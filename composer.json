@@ -11,6 +11,12 @@
             "app/AppCache.php"
         ]
     },
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/poznet/ConfigBundle"
+        }
+        ],
     "require": {
         "php": ">=5.3.9",
         "symfony/symfony": "2.8.*",
@@ -21,7 +27,8 @@
         "sensio/distribution-bundle": "~5.0",
         "sensio/framework-extra-bundle": "^3.0.2",
         "incenteev/composer-parameter-handler": "~2.0",
-        "ddeboer/imap": "^0.5.2"
+        "ddeboer/imap": "^0.5.2",
+        "poznet/configbundle": "dev-master"
     },
     "require-dev": {
         "sensio/generator-bundle": "~3.0",

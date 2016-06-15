@@ -1,0 +1,17 @@
+{
+    "name": "symfony-nowyustron",
+	"ignore": [
+        "**/.*",
+        "node_modules",
+        "bower_components",
+        "test",
+        "tests",
+        "src"
+    ],
+    "dependencies": {
+        "jquery": "*",
+        "bootstrap" : "3.*"
+    }
+    
+
+}

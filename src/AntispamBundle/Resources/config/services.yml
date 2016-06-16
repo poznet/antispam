@@ -2,3 +2,12 @@ services:
 #    antispam.example:
 #        class: AntispamBundle\Example
 #        arguments: ["@service_id", "plain_value", %parameter%]
+
+    antispam.checkkonfig.listener:
+        class: AntispamBundle\EventListener\CheckConfig\CheckEmailData
+        arguments: ["@configuration"]
+        tags:
+            - { name: kernel.event_listener, event: antispam.check.config, method: CheckEmail }
+            - { name: kernel.event_listener, event: antispam.check.config, method: CheckLogin }
+            - { name: kernel.event_listener, event: antispam.check.config, method: CheckPass }
+            - { name: kernel.event_listener, event: antispam.check.config, method: CheckImap }

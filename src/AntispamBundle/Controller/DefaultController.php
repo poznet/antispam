@@ -17,6 +17,10 @@ class DefaultController extends Controller
     {
 
         if($request->getMethod()=='POST'){
+            $this->get('configuration')->set('email',$request->get('config')['email']);
+            $this->get('configuration')->set('password',$request->get('config')['password']);
+            $this->get('configuration')->set('login',$request->get('config')['login']);
+            $this->get('configuration')->set('imap',$request->get('config')['imap']);
 
         }
         $config=array();

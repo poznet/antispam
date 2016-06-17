@@ -16,10 +16,12 @@ class MessageEvent extends Event
 {
 
     private $message;
+    private $email;
 
-    public function __construct(Message $message)
+    public function __construct(Message $message,$email=null)
     {
         $this->message = $message;
+        $this->email=$email;
     }
 
     /**
@@ -38,6 +40,19 @@ class MessageEvent extends Event
         $this->message = $message;
     }
 
+    /**
+    * @return null
+    */
+    public function getEmail()
+    {
+        return $this->email;
+    }/**
+     * @param null $email
+     */
+    public function setEmail($email)
+    {
+        $this->email = $email;
+    }
 
 
 }

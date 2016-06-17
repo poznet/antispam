@@ -25,9 +25,10 @@ class AntispamGoCommand extends ContainerAwareCommand
         $inbox=$this->getContainer()->get('antispam.inbox');
         $messages=$inbox->getInbox();
         $dispatcher = $this->getContainer()->get('event_dispatcher');
+        $config= $this->getContainer()->get('configuration');
 
         foreach($messages as $msg) {
-            $event = new MessageEvent($msg);
+            $event = new MessageEvent($msg,$config->get('email'));
             $dispatcher->dispatch('antispam.check.message', $event);
         }
 

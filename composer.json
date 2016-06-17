@@ -1,6 +1,7 @@
 {
     "name": "joseph/antyspam",
     "license": "proprietary",
+    "description": "PHP app for cleaning email accounts from spam",
     "type": "project",
     "autoload": {
         "psr-4": {

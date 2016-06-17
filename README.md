@@ -1,4 +1,7 @@
-antispam
+Antispam
 ========
 
-A Symfony project created on June 15, 2016, 10:08 pm.
+A Symfony based APP for cleaning spam from email accounts
+
+pre alpha stage
+

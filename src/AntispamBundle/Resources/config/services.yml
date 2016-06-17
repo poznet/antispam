@@ -3,6 +3,15 @@ services:
 #        class: AntispamBundle\Example
 #        arguments: ["@service_id", "plain_value", %parameter%]
 
+    antispam.connection:
+        class: AntispamBundle\Services\ConnectionService
+        arguments: ["@configuration"]
+
+    antispam.inbox:
+        class: AntispamBundle\Services\InboxService
+        arguments: ["@antispam.connection"]
+
+
     antispam.checkkonfig.listener:
         class: AntispamBundle\EventListener\CheckConfig\CheckEmailData
         arguments: ["@configuration"]
@@ -12,3 +21,9 @@ services:
             - { name: kernel.event_listener, event: antispam.check.config, method: CheckPass }
             - { name: kernel.event_listener, event: antispam.check.config, method: CheckImap }
             - { name: kernel.event_listener, event: antispam.check.config, method: tryToConnect }
+
+
+    antispam.checkemail.listener:
+        class: AntispamBundle\EventListener\Message\CheckWhitelist
+        tags:
+            - { name: kernel.event_listener, event: antispam.check.message, method: check  }

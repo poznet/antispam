@@ -55,6 +55,10 @@ class CheckEmailData
         }
     }
 
+    /**
+     * Checking connection to server
+     * @param CheckEvent $event
+     */
     public function tryToConnect(CheckEvent $event){
         if($event->getStatus()==true){
             $server = new Server($this->config->get('imap'));
@@ -69,6 +73,7 @@ class CheckEmailData
             } catch (Exception $e){
                 $event->setStatus(false);
                 $event->addMessage("Connection :  ".$e->getMessage());
+                
             }
 
         }

@@ -5,6 +5,12 @@ php:
 
 before_script:
   - composer self-update
+  - cp app/config/parameters.yml.travis app/config/parameters.yml
+  - composer  --prefer-source --dev  install
+  - php app/console doctrine:database:create --env=test
+  - php app/console doctrine:schema:create --env=test
 
-install:
-   - composer  --prefer-source --dev  install
+
+
+script:
+  - phpunit -c app

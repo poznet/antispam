@@ -26,6 +26,12 @@ services:
             - { name: kernel.event_listener, event: antispam.check.config, method: tryToConnect }
 
 
+    antispam.checkemail.listener.alreadychecked:
+        class: AntispamBundle\EventListener\Message\CheckIfIsAlreadyChecked
+        arguments: ["@antispam.message"]
+        tags:
+            - { name: kernel.event_listener, event: antispam.check.message, method: check  }
+
     antispam.checkemail.listener:
         class: AntispamBundle\EventListener\Message\CheckWhitelist
         arguments: ["@doctrine.orm.default_entity_manager","@antispam.message"]

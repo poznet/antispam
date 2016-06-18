@@ -39,7 +39,7 @@ class CheckBlacklist
             $this->em->flush();
             $this->ms->setAsChecked($msg->getId());
             $event->setBlacklistlist(true);
-            $event->stopPropagation();
+//            $event->stopPropagation();
 
         }
 

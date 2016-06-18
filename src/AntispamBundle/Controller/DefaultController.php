@@ -9,11 +9,21 @@ use Symfony\Component\HttpFoundation\Request;
 
 class DefaultController extends Controller
 {
+
     /**
-     * @Route("/")
+     * @Route("/", name="antispam_index")
      * @Template
      */
-    public function indexAction(Request $request)
+    public function indexAction(){
+        return array();
+    }
+
+    
+    /**
+     * @Route("/config/", name="antispam_config")
+     * @Template
+     */
+    public function configAction(Request $request)
     {
 
         if($request->getMethod()=='POST'){

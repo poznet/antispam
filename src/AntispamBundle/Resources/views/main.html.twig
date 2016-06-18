@@ -1,0 +1,53 @@
+<html>
+<head>
+    <title>Antispam simplefied view</title>
+
+    {% javascripts
+    'assets/bootstrap/dist/js/bootstrap.min.js'
+    %}
+    <script src="{{ asset_url }}"></script>
+    {% endjavascripts %}
+
+    {% stylesheets
+    'assets/bootstrap/dist/css/bootstrap.min.css'
+    'assets/bootstrap/dist/css/bootstrap-theme.min.css'
+    '@AntispamBundle/Resources/private/css/*.css'
+    filter='cssrewrite' %}
+    <link rel="stylesheet" href="{{ asset_url }}" />
+    {% endstylesheets %}
+</head>
+<body>
+<div class="container">
+<nav class="navbar navbar-inverse">
+    <div class="container-fluid">
+
+        <div class="navbar-header">
+            <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1" aria-expanded="false">
+                <span class="sr-only"><a href="{{ path('antispam_index') }}">Toggle navigation</a></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </button>
+            <a class="navbar-brand" href="{{ path('antispam_index') }}">Antispam</a>
+        </div>
+
+        <!-- Collect the nav links, forms, and other content for toggling -->
+        <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
+            <ul class="nav navbar-nav">
+                <li class="active"><a href="{{ path('antispam_config') }}">Configuration <span class="sr-only"></span></a></li>
+                <li class="active"><a href=" ">Whitelist <span class="sr-only"></span></a></li>
+                <li class="active"><a href=" ">Blacklist <span class="sr-only"></span></a></li>
+            </ul>
+        </div>
+    </div>
+</nav>
+    <div class="row">
+        <div class="col-xs-12"><h2>{% block title %}{% endblock %}</h2></div>
+    </div>
+
+
+{% block body %}
+{% endblock %}
+</div>
+</body>
+</html>

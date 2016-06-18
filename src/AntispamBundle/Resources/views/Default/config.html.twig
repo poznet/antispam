@@ -1,0 +1,25 @@
+{% extends 'AntispamBundle::main.html.twig' %}
+ {% block body %}
+
+
+<h4>Email</h4>
+<form method="post">
+    Email<br/>
+    <input type="text" name="config[email]" value="{{ config.email }}"></br>
+    Login<br/>
+    <input type="text" name="config[login]" value="{{ config.login }}"></br>
+    Pass<br/>
+    <input type="text" name="config[password]" value="{{ config.password }}"></br>
+    IMAP Server<br/>
+    <input type="text" name="config[imap]" value="{{ config.imap }}"></br>
+    <br/>
+    <input type="submit" value="SAVE">
+
+</form>
+</body>
+</html>
+{% endblock %}
+
+{% block title %}
+    Configuration
+{% endblock %}

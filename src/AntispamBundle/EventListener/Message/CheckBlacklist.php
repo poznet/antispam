@@ -38,7 +38,7 @@ class CheckBlacklist
             $wpis->setCounter($wpis->getCounter()+1);
             $this->em->flush();
             $this->ms->setAsChecked($msg->getId());
-            $event->setBlacklistlist(true);
+            $event->setBlacklist(true);
 //            $event->stopPropagation();
 
         }

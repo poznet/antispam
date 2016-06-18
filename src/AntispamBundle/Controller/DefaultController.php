@@ -19,6 +19,7 @@ class DefaultController extends Controller
     }
 
     
+
     /**
      * @Route("/config/", name="antispam_config")
      * @Template

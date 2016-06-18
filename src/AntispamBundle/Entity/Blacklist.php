@@ -35,6 +35,12 @@ class Blacklist
      */
     private $host;
 
+    /**
+     * @var integer
+     *
+     * @ORM\Column(name="counter", type="integer", )
+     */
+    private $counter=0;
 
     /**
      * Get id
@@ -90,5 +96,28 @@ class Blacklist
     public function getHost()
     {
         return $this->host;
+    }
+
+    /**
+     * Set counter
+     *
+     * @param integer $counter
+     * @return Blacklist
+     */
+    public function setCounter($counter)
+    {
+        $this->counter = $counter;
+
+        return $this;
+    }
+
+    /**
+     * Get counter
+     *
+     * @return integer 
+     */
+    public function getCounter()
+    {
+        return $this->counter;
     }
 }

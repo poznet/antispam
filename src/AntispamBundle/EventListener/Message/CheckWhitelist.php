@@ -10,21 +10,24 @@ namespace AntispamBundle\EventListener\Message;
 
 
 use AntispamBundle\Event\MessageEvent;
+use AntispamBundle\Services\MessageService;
 use Ddeboer\Imap\Exception\Exception;
 use Doctrine\ORM\EntityManager;
 
 class CheckWhitelist
 {
     private $em;
+    private $ms;
 
-    public function __construct(EntityManager $entityManager)
+    public function __construct(EntityManager $entityManager,MessageService $ms)
     {
         $this->em=$entityManager;
-
+        $this->ms=$ms;
     }
 
     public function check(MessageEvent $event){
         $msg=$event->getMessage();
+
         try {
             $host = $msg->getHeaders()->get('sender')[0]->host;
         }catch(Exception $e){
@@ -34,6 +37,7 @@ class CheckWhitelist
            if($wpis){
             $wpis->setCounter($wpis->getCounter()+1);
             $this->em->flush();
+               $this->ms->setAsChecked($msg->getId());
             $event->stopPropagation();
 
         }

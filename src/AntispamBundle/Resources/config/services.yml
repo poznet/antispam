@@ -11,6 +11,9 @@ services:
         class: AntispamBundle\Services\InboxService
         arguments: ["@antispam.connection"]
 
+    antispam.message:
+        class: AntispamBundle\Services\MessageService
+
 
     antispam.checkkonfig.listener:
         class: AntispamBundle\EventListener\CheckConfig\CheckEmailData
@@ -25,6 +28,6 @@ services:
 
     antispam.checkemail.listener:
         class: AntispamBundle\EventListener\Message\CheckWhitelist
-        arguments: ["@doctrine.orm.default_entity_manager"]
+        arguments: ["@doctrine.orm.default_entity_manager","@antispam.message"]
         tags:
             - { name: kernel.event_listener, event: antispam.check.message, method: check  }

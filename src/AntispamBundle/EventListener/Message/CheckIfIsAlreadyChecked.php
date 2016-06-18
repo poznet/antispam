@@ -27,6 +27,7 @@ class CheckIfIsAlreadyChecked
     public function check(MessageEvent $event){
         $msg=$event->getMessage();
         if($this->ms->isChecked($msg->getId())) {
+            $event->setCheckedbefore(true);
             $event->stopPropagation();
         }
 

@@ -14,7 +14,7 @@ use AntispamBundle\Services\MessageService;
 use Ddeboer\Imap\Exception\Exception;
 use Doctrine\ORM\EntityManager;
 
-class CheckWhitelist
+class CheckBlacklist
 {
     private $em;
     private $ms;
@@ -33,12 +33,12 @@ class CheckWhitelist
         }catch(Exception $e){
 
         }
-        $wpis=$this->em->getRepository("AntispamBundle:Whitelist")->findOneBy(array('host'=>$host,"email"=>$event->getEmail()));
+        $wpis=$this->em->getRepository("AntispamBundle:Blacklist")->findOneBy(array('host'=>$host,"email"=>$event->getEmail()));
            if($wpis){
             $wpis->setCounter($wpis->getCounter()+1);
             $this->em->flush();
             $this->ms->setAsChecked($msg->getId());
-            $event->setWhitelist(true);
+            $event->setBlacklistlist(true);
             $event->stopPropagation();
 
         }

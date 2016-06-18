@@ -13,6 +13,9 @@
     IMAP Server<br/>
     <input type="text" name="config[imap]" value="{{ config.imap }}"></br>
     <br/>
+    Delete SPAM ? (otherwise  move to spam folder)</br>
+    <input type="checkbox" name="config[delete]" value="true" {% if config.delete==true %}checked{% endif %}>
+    </br></br>
     <input type="submit" value="SAVE">
 
 </form>

@@ -32,6 +32,11 @@ class DefaultController extends Controller
             $this->get('configuration')->set('password',$request->get('config')['password']);
             $this->get('configuration')->set('login',$request->get('config')['login']);
             $this->get('configuration')->set('imap',$request->get('config')['imap']);
+            if(!array_key_exists('delete',$request->get('config'))){
+                $this->get('configuration')->set('delete', false);
+            }else{
+                $this->get('configuration')->set('delete', true);
+            }
 
         }
         $config=array();
@@ -39,6 +44,8 @@ class DefaultController extends Controller
         $config['password']=$this->get('configuration')->get('password');
         $config['login']=$this->get('configuration')->get('login');
         $config['imap']=$this->get('configuration')->get('imap');
+        $config['delete']=$this->get('configuration')->get('delete');
+
 
 
         return array('config'=>$config);

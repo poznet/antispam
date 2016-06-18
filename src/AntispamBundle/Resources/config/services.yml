@@ -30,10 +30,16 @@ services:
         class: AntispamBundle\EventListener\Message\CheckIfIsAlreadyChecked
         arguments: ["@antispam.message"]
         tags:
-            - { name: kernel.event_listener, event: antispam.check.message, method: check  }
+            - { name: kernel.event_listener, event: antispam.check.message, method: check, priority: 100000 }
 
-    antispam.checkemail.listener:
+    antispam.checkemail.listener.whitelistcheck:
         class: AntispamBundle\EventListener\Message\CheckWhitelist
         arguments: ["@doctrine.orm.default_entity_manager","@antispam.message"]
         tags:
-            - { name: kernel.event_listener, event: antispam.check.message, method: check  }
+            - { name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99999  }
+
+    antispam.checkemail.listener.blacklistcheck:
+        class: AntispamBundle\EventListener\Message\CheckBlacklist
+        arguments: ["@doctrine.orm.default_entity_manager","@antispam.message"]
+        tags:
+            - { name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99998  }

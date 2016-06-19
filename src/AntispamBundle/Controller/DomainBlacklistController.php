@@ -10,11 +10,11 @@ use Symfony\Component\HttpFoundation\Request;
 
 /**
  *
- * Class BlacklistController
+ * Class DomainBlacklistController
  * @package AntispamBundle\Controller
- * @Route("/blacklst")
+ * @Route("/domainblacklst")
  */
-class BlacklistController extends Controller
+class DomainBlacklistController extends Controller
 {
 
     /**

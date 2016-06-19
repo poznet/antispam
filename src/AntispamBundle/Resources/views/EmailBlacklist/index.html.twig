@@ -1,8 +1,8 @@
 {% extends 'AntispamBundle::main.html.twig' %}
 {% block body %}
-     <form method="post" action="{{ path('antispam_blacklist_add') }}">
+     <form method="post" action="{{ path('antispam_emailblacklist_add') }}">
          <div class="input-group"  >
-             <input type="text" class="form-control" name="host" placeholder="domain to add" >
+             <input type="text" class="form-control" name="email" placeholder="email to add" >
 
          </div>
          <div class="input-group" style="margin-top:10px;" >
@@ -13,14 +13,14 @@
 
 
      <ul class="list-group">
-    {#{% for l in list %}#}
-         {#<li class="list-group-item btn-group-xs">#}
-             {#<a href="{{ path('antispam_blacklist_del',{'id':l.id}) }}" class="btn btn-danger btn-sm badge">Delete</a>#}
-             {#<span class="badge">{{ l.counter }}</span>#}
+    {% for l in list %}
+         <li class="list-group-item btn-group-xs">
+             <a href="{{ path('antispam_emailblacklist_del',{'id':l.id}) }}" class="btn btn-danger btn-sm badge">Delete</a>
+             <span class="badge">{{ l.counter }}</span>
 
-             {#{{ l.host }}#}
-         {#</li>#}
-    {#{%  endfor %}#}
+             {{ l.blacklistemail }}
+         </li>
+    {%  endfor %}
      </ul>
 {% endblock %}
 

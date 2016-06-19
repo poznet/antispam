@@ -60,7 +60,7 @@ class CheckEmailData
      * @param CheckEvent $event
      */
     public function tryToConnect(CheckEvent $event){
-        if($event->getStatus()==true){
+        if($event->getStatus()===true){
             $server = new Server($this->config->get('imap'));
             $server = new Server(
                 $this->config->get('imap'),
@@ -69,7 +69,7 @@ class CheckEmailData
 
             );
             try {
-                $connection = $server->authenticate($this->config->get('login'), $this->config->get('password'));
+                $server->authenticate($this->config->get('login'), $this->config->get('password'));
             } catch (Exception $e){
                 $event->setStatus(false);
                 $event->addMessage("Connection :  ".$e->getMessage());

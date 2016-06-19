@@ -14,7 +14,6 @@ use Poznet\ConfigBundle\Service\ConfigService;
 class ConnectionService
 {
     private  $config;
-    private  $server;
     private  $connection;
 
     public function __construct(ConfigService $config)

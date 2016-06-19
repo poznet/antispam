@@ -40,7 +40,7 @@ class CheckEmailBlacklist
             $this->ms->setAsChecked($msg->getId());
             $event->setBlacklist(true);
             $event->setSpam(true);
-//            $event->stopPropagation();
+ 
         }
 
 

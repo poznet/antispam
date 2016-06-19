@@ -8,8 +8,7 @@
 
 namespace AntispamBundle\Services;
 
-use Ddeboer\Imap\Server;
-use Ddeboer\Imap\Mailbox;
+
 
 class InboxService
 {
@@ -32,6 +31,18 @@ class InboxService
     public function getMessage($id){
         return $this->mailbox->getMessage($id);
     }
+
+
+    public function getSpamFolder($spambox='SPAM'){
+        $connection=$this->connection->getConnection();
+        if (!$connection->hasMailbox($spambox)){
+            $connection->createMailbox($spambox);
+        }
+        return  $connection->getMailbox($spambox);
+
+
+    }
+
 
     
 }

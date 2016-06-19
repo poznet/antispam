@@ -21,6 +21,7 @@ class MessageEvent extends Event
     private $whitelist;
     private $blacklist;
     private $spamscore;
+    private $spam;
     private $checkedbefore;
 
 
@@ -30,6 +31,7 @@ class MessageEvent extends Event
         $this->email=$email;
         $this->delete=false;
         $this->spamscore=0;
+        $this->spam=false;
         $this->whitelist=false;
         $this->blacklist=false;
         $this->checkedbefore=false;
@@ -143,6 +145,22 @@ class MessageEvent extends Event
     public function setCheckedbefore($checkedbefore)
     {
         $this->checkedbefore = $checkedbefore;
+    }
+
+    /**
+     * @return boolean
+     */
+    public function isSpam()
+    {
+        return $this->spam;
+    }
+
+    /**
+     * @param boolean $spam
+     */
+    public function setSpam($spam)
+    {
+        $this->spam = $spam;
     }
 
 

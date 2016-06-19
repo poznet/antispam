@@ -11,7 +11,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 
 class AntispamGoCommand extends ContainerAwareCommand
 {
-    private $raport=array('whitelist'=>0,'checkedbefore'=>0,'blacklist'=>0);
+    private $raport=array('whitelist'=>0,'checkedbefore'=>0,'blacklist'=>0,'delete'=>0);
     protected function configure()
     {
         $this
@@ -34,6 +34,7 @@ class AntispamGoCommand extends ContainerAwareCommand
             if($event->isCheckedbefore())  $this->raport['checkedbefore']++;
             if($event->isWhitelist())  $this->raport['whitelist']++;
             if($event->isBlacklist()) $this->raport['blacklist']++;
+            if($event->isDelete()) $this->raport['delete']++;
         }
 
 
@@ -41,6 +42,7 @@ class AntispamGoCommand extends ContainerAwareCommand
         $output->writeln('Checked before / skipped : '.$this->raport['checkedbefore'].' ');
         $output->writeln('Whitelisted : '.$this->raport['whitelist'].' ');
         $output->writeln('Blacklisted : '.$this->raport['blacklist'].' ');
+        $output->writeln('Deleted/Moved : '.$this->raport['blacklist'].' ');
     }
 
 }

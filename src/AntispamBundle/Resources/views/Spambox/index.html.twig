@@ -1,0 +1,21 @@
+{% extends 'AntispamBundle::main.html.twig' %}
+{% block body %}
+    <div class="row">
+        <div class="col-xs-3">
+        {% for msg in messages  %}
+            <div class="spamboxmsgheader" rel="{{ msg.id }}">
+                <div class="date">{{ msg.date | date("d-m-Y")}}</div>
+                <div class="email">{{ msg.from }}</div>
+                <div class="subject">{{ msg.subject[:51]}}</div>
+            </div>
+
+        {% endfor %}
+        </div>
+        <div class="col-xs-9 spamboxmsgcontent"></div>
+    </div>
+     
+{% endblock %}
+
+{% block title %}
+    Spambox
+{% endblock %}

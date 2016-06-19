@@ -1,0 +1,22 @@
+.spamboxmsgheader{
+    font:10px tahoma;
+    margin-bottom:5px;
+    border-radius:7px;
+    border-color: #afafaf;
+    border:1px solid;
+    padding:11px 6px 11px 6px;
+
+
+}
+
+.spamboxmsgheader> .email{
+    margin-top:2px;
+    margin-bottom:2px;
+    font-weight:bold;
+}
+
+.spamboxmsgheader:hover {
+    color:#ffffff;
+    background:#444444;
+    cursor:hand;
+}

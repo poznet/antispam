@@ -40,6 +40,14 @@
                 <li class="active"><a href="{{ path('antispam_config') }}">Configuration<span class="sr-only"></span></a></li>
                 <li class="active"><a href="{{ path('antispam_whitelist_index') }}">Whitelist <span class="sr-only"></span></a></li>
                 <li class="dropdown">
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Whitelists<span class="caret"></span></a>
+                    <ul class="dropdown-menu">
+                        <li><a href="{{ path('antispam_whitelist_index') }}">Domain Whitelist</a></li>
+
+
+                    </ul>
+                </li>
+                <li class="dropdown">
                     <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Blacklists<span class="caret"></span></a>
                     <ul class="dropdown-menu">
                         <li><a href="{{ path('antispam_blacklist_index') }}">Domain Blacklist</a></li>

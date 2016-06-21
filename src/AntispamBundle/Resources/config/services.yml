@@ -44,6 +44,7 @@ services:
         tags:
             - { name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99998  }
 
+   
     antispam.checkemail.listener.emailblacklistcheck:
         class: AntispamBundle\EventListener\Message\CheckEmailBlacklist
         arguments: ["@doctrine.orm.default_entity_manager","@antispam.message"]
@@ -54,4 +55,4 @@ services:
         class: AntispamBundle\EventListener\Message\MoveToSpam
         arguments: ["@configuration","@antispam.inbox"]
         tags:
-            - { name: kernel.event_listener, event: antispam.check.message, method: move, priority: 99996  }
+            - { name: kernel.event_listener, event: antispam.check.message, method: move, priority: 99995  }

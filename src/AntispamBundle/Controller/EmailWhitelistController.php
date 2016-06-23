@@ -51,7 +51,7 @@ class EmailWhitelistController extends Controller
         $jest=$em->getRepository("AntispamBundle:EmailWhitelist")->findOneById($id);
         if($jest){
             $em->remove($jest);
-            $em->flush();
+            $em->flush(); 
         }
         return $this->redirectToRoute('antispam_emailwhitelist_index');
     }

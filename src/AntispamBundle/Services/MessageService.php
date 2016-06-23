@@ -42,4 +42,10 @@ class MessageService
             $fs->remove($name);
     }
 
+    public function unCheckAll(){
+        $fs=new Filesystem();
+        $name=$this->dir.'/';
+        $fs->remove($name);
+    }
+
 }

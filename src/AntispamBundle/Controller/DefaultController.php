@@ -20,34 +20,5 @@ class DefaultController extends Controller
 
     
 
-    /**
-     * @Route("/config/", name="antispam_config")
-     * @Template
-     */
-    public function configAction(Request $request)
-    {
-
-        if($request->getMethod()=='POST'){
-            $this->get('configuration')->set('email',$request->get('config')['email']);
-            $this->get('configuration')->set('password',$request->get('config')['password']);
-            $this->get('configuration')->set('login',$request->get('config')['login']);
-            $this->get('configuration')->set('imap',$request->get('config')['imap']);
-            if(!array_key_exists('delete',$request->get('config'))){
-                $this->get('configuration')->set('delete', false);
-            }else{
-                $this->get('configuration')->set('delete', true);
-            }
-
-        }
-        $config=array();
-        $config['email']=$this->get('configuration')->get('email');
-        $config['password']=$this->get('configuration')->get('password');
-        $config['login']=$this->get('configuration')->get('login');
-        $config['imap']=$this->get('configuration')->get('imap');
-        $config['delete']=$this->get('configuration')->get('delete');
-
-
-
-        return array('config'=>$config);
-    }
+   
 }

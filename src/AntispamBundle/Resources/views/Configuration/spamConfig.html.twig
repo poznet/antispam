@@ -1,0 +1,37 @@
+{% extends 'AntispamBundle::main.html.twig' %}
+ {% block body %}
+
+     <div class="row"style="margin-bottom:30px;margin-top:10px;">
+         <div class="col-xs-12">
+             <a href="{{ path('antispam_spam_unchekall') }}" class="btn btn-warning">Set unchecked flag to all</a>
+             <a href="{{ path('antispam_spam_resetcounters') }}" class="btn btn-warning">Reset all counters</a>
+         </div>
+     </div>
+
+<form method="post">
+    <input type="hidden" name="config['test']" value="aaa" id="">
+    <div class="row linia">
+        <div class="col-xs-9">Delete messages recognized as spam (otherwise moves messagges to spam folder)</div>
+        <div class="col-xs-3 ">
+            <div class="onoffswitch">
+                <input type="checkbox" name="config[delete]" value="true" class="onoffswitch-checkbox" id="myonoffswitch" {% if config.delete==true %}checked{% endif %}>
+                <label class="onoffswitch-label" for="myonoffswitch">
+                    <span class="onoffswitch-inner"></span>
+                    <span class="onoffswitch-switch"></span>
+                </label>
+            </div></div>
+    </div>
+    <div class="row">
+        <div class="col-xs-12 text-center">
+            <input type="submit" class="btn btn-primary" value="Zapisz">
+        </div>
+    </div>
+
+</form>
+</body>
+</html>
+{% endblock %}
+
+{% block title %}
+    Antispam Configuration
+{% endblock %}

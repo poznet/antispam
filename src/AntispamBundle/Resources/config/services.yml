@@ -64,3 +64,9 @@ services:
         arguments: ["@configuration","@antispam.inbox"]
         tags:
             - { name: kernel.event_listener, event: antispam.check.message, method: move, priority: 99995  }
+
+    antispam.checkemail.listener.setaschecked:
+        class: AntispamBundle\EventListener\Message\SetAsChecked
+        arguments: ["@antispam.message"]
+        tags:
+            - { name: kernel.event_listener, event: antispam.check.message, method: set, priority: -99999  }

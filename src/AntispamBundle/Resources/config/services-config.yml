@@ -1,0 +1,29 @@
+
+services:
+#    antispam.example:
+#        class: AntispamBundle\Example
+#        arguments: ["@service_id", "plain_value", %parameter%]
+
+    antispam.config.listener.resetblacklistcounter:
+        class: AntispamBundle\EventListener\Config\ResetCounters\BlacklistReset
+        arguments: ["@doctrine.orm.entity_manager"]
+        tags:
+            - { name: kernel.event_listener, event: antispam.config.event, method: reset    }
+
+    antispam.config.listener.resetwhitelistcounter:
+        class: AntispamBundle\EventListener\Config\ResetCounters\WhitelistReset
+        arguments: ["@doctrine.orm.entity_manager"]
+        tags:
+            - { name: kernel.event_listener, event: antispam.config.event, method: reset    }
+
+    antispam.config.listener.resetemailwhitelistcounter:
+        class: AntispamBundle\EventListener\Config\ResetCounters\EmailWhitelistReset
+        arguments: ["@doctrine.orm.entity_manager"]
+        tags:
+            - { name: kernel.event_listener, event: antispam.config.event, method: reset    }
+
+    antispam.config.listener.resetemailblacklistcounter:
+        class: AntispamBundle\EventListener\Config\ResetCounters\EmailBlacklistReset
+        arguments: ["@doctrine.orm.entity_manager"]
+        tags:
+            - { name: kernel.event_listener, event: antispam.config.event, method: reset    }

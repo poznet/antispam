@@ -1,3 +1,5 @@
+imports:
+    - { resource: services-config.yml }
 services:
 #    antispam.example:
 #        class: AntispamBundle\Example

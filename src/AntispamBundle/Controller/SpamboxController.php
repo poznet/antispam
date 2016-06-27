@@ -23,7 +23,8 @@ class SpamboxController extends Controller
         $messages=array();
         for($i=0;$i<20;$i++){
             $msg=$this->get('antispam.inbox')->getMessage($list[$i]);
-            array_push($messages,array("subject"=>$msg->getSubject(),"from"=>$msg->getFrom(),"date"=>$msg->getDate(),"id"=>$msg->getId()));
+            dump($msg);
+            array_push($messages,array("subject"=>$msg->getSubject(),"from"=>$msg->getFrom(),"content"=>$msg->getBodyHtml(),"date"=>$msg->getDate(),"id"=>$msg->getId()));
         }
         return array('messages'=>$messages);
     }

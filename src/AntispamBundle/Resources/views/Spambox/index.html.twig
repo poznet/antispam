@@ -11,7 +11,9 @@
 
         {% endfor %}
         </div>
-        <div class="col-xs-9 spamboxmsgcontent"></div>
+        <div class="col-xs-9 spamboxmsgcontent"  >
+            {{ messages.0.content | raw }}
+        </div>
     </div>
      
 {% endblock %}

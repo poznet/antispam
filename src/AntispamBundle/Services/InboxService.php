@@ -26,10 +26,10 @@ class InboxService
      * @param string $name
      * @return mixed
      */
-    public function getInbox($name='INBOX'){
+    public function getInbox($name='INBOX',$condition=null){
         $connection=$this->connection->getConnection();
         $this->mailbox = $connection->getMailbox($name);
-        $messages = $this->mailbox->getMessages();
+        $messages = $this->mailbox->getMessages($condition);
         return $messages;
     }
 

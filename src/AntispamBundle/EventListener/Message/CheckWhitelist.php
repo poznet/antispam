@@ -37,7 +37,7 @@ class CheckWhitelist
            if($wpis){
             $wpis->setCounter($wpis->getCounter()+1);
             $this->em->flush();
-            $this->ms->setAsChecked($msg->getId());
+            $this->ms->setAsChecked($msg);
             $event->setWhitelist(true);
             $event->stopPropagation();
 

@@ -2,6 +2,7 @@
 
 namespace AntispamBundle\Controller;
 
+use Ddeboer\Imap\Exception\Exception;
 use Symfony\Bundle\FrameworkBundle\Controller\Controller;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
@@ -24,7 +25,11 @@ class SpamboxController extends Controller
         for($i=0;$i<20;$i++){
             $msg=$this->get('antispam.inbox')->getMessage($list[$i]);
             dump($msg);
-            array_push($messages,array("subject"=>$msg->getSubject(),"from"=>$msg->getFrom(),"content"=>$msg->getBodyHtml(),"date"=>$msg->getDate(),"id"=>$msg->getId()));
+            try {
+                array_push($messages, array("subject" => $msg->getSubject(), "from" => $msg->getFrom(), "content" => $msg->getBodyHtml(), "date" => $msg->getDate(), "id" => $msg->getId()));
+            }catch (\Exception $e){
+
+            }
         }
         return array('messages'=>$messages);
     }

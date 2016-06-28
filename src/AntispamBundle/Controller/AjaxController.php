@@ -4,6 +4,9 @@ namespace AntispamBundle\Controller;
 
 use Symfony\Bundle\FrameworkBundle\Controller\Controller;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
+use Ddeboer\Imap\SearchExpression;
+
+
 
 /**
  * Class AjaxController
@@ -18,13 +21,8 @@ class AjaxController extends Controller
      * @Route("/getmsg/{id}")
      */
     public function getMsgAction($id){
-        $mailbox=$this->get('antispam.inbox')->getInbox($this->get('antispam.inbox')->getSpamFolderName());
+        $mailbox=$this->get('antispam.inbox')->getMessage();
 
-        $search = new SearchExpression();
-        $search->addCondition(new Id($id));
-
-        $msg = $mailbox->getMessages($search);
-        dump($msg);
         return array('msg'=>$msg);
     }
 }

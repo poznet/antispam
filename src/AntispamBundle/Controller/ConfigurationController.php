@@ -70,7 +70,7 @@ class ConfigurationController extends Controller
      * @return \Symfony\Component\HttpFoundation\RedirectResponse
      * @Route("/uncheck-all/", name="antispam_spam_unchekall")
      */
-    public function uncheckAllActon(){
+    public function uncheckAllAction(){
         $this->get('antispam.message')->unCheckAll();
         return $this->redirectToRoute('antispam_spam_config');
     }

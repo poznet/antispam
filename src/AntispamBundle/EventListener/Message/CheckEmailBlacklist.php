@@ -37,7 +37,7 @@ class CheckEmailBlacklist
            if($wpis){
             $wpis->setCounter($wpis->getCounter()+1);
             $this->em->flush();
-            $this->ms->setAsChecked($msg->getId());
+            $this->ms->setAsChecked($msg);
             $event->setBlacklist(true);
             $event->setSpam(true);
  

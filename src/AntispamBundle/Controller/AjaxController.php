@@ -21,8 +21,13 @@ class AjaxController extends Controller
      * @Route("/getmsg/{id}")
      */
     public function getMsgAction($id){
-        $mailbox=$this->get('antispam.inbox')->getMessage();
 
-        return array('msg'=>$msg);
+        $idek=$this->get('antispam.message')->getId(trim($id));
+        $list=$this->get('antispam.inbox')->getInbox($this->get('antispam.inbox')->getSpamFolderName());
+        $msg=$this->get('antispam.inbox')->getMessage($id);
+
+
+            dump($msg);
+        return array();
     }
 }

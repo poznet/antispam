@@ -72,5 +72,19 @@ class MessageService
         $fs->remove($name);
     }
 
+    /**
+     * Returns  internal  msg  id
+     * @param $id
+     * @return string
+     */
+    public function getId($id){
+        $fs=new Filesystem();
+        $name=$this->dir.'/'.$id;
+        dump($name);
+        if($fs->exists($name))
+            return file_get_contents($name);
+        return null;
+    }
+
 
 }

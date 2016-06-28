@@ -39,6 +39,7 @@ class InboxService
      * @return mixed
      */
     public function getMessage($id){
+        
         return $this->mailbox->getMessage($id);
     }
 

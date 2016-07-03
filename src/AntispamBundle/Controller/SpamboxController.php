@@ -3,6 +3,7 @@
 namespace AntispamBundle\Controller;
 
 use Ddeboer\Imap\Exception\Exception;
+use Ddeboer\Imap\Exception\MessageUnsupportedEncodeException;
 use Symfony\Bundle\FrameworkBundle\Controller\Controller;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
@@ -23,8 +24,11 @@ class SpamboxController extends Controller
         $list=$this->get('antispam.inbox')->getInbox($this->get('antispam.inbox')->getSpamFolderName());
         $messages=array();
         for($i=0;$i<20;$i++){
-            $msg=$this->get('antispam.inbox')->getMessage($list[$i]);
-           
+            try {
+                $msg = $this->get('antispam.inbox')->getMessage($list[$i]);
+            }catch(MessageUnsupportedEncodeException $e){
+                
+            }
             try {
                 array_push($messages, array("subject" => $msg->getSubject(), "from" => $msg->getFrom(), "content" => $msg->getBodyHtml(), "date" => $msg->getDate(), "id" => $msg->getId()));
             }catch (\Exception $e){

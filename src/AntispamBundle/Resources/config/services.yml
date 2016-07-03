@@ -52,7 +52,7 @@ services:
         tags:
             - { name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99997  }
 
-   
+
     antispam.checkemail.listener.emailblacklistcheck:
         class: AntispamBundle\EventListener\Message\CheckEmailBlacklist
         arguments: ["@doctrine.orm.default_entity_manager","@antispam.message"]

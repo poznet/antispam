@@ -31,7 +31,7 @@ class CheckBlacklist
         try {
             $host = $msg->getHeaders()->get('sender')[0]->host;
         }catch(Exception $e){
-
+            return;
         }
         $wpis=$this->em->getRepository("AntispamBundle:Blacklist")->findOneBy(array('host'=>$host,"email"=>$event->getEmail()));
            if($wpis){
@@ -40,7 +40,7 @@ class CheckBlacklist
             $this->ms->setAsChecked($msg);
             $event->setBlacklist(true);
             $event->setSpam(true);
- 
+
 
         }
 

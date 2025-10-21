@@ -31,7 +31,7 @@ class CheckEmailWhitelist
         try {
             $email = $msg->getHeaders()->get('sender')[0]->mailbox.'@'.$msg->getHeaders()->get('sender')[0]->host;
         }catch(Exception $e){
-
+            return;
         }
         $wpis=$this->em->getRepository("AntispamBundle:EmailWhitelist")->findOneBy(array('whitelistemail'=>$email,"email"=>$event->getEmail()));
            if($wpis){

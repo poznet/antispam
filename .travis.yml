@@ -1,16 +1,20 @@
 language: php
-php:
-  - '5.5'
 
+php:
+  - '7.2'
+  - '7.3'
+  - '7.4'
+
+cache:
+  directories:
+    - $HOME/.composer/cache
 
 before_script:
   - composer self-update
   - cp app/config/parameters.yml.travis app/config/parameters.yml
-  - composer  --prefer-source --dev  install
-  - php app/console doctrine:database:create --env=test
-  - php app/console doctrine:schema:create --env=test
-
-
+  - composer install --prefer-dist --no-interaction
+  - php bin/console doctrine:database:create --env=test
+  - php bin/console doctrine:schema:create --env=test
 
 script:
-  - phpunit -c app
+  - ./bin/phpunit -c app

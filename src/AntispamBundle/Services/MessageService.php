@@ -59,7 +59,7 @@ class MessageService
         $id=$msg->getId();
         $fs=new Filesystem();
         $name=$this->dir.'/'.$id;
-        if(!$fs->exists($name))
+        if($fs->exists($name))
             $fs->remove($name);
     }
 
@@ -80,7 +80,6 @@ class MessageService
     public function getId($id){
         $fs=new Filesystem();
         $name=$this->dir.'/'.$id;
-        dump($name);
         if($fs->exists($name))
             return file_get_contents($name);
         return null;

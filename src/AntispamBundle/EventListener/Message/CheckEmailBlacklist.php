@@ -31,7 +31,7 @@ class CheckEmailBlacklist
         try {
             $email = $msg->getHeaders()->get('sender')[0]->mailbox.'@'.$msg->getHeaders()->get('sender')[0]->host;
         }catch(Exception $e){
-
+            return;
         }
         $wpis=$this->em->getRepository("AntispamBundle:EmailBlacklist")->findOneBy(array('blacklistemail'=>$email,"email"=>$event->getEmail()));
            if($wpis){
@@ -40,7 +40,7 @@ class CheckEmailBlacklist
             $this->ms->setAsChecked($msg);
             $event->setBlacklist(true);
             $event->setSpam(true);
- 
+
         }
 
 

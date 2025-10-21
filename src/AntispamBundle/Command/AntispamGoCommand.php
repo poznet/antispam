@@ -54,7 +54,7 @@ class AntispamGoCommand extends ContainerAwareCommand
         $output->writeln('Checked before / skipped : '.$this->raport['checkedbefore'].' ');
         $output->writeln('Whitelisted : '.$this->raport['whitelist'].' ');
         $output->writeln('Blacklisted : '.$this->raport['blacklist'].' ');
-        $output->writeln('Deleted/Moved : '.$this->raport['blacklist'].' ');
+        $output->writeln('Deleted/Moved : '.$this->raport['delete'].' ');
 
     }
 

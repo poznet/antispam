@@ -1,20 +1,39 @@
 imports:
     - { resource: services-config.yml }
-services:
-#    antispam.example:
-#        class: AntispamBundle\Example
-#        arguments: ["@service_id", "plain_value", %parameter%]
 
+services:
+    _defaults:
+        autowire: false
+        autoconfigure: false
+        public: false
+
+    # Services
     antispam.connection:
         class: AntispamBundle\Services\ConnectionService
         arguments: ["@configuration"]
+        public: true
 
     antispam.inbox:
         class: AntispamBundle\Services\InboxService
         arguments: ["@antispam.connection"]
+        public: true
 
     antispam.message:
         class: AntispamBundle\Services\MessageService
+        public: true
+
+    # Commands
+    AntispamBundle\Command\AntispamGoCommand:
+        arguments:
+            - "@antispam.inbox"
+            - "@event_dispatcher"
+            - "@configuration"
+        tags: ['console.command']
+
+    AntispamBundle\Command\AntispamCheckCommand:
+        arguments:
+            - "@event_dispatcher"
+        tags: ['console.command']
 
 
     antispam.checkkonfig.listener:

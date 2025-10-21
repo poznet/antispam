@@ -3,35 +3,43 @@
 namespace AntispamBundle\Command;
 
 use AntispamBundle\Event\CheckEvent;
-use Symfony\Bundle\FrameworkBundle\Command\ContainerAwareCommand;
+use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
-class AntispamCheckCommand extends ContainerAwareCommand
+class AntispamCheckCommand extends Command
 {
+    protected static $defaultName = 'antispam:check';
+
+    private $dispatcher;
+
+    public function __construct(EventDispatcherInterface $dispatcher)
+    {
+        $this->dispatcher = $dispatcher;
+        parent::__construct();
+    }
+
     protected function configure()
     {
         $this
-            ->setName('antispam:check')
-            ->setDescription('checks config')
-
-        ;
+            ->setDescription('Checks antispam configuration');
     }
 
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $event=new CheckEvent();
-        $dispatcher = $this->getContainer()->get('event_dispatcher');
-        $dispatcher->dispatch('antispam.check.config', $event);
-        if($event->getStatus()===true) {
-            $output->writeln('All OK');
-        }else{
-            $output->writeln('Error:');
+        $event = new CheckEvent();
+        $this->dispatcher->dispatch($event, 'antispam.check.config');
+
+        if($event->getStatus() === true) {
+            $output->writeln('<info>All OK</info>');
+            return Command::SUCCESS;
+        } else {
+            $output->writeln('<error>Error:</error>');
             foreach ($event->getMessages() as $msg) {
-                $output->writeln($msg);
+                $output->writeln('  - ' . $msg);
             }
+            return Command::FAILURE;
         }
-
     }
-
 }

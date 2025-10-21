@@ -290,3 +290,171 @@ W razie problemów:
 1. Sprawdź logi: `app/logs/dev.log` lub `app/logs/prod.log`
 2. Uruchom diagnostykę: `php bin/console debug:container`
 3. Sprawdź routingi: `php bin/console debug:router`
+
+---
+
+# Upgrade do Symfony 5.4 LTS
+
+## Przegląd zmian
+
+Aplikacja została dodatkowo zaktualizowana z **Symfony 4.4 LTS** do **Symfony 5.4 LTS**.
+
+### Wymagania systemowe
+
+#### Po aktualizacji (Symfony 5.4)
+- **PHP >= 7.2.5** (zalecane: PHP 7.4, 8.0 lub 8.1)
+- **MySQL 5.7+** / MariaDB 10.2+
+- **ext-iconv**
+- **ext-ctype**
+
+## Główne zmiany w Symfony 5.4
+
+### 1. Zaktualizowane zależności
+
+#### Framework
+- `symfony/symfony`: `4.4.*` → `5.4.*`
+- `doctrine/orm`: `^2.6` → `^2.10`
+- `doctrine/doctrine-bundle`: `^1.12|^2.0` → `^2.5`
+
+#### Bundle
+- `sensio/framework-extra-bundle`: `^5.5` → `^6.2`
+- `ddeboer/imap`: `^1.0` → `^1.13`
+- `symfony/monolog-bundle`: `^3.5` → `^3.7`
+
+#### Nowe wymagania
+- ✅ `symfony/runtime` - nowy komponent runtime
+- ✅ `ext-ctype` - rozszerzenie PHP
+
+### 2. Rozwiązane problemy z migracji 4.4
+
+#### ddeboer/imap API
+
+**Zaktualizowano ConnectionService:**
+
+```php
+// Stara składnia (ddeboer/imap ^0.5)
+$server = new Server($host, $port, $flags);
+$connection = $server->authenticate($user, $pass);
+
+// Nowa składnia (ddeboer/imap ^1.0+)
+$serverFactory = new ServerFactory();
+$server = $serverFactory->create($host, $port, $flags);
+$connection = $server->authenticate($user, $pass);
+```
+
+#### Zarządzanie assetami
+
+**Usunięto Assetic, zastąpiono CDN:**
+
+```twig
+{# Stara składnia z Assetic #}
+{% javascripts 'assets/jquery/dist/jquery.min.js' %}
+    <script src="{{ asset_url }}"></script>
+{% endjavascripts %}
+
+{# Nowa składnia - CDN #}
+<script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
+```
+
+### 3. Zmiany w konfiguracji
+
+#### config.yml - Framework
+
+**Usunięto przestarzałe opcje:**
+```yaml
+framework:
+    # USUNIĘTO:
+    # strict_requirements: ~
+    # trusted_hosts: ~
+    # fragments: ~
+```
+
+**Dodano nowe opcje Symfony 5:**
+```yaml
+framework:
+    session:
+        storage_factory_id: session.storage.factory.native
+    handle_all_throwables: true
+```
+
+#### Doctrine - Lepsze wsparcie UTF-8
+
+**Zmiana z UTF8 na utf8mb4:**
+```yaml
+doctrine:
+    dbal:
+        charset: utf8mb4
+        default_table_options:
+            charset: utf8mb4
+            collate: utf8mb4_unicode_ci
+```
+
+### 4. Zmiany w Travis CI
+
+```yaml
+php:
+  - '7.2'
+  - '7.3'
+  - '7.4'
+  - '8.0'
+  - '8.1'
+```
+
+Aplikacja jest teraz testowana na PHP 7.2-8.1.
+
+## Instrukcje aktualizacji do Symfony 5.4
+
+### 1. Sprawdź wersję PHP
+
+```bash
+php -v
+# Powinno być >= 7.2.5, zalecane 7.4 lub 8.0+
+```
+
+### 2. Aktualizacja zależności
+
+```bash
+# Usuń vendor i cache
+rm -rf vendor/ app/cache/* app/logs/*
+
+# Zainstaluj nowe zależności
+composer install
+
+# Jeśli wystąpią problemy:
+composer update
+```
+
+### 3. Wyczyść cache
+
+```bash
+php bin/console cache:clear
+php bin/console cache:warmup
+```
+
+### 4. Sprawdź bazę danych
+
+```bash
+php bin/console doctrine:schema:update --dump-sql
+# Jeśli trzeba:
+php bin/console doctrine:schema:update --force
+```
+
+## Co dalej?
+
+Symfony 5.4 LTS jest wspierane do **listopada 2026**, co daje:
+- ✅ 5 lat wsparcia bezpieczeństwa
+- ✅ Stabilną platformę na produkcję
+- ✅ Łatwą ścieżkę migracji do Symfony 6.x w przyszłości
+
+## Migracja do Symfony 6.x (opcjonalnie)
+
+Jeśli chcesz migrować do Symfony 6.x w przyszłości:
+- Wymaga PHP >= 8.0.2
+- Wymiana SwiftMailer na Symfony Mailer
+- Większość kodu pozostaje kompatybilna dzięki Symfony 5.4 LTS
+
+## Dodatkowe zasoby
+
+- [Symfony 4.4 → 5.0 Upgrade Guide](https://github.com/symfony/symfony/blob/5.4/UPGRADE-5.0.md)
+- [Symfony 5.4 Documentation](https://symfony.com/doc/5.4/index.html)
+- [ddeboer/imap Documentation](https://github.com/ddeboer/imap)

@@ -7,10 +7,11 @@ A Symfony based application for cleaning spam from email accounts using IMAP pro
 
 ## Requirements
 
-- **PHP >= 7.1.3** (recommended: 7.2, 7.3, or 7.4)
-- **Symfony 4.4 LTS**
+- **PHP >= 7.2.5** (recommended: 7.4, 8.0, or 8.1)
+- **Symfony 5.4 LTS**
 - **MySQL 5.7+** or MariaDB 10.2+
 - **ext-iconv**
+- **ext-ctype**
 - IMAP enabled email account
 
 ## Features

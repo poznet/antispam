@@ -1,8 +1,106 @@
 {% extends 'AntispamBundle::main.html.twig' %}
- {% block body %}
 
-{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block title %}Dashboard{% endblock %}
 
-{% block title %}
-   Antispam
+{% block body %}
+    <div class="row">
+        <div class="col-sm-3">
+            <div class="panel panel-stat panel-default">
+                <div class="panel-body text-center">
+                    <span class="glyphicon glyphicon-cloud" style="font-size:24px; color:#5bc0de;"></span>
+                    <div class="stat-value">{{ accounts|default(0) }}</div>
+                    <div class="stat-label">Accounts</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-3">
+            <div class="panel panel-stat panel-default">
+                <div class="panel-body text-center">
+                    <span class="glyphicon glyphicon-ok-circle" style="font-size:24px; color:#5cb85c;"></span>
+                    <div class="stat-value">{{ whitelistCount|default(0) }}</div>
+                    <div class="stat-label">Whitelist Rules</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-3">
+            <div class="panel panel-stat panel-default">
+                <div class="panel-body text-center">
+                    <span class="glyphicon glyphicon-ban-circle" style="font-size:24px; color:#d9534f;"></span>
+                    <div class="stat-value">{{ blacklistCount|default(0) }}</div>
+                    <div class="stat-label">Blacklist Rules</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-3">
+            <div class="panel panel-stat panel-default">
+                <div class="panel-body text-center">
+                    <span class="glyphicon glyphicon-trash" style="font-size:24px; color:#f0ad4e;"></span>
+                    <div class="stat-value">{{ spamCount|default('--') }}</div>
+                    <div class="stat-label">Spam Caught</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if recentScans is defined and recentScans|length > 0 %}
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-time"></span> Recent Scans</div>
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Account</th>
+                    <th>Type</th>
+                    <th>Last Scan</th>
+                    <th>Total</th>
+                    <th>Spam</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for account in recentScans %}
+                <tr>
+                    <td>{{ account.name }}</td>
+                    <td><span class="label label-{{ account.connectionType == 'ssh' ? 'info' : 'default' }}">{{ account.connectionType|upper }}</span></td>
+                    <td>{{ account.lastScanAt ? account.lastScanAt|date('Y-m-d H:i') : 'Never' }}</td>
+                    {% set scan = account.lastScanResultDecoded %}
+                    <td>{{ scan ? scan.total|default(0) : '--' }}</td>
+                    <td>{{ scan ? scan.moved_to_spam|default(0) : '--' }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <div class="row">
+        <div class="col-sm-6">
+            <div class="panel panel-default">
+                <div class="panel-heading"><span class="glyphicon glyphicon-flash"></span> Quick Actions</div>
+                <div class="panel-body">
+                    <a href="{{ path('antispam_account_index') }}" class="btn btn-primary btn-block" style="margin-bottom:8px;">
+                        <span class="glyphicon glyphicon-plus"></span> Manage Accounts
+                    </a>
+                    <a href="{{ path('antispam_blacklist_index') }}" class="btn btn-danger btn-block" style="margin-bottom:8px;">
+                        <span class="glyphicon glyphicon-ban-circle"></span> Manage Blacklists
+                    </a>
+                    <a href="{{ path('antispam_whitelist_index') }}" class="btn btn-success btn-block">
+                        <span class="glyphicon glyphicon-ok-circle"></span> Manage Whitelists
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6">
+            <div class="panel panel-default">
+                <div class="panel-heading"><span class="glyphicon glyphicon-info-sign"></span> About</div>
+                <div class="panel-body">
+                    <p>Antispam filters unwanted emails from your mailboxes using blacklist and whitelist rules.</p>
+                    <p><strong>Connection modes:</strong></p>
+                    <ul>
+                        <li><strong>IMAP</strong> &mdash; connects to mail server via IMAP protocol</li>
+                        <li><strong>SSH+Maildir</strong> &mdash; deploys agent directly on hosting server</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
 {% endblock %}

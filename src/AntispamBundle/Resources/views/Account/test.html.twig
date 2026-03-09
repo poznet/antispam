@@ -1,0 +1,20 @@
+{% extends 'AntispamBundle::main.html.twig' %}
+
+{% block title %}Connection Test{% if account %}: {{ account.name }}{% endif %}{% endblock %}
+{% block page_title %}Connection Test{% if account %}: {{ account.name }}{% endif %}{% endblock %}
+
+{% block body %}
+    {% if result.success %}
+        <div class="alert alert-success"><strong>Connection successful!</strong></div>
+    {% else %}
+        <div class="alert alert-danger"><strong>Connection failed</strong></div>
+    {% endif %}
+
+    <ul class="list-group">
+    {% for message in result.messages %}
+        <li class="list-group-item">{{ message }}</li>
+    {% endfor %}
+    </ul>
+
+    <a href="{{ path('antispam_account_index') }}" class="btn btn-default">Back to Accounts</a>
+{% endblock %}

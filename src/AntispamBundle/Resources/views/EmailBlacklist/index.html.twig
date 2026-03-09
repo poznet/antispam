@@ -1,31 +1,36 @@
 {% extends 'AntispamBundle::main.html.twig' %}
+{% block title %}E-mail Blacklist{% endblock %}
+{% block page_title %}E-mail Blacklist{% endblock %}
+
 {% block body %}
-     <form method="post" action="{{ path('antispam_emailblacklist_add') }}">
-         <div class="input-group"  >
-             <input type="text" class="form-control" name="email" placeholder="email to add" >
+    <div class="add-form">
+        <form method="post" action="{{ path('antispam_emailblacklist_add') }}" class="form-inline">
+            <div class="input-group">
+                <input type="email" class="form-control" name="email" placeholder="Enter email to block (e.g. spammer@example.com)" required style="min-width:300px;">
+                <span class="input-group-btn">
+                    <button type="submit" class="btn btn-danger"><span class="glyphicon glyphicon-plus"></span> Add</button>
+                </span>
+            </div>
+        </form>
+    </div>
 
-         </div>
-         <div class="input-group" style="margin-top:10px;" >
-             <input type="submit"  class="btn btn-primary  " value="Dodaj" >
-         </div>
-
-     </form>
-
-
-     <ul class="list-group">
-    {% for l in list %}
-         <li class="list-group-item btn-group-xs">
-             <a href="{{ path('antispam_emailblacklist_del',{'id':l.id}) }}" class="btn btn-danger btn-sm badge">Delete</a>
-             <span class="badge">{{ l.counter }}</span>
-
-             {{ l.blacklistemail }}
-         </li>
-    {%  endfor %}
-     </ul>
-{% endblock %}
-
-{% block title %}
-   E-mail Blacklists
-
-
+    {% if list|length > 0 %}
+    <ul class="list-group">
+        {% for l in list %}
+        <li class="list-group-item">
+            <a href="{{ path('antispam_emailblacklist_del',{'id':l.id}) }}" class="btn btn-danger btn-xs list-actions" onclick="return confirm('Delete this email from blacklist?')">
+                <span class="glyphicon glyphicon-remove"></span> Delete
+            </a>
+            <span class="badge badge-counter">{{ l.counter }} hits</span>
+            <span class="glyphicon glyphicon-envelope"></span> {{ l.blacklistemail }}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <div class="empty-state">
+        <span class="glyphicon glyphicon-ban-circle"></span>
+        <p>No emails in blacklist yet</p>
+        <p class="text-muted">Add specific email addresses to block</p>
+    </div>
+    {% endif %}
 {% endblock %}

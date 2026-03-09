@@ -1,31 +1,36 @@
 {% extends 'AntispamBundle::main.html.twig' %}
+{% block title %}E-mail Whitelist{% endblock %}
+{% block page_title %}E-mail Whitelist{% endblock %}
+
 {% block body %}
-     <form method="post" action="{{ path('antispam_emailwhitelist_add') }}">
-         <div class="input-group"  >
-             <input type="text" class="form-control" name="email" placeholder="email to add" >
+    <div class="add-form">
+        <form method="post" action="{{ path('antispam_emailwhitelist_add') }}" class="form-inline">
+            <div class="input-group">
+                <input type="email" class="form-control" name="email" placeholder="Enter trusted email (e.g. friend@example.com)" required style="min-width:300px;">
+                <span class="input-group-btn">
+                    <button type="submit" class="btn btn-success"><span class="glyphicon glyphicon-plus"></span> Add</button>
+                </span>
+            </div>
+        </form>
+    </div>
 
-         </div>
-         <div class="input-group" style="margin-top:10px;" >
-             <input type="submit"  class="btn btn-primary  " value="Dodaj" >
-         </div>
-
-     </form>
-
-
-     <ul class="list-group">
-    {% for l in list %}
-         <li class="list-group-item btn-group-xs">
-             <a href="{{ path('antispam_emailwhitelist_del',{'id':l.id}) }}" class="btn btn-danger btn-sm badge">Delete</a>
-             <span class="badge">{{ l.counter }}</span>
-
-             {{ l.whitelistemail }}
-         </li>
-    {%  endfor %}
-     </ul>
-{% endblock %}
-
-{% block title %}
-   E-mail Whitelist
-
-
+    {% if list|length > 0 %}
+    <ul class="list-group">
+        {% for l in list %}
+        <li class="list-group-item">
+            <a href="{{ path('antispam_emailwhitelist_del',{'id':l.id}) }}" class="btn btn-danger btn-xs list-actions" onclick="return confirm('Remove this email from whitelist?')">
+                <span class="glyphicon glyphicon-remove"></span> Delete
+            </a>
+            <span class="badge badge-counter">{{ l.counter }} hits</span>
+            <span class="glyphicon glyphicon-envelope"></span> {{ l.whitelistemail }}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <div class="empty-state">
+        <span class="glyphicon glyphicon-ok-circle"></span>
+        <p>No emails in whitelist yet</p>
+        <p class="text-muted">Add trusted email addresses to always allow</p>
+    </div>
+    {% endif %}
 {% endblock %}

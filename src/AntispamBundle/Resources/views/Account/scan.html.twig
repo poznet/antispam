@@ -1,0 +1,30 @@
+{% extends 'AntispamBundle::main.html.twig' %}
+
+{% block title %}Scan Results{% if account %}: {{ account.name }}{% endif %}{% endblock %}
+{% block page_title %}Scan Results{% if account %}: {{ account.name }}{% endif %}{% endblock %}
+
+{% block body %}
+    {% if result.success %}
+        <div class="alert alert-success"><strong>Scan completed!</strong></div>
+
+        {% if result.scan_result is defined %}
+        <table class="table table-bordered">
+            <tr><th>Total messages</th><td>{{ result.scan_result.total|default(0) }}</td></tr>
+            <tr><th>Checked</th><td>{{ result.scan_result.checked|default(0) }}</td></tr>
+            <tr><th>Skipped (already checked)</th><td>{{ result.scan_result.skipped|default(0) }}</td></tr>
+            <tr><th>Whitelisted</th><td>{{ result.scan_result.whitelisted|default(0) }}</td></tr>
+            <tr><th>Blacklisted</th><td>{{ result.scan_result.blacklisted|default(0) }}</td></tr>
+            <tr><th>Moved to spam</th><td>{{ result.scan_result.moved_to_spam|default(0) }}</td></tr>
+        </table>
+        {% endif %}
+    {% else %}
+        <div class="alert alert-danger"><strong>Scan failed</strong></div>
+        <ul class="list-group">
+        {% for message in result.messages %}
+            <li class="list-group-item">{{ message }}</li>
+        {% endfor %}
+        </ul>
+    {% endif %}
+
+    <a href="{{ path('antispam_account_index') }}" class="btn btn-default">Back to Accounts</a>
+{% endblock %}

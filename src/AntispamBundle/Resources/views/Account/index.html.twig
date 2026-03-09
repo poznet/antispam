@@ -1,0 +1,96 @@
+{% extends 'AntispamBundle::main.html.twig' %}
+
+{% block title %}Accounts{% endblock %}
+{% block page_title %}Accounts{% endblock %}
+
+{% block body %}
+    <div class="row" style="margin-bottom:15px;">
+        <div class="col-xs-12">
+            <a href="{{ path('antispam_account_add') }}" class="btn btn-success">Add Account</a>
+            <a href="{{ path('antispam_account_download_agent') }}" class="btn btn-info pull-right">Download Agent</a>
+        </div>
+    </div>
+
+    <table class="table table-striped table-bordered">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Type</th>
+                <th>Host</th>
+                <th>Agent</th>
+                <th>Last Scan</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for account in accounts %}
+            <tr>
+                <td>{{ account.name }}</td>
+                <td>{{ account.email }}</td>
+                <td>
+                    {% if account.connectionType == 'ssh' %}
+                        <span class="label label-info">SSH+Maildir</span>
+                    {% else %}
+                        <span class="label label-default">IMAP</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if account.connectionType == 'ssh' %}
+                        {{ account.sshHost }}
+                    {% else %}
+                        {{ account.imapHost }}
+                    {% endif %}
+                </td>
+                <td>
+                    {% if account.connectionType == 'ssh' %}
+                        {% if account.agentDeployed %}
+                            <span class="label label-success">Deployed</span>
+                        {% else %}
+                            <span class="label label-warning">Not deployed</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="label label-default">N/A</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if account.lastScanAt %}
+                        {{ account.lastScanAt|date('Y-m-d H:i') }}
+                    {% else %}
+                        <em>Never</em>
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="btn-group btn-group-xs">
+                        <a href="{{ path('antispam_account_edit', {id: account.id}) }}" class="btn btn-default" title="Edit">Edit</a>
+                        <a href="{{ path('antispam_account_test', {id: account.id}) }}" class="btn btn-info" title="Test connection">Test</a>
+                        <a href="{{ path('antispam_account_scan', {id: account.id}) }}" class="btn btn-primary" title="Run scan">Scan</a>
+                        {% if account.connectionType == 'ssh' %}
+                            <a href="{{ path('antispam_account_deploy', {id: account.id}) }}" class="btn btn-warning" title="Deploy agent">Deploy</a>
+                            <a href="{{ path('antispam_account_sync', {id: account.id}) }}" class="btn btn-success" title="Sync rules">Sync</a>
+                        {% endif %}
+                        <a href="{{ path('antispam_account_del', {id: account.id}) }}" class="btn btn-danger" title="Delete" onclick="return confirm('Delete this account?')">Del</a>
+                    </div>
+                </td>
+            </tr>
+            {% if account.lastScanResult %}
+            <tr>
+                <td colspan="7" style="background:#f9f9f9; font-size:12px;">
+                    {% set scanData = account.lastScanResultDecoded %}
+                    {% if scanData %}
+                        Total: {{ scanData.total|default(0) }} |
+                        Checked: {{ scanData.checked|default(0) }} |
+                        Skipped: {{ scanData.skipped|default(0) }} |
+                        Whitelisted: {{ scanData.whitelisted|default(0) }} |
+                        Blacklisted: {{ scanData.blacklisted|default(0) }} |
+                        Moved to spam: {{ scanData.moved_to_spam|default(0) }}
+                    {% endif %}
+                </td>
+            </tr>
+            {% endif %}
+        {% else %}
+            <tr><td colspan="7" class="text-center"><em>No accounts configured</em></td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

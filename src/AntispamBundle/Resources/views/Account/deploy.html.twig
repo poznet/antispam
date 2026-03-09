@@ -1,0 +1,24 @@
+{% extends 'AntispamBundle::main.html.twig' %}
+
+{% block title %}Deploy Agent{% if account %}: {{ account.name }}{% endif %}{% endblock %}
+
+{% block body %}
+    {% if result.success %}
+        <div class="alert alert-success"><strong>Agent deployed successfully!</strong></div>
+    {% else %}
+        <div class="alert alert-danger"><strong>Deploy failed</strong></div>
+    {% endif %}
+
+    <ul class="list-group">
+    {% for message in result.messages %}
+        <li class="list-group-item">{{ message }}</li>
+    {% endfor %}
+    </ul>
+
+    {% if result.deploy_result is defined %}
+        <h4>Agent test output:</h4>
+        <pre>{{ result.deploy_result|json_encode(constant('JSON_PRETTY_PRINT')) }}</pre>
+    {% endif %}
+
+    <a href="{{ path('antispam_account_index') }}" class="btn btn-default">Back to Accounts</a>
+{% endblock %}

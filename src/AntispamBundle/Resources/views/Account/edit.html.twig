@@ -1,0 +1,98 @@
+{% extends 'AntispamBundle::main.html.twig' %}
+
+{% block title %}Edit Account: {{ account.name }}{% endblock %}
+
+{% block body %}
+    <form method="post" action="{{ path('antispam_account_edit', {id: account.id}) }}">
+        <div class="panel panel-default">
+            <div class="panel-heading">General</div>
+            <div class="panel-body">
+                <div class="form-group">
+                    <label>Account Name</label>
+                    <input type="text" class="form-control" name="account[name]" value="{{ account.name }}" required>
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" class="form-control" name="account[email]" value="{{ account.email }}" required>
+                </div>
+                <div class="form-group">
+                    <label>Connection Type</label>
+                    <select class="form-control" name="account[connection_type]" id="connectionType" onchange="toggleFields()">
+                        <option value="imap" {% if account.connectionType == 'imap' %}selected{% endif %}>IMAP</option>
+                        <option value="ssh" {% if account.connectionType == 'ssh' %}selected{% endif %}>SSH + Maildir</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label><input type="checkbox" name="account[delete_spam]" value="1" {% if account.deleteSpam %}checked{% endif %}> Delete spam (instead of moving to SPAM folder)</label>
+                </div>
+            </div>
+        </div>
+
+        <div id="imapFields" class="panel panel-default" {% if account.connectionType == 'ssh' %}style="display:none;"{% endif %}>
+            <div class="panel-heading">IMAP Settings</div>
+            <div class="panel-body">
+                <div class="form-group">
+                    <label>IMAP Host</label>
+                    <input type="text" class="form-control" name="account[imap_host]" value="{{ account.imapHost }}">
+                </div>
+                <div class="form-group">
+                    <label>IMAP Port</label>
+                    <input type="number" class="form-control" name="account[imap_port]" value="{{ account.imapPort }}">
+                </div>
+                <div class="form-group">
+                    <label>Login</label>
+                    <input type="text" class="form-control" name="account[imap_login]" value="{{ account.imapLogin }}">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" class="form-control" name="account[imap_password]" value="{{ account.imapPassword }}">
+                </div>
+                <div class="form-group">
+                    <label>IMAP Flags</label>
+                    <input type="text" class="form-control" name="account[imap_flags]" value="{{ account.imapFlags }}">
+                </div>
+            </div>
+        </div>
+
+        <div id="sshFields" class="panel panel-default" {% if account.connectionType != 'ssh' %}style="display:none;"{% endif %}>
+            <div class="panel-heading">SSH + Maildir Settings</div>
+            <div class="panel-body">
+                <div class="form-group">
+                    <label>SSH Host</label>
+                    <input type="text" class="form-control" name="account[ssh_host]" value="{{ account.sshHost }}">
+                </div>
+                <div class="form-group">
+                    <label>SSH Port</label>
+                    <input type="number" class="form-control" name="account[ssh_port]" value="{{ account.sshPort }}">
+                </div>
+                <div class="form-group">
+                    <label>SSH User</label>
+                    <input type="text" class="form-control" name="account[ssh_user]" value="{{ account.sshUser }}">
+                </div>
+                <div class="form-group">
+                    <label>SSH Key Path (on this server)</label>
+                    <input type="text" class="form-control" name="account[ssh_key_path]" value="{{ account.sshKeyPath }}">
+                </div>
+                <div class="form-group">
+                    <label>Maildir Path (on hosting)</label>
+                    <input type="text" class="form-control" name="account[maildir_path]" value="{{ account.maildirPath }}">
+                </div>
+                <div class="form-group">
+                    <label>Agent Path (on hosting)</label>
+                    <input type="text" class="form-control" name="account[agent_path]" value="{{ account.agentPath }}">
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Save</button>
+        <a href="{{ path('antispam_account_index') }}" class="btn btn-default">Cancel</a>
+    </form>
+
+    <script>
+    function toggleFields() {
+        var type = document.getElementById('connectionType').value;
+        document.getElementById('imapFields').style.display = type === 'imap' ? 'block' : 'none';
+        document.getElementById('sshFields').style.display = type === 'ssh' ? 'block' : 'none';
+    }
+    </script>
+{% endblock %}

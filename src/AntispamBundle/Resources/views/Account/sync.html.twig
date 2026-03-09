@@ -1,0 +1,24 @@
+{% extends 'AntispamBundle::main.html.twig' %}
+
+{% block title %}Sync Rules{% if account %}: {{ account.name }}{% endif %}{% endblock %}
+
+{% block body %}
+    {% if result.success %}
+        <div class="alert alert-success"><strong>Rules synced successfully!</strong></div>
+    {% else %}
+        <div class="alert alert-danger"><strong>Sync failed</strong></div>
+    {% endif %}
+
+    <ul class="list-group">
+    {% for message in result.messages %}
+        <li class="list-group-item">{{ message }}</li>
+    {% endfor %}
+    </ul>
+
+    {% if result.sync_result is defined %}
+        <h4>Sync result:</h4>
+        <pre>{{ result.sync_result|json_encode(constant('JSON_PRETTY_PRINT')) }}</pre>
+    {% endif %}
+
+    <a href="{{ path('antispam_account_index') }}" class="btn btn-default">Back to Accounts</a>
+{% endblock %}

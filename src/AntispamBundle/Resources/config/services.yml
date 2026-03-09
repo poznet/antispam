@@ -22,6 +22,10 @@ services:
         class: AntispamBundle\Services\MessageService
         public: true
 
+    antispam.ssh:
+        class: AntispamBundle\Services\SshService
+        public: true
+
     # Commands
     AntispamBundle\Command\AntispamGoCommand:
         arguments:
@@ -33,6 +37,30 @@ services:
     AntispamBundle\Command\AntispamCheckCommand:
         arguments:
             - "@event_dispatcher"
+        tags: ['console.command']
+
+    AntispamBundle\Command\AgentDeployCommand:
+        arguments:
+            - "@doctrine.orm.default_entity_manager"
+            - "@antispam.ssh"
+        tags: ['console.command']
+
+    AntispamBundle\Command\AgentSyncCommand:
+        arguments:
+            - "@doctrine.orm.default_entity_manager"
+            - "@antispam.ssh"
+        tags: ['console.command']
+
+    AntispamBundle\Command\AgentScanCommand:
+        arguments:
+            - "@doctrine.orm.default_entity_manager"
+            - "@antispam.ssh"
+        tags: ['console.command']
+
+    AntispamBundle\Command\AgentScanAllCommand:
+        arguments:
+            - "@doctrine.orm.default_entity_manager"
+            - "@antispam.ssh"
         tags: ['console.command']
 
 

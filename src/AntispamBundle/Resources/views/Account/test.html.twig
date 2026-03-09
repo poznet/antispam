@@ -1,6 +1,7 @@
 {% extends 'AntispamBundle::main.html.twig' %}
 
 {% block title %}Connection Test{% if account %}: {{ account.name }}{% endif %}{% endblock %}
+{% block page_title %}Connection Test{% if account %}: {{ account.name }}{% endif %}{% endblock %}
 
 {% block body %}
     {% if result.success %}

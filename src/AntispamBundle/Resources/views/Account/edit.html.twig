@@ -1,6 +1,7 @@
 {% extends 'AntispamBundle::main.html.twig' %}
 
 {% block title %}Edit Account: {{ account.name }}{% endblock %}
+{% block page_title %}Edit Account: {{ account.name }}{% endblock %}
 
 {% block body %}
     <form method="post" action="{{ path('antispam_account_edit', {id: account.id}) }}">

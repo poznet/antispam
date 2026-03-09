@@ -1,6 +1,9 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-    <title>Antispam simplefied view</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Antispam{% endblock %} - Antispam</title>
 
     {% javascripts
     'assets/jquery/dist/jquery.min.js'
@@ -19,58 +22,78 @@
     {% endstylesheets %}
 </head>
 <body>
-<div class="container">
-<nav class="navbar navbar-inverse">
-    <div class="container-fluid">
-
+<nav class="navbar navbar-inverse navbar-fixed-top">
+    <div class="container">
         <div class="navbar-header">
-            <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1" aria-expanded="false">
-                <span class="sr-only"><a href="{{ path('antispam_index') }}">Toggle navigation</a></span>
+            <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#main-navbar" aria-expanded="false">
+                <span class="sr-only">Toggle navigation</span>
                 <span class="icon-bar"></span>
                 <span class="icon-bar"></span>
                 <span class="icon-bar"></span>
             </button>
-            <a class="navbar-brand" href="{{ path('antispam_index') }}">Antispam</a>
+            <a class="navbar-brand" href="{{ path('antispam_index') }}">
+                <span class="glyphicon glyphicon-shield"></span> Antispam
+            </a>
         </div>
 
-        <!-- Collect the nav links, forms, and other content for toggling -->
-        <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
+        <div class="collapse navbar-collapse" id="main-navbar">
             <ul class="nav navbar-nav">
-                <li class="active"><a href="{{ path('antispam_spambox_index') }}">Spambox<span class="sr-only"></span></a></li>
+                <li><a href="{{ path('antispam_index') }}"><span class="glyphicon glyphicon-dashboard"></span> Dashboard</a></li>
+                <li><a href="{{ path('antispam_account_index') }}"><span class="glyphicon glyphicon-cloud"></span> Accounts</a></li>
+                <li><a href="{{ path('antispam_spambox_index') }}"><span class="glyphicon glyphicon-trash"></span> Spambox</a></li>
                 <li class="dropdown">
-                    <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Configuration<span class="caret"></span></a>
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
+                        <span class="glyphicon glyphicon-ok-circle"></span> Whitelists <span class="caret"></span>
+                    </a>
                     <ul class="dropdown-menu">
-                        <li><a href="{{ path('antispam_account_config') }}">Account </a></li>
-                        <li><a href="{{ path('antispam_spam_config') }}">Spam filter settings</a></li>
+                        <li><a href="{{ path('antispam_whitelist_index') }}"><span class="glyphicon glyphicon-globe"></span> Domain Whitelist</a></li>
+                        <li><a href="{{ path('antispam_emailwhitelist_index') }}"><span class="glyphicon glyphicon-envelope"></span> E-mail Whitelist</a></li>
                     </ul>
                 </li>
                 <li class="dropdown">
-                    <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Whitelists<span class="caret"></span></a>
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
+                        <span class="glyphicon glyphicon-ban-circle"></span> Blacklists <span class="caret"></span>
+                    </a>
                     <ul class="dropdown-menu">
-                        <li><a href="{{ path('antispam_emailwhitelist_index') }}">E-mail Whitelist</a></li>
-                        <li><a href="{{ path('antispam_whitelist_index') }}">Domain Whitelist</a></li>
+                        <li><a href="{{ path('antispam_blacklist_index') }}"><span class="glyphicon glyphicon-globe"></span> Domain Blacklist</a></li>
+                        <li><a href="{{ path('antispam_emailblacklist_index') }}"><span class="glyphicon glyphicon-envelope"></span> E-mail Blacklist</a></li>
                     </ul>
                 </li>
                 <li class="dropdown">
-                    <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Blacklists<span class="caret"></span></a>
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
+                        <span class="glyphicon glyphicon-cog"></span> Settings <span class="caret"></span>
+                    </a>
                     <ul class="dropdown-menu">
-                        <li><a href="{{ path('antispam_blacklist_index') }}">Domain Blacklist</a></li>
-                        <li><a href="{{ path('antispam_emailblacklist_index') }}">E-mail Blacklist</a></li>
-
+                        <li><a href="{{ path('antispam_account_config') }}">Legacy Account Config</a></li>
+                        <li><a href="{{ path('antispam_spam_config') }}">Spam Filter Settings</a></li>
                     </ul>
                 </li>
-                <li><a href="{{ path('antispam_account_index') }}">Accounts</a></li>
             </ul>
         </div>
     </div>
 </nav>
-    <div class="row">
-        <div class="col-xs-12"><h2>{% block title %}{% endblock %}</h2></div>
+
+<div class="container" style="padding-top: 70px;">
+    {% for type, messages in app.session.flashbag.all() %}
+        {% for message in messages %}
+            <div class="alert alert-{{ type }} alert-dismissible" role="alert">
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endfor %}
+
+    <div class="page-header">
+        <h2>{% block page_title %}{% endblock %}</h2>
     </div>
 
-
-{% block body %}
-{% endblock %}
+    {% block body %}{% endblock %}
 </div>
+
+<footer class="footer">
+    <div class="container">
+        <p>Antispam &mdash; Email spam filtering system</p>
+    </div>
+</footer>
 </body>
 </html>

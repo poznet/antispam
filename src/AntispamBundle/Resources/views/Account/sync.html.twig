@@ -1,6 +1,7 @@
 {% extends 'AntispamBundle::main.html.twig' %}
 
 {% block title %}Sync Rules{% if account %}: {{ account.name }}{% endif %}{% endblock %}
+{% block page_title %}Sync Rules{% if account %}: {{ account.name }}{% endif %}{% endblock %}
 
 {% block body %}
     {% if result.success %}

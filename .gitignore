@@ -2,3 +2,5 @@
 /app/config/parameters.yml
 /.phpunit/
 /var/
+*.result.cache
+src/AntispamBundle/Resources/agent/rules.sqlite

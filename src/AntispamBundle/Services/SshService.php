@@ -9,6 +9,13 @@ use phpseclib3\Crypt\PublicKeyLoader;
 
 class SshService
 {
+    private $keyEncryption;
+
+    public function __construct(KeyEncryptionService $keyEncryption = null)
+    {
+        $this->keyEncryption = $keyEncryption;
+    }
+
     public function testConnection(Account $account)
     {
         $result = ['success' => false, 'messages' => []];
@@ -39,15 +46,10 @@ class SshService
     public function connect(Account $account)
     {
         $ssh = new SSH2($account->getSshHost(), $account->getSshPort());
+        $key = $this->loadKey($account);
 
-        $keyPath = $account->getSshKeyPath();
-        if ($keyPath && file_exists($keyPath)) {
-            $key = PublicKeyLoader::load(file_get_contents($keyPath));
-            if (!$ssh->login($account->getSshUser(), $key)) {
-                throw new \RuntimeException('SSH key authentication failed');
-            }
-        } else {
-            throw new \RuntimeException('SSH key file not found: ' . $keyPath);
+        if (!$ssh->login($account->getSshUser(), $key)) {
+            throw new \RuntimeException('SSH key authentication failed');
         }
 
         return $ssh;
@@ -64,9 +66,8 @@ class SshService
     public function upload(Account $account, $localPath, $remotePath)
     {
         $sftp = new SFTP($account->getSshHost(), $account->getSshPort());
+        $key = $this->loadKey($account);
 
-        $keyPath = $account->getSshKeyPath();
-        $key = PublicKeyLoader::load(file_get_contents($keyPath));
         if (!$sftp->login($account->getSshUser(), $key)) {
             throw new \RuntimeException('SFTP authentication failed');
         }
@@ -80,30 +81,33 @@ class SshService
         return $result;
     }
 
-    public function deployAgent(Account $account)
+    private function loadKey(Account $account)
     {
-        $agentSource = __DIR__ . '/../Resources/agent/antispam-agent.php';
-        $remotePath = $account->getAgentPath() . '/antispam-agent.php';
+        // Try inline key first (stored in database)
+        $keyContent = $account->getSshKeyPrivate();
+        if ($keyContent) {
+            // Decrypt if encryption service is available
+            if ($this->keyEncryption) {
+                $decrypted = $this->keyEncryption->decrypt($keyContent);
+                if ($decrypted) {
+                    $keyContent = $decrypted;
+                }
+            }
 
-        $this->upload($account, $agentSource, $remotePath);
+            $passphrase = $account->getSshKeyPassphrase();
+            if ($passphrase && $this->keyEncryption) {
+                $passphrase = $this->keyEncryption->decrypt($passphrase) ?: $passphrase;
+            }
 
-        $output = $this->exec($account, "php {$remotePath} test 2>&1");
-        return json_decode($output, true) ?: ['success' => false, 'error' => $output];
-    }
+            return PublicKeyLoader::load($keyContent, $passphrase ?: false);
+        }
 
-    public function syncRules(Account $account, $rulesJson)
-    {
-        $remotePath = $account->getAgentPath() . '/antispam-agent.php';
-        $escapedJson = escapeshellarg($rulesJson);
-        $output = $this->exec($account, "echo {$escapedJson} | php {$remotePath} import-rules 2>&1");
-        return json_decode($output, true) ?: ['success' => false, 'error' => $output];
-    }
+        // Fallback to key file path
+        $keyPath = $account->getSshKeyPath();
+        if ($keyPath && file_exists($keyPath)) {
+            return PublicKeyLoader::load(file_get_contents($keyPath));
+        }
 
-    public function runScan(Account $account)
-    {
-        $remotePath = $account->getAgentPath() . '/antispam-agent.php';
-        $maildirPath = $account->getMaildirPath();
-        $output = $this->exec($account, "php {$remotePath} scan --maildir={$maildirPath} 2>&1");
-        return json_decode($output, true) ?: ['success' => false, 'error' => $output];
+        throw new \RuntimeException('No SSH key configured: provide either a key file path or paste the private key');
     }
 }

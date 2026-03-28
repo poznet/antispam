@@ -5,14 +5,25 @@
  * Requirements: PHP 7.1+, SQLite3 extension
  */
 
+define('AGENT_VERSION', '2.0.0');
+
 $defaultMaildir = getenv('HOME') . '/Maildir';
 $defaultDb = __DIR__ . '/rules.sqlite';
 
-$options = getopt('', ['maildir:', 'db:']);
-$maildirPath = $options['maildir'] ?? $defaultMaildir;
-$dbPath = $options['db'] ?? $defaultDb;
+// Parse command from first non-option argument
+$command = 'help';
+$maildirPath = $defaultMaildir;
+$dbPath = $defaultDb;
 
-$command = $argv[1] ?? 'help';
+for ($i = 1; $i < $argc; $i++) {
+    if (strpos($argv[$i], '--maildir=') === 0) {
+        $maildirPath = substr($argv[$i], strlen('--maildir='));
+    } elseif (strpos($argv[$i], '--db=') === 0) {
+        $dbPath = substr($argv[$i], strlen('--db='));
+    } elseif ($argv[$i][0] !== '-') {
+        $command = $argv[$i];
+    }
+}
 
 switch ($command) {
     case 'test':
@@ -24,18 +35,26 @@ switch ($command) {
     case 'scan':
         echo json_encode(runScan($maildirPath, $dbPath), JSON_PRETTY_PRINT) . "\n";
         break;
+    case 'version':
+        echo json_encode(['version' => AGENT_VERSION], JSON_PRETTY_PRINT) . "\n";
+        break;
+    case 'status':
+        echo json_encode(getStatus($maildirPath, $dbPath), JSON_PRETTY_PRINT) . "\n";
+        break;
     default:
-        echo "Antispam Maildir Agent\n";
+        echo "Antispam Maildir Agent v" . AGENT_VERSION . "\n";
         echo "Usage:\n";
         echo "  php antispam-agent.php test\n";
         echo "  php antispam-agent.php import-rules < rules.json\n";
         echo "  php antispam-agent.php scan [--maildir=path] [--db=path]\n";
+        echo "  php antispam-agent.php version\n";
+        echo "  php antispam-agent.php status [--maildir=path] [--db=path]\n";
         break;
 }
 
 function runTest($maildirPath)
 {
-    $result = ['success' => true, 'checks' => []];
+    $result = ['success' => true, 'version' => AGENT_VERSION, 'checks' => []];
 
     $result['checks']['php_version'] = PHP_VERSION;
     $result['checks']['sqlite3'] = extension_loaded('sqlite3') ? 'available' : 'NOT available';
@@ -56,6 +75,45 @@ function runTest($maildirPath)
     $result['checks']['agent_dir_writable'] = is_writable(__DIR__) ? 'yes' : 'no';
 
     return $result;
+}
+
+function getStatus($maildirPath, $dbPath)
+{
+    $status = [
+        'version' => AGENT_VERSION,
+        'db_exists' => file_exists($dbPath),
+        'rules' => ['whitelist' => 0, 'email_whitelist' => 0, 'blacklist' => 0, 'email_blacklist' => 0],
+        'checked_count' => 0,
+        'maildir' => ['new' => 0, 'cur' => 0, 'spam_new' => 0, 'spam_cur' => 0],
+    ];
+
+    if (file_exists($dbPath)) {
+        $db = new \SQLite3($dbPath);
+        $db->busyTimeout(5000);
+
+        foreach (['whitelist', 'email_whitelist', 'blacklist', 'email_blacklist'] as $table) {
+            $result = $db->querySingle("SELECT COUNT(*) FROM {$table}");
+            $status['rules'][$table] = (int)$result;
+        }
+
+        $status['checked_count'] = (int)$db->querySingle("SELECT COUNT(*) FROM checked");
+    }
+
+    foreach (['new', 'cur'] as $sub) {
+        $dir = $maildirPath . '/' . $sub;
+        if (is_dir($dir)) {
+            $status['maildir'][$sub] = count(array_diff(scandir($dir), ['.', '..']));
+        }
+    }
+
+    foreach (['new', 'cur'] as $sub) {
+        $dir = $maildirPath . '/.SPAM/' . $sub;
+        if (is_dir($dir)) {
+            $status['maildir']['spam_' . $sub] = count(array_diff(scandir($dir), ['.', '..']));
+        }
+    }
+
+    return $status;
 }
 
 function importRules($dbPath)
@@ -130,6 +188,7 @@ function runScan($maildirPath, $dbPath)
         'whitelisted' => 0,
         'blacklisted' => 0,
         'moved_to_spam' => 0,
+        'version' => AGENT_VERSION,
     ];
 
     // Load rules into memory

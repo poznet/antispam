@@ -22,8 +22,29 @@ services:
         class: AntispamBundle\Services\MessageService
         public: true
 
+    antispam.key_encryption:
+        class: AntispamBundle\Services\KeyEncryptionService
+        arguments: ["%secret%"]
+        public: true
+
     antispam.ssh:
         class: AntispamBundle\Services\SshService
+        arguments: ["@antispam.key_encryption"]
+        public: true
+
+    antispam.agent.deploy:
+        class: AntispamBundle\Services\AgentDeployService
+        arguments: ["@antispam.ssh"]
+        public: true
+
+    antispam.agent.sync:
+        class: AntispamBundle\Services\RuleSyncService
+        arguments: ["@doctrine.orm.default_entity_manager", "@antispam.ssh"]
+        public: true
+
+    antispam.agent.scan:
+        class: AntispamBundle\Services\RemoteScanService
+        arguments: ["@antispam.ssh", "@doctrine.orm.default_entity_manager"]
         public: true
 
     # Commands
@@ -42,28 +63,39 @@ services:
     AntispamBundle\Command\AgentDeployCommand:
         arguments:
             - "@doctrine.orm.default_entity_manager"
-            - "@antispam.ssh"
+            - "@antispam.agent.deploy"
         tags: ['console.command']
 
     AntispamBundle\Command\AgentSyncCommand:
         arguments:
             - "@doctrine.orm.default_entity_manager"
-            - "@antispam.ssh"
+            - "@antispam.agent.sync"
         tags: ['console.command']
 
     AntispamBundle\Command\AgentScanCommand:
         arguments:
             - "@doctrine.orm.default_entity_manager"
-            - "@antispam.ssh"
+            - "@antispam.agent.scan"
+            - "@antispam.agent.sync"
         tags: ['console.command']
 
     AntispamBundle\Command\AgentScanAllCommand:
         arguments:
             - "@doctrine.orm.default_entity_manager"
-            - "@antispam.ssh"
+            - "@antispam.agent.scan"
+            - "@antispam.agent.sync"
         tags: ['console.command']
 
+    # Event listeners - rule change tracking
+    antispam.listener.rule_change:
+        class: AntispamBundle\EventListener\RuleChangeListener
+        arguments: ["@doctrine.orm.default_entity_manager"]
+        tags:
+            - { name: doctrine.event_listener, event: postPersist }
+            - { name: doctrine.event_listener, event: postUpdate }
+            - { name: doctrine.event_listener, event: postRemove }
 
+    # Event listeners - message checking
     antispam.checkkonfig.listener:
         class: AntispamBundle\EventListener\CheckConfig\CheckEmailData
         arguments: ["@configuration"]

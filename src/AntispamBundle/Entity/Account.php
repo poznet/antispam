@@ -3,6 +3,7 @@
 namespace AntispamBundle\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Validator\Constraints as Assert;
 
 /**
  * @ORM\Table(name="antispam_account")
@@ -22,16 +23,21 @@ class Account
 
     /**
      * @ORM\Column(name="name", type="string", length=255)
+     * @Assert\NotBlank(message="Account name is required")
+     * @Assert\Length(max=255)
      */
     private $name;
 
     /**
      * @ORM\Column(name="email", type="string", length=255)
+     * @Assert\NotBlank(message="Email is required")
+     * @Assert\Email(message="Invalid email address")
      */
     private $email;
 
     /**
      * @ORM\Column(name="connection_type", type="string", length=10)
+     * @Assert\Choice(choices={"imap", "ssh"}, message="Invalid connection type")
      */
     private $connectionType = self::CONNECTION_IMAP;
 
@@ -39,11 +45,13 @@ class Account
 
     /**
      * @ORM\Column(name="imap_host", type="string", length=255, nullable=true)
+     * @Assert\Length(max=255)
      */
     private $imapHost;
 
     /**
      * @ORM\Column(name="imap_port", type="integer", nullable=true)
+     * @Assert\Range(min=1, max=65535)
      */
     private $imapPort = 143;
 
@@ -66,16 +74,19 @@ class Account
 
     /**
      * @ORM\Column(name="ssh_host", type="string", length=255, nullable=true)
+     * @Assert\Length(max=255)
      */
     private $sshHost;
 
     /**
      * @ORM\Column(name="ssh_port", type="integer", nullable=true)
+     * @Assert\Range(min=1, max=65535)
      */
     private $sshPort = 22;
 
     /**
      * @ORM\Column(name="ssh_user", type="string", length=255, nullable=true)
+     * @Assert\Length(max=255)
      */
     private $sshUser;
 
@@ -85,12 +96,24 @@ class Account
     private $sshKeyPath;
 
     /**
+     * @ORM\Column(name="ssh_key_private", type="text", nullable=true)
+     */
+    private $sshKeyPrivate;
+
+    /**
+     * @ORM\Column(name="ssh_key_passphrase", type="string", length=255, nullable=true)
+     */
+    private $sshKeyPassphrase;
+
+    /**
      * @ORM\Column(name="maildir_path", type="string", length=500, nullable=true)
+     * @Assert\Length(max=500)
      */
     private $maildirPath = '~/Maildir';
 
     /**
      * @ORM\Column(name="agent_path", type="string", length=500, nullable=true)
+     * @Assert\Length(max=500)
      */
     private $agentPath = '~/antispam-agent';
 
@@ -105,6 +128,16 @@ class Account
      * @ORM\Column(name="agent_deployed", type="boolean")
      */
     private $agentDeployed = false;
+
+    /**
+     * @ORM\Column(name="needs_sync", type="boolean")
+     */
+    private $needsSync = false;
+
+    /**
+     * @ORM\Column(name="last_sync_at", type="datetime", nullable=true)
+     */
+    private $lastSyncAt;
 
     /**
      * @ORM\Column(name="last_scan_at", type="datetime", nullable=true)
@@ -157,6 +190,12 @@ class Account
     public function getSshKeyPath() { return $this->sshKeyPath; }
     public function setSshKeyPath($sshKeyPath) { $this->sshKeyPath = $sshKeyPath; return $this; }
 
+    public function getSshKeyPrivate() { return $this->sshKeyPrivate; }
+    public function setSshKeyPrivate($sshKeyPrivate) { $this->sshKeyPrivate = $sshKeyPrivate; return $this; }
+
+    public function getSshKeyPassphrase() { return $this->sshKeyPassphrase; }
+    public function setSshKeyPassphrase($sshKeyPassphrase) { $this->sshKeyPassphrase = $sshKeyPassphrase; return $this; }
+
     public function getMaildirPath() { return $this->maildirPath; }
     public function setMaildirPath($maildirPath) { $this->maildirPath = $maildirPath; return $this; }
 
@@ -169,6 +208,12 @@ class Account
     public function getAgentDeployed() { return $this->agentDeployed; }
     public function setAgentDeployed($agentDeployed) { $this->agentDeployed = $agentDeployed; return $this; }
 
+    public function getNeedsSync() { return $this->needsSync; }
+    public function setNeedsSync($needsSync) { $this->needsSync = $needsSync; return $this; }
+
+    public function getLastSyncAt() { return $this->lastSyncAt; }
+    public function setLastSyncAt($lastSyncAt) { $this->lastSyncAt = $lastSyncAt; return $this; }
+
     public function getLastScanAt() { return $this->lastScanAt; }
     public function setLastScanAt($lastScanAt) { $this->lastScanAt = $lastScanAt; return $this; }
 
@@ -178,5 +223,13 @@ class Account
     public function getLastScanResultDecoded()
     {
         return $this->lastScanResult ? json_decode($this->lastScanResult, true) : null;
+    }
+
+    public function hasSshKey()
+    {
+        if ($this->sshKeyPrivate) {
+            return true;
+        }
+        return $this->sshKeyPath && file_exists($this->sshKeyPath);
     }
 }

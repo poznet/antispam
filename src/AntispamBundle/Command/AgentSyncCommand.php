@@ -2,7 +2,7 @@
 
 namespace AntispamBundle\Command;
 
-use AntispamBundle\Services\SshService;
+use AntispamBundle\Services\RuleSyncService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -14,13 +14,13 @@ class AgentSyncCommand extends Command
     protected static $defaultName = 'antispam:agent:sync';
 
     private $em;
-    private $ssh;
+    private $syncService;
 
-    public function __construct(EntityManagerInterface $em, SshService $ssh)
+    public function __construct(EntityManagerInterface $em, RuleSyncService $syncService)
     {
         parent::__construct();
         $this->em = $em;
-        $this->ssh = $ssh;
+        $this->syncService = $syncService;
     }
 
     protected function configure()
@@ -39,14 +39,14 @@ class AgentSyncCommand extends Command
 
         $output->writeln('Syncing rules for ' . $account->getEmail() . '...');
 
-        $rules = $this->exportRules($account->getEmail());
-        $output->writeln('Rules: ' . count($rules['whitelist']) . ' whitelist, '
-            . count($rules['email_whitelist']) . ' email whitelist, '
-            . count($rules['blacklist']) . ' blacklist, '
-            . count($rules['email_blacklist']) . ' email blacklist');
+        $counts = $this->syncService->getRuleCounts($account->getEmail());
+        $output->writeln('Rules: ' . $counts['whitelist'] . ' whitelist, '
+            . $counts['email_whitelist'] . ' email whitelist, '
+            . $counts['blacklist'] . ' blacklist, '
+            . $counts['email_blacklist'] . ' email blacklist');
 
         try {
-            $result = $this->ssh->syncRules($account, json_encode($rules));
+            $result = $this->syncService->sync($account);
             $output->writeln('<info>Rules synced successfully</info>');
             $output->writeln(json_encode($result, JSON_PRETTY_PRINT));
         } catch (\Exception $e) {
@@ -55,25 +55,5 @@ class AgentSyncCommand extends Command
         }
 
         return 0;
-    }
-
-    private function exportRules($email)
-    {
-        $rules = ['whitelist' => [], 'email_whitelist' => [], 'blacklist' => [], 'email_blacklist' => []];
-
-        foreach ($this->em->getRepository('AntispamBundle:Whitelist')->findBy(['email' => $email]) as $item) {
-            $rules['whitelist'][] = ['email' => $item->getEmail(), 'host' => $item->getHost()];
-        }
-        foreach ($this->em->getRepository('AntispamBundle:EmailWhitelist')->findBy(['email' => $email]) as $item) {
-            $rules['email_whitelist'][] = ['email' => $item->getEmail(), 'whitelistemail' => $item->getWhitelistemail()];
-        }
-        foreach ($this->em->getRepository('AntispamBundle:Blacklist')->findBy(['email' => $email]) as $item) {
-            $rules['blacklist'][] = ['email' => $item->getEmail(), 'host' => $item->getHost()];
-        }
-        foreach ($this->em->getRepository('AntispamBundle:EmailBlacklist')->findBy(['email' => $email]) as $item) {
-            $rules['email_blacklist'][] = ['email' => $item->getEmail(), 'blacklistemail' => $item->getBlacklistemail()];
-        }
-
-        return $rules;
     }
 }

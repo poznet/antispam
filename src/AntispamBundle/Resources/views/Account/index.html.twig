@@ -19,6 +19,7 @@
                 <th>Type</th>
                 <th>Host</th>
                 <th>Agent</th>
+                <th>Sync</th>
                 <th>Last Scan</th>
                 <th>Actions</th>
             </tr>
@@ -54,6 +55,19 @@
                     {% endif %}
                 </td>
                 <td>
+                    {% if account.connectionType == 'ssh' %}
+                        {% if account.needsSync %}
+                            <span class="label label-warning">Needs sync</span>
+                        {% elseif account.lastSyncAt %}
+                            <span class="label label-success" title="{{ account.lastSyncAt|date('Y-m-d H:i') }}">Synced</span>
+                        {% else %}
+                            <span class="label label-default">Never</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="label label-default">N/A</span>
+                    {% endif %}
+                </td>
+                <td>
                     {% if account.lastScanAt %}
                         {{ account.lastScanAt|date('Y-m-d H:i') }}
                     {% else %}
@@ -69,13 +83,17 @@
                             <a href="{{ path('antispam_account_deploy', {id: account.id}) }}" class="btn btn-warning" title="Deploy agent">Deploy</a>
                             <a href="{{ path('antispam_account_sync', {id: account.id}) }}" class="btn btn-success" title="Sync rules">Sync</a>
                         {% endif %}
-                        <a href="{{ path('antispam_account_del', {id: account.id}) }}" class="btn btn-danger" title="Delete" onclick="return confirm('Delete this account?')">Del</a>
+                        <a href="{{ path('antispam_account_history', {id: account.id}) }}" class="btn btn-default" title="Scan history">History</a>
+                        <form method="post" action="{{ path('antispam_account_del', {id: account.id}) }}" style="display:inline;" onsubmit="return confirm('Delete this account?')">
+                            <input type="hidden" name="_token" value="{{ csrf_token('account_delete_' ~ account.id) }}">
+                            <button type="submit" class="btn btn-danger btn-xs" title="Delete">Del</button>
+                        </form>
                     </div>
                 </td>
             </tr>
             {% if account.lastScanResult %}
             <tr>
-                <td colspan="7" style="background:#f9f9f9; font-size:12px;">
+                <td colspan="8" style="background:#f9f9f9; font-size:12px;">
                     {% set scanData = account.lastScanResultDecoded %}
                     {% if scanData %}
                         Total: {{ scanData.total|default(0) }} |
@@ -89,7 +107,7 @@
             </tr>
             {% endif %}
         {% else %}
-            <tr><td colspan="7" class="text-center"><em>No accounts configured</em></td></tr>
+            <tr><td colspan="8" class="text-center"><em>No accounts configured</em></td></tr>
         {% endfor %}
         </tbody>
     </table>

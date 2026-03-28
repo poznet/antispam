@@ -2,7 +2,7 @@
 
 namespace AntispamBundle\Command;
 
-use AntispamBundle\Services\SshService;
+use AntispamBundle\Services\AgentDeployService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -14,13 +14,13 @@ class AgentDeployCommand extends Command
     protected static $defaultName = 'antispam:agent:deploy';
 
     private $em;
-    private $ssh;
+    private $deployer;
 
-    public function __construct(EntityManagerInterface $em, SshService $ssh)
+    public function __construct(EntityManagerInterface $em, AgentDeployService $deployer)
     {
         parent::__construct();
         $this->em = $em;
-        $this->ssh = $ssh;
+        $this->deployer = $deployer;
     }
 
     protected function configure()
@@ -40,7 +40,7 @@ class AgentDeployCommand extends Command
         $output->writeln('Deploying agent to ' . $account->getSshHost() . '...');
 
         try {
-            $result = $this->ssh->deployAgent($account);
+            $result = $this->deployer->deploy($account);
             $account->setAgentDeployed(true);
             $this->em->flush();
             $output->writeln('<info>Agent deployed successfully</info>');

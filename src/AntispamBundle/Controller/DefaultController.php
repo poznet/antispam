@@ -30,11 +30,55 @@ class DefaultController extends Controller
         });
         $recentScans = array_slice($recentScans, 0, 5);
 
+        // Compute total spam caught from scan logs (last 30 days)
+        $spamCount = 0;
+        $dailyStats = [];
+        try {
+            $since = new \DateTime('-30 days');
+            $logs = $em->getRepository('AntispamBundle:ScanLog')->createQueryBuilder('l')
+                ->where('l.scannedAt >= :since')
+                ->andWhere('l.success = true')
+                ->setParameter('since', $since)
+                ->orderBy('l.scannedAt', 'ASC')
+                ->getQuery()
+                ->getResult();
+
+            foreach ($logs as $log) {
+                $spamCount += $log->getMovedToSpam();
+                $day = $log->getScannedAt()->format('Y-m-d');
+                if (!isset($dailyStats[$day])) {
+                    $dailyStats[$day] = ['total' => 0, 'spam' => 0, 'whitelisted' => 0];
+                }
+                $dailyStats[$day]['total'] += $log->getTotalMessages();
+                $dailyStats[$day]['spam'] += $log->getMovedToSpam();
+                $dailyStats[$day]['whitelisted'] += $log->getWhitelisted();
+            }
+
+            // Top blacklisted domains
+            $topDomains = $em->createQuery(
+                'SELECT b.host, SUM(b.counter) as cnt FROM AntispamBundle:Blacklist b GROUP BY b.host ORDER BY cnt DESC'
+            )->setMaxResults(10)->getResult();
+        } catch (\Exception $e) {
+            $topDomains = [];
+        }
+
+        // Accounts needing sync
+        $needsSyncCount = 0;
+        foreach ($accounts as $a) {
+            if ($a->isSsh() && $a->getNeedsSync()) {
+                $needsSyncCount++;
+            }
+        }
+
         return [
             'accounts' => count($accounts),
             'whitelistCount' => $whitelistCount,
             'blacklistCount' => $blacklistCount,
+            'spamCount' => $spamCount,
+            'needsSyncCount' => $needsSyncCount,
             'recentScans' => $recentScans,
+            'dailyStats' => $dailyStats,
+            'topDomains' => $topDomains ?? [],
         ];
     }
 }

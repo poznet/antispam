@@ -36,12 +36,52 @@
             <div class="panel panel-stat panel-default">
                 <div class="panel-body text-center">
                     <span class="glyphicon glyphicon-trash" style="font-size:24px; color:#f0ad4e;"></span>
-                    <div class="stat-value">{{ spamCount|default('--') }}</div>
-                    <div class="stat-label">Spam Caught</div>
+                    <div class="stat-value">{{ spamCount|default(0) }}</div>
+                    <div class="stat-label">Spam (30 days)</div>
                 </div>
             </div>
         </div>
     </div>
+
+    {% if needsSyncCount > 0 %}
+    <div class="alert alert-warning">
+        <span class="glyphicon glyphicon-exclamation-sign"></span>
+        <strong>{{ needsSyncCount }} account(s)</strong> need rule sync. Rules have changed since last sync.
+        <a href="{{ path('antispam_account_index') }}" class="alert-link">Go to Accounts</a>
+    </div>
+    {% endif %}
+
+    {% if dailyStats|length > 0 %}
+    <div class="row">
+        <div class="col-sm-8">
+            <div class="panel panel-default">
+                <div class="panel-heading"><span class="glyphicon glyphicon-stats"></span> Scan Activity (30 days)</div>
+                <div class="panel-body">
+                    <canvas id="scanChart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <div class="panel panel-default">
+                <div class="panel-heading"><span class="glyphicon glyphicon-ban-circle"></span> Top Blocked Domains</div>
+                {% if topDomains|length > 0 %}
+                <table class="table table-condensed">
+                    <tbody>
+                    {% for item in topDomains %}
+                        <tr>
+                            <td><code>{{ item.host }}</code></td>
+                            <td class="text-right"><span class="badge">{{ item.cnt }}</span></td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="panel-body text-muted">No data yet</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     {% if recentScans is defined and recentScans|length > 0 %}
     <div class="panel panel-default">
@@ -54,6 +94,7 @@
                     <th>Last Scan</th>
                     <th>Total</th>
                     <th>Spam</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -65,6 +106,10 @@
                     {% set scan = account.lastScanResultDecoded %}
                     <td>{{ scan ? scan.total|default(0) : '--' }}</td>
                     <td>{{ scan ? scan.moved_to_spam|default(0) : '--' }}</td>
+                    <td>
+                        <a href="{{ path('antispam_account_history', {id: account.id}) }}" class="btn btn-xs btn-default">History</a>
+                        <a href="{{ path('antispam_account_scan', {id: account.id}) }}" class="btn btn-xs btn-primary">Scan</a>
+                    </td>
                 </tr>
             {% endfor %}
             </tbody>
@@ -91,16 +136,44 @@
         </div>
         <div class="col-sm-6">
             <div class="panel panel-default">
-                <div class="panel-heading"><span class="glyphicon glyphicon-info-sign"></span> About</div>
+                <div class="panel-heading"><span class="glyphicon glyphicon-info-sign"></span> Cron Setup</div>
                 <div class="panel-body">
-                    <p>Antispam filters unwanted emails from your mailboxes using blacklist and whitelist rules.</p>
-                    <p><strong>Connection modes:</strong></p>
-                    <ul>
-                        <li><strong>IMAP</strong> &mdash; connects to mail server via IMAP protocol</li>
-                        <li><strong>SSH+Maildir</strong> &mdash; deploys agent directly on hosting server</li>
-                    </ul>
+                    <p>Add to crontab for automatic scanning:</p>
+                    <pre style="font-size:12px;">*/15 * * * * cd {{ app.request is defined ? app.request.server.get('DOCUMENT_ROOT')|replace({'web': ''}) : '/path/to/antispam' }} && php bin/console antispam:agent:scan-all --sync-first --quiet-ok</pre>
+                    <p class="text-muted" style="font-size:12px;">Runs every 15 minutes. Auto-syncs rules when they change.</p>
                 </div>
             </div>
         </div>
     </div>
+
+    {% if dailyStats|length > 0 %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+    var ctx = document.getElementById('scanChart').getContext('2d');
+    var dailyData = {{ dailyStats|json_encode|raw }};
+    var labels = Object.keys(dailyData).sort();
+    var spamData = labels.map(function(d) { return dailyData[d].spam || 0; });
+    var totalData = labels.map(function(d) { return dailyData[d].total || 0; });
+    var whiteData = labels.map(function(d) { return dailyData[d].whitelisted || 0; });
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels.map(function(d) { return d.substring(5); }),
+            datasets: [
+                { label: 'Spam', data: spamData, backgroundColor: 'rgba(217, 83, 79, 0.8)' },
+                { label: 'Whitelisted', data: whiteData, backgroundColor: 'rgba(92, 184, 92, 0.6)' },
+                { label: 'Total', data: totalData, backgroundColor: 'rgba(91, 192, 222, 0.3)' }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: { stacked: false },
+                y: { beginAtZero: true }
+            }
+        }
+    });
+    </script>
+    {% endif %}
 {% endblock %}

@@ -17,3 +17,7 @@ parameters:
 
     # A secret key that's used to generate certain security-related tokens
     secret:            ThidsTokdenssNostSosSecretChadngedIt
+
+    # Notification email (optional, for scan reports)
+    notification_email: ~
+    notification_spam_threshold: 50

@@ -9,9 +9,9 @@
 >
     <php>
         <ini name="error_reporting" value="-1" />
-        <!--
-            <server name="KERNEL_DIR" value="/path/to/your/app/" />
-        -->
+        <server name="KERNEL_CLASS" value="AppKernel" />
+        <server name="KERNEL_DIR" value="./" />
+        <env name="APP_ENV" value="test" />
     </php>
 
     <testsuites>

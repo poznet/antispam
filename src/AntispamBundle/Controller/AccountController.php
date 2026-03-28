@@ -3,7 +3,7 @@
 namespace AntispamBundle\Controller;
 
 use AntispamBundle\Entity\Account;
-use AntispamBundle\Services\SshService;
+use AntispamBundle\Entity\ScanLog;
 use Symfony\Bundle\FrameworkBundle\Controller\Controller;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
@@ -35,10 +35,22 @@ class AccountController extends Controller
     public function addAction(Request $request)
     {
         if ($request->getMethod() === 'POST') {
+            if (!$this->isCsrfTokenValid('account_form', $request->get('_token'))) {
+                $this->addFlash('danger', 'Invalid CSRF token');
+                return $this->redirectToRoute('antispam_account_add');
+            }
+
             $em = $this->getDoctrine()->getManager();
             $account = $this->fillAccountFromRequest(new Account(), $request);
+
+            $errors = $this->get('validator')->validate($account);
+            if (count($errors) > 0) {
+                return ['errors' => $errors];
+            }
+
             $em->persist($account);
             $em->flush();
+            $this->addFlash('success', 'Account created');
             return $this->redirectToRoute('antispam_account_index');
         }
         return [];
@@ -57,8 +69,20 @@ class AccountController extends Controller
         }
 
         if ($request->getMethod() === 'POST') {
+            if (!$this->isCsrfTokenValid('account_form', $request->get('_token'))) {
+                $this->addFlash('danger', 'Invalid CSRF token');
+                return $this->redirectToRoute('antispam_account_edit', ['id' => $id]);
+            }
+
             $account = $this->fillAccountFromRequest($account, $request);
+
+            $errors = $this->get('validator')->validate($account);
+            if (count($errors) > 0) {
+                return ['account' => $account, 'errors' => $errors];
+            }
+
             $em->flush();
+            $this->addFlash('success', 'Account updated');
             return $this->redirectToRoute('antispam_account_index');
         }
 
@@ -66,15 +90,21 @@ class AccountController extends Controller
     }
 
     /**
-     * @Route("/del/{id}", name="antispam_account_del")
+     * @Route("/del/{id}", name="antispam_account_del", methods={"POST"})
      */
-    public function delAction($id)
+    public function delAction($id, Request $request)
     {
+        if (!$this->isCsrfTokenValid('account_delete_' . $id, $request->get('_token'))) {
+            $this->addFlash('danger', 'Invalid CSRF token');
+            return $this->redirectToRoute('antispam_account_index');
+        }
+
         $em = $this->getDoctrine()->getManager();
         $account = $em->getRepository('AntispamBundle:Account')->find($id);
         if ($account) {
             $em->remove($account);
             $em->flush();
+            $this->addFlash('success', 'Account deleted');
         }
         return $this->redirectToRoute('antispam_account_index');
     }
@@ -134,8 +164,8 @@ class AccountController extends Controller
         }
 
         try {
-            $sshService = $this->get('antispam.ssh');
-            $deployResult = $sshService->deployAgent($account);
+            $deployer = $this->get('antispam.agent.deploy');
+            $deployResult = $deployer->deploy($account);
             $account->setAgentDeployed(true);
             $em->flush();
             $result['success'] = true;
@@ -164,11 +194,15 @@ class AccountController extends Controller
         }
 
         try {
-            $rules = $this->exportRules($em, $account->getEmail());
-            $sshService = $this->get('antispam.ssh');
-            $syncResult = $sshService->syncRules($account, json_encode($rules));
+            $syncService = $this->get('antispam.agent.sync');
+            $counts = $syncService->getRuleCounts($account->getEmail());
+            $syncResult = $syncService->sync($account);
             $result['success'] = true;
             $result['messages'][] = 'Rules synced successfully';
+            $result['messages'][] = $counts['whitelist'] . ' whitelist, '
+                . $counts['email_whitelist'] . ' email whitelist, '
+                . $counts['blacklist'] . ' blacklist, '
+                . $counts['email_blacklist'] . ' email blacklist';
             $result['sync_result'] = $syncResult;
         } catch (\Exception $e) {
             $result['messages'][] = 'Sync failed: ' . $e->getMessage();
@@ -193,16 +227,19 @@ class AccountController extends Controller
         }
 
         try {
-            if ($account->isSsh()) {
-                $sshService = $this->get('antispam.ssh');
-                $scanResult = $sshService->runScan($account);
-            } else {
-                $scanResult = $this->runImapScan($account);
-            }
+            $scanService = $this->get('antispam.agent.scan');
 
-            $account->setLastScanAt(new \DateTime());
-            $account->setLastScanResult(json_encode($scanResult));
-            $em->flush();
+            if ($account->isSsh()) {
+                // Auto-sync if needed
+                if ($account->getNeedsSync()) {
+                    $syncService = $this->get('antispam.agent.sync');
+                    $syncService->sync($account);
+                    $result['messages'][] = 'Rules auto-synced before scan';
+                }
+                $scanResult = $scanService->scan($account);
+            } else {
+                $scanResult = $scanService->scanImap($account);
+            }
 
             $result['success'] = true;
             $result['scan_result'] = $scanResult;
@@ -211,6 +248,28 @@ class AccountController extends Controller
         }
 
         return ['account' => $account, 'result' => $result];
+    }
+
+    /**
+     * @Route("/history/{id}", name="antispam_account_history")
+     * @Template
+     */
+    public function historyAction($id)
+    {
+        $em = $this->getDoctrine()->getManager();
+        $account = $em->getRepository('AntispamBundle:Account')->find($id);
+
+        if (!$account) {
+            return $this->redirectToRoute('antispam_account_index');
+        }
+
+        $logs = $em->getRepository('AntispamBundle:ScanLog')->findBy(
+            ['account' => $account],
+            ['scannedAt' => 'DESC'],
+            50
+        );
+
+        return ['account' => $account, 'logs' => $logs];
     }
 
     /**
@@ -227,6 +286,7 @@ class AccountController extends Controller
     private function fillAccountFromRequest(Account $account, Request $request)
     {
         $data = $request->get('account');
+        $keyEncryption = $this->get('antispam.key_encryption');
 
         $account->setName($data['name'] ?? '');
         $account->setEmail($data['email'] ?? '');
@@ -248,87 +308,20 @@ class AccountController extends Controller
         $account->setMaildirPath($data['maildir_path'] ?? '~/Maildir');
         $account->setAgentPath($data['agent_path'] ?? '~/antispam-agent');
 
+        // Handle SSH private key (encrypt before storing)
+        $keyContent = $data['ssh_key_private'] ?? '';
+        if (!empty($keyContent)) {
+            $account->setSshKeyPrivate($keyEncryption->encrypt($keyContent));
+        }
+
+        // Handle passphrase (encrypt before storing)
+        $passphrase = $data['ssh_key_passphrase'] ?? '';
+        if (!empty($passphrase)) {
+            $account->setSshKeyPassphrase($keyEncryption->encrypt($passphrase));
+        } elseif (isset($data['ssh_key_passphrase'])) {
+            $account->setSshKeyPassphrase(null);
+        }
+
         return $account;
-    }
-
-    private function exportRules($em, $email)
-    {
-        $rules = [
-            'whitelist' => [],
-            'email_whitelist' => [],
-            'blacklist' => [],
-            'email_blacklist' => [],
-        ];
-
-        foreach ($em->getRepository('AntispamBundle:Whitelist')->findBy(['email' => $email]) as $item) {
-            $rules['whitelist'][] = ['email' => $item->getEmail(), 'host' => $item->getHost()];
-        }
-        foreach ($em->getRepository('AntispamBundle:EmailWhitelist')->findBy(['email' => $email]) as $item) {
-            $rules['email_whitelist'][] = ['email' => $item->getEmail(), 'whitelistemail' => $item->getWhitelistemail()];
-        }
-        foreach ($em->getRepository('AntispamBundle:Blacklist')->findBy(['email' => $email]) as $item) {
-            $rules['blacklist'][] = ['email' => $item->getEmail(), 'host' => $item->getHost()];
-        }
-        foreach ($em->getRepository('AntispamBundle:EmailBlacklist')->findBy(['email' => $email]) as $item) {
-            $rules['email_blacklist'][] = ['email' => $item->getEmail(), 'blacklistemail' => $item->getBlacklistemail()];
-        }
-
-        return $rules;
-    }
-
-    private function runImapScan(Account $account)
-    {
-        $server = new \Ddeboer\Imap\Server(
-            $account->getImapHost(),
-            $account->getImapPort(),
-            $account->getImapFlags()
-        );
-        $connection = $server->authenticate($account->getImapLogin(), $account->getImapPassword());
-        $inbox = $connection->getMailbox('INBOX');
-        $messages = $inbox->getMessages();
-
-        $em = $this->getDoctrine()->getManager();
-        $stats = ['total' => 0, 'checked' => 0, 'whitelisted' => 0, 'blacklisted' => 0, 'moved_to_spam' => 0];
-
-        foreach ($messages as $msg) {
-            $stats['total']++;
-            $stats['checked']++;
-
-            try {
-                $senderHeaders = $msg->getHeaders()->get('sender');
-                if (empty($senderHeaders)) continue;
-
-                $host = $senderHeaders[0]->host ?? '';
-                $senderEmail = ($senderHeaders[0]->mailbox ?? '') . '@' . $host;
-
-                // Check whitelists
-                $wl = $em->getRepository('AntispamBundle:Whitelist')->findOneBy(['host' => $host, 'email' => $account->getEmail()]);
-                if ($wl) { $stats['whitelisted']++; continue; }
-
-                $ewl = $em->getRepository('AntispamBundle:EmailWhitelist')->findOneBy(['whitelistemail' => $senderEmail, 'email' => $account->getEmail()]);
-                if ($ewl) { $stats['whitelisted']++; continue; }
-
-                // Check blacklists
-                $bl = $em->getRepository('AntispamBundle:Blacklist')->findOneBy(['host' => $host, 'email' => $account->getEmail()]);
-                $ebl = $em->getRepository('AntispamBundle:EmailBlacklist')->findOneBy(['blacklistemail' => $senderEmail, 'email' => $account->getEmail()]);
-
-                if ($bl || $ebl) {
-                    $stats['blacklisted']++;
-                    if (!$account->getDeleteSpam()) {
-                        if (!$connection->hasMailbox('SPAM')) {
-                            $connection->createMailbox('SPAM');
-                        }
-                        $spambox = $connection->getMailbox('SPAM');
-                        $msg->move($spambox);
-                        $stats['moved_to_spam']++;
-                    }
-                }
-            } catch (\Exception $e) {
-                // Skip messages with encoding issues
-            }
-        }
-
-        $connection->close();
-        return $stats;
     }
 }

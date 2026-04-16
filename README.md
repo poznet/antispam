@@ -42,6 +42,12 @@ php bin/console doctrine:database:create
 php bin/console doctrine:schema:create
 ```
 
+### Docker / Coolify
+
+A production-ready Docker stack is included (`Dockerfile`, `docker-compose.yml`).
+See [docs/deployment.md](docs/deployment.md) for step-by-step instructions on
+deploying the app on Coolify or plain docker-compose.
+
 ## Usage
 
 ### Check configuration

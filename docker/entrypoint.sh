@@ -14,6 +14,8 @@ APP_DIR=/var/www/html
 : "${MAILER_USER:=}"
 : "${MAILER_PASSWORD:=}"
 : "${APP_SECRET:=ChangeMeInProductionPlease}"
+: "${ADMIN_USER:=admin}"
+: "${ADMIN_PASSWORD:=admin}"
 : "${RUN_MIGRATIONS:=true}"
 
 export SYMFONY_ENV
@@ -27,6 +29,14 @@ MAILER_PASSWORD_YAML="null"
 if [ -n "$MAILER_PASSWORD" ]; then
     MAILER_PASSWORD_YAML="'${MAILER_PASSWORD}'"
 fi
+
+# Accept a pre-computed bcrypt hash (ADMIN_PASSWORD_HASH) or derive one from
+# ADMIN_PASSWORD. "%" characters are escaped to "%%" because Symfony parameter
+# resolution otherwise tries to expand them.
+if [ -z "${ADMIN_PASSWORD_HASH:-}" ]; then
+    ADMIN_PASSWORD_HASH=$(ADMIN_PASSWORD="$ADMIN_PASSWORD" php -r 'echo password_hash(getenv("ADMIN_PASSWORD"), PASSWORD_BCRYPT);')
+fi
+ADMIN_PASSWORD_HASH_ESCAPED=$(printf '%s' "$ADMIN_PASSWORD_HASH" | sed 's/%/%%/g')
 
 # Generate parameters.yml from environment variables each startup
 cat > "${APP_DIR}/app/config/parameters.yml" <<EOF
@@ -44,6 +54,9 @@ parameters:
     mailer_password: ${MAILER_PASSWORD_YAML}
 
     secret: '${APP_SECRET}'
+
+    admin_user: '${ADMIN_USER}'
+    admin_password_hash: '${ADMIN_PASSWORD_HASH_ESCAPED}'
 EOF
 
 # Wait for the database (max ~60s)
@@ -74,5 +87,13 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
 fi
 
 chown -R www-data:www-data "${APP_DIR}/app/cache" "${APP_DIR}/app/logs"
+
+# Warn loudly if the operator left the defaults in place
+if [ "${APP_SECRET}" = "ChangeMeInProductionPlease" ]; then
+    echo "[entrypoint] WARNING: APP_SECRET is using the default value - set a strong random secret!"
+fi
+if [ "${ADMIN_PASSWORD}" = "admin" ]; then
+    echo "[entrypoint] WARNING: ADMIN_PASSWORD is set to 'admin' - change it before exposing the app!"
+fi
 
 exec "$@"

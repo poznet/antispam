@@ -9,3 +9,5 @@ parameters:
     mailer_user: null
     mailer_password: null
     secret: 733c7eb6437bacba5ae9esdf3486dee8b7f03632005
+    admin_user: admin
+    admin_password_hash: '$2y$10$2nZvcuuPuPzXYwXQvFEuuehrmAjUvf/MSYjU6D7HL7q5URAnL80oK'

@@ -1,24 +1,39 @@
-# To get started with security, check out the documentation:
-# http://symfony.com/doc/current/book/security.html
+# Authentication and access control.
+#
+# The single application user is defined by the %admin_user% and
+# %admin_password_hash% parameters, which are rendered into app/config/parameters.yml
+# at container start from the ADMIN_USER / ADMIN_PASSWORD environment variables
+# (see docker/entrypoint.sh).
 security:
 
-    # http://symfony.com/doc/current/book/security.html#where-do-users-come-from-user-providers
+    encoders:
+        Symfony\Component\Security\Core\User\User: bcrypt
+
     providers:
-        in_memory:
-            memory: ~
+        app_users:
+            memory:
+                users:
+                    '%admin_user%':
+                        password: '%admin_password_hash%'
+                        roles: ['ROLE_ADMIN']
 
     firewalls:
-        # disables authentication for assets and the profiler, adapt it according to your needs
         dev:
             pattern: ^/(_(profiler|wdt)|css|images|js)/
             security: false
 
         main:
             anonymous: ~
-            # activate different ways to authenticate
+            provider: app_users
+            form_login:
+                login_path: login
+                check_path: login
+                default_target_path: /
+                csrf_token_generator: security.csrf.token_manager
+            logout:
+                path: logout
+                target: /login
 
-            # http_basic: ~
-            # http://symfony.com/doc/current/book/security.html#a-configuring-how-your-users-will-authenticate
-
-            # form_login: ~
-            # http://symfony.com/doc/current/cookbook/security/form_login_setup.html
+    access_control:
+        - { path: ^/login, roles: IS_AUTHENTICATED_ANONYMOUSLY }
+        - { path: ^/, roles: ROLE_ADMIN }

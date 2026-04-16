@@ -19,15 +19,22 @@ services:
     environment:
       SYMFONY_ENV: prod
       APP_SECRET: ${APP_SECRET:-ChangeMeInProductionPlease}
+
+      # Application login (form-based, required to access every page).
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+
       DATABASE_HOST: db
       DATABASE_PORT: 3306
       DATABASE_NAME: ${DATABASE_NAME:-antispam}
       DATABASE_USER: ${DATABASE_USER:-antispam}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:-antispam}
+
       MAILER_TRANSPORT: ${MAILER_TRANSPORT:-smtp}
       MAILER_HOST: ${MAILER_HOST:-127.0.0.1}
       MAILER_USER: ${MAILER_USER:-}
       MAILER_PASSWORD: ${MAILER_PASSWORD:-}
+
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
     expose:
       - "80"

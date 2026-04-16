@@ -69,6 +69,14 @@
                     </ul>
                 </li>
             </ul>
+            {% if app.user %}
+                <ul class="nav navbar-nav navbar-right">
+                    <li class="navbar-text" style="margin-right: 10px;">
+                        <span class="glyphicon glyphicon-user"></span> {{ app.user.username }}
+                    </li>
+                    <li><a href="{{ path('logout') }}"><span class="glyphicon glyphicon-log-out"></span> Logout</a></li>
+                </ul>
+            {% endif %}
         </div>
     </div>
 </nav>

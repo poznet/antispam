@@ -1,0 +1,71 @@
+# Docker Compose stack for Antispam, tailored for Coolify.
+#
+# Coolify will read this file, build the `app` image, expose port 80 on the
+# managed reverse proxy (using the FQDN you configure in the Coolify UI) and
+# persist the `db_data`, `app_cache` and `app_logs` volumes across restarts.
+#
+# All sensitive values should be set through Coolify's environment variables
+# screen (or a local `.env` file for docker-compose outside of Coolify).
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SYMFONY_ENV: prod
+      APP_SECRET: ${APP_SECRET:-ChangeMeInProductionPlease}
+
+      # Application login (form-based, required to access every page).
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+
+      DATABASE_HOST: db
+      DATABASE_PORT: 3306
+      DATABASE_NAME: ${DATABASE_NAME:-antispam}
+      DATABASE_USER: ${DATABASE_USER:-antispam}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-antispam}
+
+      MAILER_TRANSPORT: ${MAILER_TRANSPORT:-smtp}
+      MAILER_HOST: ${MAILER_HOST:-127.0.0.1}
+      MAILER_USER: ${MAILER_USER:-}
+      MAILER_PASSWORD: ${MAILER_PASSWORD:-}
+
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+    expose:
+      - "80"
+    volumes:
+      - app_cache:/var/www/html/app/cache
+      - app_logs:/var/www/html/app/logs
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "echo > /dev/tcp/127.0.0.1/80"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  db:
+    image: mariadb:10.6
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DATABASE_ROOT_PASSWORD:-rootpassword}
+      MARIADB_DATABASE: ${DATABASE_NAME:-antispam}
+      MARIADB_USER: ${DATABASE_USER:-antispam}
+      MARIADB_PASSWORD: ${DATABASE_PASSWORD:-antispam}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  app_cache:
+  app_logs:
+  db_data:

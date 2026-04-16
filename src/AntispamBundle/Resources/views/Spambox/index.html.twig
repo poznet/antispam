@@ -8,11 +8,14 @@
         <div class="col-sm-4">
             <div class="list-group">
             {% for msg in messages %}
-                <a href="#" class="list-group-item spamboxmsgheader" rel="{{ msg.id }}" {% if loop.first %}style="background:#f0f0f0;"{% endif %}>
+                <div class="list-group-item">
                     <small class="text-muted pull-right">{{ msg.date | date("d-m-Y") }}</small>
-                    <strong class="list-group-item-heading" style="font-size:12px;">{{ msg.from }}</strong>
-                    <p class="list-group-item-text" style="font-size:11px; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ msg.subject[:60] }}</p>
-                </a>
+                    <strong style="font-size:12px;">{{ msg.from }}</strong>
+                    <p style="font-size:11px; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ msg.subject[:60] }}</p>
+                    <a href="{{ path('antispam_spambox_restore', {folder: 'SPAM', id: msg.id}) }}" class="btn btn-xs btn-success" style="margin-top:5px;">
+                        <span class="glyphicon glyphicon-arrow-up"></span> Restore to Inbox
+                    </a>
+                </div>
             {% endfor %}
             </div>
         </div>

@@ -1,70 +1,62 @@
 <?php
-/**
- * Created by PhpStorm.
- * User: joseph
- * Date: 17.06.16
- * Time: 23:11
- */
 
 namespace AntispamBundle\Services;
-
-
 
 class InboxService
 {
     private $connection;
     private $mailbox;
-    private $spamboxname='SPAM';
+    private $spamboxname = 'SPAM';
+    private $quarantineboxname = 'QUARANTINE';
 
     public function __construct(ConnectionService $connection)
     {
-        $this->connection=$connection;
+        $this->connection = $connection;
     }
 
-    /**
-     * Return the Inbox instance
-     * @param string $name
-     * @return mixed
-     */
-    public function getInbox($name='INBOX',$condition=null){
-        $connection=$this->connection->getConnection();
+    public function getInbox($name = 'INBOX', $condition = null)
+    {
+        $connection = $this->connection->getConnection();
         $this->mailbox = $connection->getMailbox($name);
         $messages = $this->mailbox->getMessages($condition);
         return $messages;
     }
 
-    /**
-     * Returns message of given id
-     * @param $id
-     * @return mixed
-     */
-    public function getMessage($id){
-        
+    public function getMessage($id)
+    {
         return $this->mailbox->getMessage($id);
     }
 
-
-    /**
-     * Return spambox instance ( create one if not exists)
-     * @return mixed
-     */
-    public function getSpamFolder(){
-        $spambox=$this->spamboxname;
-        $connection=$this->connection->getConnection();
-        if (!$connection->hasMailbox($spambox)){
-            $connection->createMailbox($spambox);
-        }
-        return  $connection->getMailbox($spambox);
+    public function getSpamFolder()
+    {
+        return $this->getOrCreateFolder($this->spamboxname);
     }
 
-    /**
-     * Return Spambox name
-     * @return string
-     */
-    public function getSpamFolderName(){
+    public function getSpamFolderName()
+    {
         return $this->spamboxname;
     }
 
+    /**
+     * Returns (creating if needed) the quarantine folder used for messages
+     * whose score is suspicious but below the spam threshold.
+     */
+    public function getQuarantineFolder()
+    {
+        return $this->getOrCreateFolder($this->quarantineboxname);
+    }
 
-    
+    public function getQuarantineFolderName()
+    {
+        return $this->quarantineboxname;
+    }
+
+    private function getOrCreateFolder($name)
+    {
+        $connection = $this->connection->getConnection();
+        if (!$connection->hasMailbox($name)) {
+            $connection->createMailbox($name);
+        }
+        return $connection->getMailbox($name);
+    }
 }

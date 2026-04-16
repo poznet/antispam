@@ -5,12 +5,14 @@
 {% block body %}
     <div class="add-form">
         <form method="post" action="{{ path('antispam_blacklist_add') }}" class="form-inline">
-            <div class="input-group">
-                <input type="text" class="form-control" name="host" placeholder="Enter domain to block (e.g. spam-domain.com)" required style="min-width:300px;">
-                <span class="input-group-btn">
-                    <button type="submit" class="btn btn-danger"><span class="glyphicon glyphicon-plus"></span> Add</button>
-                </span>
-            </div>
+            <input type="text" class="form-control" name="host" placeholder="spam-domain.com or *.evil.example or ^.*\.ru$" required style="min-width:280px;">
+            <select name="pattern_type" class="form-control">
+                <option value="exact">Exact</option>
+                <option value="wildcard">Wildcard</option>
+                <option value="regex">Regex</option>
+            </select>
+            <input type="number" class="form-control" name="score" value="10" min="1" max="50" title="Spam score added on hit" style="width:90px;">
+            <button type="submit" class="btn btn-danger"><span class="glyphicon glyphicon-plus"></span> Add</button>
         </form>
     </div>
 
@@ -22,6 +24,8 @@
                 <span class="glyphicon glyphicon-remove"></span> Delete
             </a>
             <span class="badge badge-counter">{{ l.counter }} hits</span>
+            <span class="label label-default">{{ l.patternType }}</span>
+            <span class="label label-warning">score {{ l.score }}</span>
             <span class="glyphicon glyphicon-globe"></span> {{ l.host }}
         </li>
         {% endfor %}
@@ -30,7 +34,7 @@
     <div class="empty-state">
         <span class="glyphicon glyphicon-ban-circle"></span>
         <p>No domains in blacklist yet</p>
-        <p class="text-muted">Add domains above to start blocking spam</p>
+        <p class="text-muted">Add domains above. Use <code>*.example.com</code> for wildcard or a PCRE like <code>^mail\d+\.spam$</code> for regex.</p>
     </div>
     {% endif %}
 {% endblock %}

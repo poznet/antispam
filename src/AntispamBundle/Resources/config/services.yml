@@ -7,7 +7,7 @@ services:
         autoconfigure: false
         public: false
 
-    # Services
+    # Core services
     antispam.connection:
         class: AntispamBundle\Services\ConnectionService
         arguments: ["@configuration"]
@@ -24,6 +24,21 @@ services:
 
     antispam.ssh:
         class: AntispamBundle\Services\SshService
+        public: true
+
+    # Scoring / DNSBL / header analysis
+    antispam.dnsbl:
+        class: AntispamBundle\Services\DnsblService
+        arguments: ["@doctrine.orm.default_entity_manager"]
+        public: true
+
+    antispam.header_analyzer:
+        class: AntispamBundle\Services\HeaderAnalyzer
+        public: true
+
+    antispam.scoring:
+        class: AntispamBundle\Services\ScoringService
+        arguments: ["@doctrine.orm.default_entity_manager", "@configuration"]
         public: true
 
     # Commands
@@ -63,7 +78,13 @@ services:
             - "@antispam.ssh"
         tags: ['console.command']
 
+    AntispamBundle\Command\AgentHealthCommand:
+        arguments:
+            - "@doctrine.orm.default_entity_manager"
+            - "@antispam.ssh"
+        tags: ['console.command']
 
+    # Config-check listener
     antispam.checkkonfig.listener:
         class: AntispamBundle\EventListener\CheckConfig\CheckEmailData
         arguments: ["@configuration"]
@@ -74,7 +95,9 @@ services:
             - { name: kernel.event_listener, event: antispam.check.config, method: CheckImap }
             - { name: kernel.event_listener, event: antispam.check.config, method: tryToConnect }
 
-
+    # Message pipeline
+    # Priorities: higher = runs first. Whitelist short-circuits; scoring steps
+    # accumulate; final decision runs at the tail.
     antispam.checkemail.listener.alreadychecked:
         class: AntispamBundle\EventListener\Message\CheckIfIsAlreadyChecked
         arguments: ["@antispam.message"]
@@ -95,22 +118,39 @@ services:
 
     antispam.checkemail.listener.blacklistcheck:
         class: AntispamBundle\EventListener\Message\CheckBlacklist
-        arguments: ["@doctrine.orm.default_entity_manager","@antispam.message"]
+        arguments: ["@doctrine.orm.default_entity_manager","@antispam.message","@antispam.scoring"]
         tags:
             - { name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99997  }
 
-
     antispam.checkemail.listener.emailblacklistcheck:
         class: AntispamBundle\EventListener\Message\CheckEmailBlacklist
-        arguments: ["@doctrine.orm.default_entity_manager","@antispam.message"]
+        arguments: ["@doctrine.orm.default_entity_manager","@antispam.message","@antispam.scoring"]
         tags:
             - { name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99996  }
+
+    antispam.checkemail.listener.headers:
+        class: AntispamBundle\EventListener\Message\CheckHeaders
+        arguments: ["@antispam.header_analyzer","@antispam.scoring"]
+        tags:
+            - { name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99990  }
+
+    antispam.checkemail.listener.dnsbl:
+        class: AntispamBundle\EventListener\Message\CheckDnsbl
+        arguments: ["@antispam.dnsbl","@antispam.scoring"]
+        tags:
+            - { name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99980  }
+
+    antispam.checkemail.listener.apply_decision:
+        class: AntispamBundle\EventListener\Message\ApplyScoreDecision
+        arguments: ["@antispam.scoring","@antispam.inbox"]
+        tags:
+            - { name: kernel.event_listener, event: antispam.check.message, method: decide, priority: 99970  }
 
     antispam.checkemail.listener.movetospam:
         class: AntispamBundle\EventListener\Message\MoveToSpam
         arguments: ["@configuration","@antispam.inbox"]
         tags:
-            - { name: kernel.event_listener, event: antispam.check.message, method: move, priority: 99995  }
+            - { name: kernel.event_listener, event: antispam.check.message, method: move, priority: 99960  }
 
     antispam.checkemail.listener.setaschecked:
         class: AntispamBundle\EventListener\Message\SetAsChecked

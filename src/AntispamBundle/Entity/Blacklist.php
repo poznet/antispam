@@ -5,16 +5,16 @@ namespace AntispamBundle\Entity;
 use Doctrine\ORM\Mapping as ORM;
 
 /**
- * Whitelist
- *
  * @ORM\Table(name="antispam_blacklist")
  * @ORM\Entity(repositoryClass="AntispamBundle\Repository\BlacklistRepository")
  */
 class Blacklist
 {
+    const PATTERN_EXACT = 'exact';
+    const PATTERN_WILDCARD = 'wildcard';
+    const PATTERN_REGEX = 'regex';
+
     /**
-     * @var int
-     *
      * @ORM\Column(name="id", type="integer")
      * @ORM\Id
      * @ORM\GeneratedValue(strategy="AUTO")
@@ -22,102 +22,44 @@ class Blacklist
     private $id;
 
     /**
-     * @var string
-     *
      * @ORM\Column(name="email", type="string", length=255)
      */
     private $email;
 
     /**
-     * @var string
-     *
      * @ORM\Column(name="host", type="string", length=255)
      */
     private $host;
 
     /**
-     * @var integer
-     *
-     * @ORM\Column(name="counter", type="integer", )
+     * @ORM\Column(name="pattern_type", type="string", length=16)
      */
-    private $counter=0;
+    private $patternType = self::PATTERN_EXACT;
 
     /**
-     * Get id
-     *
-     * @return integer 
+     * @ORM\Column(name="score", type="integer")
      */
-    public function getId()
-    {
-        return $this->id;
-    }
+    private $score = 10;
 
     /**
-     * Set email
-     *
-     * @param string $email
-     * @return Whitelist
+     * @ORM\Column(name="counter", type="integer")
      */
-    public function setEmail($email)
-    {
-        $this->email = $email;
+    private $counter = 0;
 
-        return $this;
-    }
+    public function getId() { return $this->id; }
 
-    /**
-     * Get email
-     *
-     * @return string 
-     */
-    public function getEmail()
-    {
-        return $this->email;
-    }
+    public function setEmail($email) { $this->email = $email; return $this; }
+    public function getEmail() { return $this->email; }
 
-    /**
-     * Set host
-     *
-     * @param string $host
-     * @return Whitelist
-     */
-    public function setHost($host)
-    {
-        $this->host = $host;
+    public function setHost($host) { $this->host = $host; return $this; }
+    public function getHost() { return $this->host; }
 
-        return $this;
-    }
+    public function getPatternType() { return $this->patternType; }
+    public function setPatternType($patternType) { $this->patternType = $patternType; return $this; }
 
-    /**
-     * Get host
-     *
-     * @return string 
-     */
-    public function getHost()
-    {
-        return $this->host;
-    }
+    public function getScore() { return $this->score; }
+    public function setScore($score) { $this->score = (int)$score; return $this; }
 
-    /**
-     * Set counter
-     *
-     * @param integer $counter
-     * @return Blacklist
-     */
-    public function setCounter($counter)
-    {
-        $this->counter = $counter;
-
-        return $this;
-    }
-
-    /**
-     * Get counter
-     *
-     * @return integer 
-     */
-    public function getCounter()
-    {
-        return $this->counter;
-    }
+    public function setCounter($counter) { $this->counter = $counter; return $this; }
+    public function getCounter() { return $this->counter; }
 }

@@ -1,0 +1,44 @@
+{% extends 'AntispamBundle::main.html.twig' %}
+{% block title %}Bulk Import / Export{% endblock %}
+{% block page_title %}Bulk Import / Export{% endblock %}
+
+{% block body %}
+    <p class="text-muted">Paste one entry per line (domains, email addresses, wildcard or regex patterns). Lines starting with <code>#</code> are ignored. <code>,</code> and <code>;</code> are treated as separators.</p>
+
+    {% for key, t in types %}
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            <strong>{{ t.label }}</strong>
+            <a class="btn btn-xs btn-default pull-right" href="{{ path('antispam_bulk_export', {type: key}) }}">
+                <span class="glyphicon glyphicon-download-alt"></span> Export
+            </a>
+        </div>
+        <div class="panel-body">
+            <form method="post" action="{{ path('antispam_bulk_import', {type: key}) }}">
+                <textarea name="entries" class="form-control" rows="6" placeholder="spam-domain.tld&#10;*.evil.example&#10;^.*@.*\.ru$"></textarea>
+                <div class="row" style="margin-top:8px;">
+                    <div class="col-sm-4">
+                        <label>Pattern type</label>
+                        <select name="pattern_type" class="form-control">
+                            <option value="exact">Exact match</option>
+                            <option value="wildcard">Wildcard (* ?)</option>
+                            <option value="regex">Regex</option>
+                        </select>
+                    </div>
+                    {% if 'blacklist' in key %}
+                    <div class="col-sm-3">
+                        <label>Score per hit</label>
+                        <input type="number" name="score" class="form-control" value="10" min="1" max="50">
+                    </div>
+                    {% endif %}
+                    <div class="col-sm-3" style="padding-top:25px;">
+                        <button type="submit" class="btn btn-primary btn-block">
+                            <span class="glyphicon glyphicon-upload"></span> Import
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+{% endblock %}

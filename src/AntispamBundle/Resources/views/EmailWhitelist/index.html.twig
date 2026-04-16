@@ -5,12 +5,13 @@
 {% block body %}
     <div class="add-form">
         <form method="post" action="{{ path('antispam_emailwhitelist_add') }}" class="form-inline">
-            <div class="input-group">
-                <input type="email" class="form-control" name="email" placeholder="Enter trusted email (e.g. friend@example.com)" required style="min-width:300px;">
-                <span class="input-group-btn">
-                    <button type="submit" class="btn btn-success"><span class="glyphicon glyphicon-plus"></span> Add</button>
-                </span>
-            </div>
+            <input type="text" class="form-control" name="email" placeholder="friend@example.com or *@trusted.example" required style="min-width:280px;">
+            <select name="pattern_type" class="form-control">
+                <option value="exact">Exact</option>
+                <option value="wildcard">Wildcard</option>
+                <option value="regex">Regex</option>
+            </select>
+            <button type="submit" class="btn btn-success"><span class="glyphicon glyphicon-plus"></span> Add</button>
         </form>
     </div>
 
@@ -22,6 +23,7 @@
                 <span class="glyphicon glyphicon-remove"></span> Delete
             </a>
             <span class="badge badge-counter">{{ l.counter }} hits</span>
+            <span class="label label-default">{{ l.patternType }}</span>
             <span class="glyphicon glyphicon-envelope"></span> {{ l.whitelistemail }}
         </li>
         {% endfor %}
@@ -30,7 +32,7 @@
     <div class="empty-state">
         <span class="glyphicon glyphicon-ok-circle"></span>
         <p>No emails in whitelist yet</p>
-        <p class="text-muted">Add trusted email addresses to always allow</p>
+        <p class="text-muted">Supports exact, wildcard and regex patterns</p>
     </div>
     {% endif %}
 {% endblock %}

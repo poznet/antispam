@@ -1,0 +1,31 @@
+{% extends 'AntispamBundle::main.html.twig' %}
+{% block title %}Quarantine{% endblock %}
+{% block page_title %}Quarantine{% endblock %}
+
+{% block body %}
+    <p class="text-muted">Messages whose spam score landed between quarantine and spam thresholds.</p>
+    {% if messages|length > 0 %}
+    <table class="table table-striped">
+        <thead><tr><th>Date</th><th>From</th><th>Subject</th><th></th></tr></thead>
+        <tbody>
+        {% for msg in messages %}
+            <tr>
+                <td>{{ msg.date | date("Y-m-d H:i") }}</td>
+                <td>{{ msg.from }}</td>
+                <td>{{ msg.subject[:80] }}</td>
+                <td class="text-right">
+                    <a href="{{ path('antispam_spambox_restore', {folder: 'QUARANTINE', id: msg.id}) }}" class="btn btn-xs btn-success">
+                        <span class="glyphicon glyphicon-ok"></span> Restore
+                    </a>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <span class="glyphicon glyphicon-ok-circle"></span>
+        <p>Quarantine is empty</p>
+    </div>
+    {% endif %}
+{% endblock %}

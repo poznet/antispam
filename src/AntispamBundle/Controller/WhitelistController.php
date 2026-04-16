@@ -3,43 +3,48 @@
 namespace AntispamBundle\Controller;
 
 use AntispamBundle\Entity\Whitelist;
-use Symfony\Bundle\FrameworkBundle\Controller\Controller;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
+use Symfony\Bundle\FrameworkBundle\Controller\Controller;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
- *
- * Class WhitelistController
- * @package AntispamBundle\Controller
  * @Route("/whitelist")
  */
 class WhitelistController extends Controller
 {
-
     /**
      * @Route("/index", name="antispam_whitelist_index")
      * @Template
      */
-    public function indexAction(){
+    public function indexAction()
+    {
         $em = $this->getDoctrine()->getManager();
-        $list=$em->getRepository("AntispamBundle:Whitelist")->findAll();
-        return array('list'=>$list);
+        $list = $em->getRepository('AntispamBundle:Whitelist')->findAll();
+        return ['list' => $list];
     }
 
     /**
      * @Route("/add", name="antispam_whitelist_add")
-     *
      */
-    public function addAction(Request $request){
+    public function addAction(Request $request)
+    {
         $em = $this->getDoctrine()->getManager();
-        $host=trim($request->get('host'));
-        $jest=$em->getRepository("AntispamBundle:Whitelist")->findOneByHost($host);
-        if(!$jest) {
-            $wpis = new Whitelist();
-            $wpis->setEmail($this->get('configuration')->get('email'));
-            $wpis->setHost($host);
-            $em->persist($wpis);
+        $host = trim((string)$request->get('host'));
+        $patternType = $request->get('pattern_type', Whitelist::PATTERN_EXACT);
+        if (!in_array($patternType, [Whitelist::PATTERN_EXACT, Whitelist::PATTERN_WILDCARD, Whitelist::PATTERN_REGEX], true)) {
+            $patternType = Whitelist::PATTERN_EXACT;
+        }
+        if (!$host) {
+            return $this->redirectToRoute('antispam_whitelist_index');
+        }
+        $existing = $em->getRepository('AntispamBundle:Whitelist')->findOneBy(['host' => $host]);
+        if (!$existing) {
+            $entry = new Whitelist();
+            $entry->setEmail($this->get('configuration')->get('email'));
+            $entry->setHost($host);
+            $entry->setPatternType($patternType);
+            $em->persist($entry);
             $em->flush();
         }
         return $this->redirectToRoute('antispam_whitelist_index');
@@ -48,14 +53,14 @@ class WhitelistController extends Controller
     /**
      * @Route("/del/{id}", name="antispam_whitelist_del")
      */
-    public function delAction($id){
+    public function delAction($id)
+    {
         $em = $this->getDoctrine()->getManager();
-        $jest=$em->getRepository("AntispamBundle:Whitelist")->findOneById($id);
-        if($jest){
-            $em->remove($jest);
+        $entry = $em->getRepository('AntispamBundle:Whitelist')->find($id);
+        if ($entry) {
+            $em->remove($entry);
             $em->flush();
         }
         return $this->redirectToRoute('antispam_whitelist_index');
     }
-
 }

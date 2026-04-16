@@ -35,10 +35,103 @@
         <div class="col-sm-3">
             <div class="panel panel-stat panel-default">
                 <div class="panel-body text-center">
-                    <span class="glyphicon glyphicon-trash" style="font-size:24px; color:#f0ad4e;"></span>
-                    <div class="stat-value">{{ spamCount|default('--') }}</div>
-                    <div class="stat-label">Spam Caught</div>
+                    <span class="glyphicon glyphicon-globe" style="font-size:24px; color:#f0ad4e;"></span>
+                    <div class="stat-value">{{ dnsblCount|default(0) }}</div>
+                    <div class="stat-label">DNSBL Providers</div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-sm-3">
+            <div class="panel panel-default"><div class="panel-body text-center">
+                <div class="stat-value text-success">{{ stats30.ham|default(0) }}</div>
+                <div class="stat-label">Ham (30d)</div>
+            </div></div>
+        </div>
+        <div class="col-sm-3">
+            <div class="panel panel-default"><div class="panel-body text-center">
+                <div class="stat-value text-warning">{{ stats30.quarantine|default(0) }}</div>
+                <div class="stat-label">Quarantine (30d)</div>
+            </div></div>
+        </div>
+        <div class="col-sm-3">
+            <div class="panel panel-default"><div class="panel-body text-center">
+                <div class="stat-value text-danger">{{ stats30.spam|default(0) }}</div>
+                <div class="stat-label">Spam (30d)</div>
+            </div></div>
+        </div>
+        <div class="col-sm-3">
+            <div class="panel panel-default"><div class="panel-body text-center">
+                <div class="stat-value text-info">{{ stats30.whitelisted|default(0) }}</div>
+                <div class="stat-label">Whitelisted (30d)</div>
+            </div></div>
+        </div>
+    </div>
+
+    {% if dailyChart|length > 0 %}
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-stats"></span> Activity (14 days)</div>
+        <div class="panel-body">
+            <table class="table table-condensed" style="margin-bottom:0;">
+                <thead><tr><th>Day</th><th>Ham</th><th>Quarantine</th><th>Spam</th><th>Graph</th></tr></thead>
+                <tbody>
+                {% set maxv = 1 %}
+                {% for d in dailyChart %}
+                    {% set total = d.ham + d.quarantine + d.spam %}
+                    {% if total > maxv %}{% set maxv = total %}{% endif %}
+                {% endfor %}
+                {% for d in dailyChart %}
+                    {% set total = d.ham + d.quarantine + d.spam %}
+                    <tr>
+                        <td>{{ d.day }}</td>
+                        <td>{{ d.ham }}</td>
+                        <td>{{ d.quarantine }}</td>
+                        <td>{{ d.spam }}</td>
+                        <td style="width:50%;">
+                            <div style="background:#ddd; height:12px; width:100%; position:relative;">
+                                {% set hamW = (d.ham / maxv * 100)|round %}
+                                {% set qW   = (d.quarantine / maxv * 100)|round %}
+                                {% set sW   = (d.spam / maxv * 100)|round %}
+                                <div style="background:#5cb85c; height:12px; width:{{ hamW }}%; display:inline-block;"></div><div style="background:#f0ad4e; height:12px; width:{{ qW }}%; display:inline-block;"></div><div style="background:#d9534f; height:12px; width:{{ sW }}%; display:inline-block;"></div>
+                            </div>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="row">
+        <div class="col-sm-6">
+            <div class="panel panel-default">
+                <div class="panel-heading"><span class="glyphicon glyphicon-fire"></span> Top Domain Blacklist Hits</div>
+                {% if topBlacklist|length > 0 %}
+                    <table class="table table-striped" style="margin-bottom:0;">
+                    {% for r in topBlacklist %}
+                        <tr><td>{{ r.host }}</td><td><span class="label label-default">{{ r.patternType }}</span></td><td class="text-right"><span class="badge">{{ r.counter }}</span></td></tr>
+                    {% endfor %}
+                    </table>
+                {% else %}
+                    <div class="panel-body text-muted">No hits yet</div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-sm-6">
+            <div class="panel panel-default">
+                <div class="panel-heading"><span class="glyphicon glyphicon-envelope"></span> Top Email Blacklist Hits</div>
+                {% if topEmailBlacklist|length > 0 %}
+                    <table class="table table-striped" style="margin-bottom:0;">
+                    {% for r in topEmailBlacklist %}
+                        <tr><td>{{ r.blacklistemail }}</td><td><span class="label label-default">{{ r.patternType }}</span></td><td class="text-right"><span class="badge">{{ r.counter }}</span></td></tr>
+                    {% endfor %}
+                    </table>
+                {% else %}
+                    <div class="panel-body text-muted">No hits yet</div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -48,13 +141,7 @@
         <div class="panel-heading"><span class="glyphicon glyphicon-time"></span> Recent Scans</div>
         <table class="table table-striped">
             <thead>
-                <tr>
-                    <th>Account</th>
-                    <th>Type</th>
-                    <th>Last Scan</th>
-                    <th>Total</th>
-                    <th>Spam</th>
-                </tr>
+                <tr><th>Account</th><th>Type</th><th>Last Scan</th><th>Total</th><th>Spam</th></tr>
             </thead>
             <tbody>
             {% for account in recentScans %}
@@ -80,11 +167,14 @@
                     <a href="{{ path('antispam_account_index') }}" class="btn btn-primary btn-block" style="margin-bottom:8px;">
                         <span class="glyphicon glyphicon-plus"></span> Manage Accounts
                     </a>
-                    <a href="{{ path('antispam_blacklist_index') }}" class="btn btn-danger btn-block" style="margin-bottom:8px;">
-                        <span class="glyphicon glyphicon-ban-circle"></span> Manage Blacklists
+                    <a href="{{ path('antispam_dnsbl_index') }}" class="btn btn-warning btn-block" style="margin-bottom:8px;">
+                        <span class="glyphicon glyphicon-globe"></span> DNSBL Providers
                     </a>
-                    <a href="{{ path('antispam_whitelist_index') }}" class="btn btn-success btn-block">
-                        <span class="glyphicon glyphicon-ok-circle"></span> Manage Whitelists
+                    <a href="{{ path('antispam_spambox_scorelog') }}" class="btn btn-info btn-block" style="margin-bottom:8px;">
+                        <span class="glyphicon glyphicon-list-alt"></span> Score Log
+                    </a>
+                    <a href="{{ path('antispam_bulk_index') }}" class="btn btn-default btn-block">
+                        <span class="glyphicon glyphicon-transfer"></span> Bulk Import / Export
                     </a>
                 </div>
             </div>
@@ -93,11 +183,11 @@
             <div class="panel panel-default">
                 <div class="panel-heading"><span class="glyphicon glyphicon-info-sign"></span> About</div>
                 <div class="panel-body">
-                    <p>Antispam filters unwanted emails from your mailboxes using blacklist and whitelist rules.</p>
+                    <p>Antispam filters unwanted emails using a scoring pipeline (blacklists, whitelists, DNSBL, header analysis).</p>
                     <p><strong>Connection modes:</strong></p>
                     <ul>
-                        <li><strong>IMAP</strong> &mdash; connects to mail server via IMAP protocol</li>
-                        <li><strong>SSH+Maildir</strong> &mdash; deploys agent directly on hosting server</li>
+                        <li><strong>IMAP</strong> &mdash; IMAP protocol over the network</li>
+                        <li><strong>SSH+Maildir</strong> &mdash; agent runs on the hosting server</li>
                     </ul>
                 </div>
             </div>

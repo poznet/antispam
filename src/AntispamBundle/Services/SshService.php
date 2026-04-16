@@ -99,11 +99,30 @@ class SshService
         return json_decode($output, true) ?: ['success' => false, 'error' => $output];
     }
 
-    public function runScan(Account $account)
+    public function runScan(Account $account, array $options = [])
     {
         $remotePath = $account->getAgentPath() . '/antispam-agent.php';
         $maildirPath = $account->getMaildirPath();
-        $output = $this->exec($account, "php {$remotePath} scan --maildir={$maildirPath} 2>&1");
+
+        $args = "--maildir={$maildirPath}";
+        if (isset($options['spam_threshold'])) {
+            $args .= ' --spam-threshold=' . (int)$options['spam_threshold'];
+        }
+        if (isset($options['quarantine_threshold'])) {
+            $args .= ' --quarantine-threshold=' . (int)$options['quarantine_threshold'];
+        }
+        if (!empty($options['no_dnsbl'])) { $args .= ' --no-dnsbl'; }
+        if (!empty($options['no_headers'])) { $args .= ' --no-headers'; }
+
+        $output = $this->exec($account, "php {$remotePath} scan {$args} 2>&1");
+        return json_decode($output, true) ?: ['success' => false, 'error' => $output];
+    }
+
+    public function runHealth(Account $account)
+    {
+        $remotePath = $account->getAgentPath() . '/antispam-agent.php';
+        $maildirPath = $account->getMaildirPath();
+        $output = $this->exec($account, "php {$remotePath} health --maildir={$maildirPath} 2>&1");
         return json_decode($output, true) ?: ['success' => false, 'error' => $output];
     }
 }

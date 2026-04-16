@@ -258,22 +258,73 @@ class AccountController extends Controller
             'email_whitelist' => [],
             'blacklist' => [],
             'email_blacklist' => [],
+            'dnsbl' => [],
         ];
 
         foreach ($em->getRepository('AntispamBundle:Whitelist')->findBy(['email' => $email]) as $item) {
-            $rules['whitelist'][] = ['email' => $item->getEmail(), 'host' => $item->getHost()];
+            $rules['whitelist'][] = [
+                'email' => $item->getEmail(),
+                'host' => $item->getHost(),
+                'pattern_type' => $item->getPatternType(),
+            ];
         }
         foreach ($em->getRepository('AntispamBundle:EmailWhitelist')->findBy(['email' => $email]) as $item) {
-            $rules['email_whitelist'][] = ['email' => $item->getEmail(), 'whitelistemail' => $item->getWhitelistemail()];
+            $rules['email_whitelist'][] = [
+                'email' => $item->getEmail(),
+                'whitelistemail' => $item->getWhitelistemail(),
+                'pattern_type' => $item->getPatternType(),
+            ];
         }
         foreach ($em->getRepository('AntispamBundle:Blacklist')->findBy(['email' => $email]) as $item) {
-            $rules['blacklist'][] = ['email' => $item->getEmail(), 'host' => $item->getHost()];
+            $rules['blacklist'][] = [
+                'email' => $item->getEmail(),
+                'host' => $item->getHost(),
+                'pattern_type' => $item->getPatternType(),
+                'score' => $item->getScore(),
+            ];
         }
         foreach ($em->getRepository('AntispamBundle:EmailBlacklist')->findBy(['email' => $email]) as $item) {
-            $rules['email_blacklist'][] = ['email' => $item->getEmail(), 'blacklistemail' => $item->getBlacklistemail()];
+            $rules['email_blacklist'][] = [
+                'email' => $item->getEmail(),
+                'blacklistemail' => $item->getBlacklistemail(),
+                'pattern_type' => $item->getPatternType(),
+                'score' => $item->getScore(),
+            ];
+        }
+        foreach ($em->getRepository('AntispamBundle:DnsblProvider')->findAll() as $prov) {
+            $rules['dnsbl'][] = [
+                'name' => $prov->getName(),
+                'zone' => $prov->getZone(),
+                'score' => $prov->getScore(),
+                'enabled' => $prov->isEnabled(),
+                'cache_ttl' => $prov->getCacheTtl(),
+            ];
         }
 
         return $rules;
+    }
+
+    /**
+     * @Route("/health/{id}", name="antispam_account_health")
+     * @Template
+     */
+    public function healthAction($id)
+    {
+        $em = $this->getDoctrine()->getManager();
+        $account = $em->getRepository('AntispamBundle:Account')->find($id);
+        $result = ['success' => false, 'messages' => []];
+        if (!$account || !$account->isSsh()) {
+            $result['messages'][] = 'Account not found or not SSH type';
+            return ['account' => $account, 'result' => $result];
+        }
+        try {
+            $health = $this->get('antispam.ssh')->runHealth($account);
+            $result['success'] = true;
+            $result['health'] = $health;
+        } catch (\Exception $e) {
+            $result['messages'][] = 'Health check failed: ' . $e->getMessage();
+        }
+        return ['account' => $account, 'result' => $result];
     }
 
     private function runImapScan(Account $account)
@@ -287,41 +338,22 @@ class AccountController extends Controller
         $inbox = $connection->getMailbox('INBOX');
         $messages = $inbox->getMessages();
 
-        $em = $this->getDoctrine()->getManager();
-        $stats = ['total' => 0, 'checked' => 0, 'whitelisted' => 0, 'blacklisted' => 0, 'moved_to_spam' => 0];
+        $dispatcher = $this->get('event_dispatcher');
+        $stats = ['total' => 0, 'checked' => 0, 'whitelisted' => 0, 'blacklisted' => 0,
+                  'quarantined' => 0, 'moved_to_spam' => 0];
 
         foreach ($messages as $msg) {
             $stats['total']++;
-            $stats['checked']++;
-
             try {
-                $senderHeaders = $msg->getHeaders()->get('sender');
-                if (empty($senderHeaders)) continue;
+                $event = new \AntispamBundle\Event\MessageEvent($msg, $account->getEmail());
+                $dispatcher->dispatch('antispam.check.message', $event);
 
-                $host = $senderHeaders[0]->host ?? '';
-                $senderEmail = ($senderHeaders[0]->mailbox ?? '') . '@' . $host;
-
-                // Check whitelists
-                $wl = $em->getRepository('AntispamBundle:Whitelist')->findOneBy(['host' => $host, 'email' => $account->getEmail()]);
-                if ($wl) { $stats['whitelisted']++; continue; }
-
-                $ewl = $em->getRepository('AntispamBundle:EmailWhitelist')->findOneBy(['whitelistemail' => $senderEmail, 'email' => $account->getEmail()]);
-                if ($ewl) { $stats['whitelisted']++; continue; }
-
-                // Check blacklists
-                $bl = $em->getRepository('AntispamBundle:Blacklist')->findOneBy(['host' => $host, 'email' => $account->getEmail()]);
-                $ebl = $em->getRepository('AntispamBundle:EmailBlacklist')->findOneBy(['blacklistemail' => $senderEmail, 'email' => $account->getEmail()]);
-
-                if ($bl || $ebl) {
+                if ($event->isCheckedbefore()) { continue; }
+                $stats['checked']++;
+                if ($event->isWhitelist()) { $stats['whitelisted']++; }
+                if ($event->isSpam()) {
                     $stats['blacklisted']++;
-                    if (!$account->getDeleteSpam()) {
-                        if (!$connection->hasMailbox('SPAM')) {
-                            $connection->createMailbox('SPAM');
-                        }
-                        $spambox = $connection->getMailbox('SPAM');
-                        $msg->move($spambox);
-                        $stats['moved_to_spam']++;
-                    }
+                    if ($event->isDelete()) { $stats['moved_to_spam']++; }
                 }
             } catch (\Exception $e) {
                 // Skip messages with encoding issues

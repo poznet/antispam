@@ -1,0 +1,27 @@
+.git
+.gitignore
+.idea
+.vscode
+.github
+.travis.yml
+
+# Build artifacts / caches that must be regenerated in the image
+vendor
+node_modules
+bower_components
+app/cache/*
+app/logs/*
+web/bundles
+
+# Local env files - provide values through Coolify instead
+.env
+.env.local
+.env.*.local
+app/config/parameters.yml
+
+# Editor / OS junk
+*.log
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

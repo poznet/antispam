@@ -1,0 +1,693 @@
+{% extends '@Antispam/main.html.twig' %}
+
+{% block title %}Pomoc{% endblock %}
+{% block page_title %}<span class="glyphicon glyphicon-question-sign"></span> Pomoc i dokumentacja{% endblock %}
+
+{% block body %}
+<div class="row">
+    <div class="col-md-3">
+        <div class="panel panel-default" style="position: sticky; top: 80px;">
+            <div class="panel-heading"><strong>Spis treści</strong></div>
+            <div class="list-group">
+                <a href="#intro" class="list-group-item">1. Wprowadzenie</a>
+                <a href="#accounts" class="list-group-item">2. Konta e-mail</a>
+                <a href="#imap-mode" class="list-group-item">&nbsp;&nbsp;2.1. Tryb IMAP</a>
+                <a href="#ssh-mode" class="list-group-item">&nbsp;&nbsp;2.2. Tryb SSH+Maildir</a>
+                <a href="#agent" class="list-group-item">3. Agent Maildir</a>
+                <a href="#agent-deploy" class="list-group-item">&nbsp;&nbsp;3.1. Wdrożenie</a>
+                <a href="#agent-sync" class="list-group-item">&nbsp;&nbsp;3.2. Synchronizacja reguł</a>
+                <a href="#agent-scan" class="list-group-item">&nbsp;&nbsp;3.3. Skanowanie</a>
+                <a href="#agent-cron" class="list-group-item">&nbsp;&nbsp;3.4. Harmonogram (cron)</a>
+                <a href="#rules" class="list-group-item">4. Reguły: białe i czarne listy</a>
+                <a href="#pattern-types" class="list-group-item">&nbsp;&nbsp;4.1. Typy wzorców</a>
+                <a href="#bulk" class="list-group-item">&nbsp;&nbsp;4.2. Import / eksport</a>
+                <a href="#scoring" class="list-group-item">5. Scoring (punktacja)</a>
+                <a href="#headers" class="list-group-item">&nbsp;&nbsp;5.1. Analiza nagłówków</a>
+                <a href="#dnsbl" class="list-group-item">&nbsp;&nbsp;5.2. DNSBL</a>
+                <a href="#decision" class="list-group-item">&nbsp;&nbsp;5.3. Próg decyzyjny</a>
+                <a href="#mailboxes" class="list-group-item">6. Skrzynki</a>
+                <a href="#spambox" class="list-group-item">&nbsp;&nbsp;6.1. Spambox</a>
+                <a href="#quarantine" class="list-group-item">&nbsp;&nbsp;6.2. Kwarantanna</a>
+                <a href="#scorelog" class="list-group-item">&nbsp;&nbsp;6.3. Score Log</a>
+                <a href="#cli" class="list-group-item">7. Polecenia CLI</a>
+                <a href="#troubleshooting" class="list-group-item">8. Rozwiązywanie problemów</a>
+                <a href="#faq" class="list-group-item">9. FAQ</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-9">
+
+        {# === 1. WPROWADZENIE === #}
+        <section id="intro">
+            <h3>1. Wprowadzenie</h3>
+            <p>
+                Antispam to aplikacja Symfony do filtrowania spamu z kont pocztowych. Pracuje w dwóch
+                trybach: zdalnym przez <strong>IMAP</strong> oraz lokalnie na serwerze hostingowym
+                dzięki <strong>agentowi Maildir</strong> uruchamianemu przez SSH.
+            </p>
+            <p>
+                Wiadomości przechodzą przez <strong>pipeline zdarzeń</strong> (event dispatcher
+                Symfony) &mdash; kolejne listenery dokładają punkty do wyniku (score), a na końcu
+                zapada decyzja: <code>ham</code> / <code>quarantine</code> / <code>spam</code>.
+                Trafienie na whiteliście przerywa pipeline bez naliczania punktów.
+            </p>
+            <div class="alert alert-info">
+                <strong>Szybki start:</strong>
+                <ol style="margin-bottom: 0;">
+                    <li>Dodaj konto (<a href="{{ path('antispam_account_index') }}">Accounts &rarr; Add</a>)</li>
+                    <li>Wybierz tryb: IMAP albo SSH+Maildir</li>
+                    <li>(Opcjonalnie) dodaj reguły lub włącz DNSBL</li>
+                    <li>Uruchom skan: <code>php bin/console antispam:scan</code></li>
+                </ol>
+            </div>
+        </section>
+
+        <hr>
+
+        {# === 2. KONTA === #}
+        <section id="accounts">
+            <h3>2. Konta e-mail</h3>
+            <p>
+                Każde konto ma własną konfigurację połączenia. Dodasz je w
+                <a href="{{ path('antispam_account_index') }}">Accounts</a>. Dla każdego konta
+                wybierasz <strong>Mode</strong> &mdash; IMAP albo SSH+Maildir.
+            </p>
+
+            <h4 id="imap-mode">2.1. Tryb IMAP</h4>
+            <p>
+                Aplikacja łączy się bezpośrednio z serwerem pocztowym protokołem IMAP (biblioteka
+                <code>ddeboer/imap</code>) i pobiera listę wiadomości z INBOX. Po przefiltrowaniu
+                spam jest przenoszony do folderu <code>SPAM</code> (lub <code>QUARANTINE</code>
+                dla wyników pośrednich) bezpośrednio na serwerze pocztowym.
+            </p>
+            <p><strong>Wymagane pola:</strong></p>
+            <ul>
+                <li><code>host</code> &mdash; np. <code>imap.example.com</code></li>
+                <li><code>port</code> &mdash; zwykle <code>143</code> (STARTTLS) lub <code>993</code> (SSL)</li>
+                <li><code>login</code> / <code>password</code></li>
+                <li><code>flags</code> &mdash; np. <code>/imap/ssl/novalidate-cert</code></li>
+            </ul>
+            <div class="alert alert-warning">
+                <strong>Kiedy używać:</strong> gdy nie masz dostępu SSH do serwera, albo konto jest
+                na dużym dostawcy (Gmail, Outlook, itp.). Tryb IMAP działa wszędzie, ale jest
+                wolniejszy i generuje ruch sieciowy na każdy skan.
+            </div>
+
+            <h4 id="ssh-mode">2.2. Tryb SSH+Maildir</h4>
+            <p>
+                Aplikacja łączy się po SSH (biblioteka <code>phpseclib</code>) do serwera
+                hostingowego i wdraża tam <strong>standalone agent PHP</strong> (<code>antispam-agent.php</code>).
+                Agent operuje bezpośrednio na katalogach <code>~/Maildir/{new,cur}/</code> i
+                <code>~/Maildir/.SPAM/{new,cur}/</code>. Reguły są synchronizowane do lokalnej bazy
+                <code>rules.sqlite</code> i agent używa ich offline.
+            </p>
+            <p><strong>Wymagane pola:</strong></p>
+            <ul>
+                <li><code>ssh_host</code>, <code>ssh_port</code> (domyślnie 22)</li>
+                <li><code>ssh_user</code></li>
+                <li><code>ssh_password</code> <em>albo</em> para kluczy (<code>ssh_private_key</code> + opcjonalnie <code>ssh_key_passphrase</code>)</li>
+                <li><code>maildir_path</code> &mdash; np. <code>~/Maildir</code></li>
+                <li><code>agent_path</code> &mdash; miejsce na serwerze, gdzie trafi agent (np. <code>~/antispam</code>)</li>
+            </ul>
+            <p>Klucz publiczny dla tego konta wygenerujesz i skopiujesz na serwer przez
+                <em>Accounts &rarr; edit &rarr; Generate SSH key</em>. Publiczną część dopisujesz do
+                <code>~/.ssh/authorized_keys</code> na serwerze hostingowym.</p>
+            <div class="alert alert-success">
+                <strong>Kiedy używać:</strong> własny VPS / hosting z SSH. Szybsze (brak narzutu
+                IMAP), działa lokalnie na dysku, skaluje się na wiele skrzynek na tej samej
+                maszynie.
+            </div>
+        </section>
+
+        <hr>
+
+        {# === 3. AGENT === #}
+        <section id="agent">
+            <h3>3. Agent Maildir</h3>
+            <p>
+                Agent to samodzielny skrypt PHP (<code>antispam-agent.php</code>) z własną bazą
+                SQLite. Działa na serwerze hostingowym, niezależnie od aplikacji webowej. Źródło:
+                <code>src/AntispamBundle/Resources/agent/antispam-agent.php</code>.
+            </p>
+
+            <h4 id="agent-deploy">3.1. Wdrożenie (deploy)</h4>
+            <p>
+                Wdrożenie polega na skopiowaniu skryptu agenta na zdalny serwer przez SSH oraz
+                utworzeniu pustej bazy SQLite. Wykonasz to z poziomu UI:
+            </p>
+            <ol>
+                <li>Wejdź w <em>Accounts</em> i wybierz konto w trybie SSH</li>
+                <li>Kliknij <strong>Deploy agent</strong></li>
+                <li>Aplikacja:
+                    <ul>
+                        <li>tworzy katalog <code>agent_path</code> jeśli nie istnieje</li>
+                        <li>kopiuje <code>antispam-agent.php</code></li>
+                        <li>inicjalizuje <code>rules.sqlite</code> (tabele reguł, DNSBL, cache)</li>
+                    </ul>
+                </li>
+            </ol>
+            <p>
+                Alternatywnie z CLI:
+                <code>php bin/console antispam:agent:deploy email@example.com</code>
+            </p>
+
+            <h4 id="agent-sync">3.2. Synchronizacja reguł</h4>
+            <p>
+                Reguły (whitelist/blacklist/DNSBL providers) są zarządzane w aplikacji webowej, ale
+                egzekwowane lokalnie przez agenta. Synchronizacja kopiuje aktualny stan reguł do
+                lokalnej bazy SQLite na zdalnym serwerze.
+            </p>
+            <ul>
+                <li>UI: <em>Accounts &rarr; Sync rules</em></li>
+                <li>CLI: <code>php bin/console antispam:agent:sync email@example.com</code></li>
+            </ul>
+            <p>
+                Synchronizacja jest <strong>idempotentna</strong> &mdash; możesz ją uruchamiać po
+                każdej zmianie reguł. Wysyłane są też progi scoringu i włączone zony DNSBL.
+            </p>
+
+            <h4 id="agent-scan">3.3. Skanowanie</h4>
+            <p>
+                Skan uruchamia agenta na serwerze i przetwarza wiadomości w <code>~/Maildir/new</code>
+                oraz <code>~/Maildir/cur</code>. Dla każdej wiadomości agent:
+            </p>
+            <ol>
+                <li>Parsuje nagłówki (<code>From</code>, <code>Received</code>, <code>Authentication-Results</code>)</li>
+                <li>Sprawdza whitelistę &mdash; jeśli trafia, koniec (pozostawiane w INBOX)</li>
+                <li>Sprawdza blacklistę (dodaje punkty)</li>
+                <li>Analizuje SPF/DKIM/DMARC (dodaje punkty za fail)</li>
+                <li>Odpytuje DNSBL dla IP nadawcy (z cache)</li>
+                <li>Na podstawie łącznego score podejmuje decyzję (ham / quarantine / spam)</li>
+                <li>Spam &rarr; przenoszony do <code>.SPAM/new</code>, kwarantanna &rarr; <code>.QUARANTINE/new</code></li>
+            </ol>
+            <p>
+                Wywołanie bezpośrednie na serwerze zdalnym:
+            </p>
+<pre>php antispam-agent.php scan \
+    --maildir=~/Maildir \
+    --db=/path/to/rules.sqlite \
+    --spam-threshold=10 \
+    --quarantine-threshold=5</pre>
+            <p>Dodatkowe flagi:</p>
+            <ul>
+                <li><code>--no-dnsbl</code> &mdash; wyłącza odpytywanie DNSBL (np. gdy hosting blokuje DNS)</li>
+                <li><code>--no-headers</code> &mdash; wyłącza analizę SPF/DKIM/DMARC</li>
+                <li><code>--limit=N</code> &mdash; przetwarza co najwyżej N wiadomości w jednym przebiegu</li>
+            </ul>
+            <p>
+                Z poziomu UI kliknij <strong>Scan</strong> przy koncie, albo użyj:
+                <code>php bin/console antispam:scan [--account=email@example.com]</code>.
+            </p>
+
+            <h4 id="agent-cron">3.4. Harmonogram (cron)</h4>
+            <p>
+                Agent nie ma własnego demona &mdash; spodziewa się, że uruchomisz go cyklicznie.
+                Przykładowy <code>crontab</code> na serwerze hostingowym (co 5 minut):
+            </p>
+<pre>*/5 * * * * cd ~/antispam && php antispam-agent.php scan \
+    --maildir=$HOME/Maildir --db=$HOME/antispam/rules.sqlite \
+    --spam-threshold=10 --quarantine-threshold=5 >/dev/null 2>&amp;1</pre>
+            <p>
+                Albo po stronie aplikacji webowej (jedno zadanie dla wszystkich kont):
+            </p>
+<pre>*/5 * * * * php /path/to/app/bin/console antispam:scan</pre>
+            <p>
+                Dobrym pomysłem jest też nocne wywołanie <code>antispam:agent:sync</code> &mdash;
+                gwarantuje, że reguły na serwerze są świeże nawet jeśli zapomnisz zsynchronizować
+                ręcznie po edycji.
+            </p>
+        </section>
+
+        <hr>
+
+        {# === 4. REGUŁY === #}
+        <section id="rules">
+            <h3>4. Reguły: białe i czarne listy</h3>
+            <p>
+                Reguły to wpisy określające, czy wiadomość jest zawsze dopuszczana (whitelist) lub
+                zawsze podejrzana (blacklist). Mamy cztery niezależne listy:
+            </p>
+            <table class="table table-condensed table-bordered">
+                <thead>
+                <tr>
+                    <th>Lista</th><th>Dopasowanie</th><th>Wynik</th><th>UI</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                    <td><strong>Domain Whitelist</strong></td>
+                    <td>domena nadawcy (np. <code>example.com</code>)</td>
+                    <td>ham, koniec pipeline</td>
+                    <td><a href="{{ path('antispam_whitelist_index') }}">Whitelists &rarr; Domain</a></td>
+                </tr>
+                <tr>
+                    <td><strong>E-mail Whitelist</strong></td>
+                    <td>pełny adres (np. <code>boss@example.com</code>)</td>
+                    <td>ham, koniec pipeline</td>
+                    <td><a href="{{ path('antispam_emailwhitelist_index') }}">Whitelists &rarr; E-mail</a></td>
+                </tr>
+                <tr>
+                    <td><strong>Domain Blacklist</strong></td>
+                    <td>domena nadawcy</td>
+                    <td>+<em>score</em> (domyślnie 10)</td>
+                    <td><a href="{{ path('antispam_blacklist_index') }}">Blacklists &rarr; Domain</a></td>
+                </tr>
+                <tr>
+                    <td><strong>E-mail Blacklist</strong></td>
+                    <td>pełny adres</td>
+                    <td>+<em>score</em> (domyślnie 10)</td>
+                    <td><a href="{{ path('antispam_emailblacklist_index') }}">Blacklists &rarr; E-mail</a></td>
+                </tr>
+                </tbody>
+            </table>
+            <p>
+                Każda reguła ma <strong>licznik trafień</strong> (<em>hits</em>) &mdash; widzisz,
+                jak często wpis rzeczywiście się aktywuje. Pomaga to identyfikować martwe reguły.
+            </p>
+            <div class="alert alert-info">
+                <strong>Kolejność pierwszeństwa:</strong> whitelist e-mail &rarr; whitelist domeny
+                &rarr; blacklist e-mail &rarr; blacklist domeny. Trafienie na dowolnej whiteliście
+                przerywa pipeline (<code>stopPropagation</code>) i wiadomość pozostaje w INBOX.
+            </div>
+
+            <h4 id="pattern-types">4.1. Typy wzorców (pattern types)</h4>
+            <p>Każda reguła ma pole <code>pattern_type</code> z jedną z trzech wartości:</p>
+
+            <table class="table table-condensed table-bordered">
+                <thead>
+                <tr><th style="width:110px;">Typ</th><th>Opis</th><th>Przykład</th><th>Pasuje do</th></tr>
+                </thead>
+                <tbody>
+                <tr>
+                    <td><code>exact</code></td>
+                    <td>równość case-insensitive (domyślny, kompatybilny wstecznie)</td>
+                    <td><code>evil.com</code></td>
+                    <td>dokładnie <em>evil.com</em></td>
+                </tr>
+                <tr>
+                    <td><code>wildcard</code></td>
+                    <td>shell glob: <code>*</code> = dowolny ciąg, <code>?</code> = dokładnie 1 znak</td>
+                    <td><code>*.ru</code></td>
+                    <td><em>mail.ru</em>, <em>evil.example.ru</em></td>
+                </tr>
+                <tr>
+                    <td><code>regex</code></td>
+                    <td>PCRE bez delimiterów; flagi case-insensitive domyślnie</td>
+                    <td><code>^mail\d+\.bad$</code></td>
+                    <td><em>mail1.bad</em>, <em>mail42.bad</em></td>
+                </tr>
+                </tbody>
+            </table>
+            <p>Więcej przykładów:</p>
+            <ul>
+                <li><code>*@*.ru</code> (wildcard, e-mail whitelist) &mdash; każdy adres z domeny <code>.ru</code></li>
+                <li><code>mail?.evil</code> (wildcard) &mdash; <em>mail1.evil</em>, <em>mailA.evil</em></li>
+                <li><code>^noreply@.+$</code> (regex, e-mail blacklist) &mdash; każdy adres zaczynający się od <em>noreply@</em></li>
+            </ul>
+            <div class="alert alert-warning">
+                <strong>Niepoprawny regex</strong> nie wywali skanu &mdash; jest logowany do error
+                log i po prostu nigdy nie dopasuje. Sprawdź swoje wyrażenie przed zapisem (np. na
+                <em>regex101.com</em>). Uwaga: Twig/HTML nie robią escapowania &mdash; wpisuj czystą
+                formę PCRE.
+            </div>
+
+            <h4 id="bulk">4.2. Import / eksport zbiorczy</h4>
+            <p>
+                Duże zestawy reguł zaimportujesz przez
+                <a href="{{ path('antispam_bulk_index') }}">Blacklists &rarr; Bulk Import/Export</a>.
+                Obsługiwane formaty:
+            </p>
+            <ul>
+                <li><strong>Plain text</strong> &mdash; jeden wpis na linię, komentarze <code>#</code></li>
+                <li><strong>CSV</strong> &mdash; kolumny: <code>pattern,pattern_type,score</code> (score tylko dla blacklisty)</li>
+            </ul>
+            <p>Przykład CSV dla Domain Blacklist:</p>
+<pre>pattern,pattern_type,score
+evil.com,exact,10
+*.ru,wildcard,5
+^spam\d+\..*,regex,15</pre>
+            <p>
+                Eksport zwraca pełną listę w tym samym formacie &mdash; przydaje się do backupu i
+                przenoszenia między instancjami. Import jest <em>upsert</em>: istniejące wpisy są
+                aktualizowane, nowe dopisywane.
+            </p>
+        </section>
+
+        <hr>
+
+        {# === 5. SCORING === #}
+        <section id="scoring">
+            <h3>5. Scoring (punktacja)</h3>
+            <p>
+                Pipeline zdarzeń to sekwencja listenerów, które dodają punkty do wyniku wiadomości.
+                Po wszystkich sprawdzeniach listener <code>ApplyScoreDecision</code> porównuje
+                wynik z progami i wybiera akcję. Progi skonfigurujesz pod
+                <a href="{{ path('antispam_spam_config') }}">Settings &rarr; Spam Filter Settings</a>.
+            </p>
+
+            <table class="table table-condensed table-bordered">
+                <thead>
+                <tr>
+                    <th style="width:100px;">Priorytet</th>
+                    <th>Listener</th>
+                    <th>Działanie</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr><td>100000</td><td><code>CheckIfIsAlreadyChecked</code></td><td>pomija już przetworzone</td></tr>
+                <tr><td>99999</td><td><code>CheckWhitelist</code></td><td>whitelista domen &rarr; stop</td></tr>
+                <tr><td>99998</td><td><code>CheckEmailWhitelist</code></td><td>whitelista e-maili &rarr; stop</td></tr>
+                <tr><td>99997</td><td><code>CheckBlacklist</code></td><td>+<em>score</em> reguły</td></tr>
+                <tr><td>99996</td><td><code>CheckEmailBlacklist</code></td><td>+<em>score</em> reguły</td></tr>
+                <tr><td>99990</td><td><code>CheckHeaders</code></td><td>SPF/DKIM/DMARC + heurystyki</td></tr>
+                <tr><td>99980</td><td><code>CheckDnsbl</code></td><td>odpytanie DNSBL dla IP nadawcy</td></tr>
+                <tr><td>99970</td><td><code>ApplyScoreDecision</code></td><td>ham/quarantine/spam + log</td></tr>
+                <tr><td>99960</td><td><code>MoveToSpam</code></td><td>fizyczne przeniesienie do folderu</td></tr>
+                <tr><td>-99999</td><td><code>SetAsChecked</code></td><td>oznaczenie jako przetworzone</td></tr>
+                </tbody>
+            </table>
+
+            <h4 id="headers">5.1. Analiza nagłówków</h4>
+            <p>
+                <code>HeaderAnalyzer</code> / <code>CheckHeaders</code> sprawdza techniczne sygnały
+                nadawcy i dokłada punkty:
+            </p>
+            <table class="table table-condensed table-bordered">
+                <thead><tr><th>Sygnał</th><th>Opis</th><th>Domyślny score</th></tr></thead>
+                <tbody>
+                <tr><td>SPF fail / softfail</td><td>adres IP nie znajduje się w rekordach SPF domeny nadawcy</td><td>6</td></tr>
+                <tr><td>DKIM fail / none</td><td>podpis DKIM nieważny lub go brakuje</td><td>4</td></tr>
+                <tr><td>DMARC fail / none</td><td>polityka DMARC odrzucona</td><td>6</td></tr>
+                <tr><td>From ≠ Reply-To</td><td>adres odpowiedzi różni się od nadawcy</td><td>3</td></tr>
+                <tr><td>Temat CAPS / money / !!!</td><td>cały temat kapitalikami, słowa typu $$$, $50,000, nadmiar wykrzykników</td><td>3</td></tr>
+                <tr><td>Brak <code>Message-ID</code></td><td>pominięty wymagany nagłówek</td><td>2</td></tr>
+                <tr><td>&gt; 10 hopów <code>Received</code></td><td>długa trasa &mdash; popularne przy relayach spamerskich</td><td>2</td></tr>
+                </tbody>
+            </table>
+            <p>
+                Wyłączysz etap w całości flagą <code>--no-headers</code> w agencie, albo usuwając
+                listener ze <em>Settings &rarr; Spam Filter Settings</em> (jeśli udostępnione w UI).
+            </p>
+
+            <h4 id="dnsbl">5.2. DNSBL</h4>
+            <p>
+                DNS Block List (DNSBL) to publiczna lista znanych źródeł spamu udostępniana jako
+                strefa DNS. Sprawdzamy, czy IP nadawcy (z ostatniego nagłówka <code>Received</code>)
+                znajduje się na którejś z włączonych list.
+            </p>
+            <p>
+                Dostawców skonfigurujesz pod
+                <a href="{{ path('antispam_dnsbl_index') }}">Blacklists &rarr; DNSBL Providers</a>.
+                Każda strefa ma:
+            </p>
+            <ul>
+                <li><code>name</code> &mdash; opisowa nazwa (np. <em>Spamhaus ZEN</em>)</li>
+                <li><code>zone</code> &mdash; domena strefy (np. <code>zen.spamhaus.org</code>)</li>
+                <li><code>score</code> &mdash; punkty dodawane przy trafieniu</li>
+                <li><code>cache_ttl</code> &mdash; sekundy cache'owania wyniku per IP (domyślnie 3600)</li>
+                <li><code>enabled</code> &mdash; włączenie/wyłączenie bez usuwania</li>
+                <li><code>hits</code> &mdash; licznik dotychczasowych trafień</li>
+            </ul>
+            <p><strong>Presety</strong> (klik "Add preset"):</p>
+            <ul>
+                <li><code>zen.spamhaus.org</code> (Spamhaus &mdash; score 10, agresywna)</li>
+                <li><code>bl.spamcop.net</code> (SpamCop &mdash; score 6)</li>
+                <li><code>dnsbl.sorbs.net</code> (SORBS &mdash; score 5)</li>
+                <li><code>b.barracudacentral.org</code> (Barracuda &mdash; score 7)</li>
+                <li><code>psbl.surriel.com</code> (PSBL &mdash; score 5)</li>
+                <li><code>dnsbl-1.uceprotect.net</code> (UCEPROTECT Level 1 &mdash; score 5)</li>
+            </ul>
+            <p>
+                Wyniki lookupu są cache'owane w tabeli <code>antispam_dnsbl_cache</code> aby nie
+                zatapiać resolvera DNS. Cache czyści się sam po TTL. Agent (Maildir) synchronizuje
+                tę samą konfigurację i wykonuje lookupy lokalnie, na serwerze hostingowym.
+            </p>
+            <div class="alert alert-warning">
+                <strong>Uwaga:</strong> niektóre DNSBL (np. <em>Spamhaus</em>) blokują odpytywanie
+                z publicznych resolverów typu 8.8.8.8 / 1.1.1.1. Używaj resolvera własnego hostingu
+                albo skonfiguruj konto DNSBL u dostawcy.
+            </div>
+
+            <h4 id="decision">5.3. Próg decyzyjny</h4>
+            <p>
+                Po zsumowaniu punktów <code>ApplyScoreDecision</code> porównuje wynik z progami i
+                dobiera akcję:
+            </p>
+            <table class="table table-condensed table-bordered">
+                <thead>
+                <tr><th>Wynik</th><th>Decyzja</th><th>Akcja</th></tr>
+                </thead>
+                <tbody>
+                <tr><td><code>&lt; quarantine</code></td><td><code>ham</code></td><td>zostaw w INBOX</td></tr>
+                <tr><td><code>&ge; quarantine</code></td><td><code>quarantine</code></td><td>przenieś do <code>.QUARANTINE</code></td></tr>
+                <tr><td><code>&ge; spam</code></td><td><code>spam</code></td><td>przenieś do <code>.SPAM</code> (lub usuń, jeśli włączone)</td></tr>
+                <tr><td>trafienie whitelisty</td><td><code>whitelisted</code></td><td>nigdy nie oceniane</td></tr>
+                </tbody>
+            </table>
+            <p>
+                Domyślnie: <code>quarantine_threshold = 5</code>, <code>spam_threshold = 10</code>.
+                Obie wartości zmienisz pod
+                <a href="{{ path('antispam_spam_config') }}">Settings &rarr; Spam Filter Settings</a>.
+                Tam też włączysz/wyłączysz log (<code>scoring.log_enabled</code>) oraz
+                agresywne usuwanie spamu (<code>delete_spam</code>).
+            </p>
+            <div class="alert alert-info">
+                <strong>Strojenie:</strong> zacznij od <code>quarantine=5</code>, <code>spam=15</code>
+                aby mieć bufor na ręczne przeglądanie w kwarantannie. Jeśli widzisz dużo
+                false-positives &mdash; podnieś progi. Jeśli dużo false-negatives &mdash; dodaj DNSBL,
+                zwiększ score reguł blacklisty, albo dostrój headers.
+            </div>
+        </section>
+
+        <hr>
+
+        {# === 6. SKRZYNKI === #}
+        <section id="mailboxes">
+            <h3>6. Skrzynki</h3>
+            <p>
+                W menu <em>Mailboxes</em> znajdziesz trzy widoki operacyjne: <strong>Spambox</strong>
+                (rzeczywiste wiadomości oznaczone jako spam), <strong>Quarantine</strong> (wiadomości
+                pośrednie, do ręcznego przeglądu) oraz <strong>Score Log</strong> (historia decyzji).
+            </p>
+
+            <h4 id="spambox">6.1. Spambox</h4>
+            <p>
+                Widok <a href="{{ path('antispam_spambox_index') }}">Mailboxes &rarr; Spambox</a>
+                pokazuje wiadomości, które trafiły do folderu <code>.SPAM</code> &mdash; zarówno w
+                trybie IMAP jak i SSH+Maildir. Dla każdego wpisu zobaczysz:
+            </p>
+            <ul>
+                <li>nadawcę (<code>From</code>)</li>
+                <li>temat</li>
+                <li>datę</li>
+                <li>final score i powód (np. <em>blacklist + SPF fail</em>)</li>
+            </ul>
+            <p>Dostępne akcje:</p>
+            <ul>
+                <li><strong>Restore</strong> &mdash; przenosi wiadomość z powrotem do INBOX</li>
+                <li><strong>Delete</strong> &mdash; kasuje wiadomość</li>
+                <li><strong>Add to whitelist</strong> &mdash; dodaje adres/domenę do whitelist e-mail/domain</li>
+                <li><strong>Add to blacklist</strong> &mdash; zwiększa score istniejącej reguły albo dodaje nową</li>
+            </ul>
+
+            <h4 id="quarantine">6.2. Kwarantanna</h4>
+            <p>
+                <a href="{{ path('antispam_spambox_quarantine') }}">Mailboxes &rarr; Quarantine</a>
+                to folder <code>.QUARANTINE</code> &mdash; wiadomości z wynikiem pomiędzy progami
+                kwarantanny a spamu. Traktuj to jak poczekalnię: sam decydujesz, czy wiadomość
+                była ham czy spam.
+            </p>
+            <p>
+                Jeżeli regularnie "ratujesz" coś z kwarantanny &mdash; rozważ podniesienie progu
+                <code>quarantine_threshold</code> albo dodanie nadawcy do whitelist. Jeżeli z
+                kwarantanny przesuwasz wiele rzeczy dalej do spamu &mdash; obniż <code>spam_threshold</code>
+                lub dodaj blacklistę / wzmocnij DNSBL.
+            </p>
+
+            <h4 id="scorelog">6.3. Score Log</h4>
+            <p>
+                <a href="{{ path('antispam_spambox_scorelog') }}">Mailboxes &rarr; Score Log</a>
+                to tabela <code>antispam_spam_score_log</code> &mdash; każdy wpis to jedna
+                przetworzona wiadomość, z pełnym uzasadnieniem:
+            </p>
+            <ul>
+                <li><strong>account_email</strong> &mdash; której skrzynki dotyczy</li>
+                <li><strong>sender</strong>, <strong>subject</strong></li>
+                <li><strong>score</strong> &mdash; końcowa suma</li>
+                <li><strong>decision</strong> &mdash; ham / quarantine / spam / whitelisted</li>
+                <li><strong>reasons</strong> &mdash; JSON z listą sygnałów (np. <code>["blacklist:+10","spf_fail:+6"]</code>)</li>
+                <li><strong>scored_at</strong> &mdash; timestamp</li>
+            </ul>
+            <p>
+                Log jest niezbędny przy odpowiadaniu na "czemu moja wiadomość została uznana za
+                spam?". Filtrujesz po koncie, decyzji, zakresie dat.
+            </p>
+            <p>
+                Włączenie / wyłączenie logu: <em>Settings &rarr; Spam Filter Settings
+                &rarr; Enable score log</em>. Czyszczenie starszych wpisów: CLI
+                <code>antispam:scorelog:prune --days=30</code>.
+            </p>
+            <div class="alert alert-info">
+                <strong>Dashboard:</strong> strona główna (<a href="{{ path('antispam_index') }}">Dashboard</a>)
+                pokazuje agregaty: liczba wiadomości wg decyzji, top 10 nadawców spamu, liczba
+                trafień DNSBL &mdash; wszystko zasilane z <code>spam_score_log</code>.
+            </div>
+        </section>
+
+        <hr>
+
+        {# === 7. CLI === #}
+        <section id="cli">
+            <h3>7. Polecenia CLI</h3>
+            <p>
+                Wszystkie polecenia aplikacji webowej uruchamiasz przez <code>bin/console</code>.
+                Dostępne komendy <code>antispam:*</code>:
+            </p>
+            <table class="table table-condensed table-bordered">
+                <thead>
+                <tr><th>Komenda</th><th>Opis</th></tr>
+                </thead>
+                <tbody>
+                <tr>
+                    <td><code>antispam:scan [--account=]</code></td>
+                    <td>uruchamia skan dla wszystkich kont albo konkretnego</td>
+                </tr>
+                <tr>
+                    <td><code>antispam:agent:deploy &lt;email&gt;</code></td>
+                    <td>kopiuje agent + inicjalizuje SQLite na serwerze SSH</td>
+                </tr>
+                <tr>
+                    <td><code>antispam:agent:sync &lt;email&gt;</code></td>
+                    <td>wypycha reguły i ustawienia scoringu do agenta</td>
+                </tr>
+                <tr>
+                    <td><code>antispam:agent:health &lt;email&gt;</code></td>
+                    <td>sprawdza agenta na serwerze: wersja, baza, liczba wiadomości w Maildirze</td>
+                </tr>
+                <tr>
+                    <td><code>antispam:scorelog:prune --days=N</code></td>
+                    <td>kasuje wpisy ze score log starsze niż N dni</td>
+                </tr>
+                <tr>
+                    <td><code>antispam:dnsbl:cache:clear</code></td>
+                    <td>wyrzuca cache DNSBL (po zmianie resolverów, itp.)</td>
+                </tr>
+                </tbody>
+            </table>
+
+            <p>Agent (bezpośrednio, na zdalnym serwerze):</p>
+<pre>php antispam-agent.php scan --maildir=~/Maildir --db=rules.sqlite \
+    --spam-threshold=10 --quarantine-threshold=5 \
+    [--no-dnsbl] [--no-headers] [--limit=N]
+
+php antispam-agent.php health --maildir=~/Maildir --db=rules.sqlite
+
+php antispam-agent.php test --db=rules.sqlite
+    # sprawdza spójność bazy SQLite i dostępność zon DNSBL</pre>
+        </section>
+
+        <hr>
+
+        {# === 8. TROUBLESHOOTING === #}
+        <section id="troubleshooting">
+            <h3>8. Rozwiązywanie problemów</h3>
+
+            <h4>8.1. Nie mogę zalogować się po IMAP</h4>
+            <ul>
+                <li>Zweryfikuj <code>host</code>/<code>port</code>/<code>flags</code> &mdash; na porcie 143 najczęściej potrzebujesz <code>/imap/tls</code>, na 993 <code>/imap/ssl</code></li>
+                <li>Jeśli certyfikat jest self-signed: dodaj <code>/novalidate-cert</code></li>
+                <li>Gmail / Outlook wymagają <em>App Password</em> (nie zwykłego hasła konta)</li>
+                <li>Sprawdź log Symfony: <code>var/log/dev.log</code></li>
+            </ul>
+
+            <h4>8.2. SSH: <em>Permission denied (publickey)</em></h4>
+            <ul>
+                <li>Upewnij się, że publiczna część klucza jest w <code>~/.ssh/authorized_keys</code> <em>na serwerze hostingowym</em>, pod właściwym użytkownikiem</li>
+                <li>Uprawnienia muszą być: <code>700</code> na <code>~/.ssh</code> i <code>600</code> na <code>authorized_keys</code></li>
+                <li>Niektóre serwery wymagają <code>PubkeyAcceptedKeyTypes +ssh-rsa</code> w <code>sshd_config</code> (stare RSA)</li>
+                <li>Sprawdź z linii komend: <code>ssh -i /path/to/key -v user@host</code></li>
+            </ul>
+
+            <h4>8.3. Agent: <em>SQLITE_CANTOPEN</em> albo brak tabel</h4>
+            <ul>
+                <li>Uruchom ponownie <em>Deploy agent</em> &mdash; tworzy pełny schemat bazy</li>
+                <li>Sprawdź ścieżkę <code>--db=</code> &mdash; musi być zapisywalna dla użytkownika cron-a</li>
+                <li>Zweryfikuj: <code>sqlite3 rules.sqlite '.tables'</code></li>
+            </ul>
+
+            <h4>8.4. DNSBL: każdy IP "listed"</h4>
+            <ul>
+                <li>Najczęściej to filtr resolvera (Cloudflare 1.1.1.1 i Google 8.8.8.8 zwracają stałe odpowiedzi dla niektórych zon)</li>
+                <li>Użyj resolvera hostingu albo własnego (<code>unbound</code>)</li>
+                <li>Wyczyść cache: <code>antispam:dnsbl:cache:clear</code></li>
+            </ul>
+
+            <h4>8.5. Za dużo false-positives</h4>
+            <ul>
+                <li>Podnieś <code>quarantine_threshold</code> / <code>spam_threshold</code></li>
+                <li>Dodaj zaufane domeny do <em>Domain Whitelist</em></li>
+                <li>Zmniejsz score agresywnych DNSBL (np. UCEPROTECT bywa szumny)</li>
+                <li>Wyłącz <code>--no-headers</code> jeśli domeny nadawców nie mają prawidłowego SPF</li>
+            </ul>
+
+            <h4>8.6. Za dużo false-negatives</h4>
+            <ul>
+                <li>Obniż progi</li>
+                <li>Dodaj domen-tyranów do blacklisty z typem <code>wildcard</code> lub <code>regex</code></li>
+                <li>Włącz dodatkowe DNSBL (Spamhaus + SORBS to dobra para)</li>
+                <li>Zwiększ score reguł blacklisty</li>
+            </ul>
+        </section>
+
+        <hr>
+
+        {# === 9. FAQ === #}
+        <section id="faq">
+            <h3>9. FAQ</h3>
+
+            <p><strong>Q: Czy agent usuwa oryginały wiadomości?</strong></p>
+            <p>Nie. Wiadomości są <em>przenoszone</em> z <code>Maildir/new</code> lub <code>Maildir/cur</code>
+                do <code>.SPAM/new</code> albo <code>.QUARANTINE/new</code>. Twój MUA (np. Roundcube,
+                Thunderbird) widzi je w zwykłych folderach. Usunięcie stałe włączysz ręcznie flagą
+                <em>Delete spam</em> w ustawieniach.</p>
+
+            <p><strong>Q: Czy można uruchamiać agent i IMAP równolegle?</strong></p>
+            <p>Tak &mdash; każde konto jest osobne. Możesz mieć część kont w trybie IMAP (np. Gmail),
+                a część w SSH+Maildir (własny VPS).</p>
+
+            <p><strong>Q: Gdzie są trzymane reguły dla agenta?</strong></p>
+            <p>W <code>rules.sqlite</code> w <code>agent_path</code> na serwerze hostingowym.
+                Synchronizowane z bazy MySQL aplikacji webowej komendą
+                <code>antispam:agent:sync</code>.</p>
+
+            <p><strong>Q: Agent nie widzi nowych wiadomości?</strong></p>
+            <p>Upewnij się, że MTA (np. Postfix / Dovecot LDA) dostarcza pocztę do
+                <code>~/Maildir</code>, a nie np. do <code>/var/mail/user</code> w formacie mbox.
+                Agent obsługuje wyłącznie Maildir.</p>
+
+            <p><strong>Q: Co, jeśli chcę tylko logować, bez przenoszenia?</strong></p>
+            <p>W <em>Settings &rarr; Spam Filter Settings</em> wyłącz <em>Move to spam folder</em>.
+                Pipeline policzy score i zaloguje decyzję, ale nic nie przeniesie &mdash; tryb
+                "dry-run" do tuningu progów.</p>
+
+            <p><strong>Q: Czy mogę mieć różne progi dla różnych kont?</strong></p>
+            <p>Obecnie progi są globalne (jedno ustawienie dla całej aplikacji). Per-account
+                thresholds są w roadmapie &mdash; można to zaimplementować, dodając pola
+                <code>spam_threshold</code> / <code>quarantine_threshold</code> do encji
+                <code>Account</code>.</p>
+
+            <p><strong>Q: Ile kosztuje DNSBL?</strong></p>
+            <p>Wszystkie presety są darmowe dla użytku prywatnego i małych wolumenów. Spamhaus
+                wymaga subskrypcji (DQS) powyżej &asymp;100k odpytywań/dobę. Barracuda i
+                UCEPROTECT mają podobne limity &mdash; przejrzyj regulaminy dostawców.</p>
+
+            <p><strong>Q: Czy aplikacja skanuje treść wiadomości (bayes, keywords)?</strong></p>
+            <p>Aktualnie nie &mdash; scoring opiera się na nadawcy, nagłówkach i DNSBL. Filtr bayesowski
+                (np. dspam-like) można dodać jako kolejny listener priorytetu ~99985, korzystając
+                z <code>ScoringService::addReason()</code>.</p>
+        </section>
+
+    </div>
+</div>
+{% endblock %}

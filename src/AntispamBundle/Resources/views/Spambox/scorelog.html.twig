@@ -1,0 +1,57 @@
+{% extends 'AntispamBundle::main.html.twig' %}
+{% block title %}Score Log{% endblock %}
+{% block page_title %}Score Log{% endblock %}
+
+{% block body %}
+    <div class="row">
+        <div class="col-sm-3"><div class="panel panel-default"><div class="panel-body text-center">
+            <div class="stat-value text-success">{{ stats.ham|default(0) }}</div><div class="stat-label">Ham (30d)</div>
+        </div></div></div>
+        <div class="col-sm-3"><div class="panel panel-default"><div class="panel-body text-center">
+            <div class="stat-value text-warning">{{ stats.quarantine|default(0) }}</div><div class="stat-label">Quarantine (30d)</div>
+        </div></div></div>
+        <div class="col-sm-3"><div class="panel panel-default"><div class="panel-body text-center">
+            <div class="stat-value text-danger">{{ stats.spam|default(0) }}</div><div class="stat-label">Spam (30d)</div>
+        </div></div></div>
+        <div class="col-sm-3"><div class="panel panel-default"><div class="panel-body text-center">
+            <div class="stat-value text-info">{{ stats.whitelisted|default(0) }}</div><div class="stat-label">Whitelisted (30d)</div>
+        </div></div></div>
+    </div>
+
+    {% if logs|length > 0 %}
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-list-alt"></span> Recent decisions</div>
+        <table class="table table-striped" style="margin-bottom:0;">
+            <thead><tr><th>When</th><th>Account</th><th>Sender</th><th>Subject</th><th>Score</th><th>Decision</th><th>Why</th></tr></thead>
+            <tbody>
+            {% for l in logs %}
+                <tr>
+                    <td>{{ l.scoredAt|date('m-d H:i') }}</td>
+                    <td>{{ l.accountEmail }}</td>
+                    <td>{{ l.sender }}</td>
+                    <td>{{ l.subject[:60] }}</td>
+                    <td><strong>{{ l.score }}</strong></td>
+                    <td>
+                        {% if l.decision == 'spam' %}<span class="label label-danger">spam</span>
+                        {% elseif l.decision == 'quarantine' %}<span class="label label-warning">quarantine</span>
+                        {% elseif l.decision == 'whitelisted' %}<span class="label label-info">whitelisted</span>
+                        {% else %}<span class="label label-success">ham</span>{% endif %}
+                    </td>
+                    <td>
+                        {% for r in l.reasonsDecoded %}
+                            <small>{{ r.rule }} (+{{ r.score }})</small><br>
+                        {% endfor %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+        <div class="empty-state">
+            <span class="glyphicon glyphicon-list-alt"></span>
+            <p>No decisions logged yet</p>
+            <p class="text-muted">Enable score logging in <a href="{{ path('antispam_spam_config') }}">Spam Settings</a> and run a scan.</p>
+        </div>
+    {% endif %}
+{% endblock %}

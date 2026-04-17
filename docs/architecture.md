@@ -31,20 +31,38 @@ Antispam is a Symfony 4.4 web application for filtering spam from email accounts
 
 ## Event Pipeline
 
-Message filtering uses Symfony event dispatcher with prioritized listeners:
+Message filtering uses Symfony event dispatcher with prioritized listeners.
+Whitelist hits short-circuit. Blacklist / header / DNSBL steps accumulate a
+spam score; the final decision listener turns the score into
+ham/quarantine/spam.
 
-| Priority | Listener | Action |
-|----------|----------|--------|
-| 100000 | CheckIfIsAlreadyChecked | Skip if already processed |
-| 99999 | CheckWhitelist | Domain whitelist check |
-| 99998 | CheckEmailWhitelist | Email whitelist check |
-| 99997 | CheckBlacklist | Domain blacklist check |
-| 99996 | CheckEmailBlacklist | Email blacklist check |
-| 99995 | MoveToSpam | Move to SPAM folder |
-| -99999 | SetAsChecked | Mark as processed |
+| Priority | Listener               | Action                                |
+|----------|------------------------|---------------------------------------|
+| 100000   | CheckIfIsAlreadyChecked| Skip if already processed             |
+| 99999    | CheckWhitelist         | Domain whitelist (short-circuit)      |
+| 99998    | CheckEmailWhitelist    | Email whitelist (short-circuit)       |
+| 99997    | CheckBlacklist         | Domain blacklist → add score          |
+| 99996    | CheckEmailBlacklist    | Email blacklist → add score           |
+| 99990    | CheckHeaders           | SPF/DKIM/DMARC + heuristics           |
+| 99980    | CheckDnsbl             | DNSBL lookup against configured zones |
+| 99970    | ApplyScoreDecision     | ham/quarantine/spam decision + log    |
+| 99960    | MoveToSpam             | Physically move spam to SPAM folder   |
+| -99999   | SetAsChecked           | Mark as processed                     |
+
+See `scoring.md` for scoring thresholds, pattern types and DNSBL configuration.
 
 ## Database
 
-Four rule tables: `antispam_whitelist`, `antispam_email_whitelist`, `antispam_blacklist`, `antispam_email_blacklist`. Each stores email, host/address, and hit counter.
+Rule tables: `antispam_whitelist`, `antispam_email_whitelist`,
+`antispam_blacklist`, `antispam_email_blacklist`. Each stores email,
+host/address, a `pattern_type` (`exact`/`wildcard`/`regex`) and hit counter.
+Blacklist rows additionally carry a per-rule `score`.
+
+Additional tables:
+- `antispam_dnsbl_provider` — configured DNS block list zones (name, zone,
+  score, cache_ttl, enabled, hits).
+- `antispam_dnsbl_cache` — per-IP DNSBL lookup results, TTL-capped.
+- `antispam_spam_score_log` — per-message decision log with score, reasons
+  (JSON), decision (ham/quarantine/spam/whitelisted) and timestamp.
 
 Account table: `antispam_account` - stores connection settings (IMAP or SSH) per email account.

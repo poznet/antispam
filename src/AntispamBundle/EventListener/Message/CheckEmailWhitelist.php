@@ -1,49 +1,52 @@
 <?php
-/**
- * Created by PhpStorm.
- * User: joseph
- * Date: 17.06.16
- * Time: 23:42
- */
 
 namespace AntispamBundle\EventListener\Message;
 
-
 use AntispamBundle\Event\MessageEvent;
 use AntispamBundle\Services\MessageService;
+use AntispamBundle\Services\PatternMatcher;
 use Ddeboer\Imap\Exception\Exception;
-use Doctrine\ORM\EntityManager;
+use Doctrine\ORM\EntityManagerInterface;
 
 class CheckEmailWhitelist
 {
     private $em;
     private $ms;
 
-    public function __construct(EntityManager $entityManager,MessageService $ms)
+    public function __construct(EntityManagerInterface $em, MessageService $ms)
     {
-        $this->em=$entityManager;
-        $this->ms=$ms;
+        $this->em = $em;
+        $this->ms = $ms;
     }
 
-    public function check(MessageEvent $event){
-        $msg=$event->getMessage();
+    public function check(MessageEvent $event)
+    {
+        $msg = $event->getMessage();
 
         try {
-            $email = $msg->getHeaders()->get('sender')[0]->mailbox.'@'.$msg->getHeaders()->get('sender')[0]->host;
-        }catch(Exception $e){
+            $email = strtolower(
+                $msg->getHeaders()->get('sender')[0]->mailbox
+                . '@' . $msg->getHeaders()->get('sender')[0]->host
+            );
+        } catch (Exception $e) {
+            return;
+        } catch (\Throwable $e) {
             return;
         }
-        $wpis=$this->em->getRepository("AntispamBundle:EmailWhitelist")->findOneBy(array('whitelistemail'=>$email,"email"=>$event->getEmail()));
-           if($wpis){
-            $wpis->setCounter($wpis->getCounter()+1);
-            $this->em->flush();
-            $this->ms->setAsChecked($msg);
-            $event->setWhitelist(true);
-            $event->stopPropagation();
+        if (!$email || $email === '@') return;
 
+        $rules = $this->em->getRepository('AntispamBundle:EmailWhitelist')
+            ->findBy(['email' => $event->getEmail()]);
+
+        $match = PatternMatcher::findMatching($rules, $email, 'getWhitelistemail');
+        if (!$match) {
+            return;
         }
 
-
+        $match->setCounter($match->getCounter() + 1);
+        $this->em->flush();
+        $this->ms->setAsChecked($msg);
+        $event->setWhitelist(true);
+        $event->stopPropagation();
     }
-
 }

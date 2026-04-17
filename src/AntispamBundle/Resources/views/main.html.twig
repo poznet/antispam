@@ -40,7 +40,16 @@
             <ul class="nav navbar-nav">
                 <li><a href="{{ path('antispam_index') }}"><span class="glyphicon glyphicon-dashboard"></span> Dashboard</a></li>
                 <li><a href="{{ path('antispam_account_index') }}"><span class="glyphicon glyphicon-cloud"></span> Accounts</a></li>
-                <li><a href="{{ path('antispam_spambox_index') }}"><span class="glyphicon glyphicon-trash"></span> Spambox</a></li>
+                <li class="dropdown">
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
+                        <span class="glyphicon glyphicon-trash"></span> Mailboxes <span class="caret"></span>
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a href="{{ path('antispam_spambox_index') }}"><span class="glyphicon glyphicon-trash"></span> Spambox</a></li>
+                        <li><a href="{{ path('antispam_spambox_quarantine') }}"><span class="glyphicon glyphicon-warning-sign"></span> Quarantine</a></li>
+                        <li><a href="{{ path('antispam_spambox_scorelog') }}"><span class="glyphicon glyphicon-list-alt"></span> Score Log</a></li>
+                    </ul>
+                </li>
                 <li class="dropdown">
                     <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
                         <span class="glyphicon glyphicon-ok-circle"></span> Whitelists <span class="caret"></span>
@@ -57,6 +66,9 @@
                     <ul class="dropdown-menu">
                         <li><a href="{{ path('antispam_blacklist_index') }}"><span class="glyphicon glyphicon-globe"></span> Domain Blacklist</a></li>
                         <li><a href="{{ path('antispam_emailblacklist_index') }}"><span class="glyphicon glyphicon-envelope"></span> E-mail Blacklist</a></li>
+                        <li><a href="{{ path('antispam_dnsbl_index') }}"><span class="glyphicon glyphicon-globe"></span> DNSBL Providers</a></li>
+                        <li role="separator" class="divider"></li>
+                        <li><a href="{{ path('antispam_bulk_index') }}"><span class="glyphicon glyphicon-transfer"></span> Bulk Import/Export</a></li>
                     </ul>
                 </li>
                 <li class="dropdown">

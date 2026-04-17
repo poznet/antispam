@@ -25,7 +25,7 @@ class AgentSyncCommand extends Command
 
     protected function configure()
     {
-        $this->setDescription('Sync blacklist/whitelist rules to remote agent')
+        $this->setDescription('Sync blacklist / whitelist / DNSBL rules to remote agent')
              ->addArgument('accountId', InputArgument::REQUIRED, 'Account ID');
     }
 
@@ -40,10 +40,12 @@ class AgentSyncCommand extends Command
         $output->writeln('Syncing rules for ' . $account->getEmail() . '...');
 
         $rules = $this->exportRules($account->getEmail());
-        $output->writeln('Rules: ' . count($rules['whitelist']) . ' whitelist, '
-            . count($rules['email_whitelist']) . ' email whitelist, '
-            . count($rules['blacklist']) . ' blacklist, '
-            . count($rules['email_blacklist']) . ' email blacklist');
+        $output->writeln(sprintf(
+            'Rules: %d wl, %d email-wl, %d bl, %d email-bl, %d dnsbl',
+            count($rules['whitelist']), count($rules['email_whitelist']),
+            count($rules['blacklist']), count($rules['email_blacklist']),
+            count($rules['dnsbl'])
+        ));
 
         try {
             $result = $this->ssh->syncRules($account, json_encode($rules));
@@ -53,27 +55,56 @@ class AgentSyncCommand extends Command
             $output->writeln('<error>Sync failed: ' . $e->getMessage() . '</error>');
             return 1;
         }
-
         return 0;
     }
 
     private function exportRules($email)
     {
-        $rules = ['whitelist' => [], 'email_whitelist' => [], 'blacklist' => [], 'email_blacklist' => []];
+        $rules = [
+            'whitelist' => [], 'email_whitelist' => [],
+            'blacklist' => [], 'email_blacklist' => [],
+            'dnsbl' => [],
+        ];
 
         foreach ($this->em->getRepository('AntispamBundle:Whitelist')->findBy(['email' => $email]) as $item) {
-            $rules['whitelist'][] = ['email' => $item->getEmail(), 'host' => $item->getHost()];
+            $rules['whitelist'][] = [
+                'email' => $item->getEmail(),
+                'host' => $item->getHost(),
+                'pattern_type' => $item->getPatternType(),
+            ];
         }
         foreach ($this->em->getRepository('AntispamBundle:EmailWhitelist')->findBy(['email' => $email]) as $item) {
-            $rules['email_whitelist'][] = ['email' => $item->getEmail(), 'whitelistemail' => $item->getWhitelistemail()];
+            $rules['email_whitelist'][] = [
+                'email' => $item->getEmail(),
+                'whitelistemail' => $item->getWhitelistemail(),
+                'pattern_type' => $item->getPatternType(),
+            ];
         }
         foreach ($this->em->getRepository('AntispamBundle:Blacklist')->findBy(['email' => $email]) as $item) {
-            $rules['blacklist'][] = ['email' => $item->getEmail(), 'host' => $item->getHost()];
+            $rules['blacklist'][] = [
+                'email' => $item->getEmail(),
+                'host' => $item->getHost(),
+                'pattern_type' => $item->getPatternType(),
+                'score' => $item->getScore(),
+            ];
         }
         foreach ($this->em->getRepository('AntispamBundle:EmailBlacklist')->findBy(['email' => $email]) as $item) {
-            $rules['email_blacklist'][] = ['email' => $item->getEmail(), 'blacklistemail' => $item->getBlacklistemail()];
+            $rules['email_blacklist'][] = [
+                'email' => $item->getEmail(),
+                'blacklistemail' => $item->getBlacklistemail(),
+                'pattern_type' => $item->getPatternType(),
+                'score' => $item->getScore(),
+            ];
         }
-
+        foreach ($this->em->getRepository('AntispamBundle:DnsblProvider')->findAll() as $prov) {
+            $rules['dnsbl'][] = [
+                'name' => $prov->getName(),
+                'zone' => $prov->getZone(),
+                'score' => $prov->getScore(),
+                'enabled' => $prov->isEnabled(),
+                'cache_ttl' => $prov->getCacheTtl(),
+            ];
+        }
         return $rules;
     }
 }

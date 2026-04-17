@@ -68,6 +68,7 @@
                         {% if account.connectionType == 'ssh' %}
                             <a href="{{ path('antispam_account_deploy', {id: account.id}) }}" class="btn btn-warning" title="Deploy agent">Deploy</a>
                             <a href="{{ path('antispam_account_sync', {id: account.id}) }}" class="btn btn-success" title="Sync rules">Sync</a>
+                            <a href="{{ path('antispam_account_health', {id: account.id}) }}" class="btn btn-info" title="Health check">Health</a>
                         {% endif %}
                         <a href="{{ path('antispam_account_del', {id: account.id}) }}" class="btn btn-danger" title="Delete" onclick="return confirm('Delete this account?')">Del</a>
                     </div>

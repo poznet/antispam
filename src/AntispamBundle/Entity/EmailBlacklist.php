@@ -5,16 +5,16 @@ namespace AntispamBundle\Entity;
 use Doctrine\ORM\Mapping as ORM;
 
 /**
- * Whitelist
- *
  * @ORM\Table(name="antispam_email_blacklist")
  * @ORM\Entity(repositoryClass="AntispamBundle\Repository\EmailBlacklistRepository")
  */
 class EmailBlacklist
 {
+    const PATTERN_EXACT = 'exact';
+    const PATTERN_WILDCARD = 'wildcard';
+    const PATTERN_REGEX = 'regex';
+
     /**
-     * @var int
-     *
      * @ORM\Column(name="id", type="integer")
      * @ORM\Id
      * @ORM\GeneratedValue(strategy="AUTO")
@@ -22,103 +22,44 @@ class EmailBlacklist
     private $id;
 
     /**
-     * @var string
-     *
      * @ORM\Column(name="email", type="string", length=255)
      */
     private $email;
 
     /**
-     * @var string
-     *
      * @ORM\Column(name="blacklistemail", type="string", length=255)
      */
     private $blacklistemail;
 
     /**
-     * @var integer
-     *
-     * @ORM\Column(name="counter", type="integer", )
+     * @ORM\Column(name="pattern_type", type="string", length=16)
      */
-    private $counter=0;
+    private $patternType = self::PATTERN_EXACT;
 
     /**
-     * Get id
-     *
-     * @return integer 
+     * @ORM\Column(name="score", type="integer")
      */
-    public function getId()
-    {
-        return $this->id;
-    }
+    private $score = 10;
 
     /**
-     * Set email
-     *
-     * @param string $email
-     * @return Whitelist
+     * @ORM\Column(name="counter", type="integer")
      */
-    public function setEmail($email)
-    {
-        $this->email = $email;
+    private $counter = 0;
 
-        return $this;
-    }
+    public function getId() { return $this->id; }
 
-    /**
-     * Get email
-     *
-     * @return string 
-     */
-    public function getEmail()
-    {
-        return $this->email;
-    }
+    public function setEmail($email) { $this->email = $email; return $this; }
+    public function getEmail() { return $this->email; }
 
- 
-    /**
-     * Set counter
-     *
-     * @param integer $counter
-     * @return Blacklist
-     */
-    public function setCounter($counter)
-    {
-        $this->counter = $counter;
+    public function setBlacklistemail($blacklistemail) { $this->blacklistemail = $blacklistemail; return $this; }
+    public function getBlacklistemail() { return $this->blacklistemail; }
 
-        return $this;
-    }
+    public function getPatternType() { return $this->patternType; }
+    public function setPatternType($patternType) { $this->patternType = $patternType; return $this; }
 
-    /**
-     * Get counter
-     *
-     * @return integer 
-     */
-    public function getCounter()
-    {
-        return $this->counter;
-    }
+    public function getScore() { return $this->score; }
+    public function setScore($score) { $this->score = (int)$score; return $this; }
 
-    /**
-     * Set blacklistemail
-     *
-     * @param string $blacklistemail
-     * @return EmailBlacklist
-     */
-    public function setBlacklistemail($blacklistemail)
-    {
-        $this->blacklistemail = $blacklistemail;
-
-        return $this;
-    }
-
-    /**
-     * Get blacklistemail
-     *
-     * @return string 
-     */
-    public function getBlacklistemail()
-    {
-        return $this->blacklistemail;
-    }
+    public function setCounter($counter) { $this->counter = $counter; return $this; }
+    public function getCounter() { return $this->counter; }
 }

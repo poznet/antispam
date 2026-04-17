@@ -21,6 +21,7 @@ See `docs/` directory for detailed documentation:
 - `docs/commands.md` - CLI commands reference
 - `docs/api.md` - web controller endpoints
 - `docs/deployment.md` - Docker / Coolify deployment guide
+- `docs/scoring.md` - scoring pipeline, DNSBL, regex/wildcard patterns
 
 ## Tech stack
 - PHP >= 7.1.3, Symfony 4.4, Doctrine ORM, MySQL

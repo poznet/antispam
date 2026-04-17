@@ -3,43 +3,52 @@
 namespace AntispamBundle\Controller;
 
 use AntispamBundle\Entity\Blacklist;
-use Symfony\Bundle\FrameworkBundle\Controller\Controller;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
+use Symfony\Bundle\FrameworkBundle\Controller\Controller;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
- *
- * Class DomainBlacklistController
- * @package AntispamBundle\Controller
  * @Route("/domainblacklst")
  */
 class DomainBlacklistController extends Controller
 {
-
     /**
      * @Route("/index", name="antispam_blacklist_index")
      * @Template
      */
-    public function indexAction(){
+    public function indexAction()
+    {
         $em = $this->getDoctrine()->getManager();
-        $list=$em->getRepository("AntispamBundle:Blacklist")->findAll();
-        return array('list'=>$list);
+        $list = $em->getRepository('AntispamBundle:Blacklist')->findAll();
+        return ['list' => $list];
     }
 
     /**
      * @Route("/add", name="antispam_blacklist_add")
-     *
      */
-    public function addAction(Request $request){
+    public function addAction(Request $request)
+    {
         $em = $this->getDoctrine()->getManager();
-        $host=trim($request->get('host'));
-        $jest=$em->getRepository("AntispamBundle:Blacklist")->findOneByHost($host);
-        if(!$jest) {
-            $wpis = new Blacklist();
-            $wpis->setEmail($this->get('configuration')->get('email'));
-            $wpis->setHost($host);
-            $em->persist($wpis);
+        $host = trim((string)$request->get('host'));
+        $patternType = $request->get('pattern_type', Blacklist::PATTERN_EXACT);
+        $score = (int)$request->get('score', 10);
+        if (!in_array($patternType, [Blacklist::PATTERN_EXACT, Blacklist::PATTERN_WILDCARD, Blacklist::PATTERN_REGEX], true)) {
+            $patternType = Blacklist::PATTERN_EXACT;
+        }
+
+        if (!$host) {
+            return $this->redirectToRoute('antispam_blacklist_index');
+        }
+
+        $existing = $em->getRepository('AntispamBundle:Blacklist')->findOneBy(['host' => $host]);
+        if (!$existing) {
+            $entry = new Blacklist();
+            $entry->setEmail($this->get('configuration')->get('email'));
+            $entry->setHost($host);
+            $entry->setPatternType($patternType);
+            $entry->setScore(max(1, $score));
+            $em->persist($entry);
             $em->flush();
         }
         return $this->redirectToRoute('antispam_blacklist_index');
@@ -48,14 +57,14 @@ class DomainBlacklistController extends Controller
     /**
      * @Route("/del/{id}", name="antispam_blacklist_del")
      */
-    public function delAction($id){
+    public function delAction($id)
+    {
         $em = $this->getDoctrine()->getManager();
-        $jest=$em->getRepository("AntispamBundle:Blacklist")->findOneById($id);
-        if($jest){
-            $em->remove($jest);
+        $entry = $em->getRepository('AntispamBundle:Blacklist')->find($id);
+        if ($entry) {
+            $em->remove($entry);
             $em->flush();
         }
         return $this->redirectToRoute('antispam_blacklist_index');
     }
-
 }

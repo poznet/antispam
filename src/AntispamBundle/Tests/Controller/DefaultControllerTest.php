@@ -12,6 +12,6 @@ class DefaultControllerTest extends WebTestCase
 
         $crawler = $client->request('GET', '/');
 
-        $this->assertContains('Antispam', $client->getResponse()->getContent());
+        $this->assertContains('Pancernapanda', $client->getResponse()->getContent());
     }
 }

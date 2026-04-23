@@ -1,6 +1,6 @@
-# Antispam
+# Pancernapanda antispam
 
-Symfony 4.4 application for email spam filtering via IMAP or SSH+Maildir agent.
+Symfony 4.4 application for email spam filtering via IMAP or SSH+Maildir agent. Part of the Pancernapanda security toolkit.
 
 ## Project structure
 - `src/AntispamBundle/` - main bundle (entities, controllers, services, commands, event listeners)

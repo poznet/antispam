@@ -1,143 +1,273 @@
+/* ===========================================================
+   Pancernapanda antispam - theme
+   Palette inspired by pancernapanda.pl (shades of blue):
+     --pp-navy:    #0b2a52  (deep navy - primary, panda body)
+     --pp-blue:    #1e4a8a  (armor blue - buttons, links)
+     --pp-royal:   #2563eb  (royal accent)
+     --pp-sky:     #3b82f6  (highlights)
+     --pp-light:   #e8f0fb  (pale blue surface)
+     --pp-bg:      #f3f7fd  (page background)
+   =========================================================== */
+
+:root {
+    --pp-navy:  #0b2a52;
+    --pp-blue:  #1e4a8a;
+    --pp-royal: #2563eb;
+    --pp-sky:   #3b82f6;
+    --pp-light: #e8f0fb;
+    --pp-bg:    #f3f7fd;
+    --pp-text:  #1f2a44;
+    --pp-muted: #5f7aa8;
+}
+
 /* Main layout */
 body {
-    background-color: #f5f5f5;
+    background-color: var(--pp-bg);
+    color: var(--pp-text);
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-.navbar-brand .glyphicon {
-    margin-right: 5px;
+a { color: var(--pp-blue); }
+a:hover, a:focus { color: var(--pp-navy); }
+
+/* =========== Navbar (panda/armor theme) =========== */
+.navbar-inverse {
+    background: linear-gradient(135deg, #0b2a52 0%, #1e4a8a 100%);
+    border-color: #06213f;
+    box-shadow: 0 2px 8px rgba(11, 42, 82, 0.25);
+}
+.navbar-inverse .navbar-brand,
+.navbar-inverse .navbar-nav > li > a {
+    color: #eaf1fb;
+}
+.navbar-inverse .navbar-nav > li > a:hover,
+.navbar-inverse .navbar-nav > li > a:focus,
+.navbar-inverse .navbar-nav > .active > a,
+.navbar-inverse .navbar-nav > .active > a:hover,
+.navbar-inverse .navbar-nav > .active > a:focus,
+.navbar-inverse .navbar-nav > .open > a,
+.navbar-inverse .navbar-nav > .open > a:hover,
+.navbar-inverse .navbar-nav > .open > a:focus {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.08);
+}
+.navbar-inverse .navbar-text { color: #cfdef5; }
+.navbar-inverse .dropdown-menu {
+    background: #ffffff;
+    border: 1px solid #d5e1f2;
+    box-shadow: 0 6px 20px rgba(11, 42, 82, 0.15);
+}
+.navbar-inverse .dropdown-menu > li > a {
+    color: var(--pp-text);
+}
+.navbar-inverse .dropdown-menu > li > a:hover,
+.navbar-inverse .dropdown-menu > li > a:focus {
+    background-color: var(--pp-light);
+    color: var(--pp-navy);
 }
 
+/* Brand mark */
+.navbar-brand.brand-pp {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    height: auto;
+    line-height: 1;
+}
+.pp-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+.pp-brand-text {
+    display: inline-flex;
+    flex-direction: column;
+    line-height: 1.1;
+}
+.pp-brand-text strong {
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: #ffffff;
+}
+.pp-brand-sub {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #8fb4e6;
+    font-weight: 600;
+}
+
+/* =========== Page header =========== */
 .page-header {
     margin-top: 0;
-    border-bottom-color: #ddd;
+    border-bottom-color: #d5e1f2;
 }
-
 .page-header h2 {
-    color: #333;
-    font-weight: 300;
+    color: var(--pp-navy);
+    font-weight: 400;
 }
 
-/* Dashboard panels */
+/* =========== Dashboard panels =========== */
 .panel-stat {
     border: none;
-    border-radius: 4px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
-    transition: box-shadow 0.2s;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(11, 42, 82, 0.12);
+    transition: box-shadow 0.2s, transform 0.1s;
+    border-top: 3px solid var(--pp-sky);
 }
-
 .panel-stat:hover {
-    box-shadow: 0 3px 8px rgba(0,0,0,0.18);
+    box-shadow: 0 6px 18px rgba(11, 42, 82, 0.18);
+    transform: translateY(-1px);
 }
-
-.panel-stat .panel-body {
-    padding: 20px;
-}
-
+.panel-stat .panel-body { padding: 20px; }
 .panel-stat .stat-value {
     font-size: 32px;
     font-weight: 300;
-    color: #333;
+    color: var(--pp-navy);
 }
-
 .panel-stat .stat-label {
     font-size: 13px;
-    color: #999;
+    color: var(--pp-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
-/* List improvements */
+/* =========== Lists =========== */
 .list-group-item {
     border-left: 3px solid transparent;
-    transition: border-color 0.15s;
+    transition: border-color 0.15s, background-color 0.15s;
 }
-
 .list-group-item:hover {
-    border-left-color: #337ab7;
-    background-color: #f8f9fa;
+    border-left-color: var(--pp-blue);
+    background-color: var(--pp-light);
 }
 
-/* Add form improvements */
+/* =========== Add form =========== */
 .add-form {
-    background: #fff;
+    background: #ffffff;
     padding: 15px 20px;
-    border-radius: 4px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border-radius: 6px;
+    border: 1px solid #e0e8f3;
+    box-shadow: 0 1px 3px rgba(11, 42, 82, 0.08);
     margin-bottom: 20px;
 }
+.add-form .input-group { max-width: 500px; }
 
-.add-form .input-group {
-    max-width: 500px;
-}
-
-/* Table improvements */
+/* =========== Tables =========== */
 .table > thead > tr > th {
-    background-color: #f8f9fa;
-    border-bottom-width: 1px;
+    background-color: #eef3fb;
+    border-bottom: 2px solid #d5e1f2;
     font-weight: 600;
     font-size: 13px;
     text-transform: uppercase;
     letter-spacing: 0.3px;
-    color: #666;
+    color: var(--pp-navy);
 }
-
 .table-striped > tbody > tr:nth-of-type(odd) {
-    background-color: #fafbfc;
+    background-color: #f7faff;
 }
 
-/* Empty state */
+/* =========== Empty state =========== */
 .empty-state {
     text-align: center;
     padding: 40px 20px;
-    color: #999;
+    color: var(--pp-muted);
 }
-
 .empty-state .glyphicon {
     font-size: 48px;
     display: block;
     margin-bottom: 15px;
-    color: #ccc;
+    color: #c5d3ea;
 }
-
 .empty-state p {
     font-size: 16px;
     margin-bottom: 20px;
 }
 
-/* Footer */
+/* =========== Footer =========== */
 .footer {
     margin-top: 40px;
     padding: 20px 0;
-    border-top: 1px solid #e5e5e5;
-    color: #999;
+    border-top: 1px solid #d5e1f2;
+    color: var(--pp-muted);
     text-align: center;
     font-size: 13px;
+    background: #ffffff;
 }
+.footer strong { color: var(--pp-navy); }
 
-/* Alerts */
-.alert {
-    border-radius: 3px;
-}
+/* =========== Alerts =========== */
+.alert { border-radius: 4px; }
 
-/* Badge counter */
+/* =========== Badge =========== */
 .badge-counter {
-    background-color: #5bc0de;
+    background-color: var(--pp-sky);
     font-weight: normal;
     font-size: 11px;
 }
 
-/* Action buttons in lists */
+/* =========== Action buttons in lists =========== */
 .list-actions {
     float: right;
     margin-left: 10px;
 }
 
-/* Panel forms */
+/* =========== Panels =========== */
 .panel {
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    box-shadow: 0 1px 3px rgba(11, 42, 82, 0.08);
+    border-color: #e0e8f3;
 }
-
 .panel-heading {
     font-weight: 600;
+    background-color: #eef3fb;
+    color: var(--pp-navy);
+    border-bottom-color: #d5e1f2;
 }
+.panel-default > .panel-heading {
+    background-color: #eef3fb;
+    color: var(--pp-navy);
+    border-color: #d5e1f2;
+}
+
+/* =========== Buttons (override Bootstrap 3 primary/info) =========== */
+.btn-primary {
+    background-color: var(--pp-blue);
+    border-color: var(--pp-navy);
+}
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active,
+.btn-primary.active,
+.open > .dropdown-toggle.btn-primary {
+    background-color: var(--pp-navy);
+    border-color: var(--pp-navy);
+}
+.btn-info {
+    background-color: var(--pp-sky);
+    border-color: var(--pp-royal);
+}
+.btn-info:hover,
+.btn-info:focus,
+.btn-info:active {
+    background-color: var(--pp-royal);
+    border-color: var(--pp-blue);
+}
+
+/* =========== Text helpers =========== */
+.text-primary { color: var(--pp-blue) !important; }
+.text-info { color: var(--pp-sky) !important; }
+
+/* =========== Labels =========== */
+.label-primary { background-color: var(--pp-blue); }
+.label-info { background-color: var(--pp-sky); }
+
+/* =========== Progress bars =========== */
+.progress-bar { background-color: var(--pp-blue); }
+.progress-bar-info { background-color: var(--pp-sky); }

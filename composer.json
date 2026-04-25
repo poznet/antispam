@@ -1,7 +1,7 @@
 {
-    "name": "joseph/antyspam",
+    "name": "pancernapanda/antispam",
     "license": "proprietary",
-    "description": "PHP app for cleaning email accounts from spam",
+    "description": "Pancernapanda antispam - PHP app for cleaning email accounts from spam via IMAP or SSH+Maildir",
     "type": "project",
     "autoload": {
         "psr-4": {

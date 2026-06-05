@@ -95,6 +95,45 @@ class ConfigurationController extends Controller
     }
 
     /**
+     * Shared spam feed (centralized spam DB) settings: whether this instance
+     * participates, the local API key (so other instances can push to us), and
+     * the remote hub URL + key we sync against.
+     *
+     * @Template
+     * @Route("/feed/", name="antispam_feed_config")
+     */
+    public function feedConfigAction(Request $request)
+    {
+        $c = $this->get('configuration');
+        if ($request->getMethod() == 'POST') {
+            $post = $request->get('config', []);
+            $c->set('feed.enabled', array_key_exists('enabled', $post));
+            $c->set('feed.score', max(1, (int)($post['score'] ?? 6)));
+            $c->set('feed.min_reports', max(1, (int)($post['min_reports'] ?? 1)));
+            $c->set('feed.server_key', trim($post['server_key'] ?? ''));
+            $c->set('feed.remote_url', rtrim(trim($post['remote_url'] ?? ''), '/'));
+            $c->set('feed.remote_key', trim($post['remote_key'] ?? ''));
+            $this->addFlash('success', 'Shared feed settings saved');
+            return $this->redirectToRoute('antispam_feed_config');
+        }
+
+        $config = [
+            'enabled' => $c->get('feed.enabled'),
+            'score' => $c->get('feed.score') ?: 6,
+            'min_reports' => $c->get('feed.min_reports') ?: 1,
+            'server_key' => $c->get('feed.server_key') ?: '',
+            'remote_url' => $c->get('feed.remote_url') ?: '',
+            'remote_key' => $c->get('feed.remote_key') ?: '',
+            'last_pull_at' => $c->get('feed.last_pull_at') ?: null,
+        ];
+
+        $stats = $this->getDoctrine()->getManager()
+            ->getRepository('AntispamBundle:SharedSpamSignal')->countByOrigin();
+
+        return ['config' => $config, 'stats' => $stats];
+    }
+
+    /**
      * @Route("/uncheck-all/", name="antispam_spam_unchekall")
      */
     public function uncheckAllAction()

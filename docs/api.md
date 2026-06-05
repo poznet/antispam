@@ -26,8 +26,21 @@
 |--------|-----|-------------|
 | GET/POST | `/config/email/` | Legacy email account settings |
 | GET/POST | `/config/spam/` | Spam processing settings |
+| GET/POST | `/config/feed/` | Shared spam feed settings |
 | GET | `/config/uncheck-all/` | Reset all checked messages |
 | GET | `/config/reset/countes/` | Reset all rule counters |
+
+## Shared Spam Feed API (`/api/feed`)
+
+Machine-to-machine endpoints for the centralized spam DB. Authenticated with the
+`X-Feed-Key` header (matched against `feed.server_key`), exempt from form login.
+JSON in / JSON out. See [feed.md](feed.md).
+
+| Method | URL | Description |
+|--------|-----|-------------|
+| POST | `/api/feed/report` | Accept a batch of `{type, hash}` spam fingerprints |
+| GET | `/api/feed/pull` | Return signals updated since `?since=<ISO8601>` (incremental) |
+| GET | `/api/feed/stats` | Signal counts by origin (local/remote/total) |
 
 ## Whitelists
 

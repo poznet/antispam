@@ -29,8 +29,12 @@ Defaults: `quarantine_threshold = 5`, `spam_threshold = 10`. Configure under
 | DNSBL hit         | `CheckDnsbl`          | provider.score       |
 | Infected attachment (ClamAV) | `CheckAttachments` | clamav_score (def. 15) + forced spam |
 | Flagged attachment (VirusTotal) | `CheckAttachmentsVirusTotal` | vt_score (def. 15) + forced spam |
+| Shared feed match (sender/body) | `CheckSharedFeed`     | feed.score (def. 6)  |
 
 Whitelists bypass all scoring (`stopPropagation()` on match).
+
+The shared feed match scores incoming mail against fingerprints of spam caught
+by this and other instances — see [feed.md](feed.md).
 
 ## Attachment scanning (ClamAV)
 

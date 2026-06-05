@@ -39,3 +39,16 @@ Scans all configured accounts. Suitable for cron.
 ```bash
 php bin/console antispam:agent:scan-all
 ```
+
+## Shared Feed Commands
+
+### antispam:feed:sync
+Pushes locally detected spam fingerprints to the configured shared-feed hub and
+pulls everyone else's. Suitable for cron. Requires the shared feed to be enabled
+with a remote hub configured (**Settings → Shared Spam Feed**). See
+[feed.md](feed.md).
+```bash
+php bin/console antispam:feed:sync
+php bin/console antispam:feed:sync --push-only
+php bin/console antispam:feed:sync --pull-only
+```

@@ -49,6 +49,12 @@ services:
         arguments: ["@doctrine.orm.default_entity_manager", "@configuration"]
         public: true
 
+    # Shared spam feed (centralized spam DB) — sender/body fingerprints
+    antispam.spam_signal:
+        class: AntispamBundle\Services\SpamSignalService
+        arguments: ["@doctrine.orm.default_entity_manager", "@configuration"]
+        public: true
+
     # Commands
     AntispamBundle\Command\AntispamGoCommand:
         arguments:
@@ -91,6 +97,12 @@ services:
         arguments:
             - "@doctrine.orm.default_entity_manager"
             - "@antispam.ssh"
+        tags: ['console.command']
+
+    AntispamBundle\Command\FeedSyncCommand:
+        arguments:
+            - "@doctrine.orm.default_entity_manager"
+            - "@antispam.spam_signal"
         tags: ['console.command']
 
     # Config-check listener
@@ -149,6 +161,12 @@ services:
         tags:
             - { name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99980  }
 
+    antispam.checkemail.listener.shared_feed:
+        class: AntispamBundle\EventListener\Message\CheckSharedFeed
+        arguments: ["@antispam.spam_signal","@antispam.scoring"]
+        tags:
+            - { name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99978  }
+
     antispam.checkemail.listener.attachments:
         class: AntispamBundle\EventListener\Message\CheckAttachments
         arguments: ["@antispam.clamav","@antispam.scoring"]
@@ -166,6 +184,12 @@ services:
         arguments: ["@antispam.scoring","@antispam.inbox"]
         tags:
             - { name: kernel.event_listener, event: antispam.check.message, method: decide, priority: 99970  }
+
+    antispam.checkemail.listener.record_signals:
+        class: AntispamBundle\EventListener\Message\RecordSpamSignals
+        arguments: ["@antispam.spam_signal"]
+        tags:
+            - { name: kernel.event_listener, event: antispam.check.message, method: record, priority: 99965  }
 
     antispam.checkemail.listener.movetospam:
         class: AntispamBundle\EventListener\Message\MoveToSpam

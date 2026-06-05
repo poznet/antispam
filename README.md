@@ -1,7 +1,7 @@
-Pancernapanda antispam
-======================
+antispam by pancernapanda.pl
+============================
 
-Symfony-based application for cleaning spam from email accounts via IMAP or SSH+Maildir. Part of the Pancernapanda security toolkit.
+Symfony-based application for cleaning spam from email accounts via IMAP or SSH+Maildir. Part of the [pancernapanda.pl](https://pancernapanda.pl) security toolkit.
 
 [![Build Status](https://travis-ci.org/poznet/antispam.svg?branch=master)](https://travis-ci.org/poznet/antispam)   [![SensioLabsInsight](https://insight.sensiolabs.com/projects/6fb908c6-493c-4754-b04d-c04953c537d7/mini.png)](https://insight.sensiolabs.com/projects/6fb908c6-493c-4754-b04d-c04953c537d7)
 

@@ -209,14 +209,21 @@ class SpamSignalService
         $repo = $this->em->getRepository(SharedSpamSignal::class);
         $touched = 0;
 
+        $valid = [];
         foreach ($signals as $sig) {
             $type = $sig['type'] ?? null;
             $hash = $sig['hash'] ?? null;
-            if (!$this->isValidType($type) || !$this->isValidHash($hash)) {
-                continue;
+            if ($this->isValidType($type) && $this->isValidHash($hash)) {
+                $valid[] = ['type' => $type, 'hash' => $hash];
             }
+        }
+        $existing = $repo->findByTypeHashPairs($valid);
 
-            $entity = $repo->findOneByTypeHash($type, $hash);
+        foreach ($valid as $sig) {
+            $type = $sig['type'];
+            $hash = $sig['hash'];
+
+            $entity = $existing[$type . ':' . $hash] ?? null;
             if ($entity) {
                 $entity->addReport($reportsEach)->touch();
                 // A locally-confirmed hit promotes a previously remote-only signal.
@@ -228,6 +235,7 @@ class SpamSignalService
                 $entity->setType($type)->setHash($hash)
                     ->setOrigin($origin)->setReports(max(1, (int)$reportsEach));
                 $this->em->persist($entity);
+                $existing[$type . ':' . $hash] = $entity;
             }
             $touched++;
         }
@@ -253,8 +261,13 @@ class SpamSignalService
         $minReports = $this->getMinReports();
         $hits = [];
 
-        foreach ($this->signalsForMessage($message) as $sig) {
-            $entity = $repo->findOneByTypeHash($sig['type'], $sig['hash']);
+        $signals = $this->signalsForMessage($message);
+        if (!$signals) {
+            return $hits;
+        }
+        $entities = $repo->findByTypeHashPairs($signals);
+        foreach ($signals as $sig) {
+            $entity = $entities[$sig['type'] . ':' . $sig['hash']] ?? null;
             if ($entity && $entity->getReports() >= $minReports) {
                 $hits[] = ['type' => $entity->getType(), 'reports' => $entity->getReports()];
             }

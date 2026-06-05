@@ -25,17 +25,7 @@ class WhitelistReset
      */
     public function reset(ConfigEvent $event){
         if($event->getJob()=='resetcounters'){
-        $lista=$this->em->getRepository("AntispamBundle:Whitelist")->findAll();
-            $i=0;
-            foreach ($lista as $l){
-                $l->setCounter(0);
-                if($i==200){
-                    $this->em->flush();
-                    $i=0;
-                }
-            }
-            $this->em->flush();
-
+            $this->em->createQuery('UPDATE AntispamBundle:Whitelist w SET w.counter = 0')->execute();
         }
     }
 

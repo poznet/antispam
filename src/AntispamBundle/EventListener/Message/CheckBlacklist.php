@@ -19,6 +19,8 @@ class CheckBlacklist
     private $em;
     private $ms;
     private $scoring;
+    /** @var array<string, array> rules cached per account email for the lifetime of this listener */
+    private $rulesCache = [];
 
     public function __construct(EntityManagerInterface $em, MessageService $ms, ScoringService $scoring = null)
     {
@@ -40,8 +42,12 @@ class CheckBlacklist
         }
         if (!$host) return;
 
-        $rules = $this->em->getRepository('AntispamBundle:Blacklist')
-            ->findBy(['email' => $event->getEmail()]);
+        $cacheKey = (string)$event->getEmail();
+        if (!isset($this->rulesCache[$cacheKey])) {
+            $this->rulesCache[$cacheKey] = $this->em->getRepository('AntispamBundle:Blacklist')
+                ->findBy(['email' => $event->getEmail()]);
+        }
+        $rules = $this->rulesCache[$cacheKey];
 
         $match = PatternMatcher::findMatching($rules, $host, 'getHost');
         if (!$match) {

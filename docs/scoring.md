@@ -28,6 +28,7 @@ Defaults: `quarantine_threshold = 5`, `spam_threshold = 10`. Configure under
 | > 10 Received hops| `CheckHeaders`        | 2                    |
 | DNSBL hit         | `CheckDnsbl`          | provider.score       |
 | Infected attachment (ClamAV) | `CheckAttachments` | clamav_score (def. 15) + forced spam |
+| Flagged attachment (VirusTotal) | `CheckAttachmentsVirusTotal` | vt_score (def. 15) + forced spam |
 
 Whitelists bypass all scoring (`stopPropagation()` on match).
 
@@ -62,6 +63,37 @@ reasons as `clamav:<signature>`.
 
 > Note: attachment scanning currently applies to the IMAP pipeline (web app).
 > The standalone Maildir agent does not yet shell out to ClamAV.
+
+## Attachment reputation (VirusTotal)
+
+When enabled, `CheckAttachmentsVirusTotal` computes the SHA-256 of each
+attachment and looks it up on the VirusTotal v3 API. If the number of engines
+flagging the file as malicious reaches `vt_threshold`, the configured `vt_score`
+is added **and** the message is marked as spam. This runs after ClamAV and
+before the final decision.
+
+**Privacy:** only the hash is sent to VirusTotal — never the attachment bytes.
+A file VirusTotal has never seen (HTTP 404) is simply treated as "no opinion".
+
+Scanning is **disabled by default** and requires an API key. Configure it under
+**Settings → Spam Filter Settings → Attachment Reputation**:
+
+| Config key (`ConfigBundle`) | Default | Meaning                                            |
+|-----------------------------|---------|----------------------------------------------------|
+| `scoring.vt_enabled`        | `false` | Master switch for VirusTotal lookups               |
+| `scoring.vt_api_key`        | `''`    | VirusTotal API key (required)                      |
+| `scoring.vt_threshold`      | `3`     | Min. engines flagging malicious before acting      |
+| `scoring.vt_score`          | `15`    | Score added on a hit                               |
+| `scoring.vt_timeout`        | `15`    | HTTP connect / read timeout in seconds             |
+
+Resilience: an unknown hash, a rate-limit (HTTP 429), a rejected key, or any
+network error is treated as "no opinion" and never penalises a message. The
+free VirusTotal key is rate-limited to ~4 requests/minute, so this is best
+suited to low-volume mailboxes or a paid key. The verdict and filename are
+recorded in the score log reasons as `virustotal:<malicious>/<total>`.
+
+Requires the PHP `curl` extension. Like ClamAV, this applies to the IMAP
+pipeline only — the standalone Maildir agent does not call VirusTotal.
 
 ## Pattern types
 

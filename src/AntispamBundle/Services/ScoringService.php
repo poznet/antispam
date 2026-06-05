@@ -24,6 +24,10 @@ class ScoringService
     const DEFAULT_CLAMAV_MAX_SIZE = 26214400; // 25 MiB
     const DEFAULT_CLAMAV_TIMEOUT = 30;
 
+    const DEFAULT_VT_SCORE = 15;
+    const DEFAULT_VT_THRESHOLD = 3; // min. engines flagging malicious to act
+    const DEFAULT_VT_TIMEOUT = 15;
+
     private $em;
     private $config;
 
@@ -90,6 +94,39 @@ class ScoringService
     public function getClamavTimeout()
     {
         return $this->readInt('scoring.clamav_timeout', self::DEFAULT_CLAMAV_TIMEOUT);
+    }
+
+    /**
+     * VirusTotal attachment lookup is opt-in: it stays disabled until an admin
+     * enables it and provides an API key.
+     */
+    public function isVirusTotalEnabled()
+    {
+        return (bool)$this->readBool('scoring.vt_enabled', false);
+    }
+
+    public function getVirusTotalApiKey()
+    {
+        return trim($this->readString('scoring.vt_api_key', ''));
+    }
+
+    public function getVirusTotalScore()
+    {
+        return $this->readInt('scoring.vt_score', self::DEFAULT_VT_SCORE);
+    }
+
+    /**
+     * Minimum number of VirusTotal engines flagging a file as malicious before
+     * it is treated as a hit (guards against single-engine false positives).
+     */
+    public function getVirusTotalThreshold()
+    {
+        return max(1, $this->readInt('scoring.vt_threshold', self::DEFAULT_VT_THRESHOLD));
+    }
+
+    public function getVirusTotalTimeout()
+    {
+        return $this->readInt('scoring.vt_timeout', self::DEFAULT_VT_TIMEOUT);
     }
 
     /**

@@ -17,6 +17,8 @@ use AntispamBundle\Services\ScoringService;
  */
 class CheckAttachments
 {
+    use AttachmentExtractorTrait;
+
     private $clamav;
     private $scoring;
 
@@ -69,49 +71,5 @@ class CheckAttachments
                 return;
             }
         }
-    }
-
-    /**
-     * @return array list of Ddeboer\Imap attachment parts (empty on any error)
-     */
-    private function extractAttachments(MessageEvent $event)
-    {
-        try {
-            $msg = $event->getMessage();
-            if (!method_exists($msg, 'getAttachments')) {
-                return [];
-            }
-            $attachments = $msg->getAttachments();
-            return is_array($attachments) ? $attachments : [];
-        } catch (\Throwable $e) {
-            return [];
-        }
-    }
-
-    private function decodeAttachment($attachment)
-    {
-        try {
-            if (method_exists($attachment, 'getDecodedContent')) {
-                return $attachment->getDecodedContent();
-            }
-            if (method_exists($attachment, 'getContent')) {
-                return $attachment->getContent();
-            }
-        } catch (\Throwable $e) {
-            return null;
-        }
-        return null;
-    }
-
-    private function filenameOf($attachment)
-    {
-        try {
-            if (method_exists($attachment, 'getFilename')) {
-                return (string)$attachment->getFilename();
-            }
-        } catch (\Throwable $e) {
-            // ignore
-        }
-        return '';
     }
 }

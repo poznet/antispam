@@ -35,6 +35,9 @@ class AccountController extends Controller
     public function addAction(Request $request)
     {
         if ($request->getMethod() === 'POST') {
+            if (!$this->isCsrfTokenValid('account_form', $request->request->get('_token'))) {
+                throw $this->createAccessDeniedException('Invalid CSRF token');
+            }
             $em = $this->getDoctrine()->getManager();
             $account = $this->fillAccountFromRequest(new Account(), $request);
             $em->persist($account);
@@ -45,7 +48,7 @@ class AccountController extends Controller
     }
 
     /**
-     * @Route("/edit/{id}", name="antispam_account_edit")
+     * @Route("/edit/{id}", name="antispam_account_edit", requirements={"id"="\d+"})
      * @Template
      */
     public function editAction($id, Request $request)
@@ -57,6 +60,9 @@ class AccountController extends Controller
         }
 
         if ($request->getMethod() === 'POST') {
+            if (!$this->isCsrfTokenValid('account_form', $request->request->get('_token'))) {
+                throw $this->createAccessDeniedException('Invalid CSRF token');
+            }
             $account = $this->fillAccountFromRequest($account, $request);
             $em->flush();
             return $this->redirectToRoute('antispam_account_index');
@@ -66,10 +72,13 @@ class AccountController extends Controller
     }
 
     /**
-     * @Route("/del/{id}", name="antispam_account_del")
+     * @Route("/del/{id}", name="antispam_account_del", methods={"POST"}, requirements={"id"="\d+"})
      */
-    public function delAction($id)
+    public function delAction($id, Request $request)
     {
+        if (!$this->isCsrfTokenValid('account_del_' . $id, $request->request->get('_token'))) {
+            throw $this->createAccessDeniedException('Invalid CSRF token');
+        }
         $em = $this->getDoctrine()->getManager();
         $account = $em->getRepository('AntispamBundle:Account')->find($id);
         if ($account) {
@@ -80,11 +89,14 @@ class AccountController extends Controller
     }
 
     /**
-     * @Route("/test/{id}", name="antispam_account_test")
+     * @Route("/test/{id}", name="antispam_account_test", methods={"POST"}, requirements={"id"="\d+"})
      * @Template
      */
-    public function testAction($id)
+    public function testAction($id, Request $request)
     {
+        if (!$this->isCsrfTokenValid('account_action_' . $id, $request->request->get('_token'))) {
+            throw $this->createAccessDeniedException('Invalid CSRF token');
+        }
         $em = $this->getDoctrine()->getManager();
         $account = $em->getRepository('AntispamBundle:Account')->find($id);
         $result = ['success' => false, 'messages' => []];
@@ -104,7 +116,10 @@ class AccountController extends Controller
                     $account->getImapPort(),
                     $account->getImapFlags()
                 );
-                $connection = $server->authenticate($account->getImapLogin(), $account->getImapPassword());
+                $connection = $server->authenticate(
+                    $account->getImapLogin(),
+                    $this->get('antispam.crypto')->decrypt($account->getImapPassword())
+                );
                 $result['success'] = true;
                 $result['messages'][] = 'IMAP connection OK';
                 $mailboxes = $connection->getMailboxes();
@@ -119,11 +134,14 @@ class AccountController extends Controller
     }
 
     /**
-     * @Route("/deploy/{id}", name="antispam_account_deploy")
+     * @Route("/deploy/{id}", name="antispam_account_deploy", methods={"POST"}, requirements={"id"="\d+"})
      * @Template
      */
-    public function deployAction($id)
+    public function deployAction($id, Request $request)
     {
+        if (!$this->isCsrfTokenValid('account_action_' . $id, $request->request->get('_token'))) {
+            throw $this->createAccessDeniedException('Invalid CSRF token');
+        }
         $em = $this->getDoctrine()->getManager();
         $account = $em->getRepository('AntispamBundle:Account')->find($id);
         $result = ['success' => false, 'messages' => []];
@@ -149,11 +167,14 @@ class AccountController extends Controller
     }
 
     /**
-     * @Route("/sync/{id}", name="antispam_account_sync")
+     * @Route("/sync/{id}", name="antispam_account_sync", methods={"POST"}, requirements={"id"="\d+"})
      * @Template
      */
-    public function syncAction($id)
+    public function syncAction($id, Request $request)
     {
+        if (!$this->isCsrfTokenValid('account_action_' . $id, $request->request->get('_token'))) {
+            throw $this->createAccessDeniedException('Invalid CSRF token');
+        }
         $em = $this->getDoctrine()->getManager();
         $account = $em->getRepository('AntispamBundle:Account')->find($id);
         $result = ['success' => false, 'messages' => []];
@@ -178,11 +199,14 @@ class AccountController extends Controller
     }
 
     /**
-     * @Route("/scan/{id}", name="antispam_account_scan")
+     * @Route("/scan/{id}", name="antispam_account_scan", methods={"POST"}, requirements={"id"="\d+"})
      * @Template
      */
-    public function scanAction($id)
+    public function scanAction($id, Request $request)
     {
+        if (!$this->isCsrfTokenValid('account_action_' . $id, $request->request->get('_token'))) {
+            throw $this->createAccessDeniedException('Invalid CSRF token');
+        }
         $em = $this->getDoctrine()->getManager();
         $account = $em->getRepository('AntispamBundle:Account')->find($id);
         $result = ['success' => false, 'messages' => []];
@@ -227,6 +251,7 @@ class AccountController extends Controller
     private function fillAccountFromRequest(Account $account, Request $request)
     {
         $data = $request->get('account');
+        $crypto = $this->get('antispam.crypto');
 
         $account->setName($data['name'] ?? '');
         $account->setEmail($data['email'] ?? '');
@@ -235,10 +260,15 @@ class AccountController extends Controller
 
         // IMAP fields
         $account->setImapHost($data['imap_host'] ?? null);
-        $account->setImapPort((int)($data['imap_port'] ?? 143));
+        $account->setImapPort((int)($data['imap_port'] ?? 993));
         $account->setImapLogin($data['imap_login'] ?? null);
-        $account->setImapPassword($data['imap_password'] ?? null);
-        $account->setImapFlags($data['imap_flags'] ?? '/novalidate-cert/notls');
+        // Only re-encrypt when the operator typed a new password; an empty
+        // field on the edit form means "keep the stored one".
+        $newPassword = $data['imap_password'] ?? null;
+        if ($newPassword !== null && $newPassword !== '') {
+            $account->setImapPassword($crypto->encrypt($newPassword));
+        }
+        $account->setImapFlags($data['imap_flags'] ?? '/imap/ssl');
 
         // SSH fields
         $account->setSshHost($data['ssh_host'] ?? null);
@@ -307,11 +337,14 @@ class AccountController extends Controller
     }
 
     /**
-     * @Route("/health/{id}", name="antispam_account_health")
+     * @Route("/health/{id}", name="antispam_account_health", methods={"POST"}, requirements={"id"="\d+"})
      * @Template
      */
-    public function healthAction($id)
+    public function healthAction($id, Request $request)
     {
+        if (!$this->isCsrfTokenValid('account_action_' . $id, $request->request->get('_token'))) {
+            throw $this->createAccessDeniedException('Invalid CSRF token');
+        }
         $em = $this->getDoctrine()->getManager();
         $account = $em->getRepository('AntispamBundle:Account')->find($id);
         $result = ['success' => false, 'messages' => []];
@@ -336,7 +369,10 @@ class AccountController extends Controller
             $account->getImapPort(),
             $account->getImapFlags()
         );
-        $connection = $server->authenticate($account->getImapLogin(), $account->getImapPassword());
+        $connection = $server->authenticate(
+            $account->getImapLogin(),
+            $this->get('antispam.crypto')->decrypt($account->getImapPassword())
+        );
         $inbox = $connection->getMailbox('INBOX');
         $messages = $inbox->getMessages();
 

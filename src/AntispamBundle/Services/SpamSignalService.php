@@ -65,7 +65,17 @@ class SpamSignalService
     /** Base URL of the remote hub we push to / pull from. Empty => no client sync. */
     public function getRemoteUrl()
     {
-        return rtrim(trim($this->readString('feed.remote_url', '')), '/');
+        $url = rtrim(trim($this->readString('feed.remote_url', '')), '/');
+        if ($url === '') {
+            return '';
+        }
+        // Refuse anything other than https:// so the shared-secret X-Feed-Key
+        // header is never sent over a plaintext channel and we don't allow
+        // file://, http:// or other schemes to be turned into SSRF/exfil.
+        if (stripos($url, 'https://') !== 0) {
+            return '';
+        }
+        return $url;
     }
 
     /** Secret we present to the remote hub. */

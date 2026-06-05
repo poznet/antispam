@@ -15,6 +15,7 @@
         </div>
         <div class="panel-body">
             <form method="post" action="{{ path('antispam_bulk_import', {type: key}) }}">
+                <input type="hidden" name="_token" value="{{ csrf_token('bulk_import') }}">
                 <textarea name="entries" class="form-control" rows="6" placeholder="spam-domain.tld&#10;*.evil.example&#10;^.*@.*\.ru$"></textarea>
                 <div class="row" style="margin-top:8px;">
                     <div class="col-sm-4">

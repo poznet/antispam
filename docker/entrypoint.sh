@@ -13,12 +13,38 @@ APP_DIR=/var/www/html
 : "${MAILER_HOST:=127.0.0.1}"
 : "${MAILER_USER:=}"
 : "${MAILER_PASSWORD:=}"
-: "${APP_SECRET:=ChangeMeInProductionPlease}"
+: "${APP_SECRET:=}"
 : "${ADMIN_USER:=admin}"
-: "${ADMIN_PASSWORD:=admin}"
+: "${ADMIN_PASSWORD:=}"
 : "${RUN_MIGRATIONS:=true}"
+: "${ALLOW_INSECURE_DEFAULTS:=0}"
 
 export SYMFONY_ENV
+
+# Refuse to start when critical secrets are empty or set to the well-known
+# default values. The opt-out is intended for local development only.
+INSECURE=0
+if [ -z "${APP_SECRET}" ] || [ "${APP_SECRET}" = "ChangeMeInProductionPlease" ]; then
+    echo "[entrypoint] ERROR: APP_SECRET is empty or using the well-known default."
+    echo "[entrypoint]        Generate one with: php -r 'echo bin2hex(random_bytes(32));'"
+    INSECURE=1
+fi
+if [ -z "${ADMIN_PASSWORD}" ] || [ "${ADMIN_PASSWORD}" = "admin" ]; then
+    echo "[entrypoint] ERROR: ADMIN_PASSWORD is empty or set to 'admin'."
+    INSECURE=1
+fi
+if [ -z "${DATABASE_PASSWORD}" ] || [ "${DATABASE_PASSWORD}" = "antispam" ]; then
+    echo "[entrypoint] ERROR: DATABASE_PASSWORD is empty or set to its default."
+    INSECURE=1
+fi
+if [ "${INSECURE}" = "1" ]; then
+    if [ "${ALLOW_INSECURE_DEFAULTS}" = "1" ]; then
+        echo "[entrypoint] WARNING: ALLOW_INSECURE_DEFAULTS=1 set — continuing anyway. DO NOT USE IN PRODUCTION."
+    else
+        echo "[entrypoint] Refusing to start. Set ALLOW_INSECURE_DEFAULTS=1 only for local development."
+        exit 1
+    fi
+fi
 
 MAILER_USER_YAML="null"
 if [ -n "$MAILER_USER" ]; then
@@ -87,13 +113,5 @@ if [ "${RUN_MIGRATIONS}" = "true" ]; then
 fi
 
 chown -R www-data:www-data "${APP_DIR}/app/cache" "${APP_DIR}/app/logs"
-
-# Warn loudly if the operator left the defaults in place
-if [ "${APP_SECRET}" = "ChangeMeInProductionPlease" ]; then
-    echo "[entrypoint] WARNING: APP_SECRET is using the default value - set a strong random secret!"
-fi
-if [ "${ADMIN_PASSWORD}" = "admin" ]; then
-    echo "[entrypoint] WARNING: ADMIN_PASSWORD is set to 'admin' - change it before exposing the app!"
-fi
 
 exec "$@"

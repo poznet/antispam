@@ -78,6 +78,12 @@ class MessageService
      * @return string
      */
     public function getId($id){
+        // basename() strips any path traversal — $id may come from an HTTP
+        // route parameter, and we read from $this->dir/$id below.
+        $id = basename((string)$id);
+        if ($id === '' || $id === '.' || $id === '..') {
+            return null;
+        }
         $fs=new Filesystem();
         $name=$this->dir.'/'.$id;
         if($fs->exists($name))

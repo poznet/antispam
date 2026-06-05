@@ -5,6 +5,7 @@
 
 {% block body %}
     <form method="post" action="{{ path('antispam_account_edit', {id: account.id}) }}">
+        <input type="hidden" name="_token" value="{{ csrf_token('account_form') }}">
         <div class="panel panel-default">
             <div class="panel-heading">General</div>
             <div class="panel-body">
@@ -46,7 +47,8 @@
                 </div>
                 <div class="form-group">
                     <label>Password</label>
-                    <input type="password" class="form-control" name="account[imap_password]" value="{{ account.imapPassword }}">
+                    <input type="password" class="form-control" name="account[imap_password]" value="" placeholder="(unchanged)" autocomplete="new-password">
+                    <p class="help-block">Leave blank to keep the existing password.</p>
                 </div>
                 <div class="form-group">
                     <label>IMAP Flags</label>

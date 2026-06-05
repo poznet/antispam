@@ -39,6 +39,34 @@ for ($i = 2; $i < count($argv); $i++) {
 $maildirPath = $options['maildir'] ?? $defaultMaildir;
 $dbPath = $options['db'] ?? $defaultDb;
 
+// Defence-in-depth: refuse obvious path-traversal in CLI arguments. The agent
+// runs as a constrained SSH user, but operators (or buggy callers) can still
+// pass --maildir=../../etc and we'd silently mkdir() under that path below.
+$maildirPath = sanitizePath($maildirPath, 'maildir');
+$dbPath = sanitizePath($dbPath, 'db');
+
+function sanitizePath($path, $label)
+{
+    $path = (string)$path;
+    if ($path === '') {
+        fwrite(STDERR, "Empty --{$label} path\n");
+        exit(2);
+    }
+    if (strpos($path, "\0") !== false) {
+        fwrite(STDERR, "Invalid --{$label} path (null byte)\n");
+        exit(2);
+    }
+    // Reject relative-segment traversal both at start and embedded.
+    $parts = preg_split('#[/\\\\]+#', $path);
+    foreach ($parts as $p) {
+        if ($p === '..') {
+            fwrite(STDERR, "Invalid --{$label} path (contains '..')\n");
+            exit(2);
+        }
+    }
+    return $path;
+}
+
 switch ($command) {
     case 'test':
         echo json_encode(runTest($maildirPath), JSON_PRETTY_PRINT) . "\n";

@@ -19,10 +19,12 @@ class ConnectionService
     public function __construct(ConfigService $config)
     {
         $this->config=$config;
+        $port = (int)($this->config->get('imap_port') ?: 993);
+        $flags = $this->config->get('imap_flags') ?: '/imap/ssl';
         $server = new Server(
             $this->config->get('imap'),
-            143,
-            '/novalidate-cert/notls'
+            $port,
+            $flags
         );
         $this->connection = $server->authenticate($this->config->get('login'), $this->config->get('password'));
 

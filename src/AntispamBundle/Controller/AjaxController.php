@@ -3,31 +3,27 @@
 namespace AntispamBundle\Controller;
 
 use Symfony\Bundle\FrameworkBundle\Controller\Controller;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
-use Ddeboer\Imap\SearchExpression;
-
-
 
 /**
- * Class AjaxController
- * @package AntispamBundle\Controller
  * @Route("/ajax")
  */
 class AjaxController extends Controller
 {
-
     /**
-     * @param $id
-     * @Route("/getmsg/{id}")
+     * @Route("/getmsg/{id}", requirements={"id"="\d+"})
      */
-    public function getMsgAction($id){
+    public function getMsgAction($id)
+    {
+        $id = (int)$id;
+        $this->get('antispam.message')->getId($id);
+        $this->get('antispam.inbox')->getInbox($this->get('antispam.inbox')->getSpamFolderName());
+        $msg = $this->get('antispam.inbox')->getMessage($id);
 
-        $idek=$this->get('antispam.message')->getId(trim($id));
-        $list=$this->get('antispam.inbox')->getInbox($this->get('antispam.inbox')->getSpamFolderName());
-        $msg=$this->get('antispam.inbox')->getMessage($id);
-
-
-            dump($msg);
-        return array();
+        return new JsonResponse([
+            'id' => $msg ? $msg->getNumber() : null,
+            'subject' => $msg ? (string)$msg->getSubject() : null,
+        ]);
     }
 }

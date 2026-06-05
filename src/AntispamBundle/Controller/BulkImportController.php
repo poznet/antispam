@@ -40,6 +40,9 @@ class BulkImportController extends Controller
      */
     public function importAction(Request $request, $type)
     {
+        if (!$this->isCsrfTokenValid('bulk_import', $request->request->get('_token'))) {
+            throw $this->createAccessDeniedException('Invalid CSRF token');
+        }
         if (!isset(self::TYPES[$type])) {
             $this->addFlash('danger', 'Unknown list type');
             return $this->redirectToRoute('antispam_bulk_index');

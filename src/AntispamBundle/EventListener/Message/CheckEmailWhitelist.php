@@ -12,6 +12,8 @@ class CheckEmailWhitelist
 {
     private $em;
     private $ms;
+    /** @var array<string, array> rules cached per account email for the lifetime of this listener */
+    private $rulesCache = [];
 
     public function __construct(EntityManagerInterface $em, MessageService $ms)
     {
@@ -35,8 +37,12 @@ class CheckEmailWhitelist
         }
         if (!$email || $email === '@') return;
 
-        $rules = $this->em->getRepository('AntispamBundle:EmailWhitelist')
-            ->findBy(['email' => $event->getEmail()]);
+        $cacheKey = (string)$event->getEmail();
+        if (!isset($this->rulesCache[$cacheKey])) {
+            $this->rulesCache[$cacheKey] = $this->em->getRepository('AntispamBundle:EmailWhitelist')
+                ->findBy(['email' => $event->getEmail()]);
+        }
+        $rules = $this->rulesCache[$cacheKey];
 
         $match = PatternMatcher::findMatching($rules, $email, 'getWhitelistemail');
         if (!$match) {

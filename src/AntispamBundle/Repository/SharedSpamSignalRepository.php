@@ -13,6 +13,52 @@ class SharedSpamSignalRepository extends EntityRepository
     }
 
     /**
+     * Batch lookup for a list of {type, hash} pairs. Returns matching entities
+     * indexed by "type:hash" so callers can avoid a query per pair.
+     *
+     * @param array<int, array{type:string, hash:string}> $pairs
+     * @return array<string, SharedSpamSignal>
+     */
+    public function findByTypeHashPairs(array $pairs)
+    {
+        if (!$pairs) {
+            return [];
+        }
+        $byType = [];
+        foreach ($pairs as $p) {
+            $type = $p['type'] ?? null;
+            $hash = $p['hash'] ?? null;
+            if ($type === null || $hash === null) { continue; }
+            $byType[$type][$hash] = true;
+        }
+        if (!$byType) {
+            return [];
+        }
+
+        $qb = $this->createQueryBuilder('s');
+        $orX = $qb->expr()->orX();
+        $i = 0;
+        foreach ($byType as $type => $hashes) {
+            $tParam = 't' . $i;
+            $hParam = 'h' . $i;
+            $orX->add($qb->expr()->andX(
+                $qb->expr()->eq('s.type', ':' . $tParam),
+                $qb->expr()->in('s.hash', ':' . $hParam)
+            ));
+            $qb->setParameter($tParam, $type)
+                ->setParameter($hParam, array_keys($hashes));
+            $i++;
+        }
+        $qb->andWhere($orX);
+
+        $out = [];
+        foreach ($qb->getQuery()->getResult() as $entity) {
+            $out[$entity->getType() . ':' . $entity->getHash()] = $entity;
+        }
+        return $out;
+    }
+
+    /**
      * Locally-detected signals with id greater than $afterId, for pushing to a
      * remote hub. Ordered by id so the caller can checkpoint the last id sent.
      */

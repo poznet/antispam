@@ -25,17 +25,7 @@ class EmailBlacklistReset
      */
     public function reset(ConfigEvent $event){
         if($event->getJob()=='resetcounters'){
-        $lista=$this->em->getRepository("AntispamBundle:EmailBlacklist")->findAll();
-            $i=0;
-            foreach ($lista as $l){
-                $l->setCounter(0);
-                if($i==200){
-                    $this->em->flush();
-                    $i=0;
-                }
-            }
-            $this->em->flush();
-
+            $this->em->createQuery('UPDATE AntispamBundle:EmailBlacklist b SET b.counter = 0')->execute();
         }
     }
 

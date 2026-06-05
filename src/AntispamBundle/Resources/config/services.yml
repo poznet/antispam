@@ -36,6 +36,10 @@ services:
         class: AntispamBundle\Services\HeaderAnalyzer
         public: true
 
+    antispam.clamav:
+        class: AntispamBundle\Services\ClamavService
+        public: true
+
     antispam.scoring:
         class: AntispamBundle\Services\ScoringService
         arguments: ["@doctrine.orm.default_entity_manager", "@configuration"]
@@ -139,6 +143,12 @@ services:
         arguments: ["@antispam.dnsbl","@antispam.scoring"]
         tags:
             - { name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99980  }
+
+    antispam.checkemail.listener.attachments:
+        class: AntispamBundle\EventListener\Message\CheckAttachments
+        arguments: ["@antispam.clamav","@antispam.scoring"]
+        tags:
+            - { name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99975  }
 
     antispam.checkemail.listener.apply_decision:
         class: AntispamBundle\EventListener\Message\ApplyScoreDecision

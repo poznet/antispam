@@ -20,6 +20,10 @@
                 Check sender IP against configured DNSBL providers
             </label></div>
             <div class="checkbox"><label>
+                <input type="checkbox" name="config[clamav_enabled]" {% if config.clamav_enabled %}checked{% endif %}>
+                Scan attachments for malware with ClamAV (a virus hit marks the message as spam)
+            </label></div>
+            <div class="checkbox"><label>
                 <input type="checkbox" name="config[log_enabled]" {% if config.log_enabled %}checked{% endif %}>
                 Persist per-message score log (recommended)
             </label></div>
@@ -34,6 +38,25 @@
                     <label>Spam threshold</label>
                     <input type="number" name="config[spam_threshold]" class="form-control" value="{{ config.spam_threshold }}" min="1" max="200">
                     <small class="text-muted">Score ≥ this value → treat as spam.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-paperclip"></span> Attachment Scanning (ClamAV)</div>
+        <div class="panel-body">
+            <p class="text-muted">Requires a running ClamAV daemon (clamd) reachable from this application. Enable scanning in the Spam Scoring panel above.</p>
+            <div class="row">
+                <div class="col-sm-8">
+                    <label>clamd address</label>
+                    <input type="text" name="config[clamav_dsn]" class="form-control" value="{{ config.clamav_dsn }}" placeholder="tcp://127.0.0.1:3310">
+                    <small class="text-muted">TCP (<code>tcp://host:port</code> or <code>host:port</code>) or unix socket (<code>unix:///var/run/clamav/clamd.ctl</code>).</small>
+                </div>
+                <div class="col-sm-4">
+                    <label>Virus score</label>
+                    <input type="number" name="config[clamav_score]" class="form-control" value="{{ config.clamav_score }}" min="1" max="200">
+                    <small class="text-muted">Added on a malware hit (message is also flagged spam).</small>
                 </div>
             </div>
         </div>

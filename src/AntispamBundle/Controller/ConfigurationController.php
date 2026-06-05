@@ -55,6 +55,9 @@ class ConfigurationController extends Controller
             $c->set('scoring.dnsbl_enabled', array_key_exists('dnsbl_enabled', $post));
             $c->set('scoring.header_check_enabled', array_key_exists('header_check_enabled', $post));
             $c->set('scoring.log_enabled', array_key_exists('log_enabled', $post));
+            $c->set('scoring.clamav_enabled', array_key_exists('clamav_enabled', $post));
+            $c->set('scoring.clamav_dsn', trim($post['clamav_dsn'] ?? '') ?: ScoringService::DEFAULT_CLAMAV_DSN);
+            $c->set('scoring.clamav_score', max(1, (int)($post['clamav_score'] ?? ScoringService::DEFAULT_CLAMAV_SCORE)));
             $c->set('scoring.spam_threshold', max(1, (int)($post['spam_threshold'] ?? ScoringService::DEFAULT_SPAM_THRESHOLD)));
             $c->set('scoring.quarantine_threshold', max(0, (int)($post['quarantine_threshold'] ?? ScoringService::DEFAULT_QUARANTINE_THRESHOLD)));
             $this->addFlash('success', 'Settings saved');
@@ -66,6 +69,9 @@ class ConfigurationController extends Controller
             'dnsbl_enabled' => $c->get('scoring.dnsbl_enabled'),
             'header_check_enabled' => $c->get('scoring.header_check_enabled'),
             'log_enabled' => $c->get('scoring.log_enabled'),
+            'clamav_enabled' => $c->get('scoring.clamav_enabled'),
+            'clamav_dsn' => $c->get('scoring.clamav_dsn') ?: ScoringService::DEFAULT_CLAMAV_DSN,
+            'clamav_score' => $c->get('scoring.clamav_score') ?: ScoringService::DEFAULT_CLAMAV_SCORE,
             'spam_threshold' => $c->get('scoring.spam_threshold') ?: ScoringService::DEFAULT_SPAM_THRESHOLD,
             'quarantine_threshold' => $c->get('scoring.quarantine_threshold') ?: ScoringService::DEFAULT_QUARANTINE_THRESHOLD,
         ];

@@ -19,6 +19,11 @@ class ScoringService
     const DEFAULT_SPAM_THRESHOLD = 10;
     const DEFAULT_QUARANTINE_THRESHOLD = 5;
 
+    const DEFAULT_CLAMAV_DSN = 'tcp://127.0.0.1:3310';
+    const DEFAULT_CLAMAV_SCORE = 15;
+    const DEFAULT_CLAMAV_MAX_SIZE = 26214400; // 25 MiB
+    const DEFAULT_CLAMAV_TIMEOUT = 30;
+
     private $em;
     private $config;
 
@@ -59,6 +64,35 @@ class ScoringService
     }
 
     /**
+     * ClamAV attachment scanning is opt-in: it stays disabled until an admin
+     * enables it and points it at a reachable clamd daemon.
+     */
+    public function isClamavEnabled()
+    {
+        return (bool)$this->readBool('scoring.clamav_enabled', false);
+    }
+
+    public function getClamavDsn()
+    {
+        return $this->readString('scoring.clamav_dsn', self::DEFAULT_CLAMAV_DSN);
+    }
+
+    public function getClamavScore()
+    {
+        return $this->readInt('scoring.clamav_score', self::DEFAULT_CLAMAV_SCORE);
+    }
+
+    public function getClamavMaxSize()
+    {
+        return $this->readInt('scoring.clamav_max_size', self::DEFAULT_CLAMAV_MAX_SIZE);
+    }
+
+    public function getClamavTimeout()
+    {
+        return $this->readInt('scoring.clamav_timeout', self::DEFAULT_CLAMAV_TIMEOUT);
+    }
+
+    /**
      * Apply the final spam/quarantine/ham decision to the event based on the
      * accumulated score and persist a SpamScoreLog entry.
      */
@@ -96,6 +130,13 @@ class ScoringService
         if (!$this->config) return $default;
         $v = $this->config->get($key);
         return ($v === null || $v === '') ? $default : (int)$v;
+    }
+
+    private function readString($key, $default)
+    {
+        if (!$this->config) return $default;
+        $v = $this->config->get($key);
+        return ($v === null || $v === '') ? $default : (string)$v;
     }
 
     private function readBool($key, $default)

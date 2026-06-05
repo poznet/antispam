@@ -27,8 +27,41 @@ Defaults: `quarantine_threshold = 5`, `spam_threshold = 10`. Configure under
 | Missing Message-ID| `CheckHeaders`        | 2                    |
 | > 10 Received hops| `CheckHeaders`        | 2                    |
 | DNSBL hit         | `CheckDnsbl`          | provider.score       |
+| Infected attachment (ClamAV) | `CheckAttachments` | clamav_score (def. 15) + forced spam |
 
 Whitelists bypass all scoring (`stopPropagation()` on match).
+
+## Attachment scanning (ClamAV)
+
+When enabled, `CheckAttachments` streams every message attachment through a
+ClamAV daemon (`clamd`) using the INSTREAM command. A malware hit adds the
+configured `clamav_score` **and** marks the message as spam outright, so an
+infected attachment is caught regardless of the other signals. Scanning runs
+after DNSBL and before the final decision.
+
+Scanning is **disabled by default** because it depends on a reachable `clamd`
+instance. Configure it under **Settings → Spam Filter Settings → Attachment
+Scanning**:
+
+| Config key (`ConfigBundle`)   | Default                 | Meaning                                   |
+|-------------------------------|-------------------------|-------------------------------------------|
+| `scoring.clamav_enabled`      | `false`                 | Master switch for attachment scanning     |
+| `scoring.clamav_dsn`          | `tcp://127.0.0.1:3310`  | clamd endpoint (see DSN forms below)      |
+| `scoring.clamav_score`        | `15`                    | Score added on a malware hit              |
+| `scoring.clamav_max_size`     | `26214400` (25 MiB)     | Attachments larger than this are skipped  |
+| `scoring.clamav_timeout`      | `30`                    | Connect / read timeout in seconds         |
+
+The DSN accepts a TCP endpoint (`tcp://host:port`, or the bare `host:port`
+shorthand) or a local unix socket (`unix:///var/run/clamav/clamd.ctl`).
+
+Resilience: if `clamd` is unreachable or returns an error, the scan is skipped
+silently and the message is **not** penalised — a missing daemon never turns
+ham into spam. Attachments above `clamav_max_size` are skipped rather than
+truncated. The matched signature and filename are recorded in the score log
+reasons as `clamav:<signature>`.
+
+> Note: attachment scanning currently applies to the IMAP pipeline (web app).
+> The standalone Maildir agent does not yet shell out to ClamAV.
 
 ## Pattern types
 

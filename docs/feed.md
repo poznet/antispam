@@ -90,6 +90,9 @@ delta.
 
 ## HTTP API (hub side)
 
+> Full request/response contract, error codes and examples:
+> **[feed-api.md](feed-api.md)**.
+
 All routes are under `/api/feed` and require the `X-Feed-Key` header to match
 `feed.server_key`. They are exempt from the form-login firewall in
 `security.yml`. Responses are JSON.

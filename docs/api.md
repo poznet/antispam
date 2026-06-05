@@ -34,7 +34,8 @@
 
 Machine-to-machine endpoints for the centralized spam DB. Authenticated with the
 `X-Feed-Key` header (matched against `feed.server_key`), exempt from form login.
-JSON in / JSON out. See [feed.md](feed.md).
+JSON in / JSON out. Full reference with request/response schemas, error codes and
+examples: **[feed-api.md](feed-api.md)** (concepts: [feed.md](feed.md)).
 
 | Method | URL | Description |
 |--------|-----|-------------|

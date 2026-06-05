@@ -18,17 +18,20 @@ services:
         condition: service_healthy
     environment:
       SYMFONY_ENV: prod
-      APP_SECRET: ${APP_SECRET:-ChangeMeInProductionPlease}
-
-      # Application login (form-based, required to access every page).
+      # All credentials below MUST be set explicitly in the Coolify UI / .env.
+      # The container refuses to start when APP_SECRET or ADMIN_PASSWORD are
+      # left empty or set to the known-default values, unless
+      # ALLOW_INSECURE_DEFAULTS=1 is set (development only).
+      APP_SECRET: ${APP_SECRET}
       ADMIN_USER: ${ADMIN_USER:-admin}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ALLOW_INSECURE_DEFAULTS: ${ALLOW_INSECURE_DEFAULTS:-0}
 
       DATABASE_HOST: db
       DATABASE_PORT: 3306
       DATABASE_NAME: ${DATABASE_NAME:-antispam}
       DATABASE_USER: ${DATABASE_USER:-antispam}
-      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-antispam}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
 
       MAILER_TRANSPORT: ${MAILER_TRANSPORT:-smtp}
       MAILER_HOST: ${MAILER_HOST:-127.0.0.1}
@@ -52,10 +55,10 @@ services:
     image: mariadb:10.6
     restart: unless-stopped
     environment:
-      MARIADB_ROOT_PASSWORD: ${DATABASE_ROOT_PASSWORD:-rootpassword}
+      MARIADB_ROOT_PASSWORD: ${DATABASE_ROOT_PASSWORD}
       MARIADB_DATABASE: ${DATABASE_NAME:-antispam}
       MARIADB_USER: ${DATABASE_USER:-antispam}
-      MARIADB_PASSWORD: ${DATABASE_PASSWORD:-antispam}
+      MARIADB_PASSWORD: ${DATABASE_PASSWORD}
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:

@@ -61,16 +61,36 @@
                     {% endif %}
                 </td>
                 <td>
-                    <div class="btn-group btn-group-xs">
+                    {% set actionToken = csrf_token('account_action_' ~ account.id) %}
+                    {% set delToken = csrf_token('account_del_' ~ account.id) %}
+                    <div class="btn-group btn-group-xs" role="group">
                         <a href="{{ path('antispam_account_edit', {id: account.id}) }}" class="btn btn-default" title="Edit">Edit</a>
-                        <a href="{{ path('antispam_account_test', {id: account.id}) }}" class="btn btn-info" title="Test connection">Test</a>
-                        <a href="{{ path('antispam_account_scan', {id: account.id}) }}" class="btn btn-primary" title="Run scan">Scan</a>
+                        <form method="post" action="{{ path('antispam_account_test', {id: account.id}) }}" style="display:inline;">
+                            <input type="hidden" name="_token" value="{{ actionToken }}">
+                            <button type="submit" class="btn btn-info btn-xs" title="Test connection">Test</button>
+                        </form>
+                        <form method="post" action="{{ path('antispam_account_scan', {id: account.id}) }}" style="display:inline;">
+                            <input type="hidden" name="_token" value="{{ actionToken }}">
+                            <button type="submit" class="btn btn-primary btn-xs" title="Run scan">Scan</button>
+                        </form>
                         {% if account.connectionType == 'ssh' %}
-                            <a href="{{ path('antispam_account_deploy', {id: account.id}) }}" class="btn btn-warning" title="Deploy agent">Deploy</a>
-                            <a href="{{ path('antispam_account_sync', {id: account.id}) }}" class="btn btn-success" title="Sync rules">Sync</a>
-                            <a href="{{ path('antispam_account_health', {id: account.id}) }}" class="btn btn-info" title="Health check">Health</a>
+                            <form method="post" action="{{ path('antispam_account_deploy', {id: account.id}) }}" style="display:inline;">
+                                <input type="hidden" name="_token" value="{{ actionToken }}">
+                                <button type="submit" class="btn btn-warning btn-xs" title="Deploy agent">Deploy</button>
+                            </form>
+                            <form method="post" action="{{ path('antispam_account_sync', {id: account.id}) }}" style="display:inline;">
+                                <input type="hidden" name="_token" value="{{ actionToken }}">
+                                <button type="submit" class="btn btn-success btn-xs" title="Sync rules">Sync</button>
+                            </form>
+                            <form method="post" action="{{ path('antispam_account_health', {id: account.id}) }}" style="display:inline;">
+                                <input type="hidden" name="_token" value="{{ actionToken }}">
+                                <button type="submit" class="btn btn-info btn-xs" title="Health check">Health</button>
+                            </form>
                         {% endif %}
-                        <a href="{{ path('antispam_account_del', {id: account.id}) }}" class="btn btn-danger" title="Delete" onclick="return confirm('Delete this account?')">Del</a>
+                        <form method="post" action="{{ path('antispam_account_del', {id: account.id}) }}" style="display:inline;" onsubmit="return confirm('Delete this account?');">
+                            <input type="hidden" name="_token" value="{{ delToken }}">
+                            <button type="submit" class="btn btn-danger btn-xs" title="Delete">Del</button>
+                        </form>
                     </div>
                 </td>
             </tr>

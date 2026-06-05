@@ -8,6 +8,11 @@ imports:
 # http://symfony.com/doc/current/best_practices/configuration.html#application-related-configuration
 parameters:
     locale: en
+    # Directory under which SSH private keys for SSH+Maildir accounts must
+    # live. Any ssh_key_path saved on an Account is required to resolve into
+    # this directory (realpath) — this prevents reading arbitrary local files
+    # via that field. Override in parameters.yml / env if needed.
+    antispam.ssh_keys_dir: '%kernel.root_dir%/../var/ssh-keys'
 
 framework:
     #esi:             ~

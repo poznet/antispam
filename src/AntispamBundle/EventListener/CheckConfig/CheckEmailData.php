@@ -61,12 +61,10 @@ class CheckEmailData
      */
     public function tryToConnect(CheckEvent $event){
         if($event->getStatus()===true){
-            $server = new Server($this->config->get('imap'));
             $server = new Server(
                 $this->config->get('imap'),
-                143,
-                '/novalidate-cert/notls'
-
+                (int)($this->config->get('imap_port') ?: 993),
+                $this->config->get('imap_flags') ?: '/imap/ssl'
             );
             try {
                 $server->authenticate($this->config->get('login'), $this->config->get('password'));

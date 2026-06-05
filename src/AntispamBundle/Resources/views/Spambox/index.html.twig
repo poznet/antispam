@@ -22,7 +22,11 @@
         <div class="col-sm-8">
             <div class="panel panel-default">
                 <div class="panel-body spamboxmsgcontent">
-                    {{ messages.0.content | raw }}
+                    {# Render untrusted HTML inside a sandboxed iframe so any
+                       script, form or remote resource in a spam message cannot
+                       touch the surrounding admin session. #}
+                    <iframe sandbox="" srcdoc="{{ messages.0.content|e('html_attr') }}"
+                            style="width:100%; min-height:400px; border:0;"></iframe>
                 </div>
             </div>
         </div>

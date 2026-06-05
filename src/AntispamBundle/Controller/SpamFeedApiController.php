@@ -21,6 +21,12 @@ use Symfony\Component\HttpFoundation\Request;
  */
 class SpamFeedApiController extends Controller
 {
+    /** Hard cap on accepted signals per POST — protects the DB from a flood. */
+    const MAX_SIGNALS_PER_REPORT = 1000;
+
+    /** Hard cap on raw request body size (bytes) before we even json_decode. */
+    const MAX_REPORT_BYTES = 262144;
+
     /**
      * Receive a batch of signals from another instance.
      *
@@ -34,9 +40,18 @@ class SpamFeedApiController extends Controller
             return $deny;
         }
 
-        $payload = json_decode($request->getContent(), true);
+        $body = $request->getContent();
+        if (strlen($body) > self::MAX_REPORT_BYTES) {
+            return new JsonResponse(['error' => 'payload too large'], 413);
+        }
+
+        $payload = json_decode($body, true);
         if (!is_array($payload) || !isset($payload['signals']) || !is_array($payload['signals'])) {
             return new JsonResponse(['error' => 'invalid payload'], 400);
+        }
+
+        if (count($payload['signals']) > self::MAX_SIGNALS_PER_REPORT) {
+            return new JsonResponse(['error' => 'too many signals'], 413);
         }
 
         $feed = $this->get('antispam.spam_signal');

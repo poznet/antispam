@@ -24,6 +24,12 @@ services:
 
     antispam.ssh:
         class: AntispamBundle\Services\SshService
+        arguments: ["%antispam.ssh_keys_dir%"]
+        public: true
+
+    antispam.crypto:
+        class: AntispamBundle\Services\CryptoService
+        arguments: ["%secret%"]
         public: true
 
     # Scoring / DNSBL / header analysis

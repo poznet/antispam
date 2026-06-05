@@ -2,6 +2,7 @@
 
 namespace AntispamBundle\Command;
 
+use AntispamBundle\Services\ScoringService;
 use AntispamBundle\Services\SshService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Command\Command;
@@ -15,12 +16,14 @@ class AgentSyncCommand extends Command
 
     private $em;
     private $ssh;
+    private $scoring;
 
-    public function __construct(EntityManagerInterface $em, SshService $ssh)
+    public function __construct(EntityManagerInterface $em, SshService $ssh, ScoringService $scoring)
     {
         parent::__construct();
         $this->em = $em;
         $this->ssh = $ssh;
+        $this->scoring = $scoring;
     }
 
     protected function configure()
@@ -105,6 +108,7 @@ class AgentSyncCommand extends Command
                 'cache_ttl' => $prov->getCacheTtl(),
             ];
         }
+        $rules['settings'] = $this->scoring->exportAgentSettings();
         return $rules;
     }
 }

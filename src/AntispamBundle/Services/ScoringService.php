@@ -130,6 +130,26 @@ class ScoringService
     }
 
     /**
+     * Attachment-scanning settings in the shape the Maildir agent expects in
+     * the `settings` section of its import-rules payload.
+     */
+    public function exportAgentSettings()
+    {
+        return [
+            'clamav_enabled' => $this->isClamavEnabled(),
+            'clamav_dsn' => $this->getClamavDsn(),
+            'clamav_score' => $this->getClamavScore(),
+            'clamav_max_size' => $this->getClamavMaxSize(),
+            'clamav_timeout' => $this->getClamavTimeout(),
+            'vt_enabled' => $this->isVirusTotalEnabled(),
+            'vt_api_key' => $this->getVirusTotalApiKey(),
+            'vt_score' => $this->getVirusTotalScore(),
+            'vt_threshold' => $this->getVirusTotalThreshold(),
+            'vt_timeout' => $this->getVirusTotalTimeout(),
+        ];
+    }
+
+    /**
      * Apply the final spam/quarantine/ham decision to the event based on the
      * accumulated score and persist a SpamScoreLog entry.
      */

@@ -61,8 +61,8 @@ ham into spam. Attachments above `clamav_max_size` are skipped rather than
 truncated. The matched signature and filename are recorded in the score log
 reasons as `clamav:<signature>`.
 
-> Note: attachment scanning currently applies to the IMAP pipeline (web app).
-> The standalone Maildir agent does not yet shell out to ClamAV.
+> Note: the standalone Maildir agent also supports ClamAV scanning — settings
+> are pushed to it via the sync payload. See `docs/agent.md`.
 
 ## Attachment reputation (VirusTotal)
 
@@ -92,8 +92,9 @@ free VirusTotal key is rate-limited to ~4 requests/minute, so this is best
 suited to low-volume mailboxes or a paid key. The verdict and filename are
 recorded in the score log reasons as `virustotal:<malicious>/<total>`.
 
-Requires the PHP `curl` extension. Like ClamAV, this applies to the IMAP
-pipeline only — the standalone Maildir agent does not call VirusTotal.
+Requires the PHP `curl` extension. The standalone Maildir agent supports the
+same VirusTotal lookup; settings are pushed to it via the sync payload (see
+`docs/agent.md`).
 
 ## Pattern types
 

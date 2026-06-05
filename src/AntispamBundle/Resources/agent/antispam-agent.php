@@ -10,9 +10,12 @@
  *   3. Blacklist (exact / wildcard / regex + score)
  *   4. Header heuristics (SPF/DKIM/DMARC, suspicious subject, ...)
  *   5. DNSBL lookup against configured zones (with per-zone TTL cache)
- *   6. Threshold decision -> move to .SPAM or .QUARANTINE
+ *   6. Attachment scanning (ClamAV malware + VirusTotal reputation)
+ *   7. Threshold decision -> move to .SPAM or .QUARANTINE
  *
  * Requirements: PHP 7.1+, SQLite3 extension, DNS resolution for DNSBL lookups.
+ * Optional: a reachable clamd for ClamAV scanning, the curl extension for
+ * VirusTotal lookups. Both are off unless enabled in the synced settings.
  */
 
 $defaultMaildir = getenv('HOME') . '/Maildir';
@@ -54,7 +57,7 @@ switch ($command) {
         echo "Usage:\n";
         echo "  php antispam-agent.php test\n";
         echo "  php antispam-agent.php import-rules < rules.json\n";
-        echo "  php antispam-agent.php scan [--maildir=path] [--db=path] [--spam-threshold=N] [--quarantine-threshold=N] [--no-dnsbl] [--no-headers]\n";
+        echo "  php antispam-agent.php scan [--maildir=path] [--db=path] [--spam-threshold=N] [--quarantine-threshold=N] [--no-dnsbl] [--no-headers] [--no-clamav] [--no-virustotal]\n";
         echo "  php antispam-agent.php health [--maildir=path] [--db=path]\n";
         break;
 }
@@ -70,6 +73,7 @@ function runTest($maildirPath)
     $result['checks']['sqlite3'] = extension_loaded('sqlite3') ? 'available' : 'NOT available';
     if (!extension_loaded('sqlite3')) { $result['success'] = false; }
     $result['checks']['dns_get_record'] = function_exists('dns_get_record') ? 'available' : 'missing (DNSBL will use gethostbyname fallback)';
+    $result['checks']['curl'] = function_exists('curl_init') ? 'available' : 'missing (VirusTotal lookup disabled)';
 
     $result['checks']['maildir_path'] = $maildirPath;
     $result['checks']['maildir_exists'] = is_dir($maildirPath) ? 'yes' : 'no';
@@ -84,7 +88,7 @@ function runTest($maildirPath)
 function runHealth($maildirPath, $dbPath)
 {
     $out = [
-        'agent_version' => '2.0',
+        'agent_version' => '2.1',
         'php' => PHP_VERSION,
         'time' => date('c'),
         'maildir' => $maildirPath,
@@ -102,6 +106,12 @@ function runHealth($maildirPath, $dbPath)
             'dnsbl_cache' => (int)$db->querySingle('SELECT COUNT(*) FROM dnsbl_cache'),
             'checked' => (int)$db->querySingle('SELECT COUNT(*) FROM checked'),
             'last_scan' => $db->querySingle('SELECT MAX(scanned_at) FROM scan_log'),
+        ];
+        $settings = loadSettings($db);
+        $out['attachment_scanning'] = [
+            'clamav_enabled' => !empty($settings['clamav_enabled']),
+            'clamav_dsn' => $settings['clamav_dsn'] ?? null,
+            'virustotal_enabled' => !empty($settings['vt_enabled']) && trim((string)($settings['vt_api_key'] ?? '')) !== '',
         ];
     }
     $out['maildir_new'] = countMessages($maildirPath, ['new']);
@@ -144,7 +154,7 @@ function importRules($dbPath)
     $counts = [
         'whitelist' => 0, 'email_whitelist' => 0,
         'blacklist' => 0, 'email_blacklist' => 0,
-        'dnsbl_providers' => 0,
+        'dnsbl_providers' => 0, 'settings' => 0,
     ];
 
     if (!empty($data['whitelist'])) {
@@ -201,6 +211,18 @@ function importRules($dbPath)
             $counts['dnsbl_providers']++;
         }
     }
+    // Attachment-scanning settings (ClamAV / VirusTotal) pushed from the web UI.
+    // Stored as key/value strings; booleans are normalised to '1'/'0'.
+    if (isset($data['settings']) && is_array($data['settings'])) {
+        $stmt = $db->prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (:k, :v)');
+        foreach ($data['settings'] as $k => $v) {
+            if (is_bool($v)) { $v = $v ? '1' : '0'; }
+            $stmt->bindValue(':k', (string)$k);
+            $stmt->bindValue(':v', (string)$v);
+            $stmt->execute();
+            $counts['settings']++;
+        }
+    }
 
     return ['success' => true, 'imported' => $counts];
 }
@@ -217,11 +239,19 @@ function runScan($maildirPath, $dbPath, $options = [])
     $headerCheckEnabled = !isset($options['no-headers']);
 
     $db = getDb($dbPath);
+    $settings = loadSettings($db);
+
+    // Attachment scanning is driven by synced settings; CLI flags can force it off.
+    $clamavEnabled = !isset($options['no-clamav']) && !empty($settings['clamav_enabled']);
+    $vtEnabled = !isset($options['no-virustotal'])
+        && !empty($settings['vt_enabled'])
+        && trim((string)($settings['vt_api_key'] ?? '')) !== '';
 
     $stats = [
         'total' => 0, 'checked' => 0, 'skipped' => 0,
         'whitelisted' => 0, 'blacklisted' => 0,
         'quarantined' => 0, 'moved_to_spam' => 0,
+        'attachments_flagged' => 0,
         'score_total' => 0,
         'decisions' => [],
     ];
@@ -280,6 +310,7 @@ function runScan($maildirPath, $dbPath, $options = [])
 
             $score = 0;
             $reasons = [];
+            $forceSpam = false;
 
             // Blacklist domain / email
             if ($senderHost) {
@@ -317,9 +348,22 @@ function runScan($maildirPath, $dbPath, $options = [])
                 }
             }
 
+            // Attachment scanning (ClamAV malware + VirusTotal reputation).
+            // A hit adds the configured score and forces a spam decision. A
+            // single flagged attachment is enough to condemn the message.
+            if ($clamavEnabled || $vtEnabled) {
+                $hit = scanAttachments($filePath, $settings, $clamavEnabled, $vtEnabled);
+                if ($hit) {
+                    $score += (int)$hit['score'];
+                    $reasons[] = $hit['reason'];
+                    $forceSpam = true;
+                    $stats['attachments_flagged']++;
+                }
+            }
+
             $decision = 'ham';
             $targetDir = null;
-            if ($score >= $spamThreshold) {
+            if ($forceSpam || $score >= $spamThreshold) {
                 $decision = 'spam';
                 $stats['blacklisted']++;
                 $stats['moved_to_spam']++;
@@ -593,6 +637,323 @@ function dnsblLookup($db, $ip, $provider)
 }
 
 /* ---------------------------------------------------------------------- */
+/* Attachment scanning (ClamAV + VirusTotal)                              */
+/* ---------------------------------------------------------------------- */
+
+function loadSettings($db)
+{
+    $settings = [];
+    $res = @$db->query('SELECT key, value FROM settings');
+    if ($res) {
+        while ($row = $res->fetchArray(SQLITE3_ASSOC)) {
+            $settings[$row['key']] = $row['value'];
+        }
+    }
+    return $settings;
+}
+
+/**
+ * Scan a message file's attachments. Returns the first hit as
+ * ['score' => int, 'reason' => [...]] or null when everything is clean / the
+ * scan could not be performed (an unreachable daemon never condemns a message).
+ */
+function scanAttachments($filePath, array $settings, $clamavEnabled, $vtEnabled)
+{
+    $attachments = extractAttachments($filePath);
+    if (!$attachments) {
+        return null;
+    }
+
+    $clamavMaxSize = (int)($settings['clamav_max_size'] ?? 26214400);
+
+    foreach ($attachments as $att) {
+        $data = $att['data'];
+        if ($data === '') {
+            continue;
+        }
+
+        if ($clamavEnabled && ($clamavMaxSize <= 0 || strlen($data) <= $clamavMaxSize)) {
+            $res = clamavScan(
+                $data,
+                $settings['clamav_dsn'] ?? 'tcp://127.0.0.1:3310',
+                (int)($settings['clamav_timeout'] ?? 30)
+            );
+            if (!empty($res['infected'])) {
+                $score = (int)($settings['clamav_score'] ?? 15);
+                return ['score' => $score, 'reason' => [
+                    'rule' => 'clamav:' . ($res['signature'] ?: 'unknown'),
+                    'score' => $score,
+                    'filename' => $att['filename'],
+                ]];
+            }
+        }
+
+        if ($vtEnabled) {
+            $res = virusTotalLookup(
+                hash('sha256', $data),
+                (string)($settings['vt_api_key'] ?? ''),
+                (int)($settings['vt_timeout'] ?? 15)
+            );
+            $threshold = max(1, (int)($settings['vt_threshold'] ?? 3));
+            if (!empty($res['found']) && $res['malicious'] >= $threshold) {
+                $score = (int)($settings['vt_score'] ?? 15);
+                return ['score' => $score, 'reason' => [
+                    'rule' => 'virustotal:' . $res['malicious'] . '/' . $res['total'],
+                    'score' => $score,
+                    'filename' => $att['filename'],
+                ]];
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Extract decoded attachment parts from a raw Maildir message file.
+ *
+ * @return array list of ['filename' => string, 'data' => string]
+ */
+function extractAttachments($filePath)
+{
+    $raw = @file_get_contents($filePath);
+    if ($raw === false || $raw === '') {
+        return [];
+    }
+    $split = preg_split("/\r?\n\r?\n/", $raw, 2);
+    if (count($split) < 2) {
+        return [];
+    }
+    return walkMimePart($split[0], $split[1]);
+}
+
+function walkMimePart($headerBlock, $body)
+{
+    $contentType = grabHeaderFolded($headerBlock, 'Content-Type');
+    $disposition = grabHeaderFolded($headerBlock, 'Content-Disposition');
+    $encoding = strtolower(grabHeaderFolded($headerBlock, 'Content-Transfer-Encoding'));
+
+    if (stripos($contentType, 'multipart/') === 0
+        && preg_match('/boundary\s*=\s*"?([^";\r\n]+)"?/i', $contentType, $bm)) {
+        $attachments = [];
+        foreach (splitMultipart($body, $bm[1]) as $part) {
+            $sub = preg_split("/\r?\n\r?\n/", $part, 2);
+            if (count($sub) < 2) {
+                continue;
+            }
+            $attachments = array_merge($attachments, walkMimePart($sub[0], $sub[1]));
+        }
+        return $attachments;
+    }
+
+    // Leaf part: treat it as an attachment when it is explicitly dispositioned
+    // as one, carries a filename, or is a non-text binary payload.
+    $filename = mimeParamFilename($contentType, $disposition);
+    $isAttachment = stripos($disposition, 'attachment') !== false
+        || $filename !== ''
+        || isBinaryContentType($contentType);
+    if (!$isAttachment) {
+        return [];
+    }
+
+    $data = decodeMimeBody($body, $encoding);
+    if ($data === '') {
+        return [];
+    }
+    return [['filename' => $filename, 'data' => $data]];
+}
+
+function splitMultipart($body, $boundary)
+{
+    $parts = [];
+    $segments = explode('--' . $boundary, $body);
+    foreach ($segments as $i => $seg) {
+        if ($i === 0) {
+            continue; // preamble before the first boundary
+        }
+        if (strpos($seg, '--') === 0) {
+            break; // closing delimiter "--boundary--" -> epilogue follows
+        }
+        $seg = preg_replace('/^\r?\n/', '', $seg);
+        $seg = preg_replace('/\r?\n$/', '', $seg);
+        $parts[] = $seg;
+    }
+    return $parts;
+}
+
+function decodeMimeBody($body, $encoding)
+{
+    switch ($encoding) {
+        case 'base64':
+            return (string)base64_decode(preg_replace('/\s+/', '', $body), false);
+        case 'quoted-printable':
+            return quoted_printable_decode($body);
+        default:
+            return $body;
+    }
+}
+
+function mimeParamFilename($contentType, $disposition)
+{
+    if (preg_match('/filename\*?\s*=\s*"?([^";\r\n]+)"?/i', $disposition, $m)) {
+        return trim($m[1]);
+    }
+    if (preg_match('/name\*?\s*=\s*"?([^";\r\n]+)"?/i', $contentType, $m)) {
+        return trim($m[1]);
+    }
+    return '';
+}
+
+function isBinaryContentType($ct)
+{
+    $ct = strtolower((string)$ct);
+    if ($ct === '' || strpos($ct, 'text/') === 0 || strpos($ct, 'multipart/') === 0) {
+        return false;
+    }
+    return strpos($ct, 'application/') === 0
+        || strpos($ct, 'image/') === 0
+        || strpos($ct, 'audio/') === 0
+        || strpos($ct, 'video/') === 0;
+}
+
+/**
+ * Unfold a (possibly multi-line) header value: RFC 5322 continuation lines
+ * begin with whitespace and are joined into a single logical value.
+ */
+function grabHeaderFolded($block, $name)
+{
+    if (preg_match('/^' . preg_quote($name, '/') . ':\s*(.*(?:\r?\n[ \t].*)*)/mi', $block, $m)) {
+        return trim(preg_replace('/\r?\n[ \t]+/', ' ', $m[1]));
+    }
+    return '';
+}
+
+/**
+ * Scan a blob through clamd's INSTREAM command.
+ *
+ * @return array{infected: bool, signature: string, error: ?string}
+ */
+function clamavScan($data, $dsn, $timeout)
+{
+    $clean = ['infected' => false, 'signature' => '', 'error' => null];
+    $remote = clamavNormalizeDsn($dsn);
+    $timeout = $timeout > 0 ? (int)$timeout : 30;
+
+    $errno = 0;
+    $errstr = '';
+    $sock = @stream_socket_client($remote, $errno, $errstr, $timeout);
+    if (!$sock) {
+        return array_merge($clean, ['error' => "connect failed: " . ($errstr ?: "errno $errno")]);
+    }
+    stream_set_timeout($sock, $timeout);
+
+    if (@fwrite($sock, "nINSTREAM\n") === false) {
+        @fclose($sock);
+        return array_merge($clean, ['error' => 'write failed']);
+    }
+    $len = strlen($data);
+    for ($o = 0; $o < $len; $o += 8192) {
+        $chunk = substr($data, $o, 8192);
+        if (@fwrite($sock, pack('N', strlen($chunk)) . $chunk) === false) {
+            @fclose($sock);
+            return array_merge($clean, ['error' => 'stream failed']);
+        }
+    }
+    @fwrite($sock, pack('N', 0));
+
+    $resp = '';
+    while (!feof($sock)) {
+        $buf = @fgets($sock, 4096);
+        if ($buf === false) {
+            break;
+        }
+        $resp .= $buf;
+        $meta = stream_get_meta_data($sock);
+        if (!empty($meta['timed_out'])) {
+            @fclose($sock);
+            return array_merge($clean, ['error' => 'timeout']);
+        }
+    }
+    @fclose($sock);
+
+    $resp = trim($resp);
+    if (preg_match('/\bFOUND\b/', $resp)) {
+        $sig = 'unknown';
+        if (preg_match('/:\s*(.+?)\s+FOUND\b/', $resp, $m)) {
+            $sig = trim($m[1]);
+        }
+        return ['infected' => true, 'signature' => $sig, 'error' => null];
+    }
+    if (stripos($resp, 'ERROR') !== false) {
+        return array_merge($clean, ['error' => $resp]);
+    }
+    return $clean;
+}
+
+function clamavNormalizeDsn($dsn)
+{
+    $dsn = trim((string)$dsn);
+    if ($dsn === '') {
+        return 'tcp://127.0.0.1:3310';
+    }
+    if (preg_match('#^(tcp|unix)://#i', $dsn)) {
+        return $dsn;
+    }
+    return 'tcp://' . $dsn;
+}
+
+/**
+ * Look up a file hash on the VirusTotal v3 API. Only the hash is transmitted.
+ *
+ * @return array{found: bool, malicious: int, total: int, error: ?string}
+ */
+function virusTotalLookup($hash, $apiKey, $timeout)
+{
+    $miss = ['found' => false, 'malicious' => 0, 'total' => 0, 'error' => null];
+    if (!function_exists('curl_init')) {
+        return array_merge($miss, ['error' => 'curl extension unavailable']);
+    }
+    $hash = trim((string)$hash);
+    $apiKey = trim((string)$apiKey);
+    if ($hash === '' || $apiKey === '') {
+        return array_merge($miss, ['error' => 'missing hash or API key']);
+    }
+    $timeout = $timeout > 0 ? (int)$timeout : 15;
+
+    $ch = curl_init('https://www.virustotal.com/api/v3/files/' . rawurlencode($hash));
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ['x-apikey: ' . $apiKey, 'Accept: application/json'],
+        CURLOPT_CONNECTTIMEOUT => $timeout,
+        CURLOPT_TIMEOUT => $timeout,
+    ]);
+    $body = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($body === false) {
+        return array_merge($miss, ['error' => 'request failed']);
+    }
+    if ($status === 404) {
+        return $miss; // unknown hash: no opinion
+    }
+    if ($status < 200 || $status >= 300) {
+        return array_merge($miss, ['error' => "HTTP $status"]);
+    }
+    $data = json_decode($body, true);
+    $stats = $data['data']['attributes']['last_analysis_stats'] ?? null;
+    if (!is_array($stats)) {
+        return array_merge($miss, ['error' => 'malformed response']);
+    }
+    return [
+        'found' => true,
+        'malicious' => (int)($stats['malicious'] ?? 0),
+        'total' => array_sum(array_map('intval', $stats)),
+        'error' => null,
+    ];
+}
+
+/* ---------------------------------------------------------------------- */
 /* Persistence helpers                                                    */
 /* ---------------------------------------------------------------------- */
 
@@ -638,6 +999,7 @@ function getDb($dbPath)
     $db->exec('CREATE TABLE IF NOT EXISTS dnsbl_cache (id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT, zone TEXT, listed INTEGER, checked_at TEXT, UNIQUE(ip, zone))');
     $db->exec('CREATE TABLE IF NOT EXISTS score_log (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, subject TEXT, score INTEGER, decision TEXT, reasons TEXT, scored_at TEXT)');
     $db->exec('CREATE TABLE IF NOT EXISTS scan_log (id INTEGER PRIMARY KEY AUTOINCREMENT, scanned_at TEXT, total INTEGER, checked INTEGER, moved_to_spam INTEGER, quarantined INTEGER)');
+    $db->exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)');
 
     // pattern_type column may not exist on old agent databases; ALTER if needed.
     if (!$isNew) {

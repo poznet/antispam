@@ -22,6 +22,8 @@ See `docs/` directory for detailed documentation:
 - `docs/api.md` - web controller endpoints
 - `docs/deployment.md` - Docker / Coolify deployment guide
 - `docs/scoring.md` - scoring pipeline, DNSBL, regex/wildcard patterns
+- `docs/feed.md` - shared spam feed (centralized spam DB): fingerprints, API, sync
+- `docs/feed-api.md` - shared spam feed HTTP API reference (endpoints, auth, examples)
 
 ## Tech stack
 - PHP >= 7.1.3, Symfony 4.4, Doctrine ORM, MySQL

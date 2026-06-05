@@ -36,4 +36,7 @@ security:
 
     access_control:
         - { path: ^/login, roles: IS_AUTHENTICATED_ANONYMOUSLY }
+        # Shared spam feed API authenticates via the X-Feed-Key header, not the
+        # form-login firewall, so it must be reachable anonymously.
+        - { path: ^/api/feed, roles: IS_AUTHENTICATED_ANONYMOUSLY }
         - { path: ^/, roles: ROLE_ADMIN }

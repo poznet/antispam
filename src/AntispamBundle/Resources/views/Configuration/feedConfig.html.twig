@@ -1,0 +1,96 @@
+{% extends 'AntispamBundle::main.html.twig' %}
+{% block title %}Shared Spam Feed{% endblock %}
+{% block page_title %}Shared Spam Feed{% endblock %}
+
+{% block body %}
+    <p class="text-muted">
+        The shared spam feed is a centralized spam DB across antispam instances. Each
+        instance can act as a <strong>hub</strong> (other instances push their findings to it)
+        and a <strong>client</strong> (it pulls everyone else's). Only one-way SHA-256
+        fingerprints are exchanged — a hash of the normalized sender address and of the
+        signature-stripped message body — never raw e-mail content.
+    </p>
+
+    <div class="row">
+        <div class="col-sm-4">
+            <div class="panel panel-info">
+                <div class="panel-body text-center">
+                    <h3 style="margin:0;">{{ stats.total }}</h3>
+                    <small class="text-muted">signals total</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <div class="panel panel-default">
+                <div class="panel-body text-center">
+                    <h3 style="margin:0;">{{ stats.local }}</h3>
+                    <small class="text-muted">detected locally</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <div class="panel panel-default">
+                <div class="panel-body text-center">
+                    <h3 style="margin:0;">{{ stats.remote }}</h3>
+                    <small class="text-muted">pulled from hub</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form method="post">
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-transfer"></span> Participation</div>
+        <div class="panel-body">
+            <div class="checkbox"><label>
+                <input type="checkbox" name="config[enabled]" {% if config.enabled %}checked{% endif %}>
+                <strong>Participate in the shared spam feed</strong> — record fingerprints of detected spam and score incoming mail against known signals.
+            </label></div>
+            <div class="row" style="margin-top:10px;">
+                <div class="col-sm-6">
+                    <label>Match score</label>
+                    <input type="number" name="config[score]" class="form-control" value="{{ config.score }}" min="1" max="200">
+                    <small class="text-muted">Added when an incoming message matches a trusted shared signal.</small>
+                </div>
+                <div class="col-sm-6">
+                    <label>Minimum reports</label>
+                    <input type="number" name="config[min_reports]" class="form-control" value="{{ config.min_reports }}" min="1" max="1000">
+                    <small class="text-muted">A signal is only trusted once seen this many times (corroboration).</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-home"></span> This instance as a hub</div>
+        <div class="panel-body">
+            <p class="text-muted">Other instances push to / pull from <code>/api/feed</code> on this server using the key below in an <code>X-Feed-Key</code> header. Leave empty to disable the incoming API.</p>
+            <label>Local API key (server key)</label>
+            <input type="text" name="config[server_key]" class="form-control" value="{{ config.server_key }}" autocomplete="off" placeholder="a long random secret">
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-cloud-upload"></span> Remote hub (client sync)</div>
+        <div class="panel-body">
+            <p class="text-muted">Where this instance pushes its findings and pulls others'. Run <code>php bin/console antispam:feed:sync</code> (e.g. from cron) to sync. Leave the URL empty to act as a hub only.</p>
+            <div class="row">
+                <div class="col-sm-7">
+                    <label>Remote hub URL</label>
+                    <input type="text" name="config[remote_url]" class="form-control" value="{{ config.remote_url }}" placeholder="https://hub.example.com">
+                    <small class="text-muted">Base URL only — <code>/api/feed/...</code> is appended automatically.</small>
+                </div>
+                <div class="col-sm-5">
+                    <label>Remote key</label>
+                    <input type="text" name="config[remote_key]" class="form-control" value="{{ config.remote_key }}" autocomplete="off" placeholder="the hub's server key">
+                </div>
+            </div>
+            {% if config.last_pull_at %}
+                <p class="text-muted" style="margin-top:10px;"><span class="glyphicon glyphicon-time"></span> Last pull: {{ config.last_pull_at }}</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-floppy-disk"></span> Save</button>
+    </form>
+{% endblock %}

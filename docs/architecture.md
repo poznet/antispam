@@ -45,11 +45,17 @@ ham/quarantine/spam.
 | 99996    | CheckEmailBlacklist    | Email blacklist → add score           |
 | 99990    | CheckHeaders           | SPF/DKIM/DMARC + heuristics           |
 | 99980    | CheckDnsbl             | DNSBL lookup against configured zones |
+| 99978    | CheckSharedFeed        | Match sender/body against shared feed |
 | 99970    | ApplyScoreDecision     | ham/quarantine/spam decision + log    |
+| 99965    | RecordSpamSignals      | Record fingerprints of detected spam  |
 | 99960    | MoveToSpam             | Physically move spam to SPAM folder   |
 | -99999   | SetAsChecked           | Mark as processed                     |
 
-See `scoring.md` for scoring thresholds, pattern types and DNSBL configuration.
+(Attachment listeners `CheckAttachments` (99975) and `CheckAttachmentsVirusTotal`
+(99973) run between DNSBL and the decision when enabled.)
+
+See `scoring.md` for scoring thresholds, pattern types and DNSBL configuration,
+and `feed.md` for the shared spam feed.
 
 ## Database
 
@@ -64,5 +70,8 @@ Additional tables:
 - `antispam_dnsbl_cache` — per-IP DNSBL lookup results, TTL-capped.
 - `antispam_spam_score_log` — per-message decision log with score, reasons
   (JSON), decision (ham/quarantine/spam/whitelisted) and timestamp.
+- `antispam_shared_spam_signal` — shared spam feed fingerprints: `type`
+  (sender/body), SHA-256 `hash`, `origin` (local/remote) and `reports` count.
+  See `feed.md`.
 
 Account table: `antispam_account` - stores connection settings (IMAP or SSH) per email account.

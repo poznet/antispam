@@ -9,7 +9,7 @@
         body {
             margin: 0;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: linear-gradient(135deg, #0b2a52 0%, #1e4a8a 55%, #3b82f6 100%);
+            background: linear-gradient(135deg, #000000 0%, #12153d 35%, #1a1d4e 100%);
             color: #1f2a44;
             display: flex;
             min-height: 100vh;
@@ -22,9 +22,10 @@
             max-width: 400px;
             padding: 36px 32px;
             background: #ffffff;
-            border: 1px solid #d5e1f2;
+            border: 1px solid #d5dbef;
             border-radius: 10px;
-            box-shadow: 0 14px 40px rgba(11, 42, 82, 0.25);
+            border-top: 4px solid #e21d2c;
+            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
         }
         .pp-login-logo {
             display: flex;
@@ -32,25 +33,27 @@
             margin-bottom: 14px;
         }
         .pp-login-logo svg {
-            width: 64px;
-            height: 64px;
-            filter: drop-shadow(0 3px 6px rgba(11, 42, 82, 0.2));
+            width: 84px;
+            height: 92px;
+            filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35));
         }
         .login-box h1 {
             margin: 0 0 6px;
-            font-size: 22px;
+            font-size: 24px;
             text-align: center;
-            color: #0b2a52;
-            font-weight: 700;
-            letter-spacing: 0.3px;
+            color: #1a1d4e;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
         }
         .login-box .subtitle {
             margin: 0 0 24px;
             text-align: center;
-            color: #5f7aa8;
-            font-size: 13px;
+            color: #2966e8;
+            font-size: 12px;
             text-transform: uppercase;
-            letter-spacing: 1.5px;
+            letter-spacing: 3px;
+            font-weight: 600;
         }
         .form-group { margin-bottom: 16px; }
         .form-group label {
@@ -58,7 +61,7 @@
             margin-bottom: 6px;
             font-size: 14px;
             font-weight: 600;
-            color: #0b2a52;
+            color: #1a1d4e;
         }
         .form-control {
             display: block;
@@ -68,37 +71,39 @@
             line-height: 1.5;
             color: #1f2a44;
             background-color: #ffffff;
-            border: 1px solid #c5d3ea;
+            border: 1px solid #c5cce4;
             border-radius: 6px;
             transition: border-color 0.15s, box-shadow 0.15s;
         }
         .form-control:focus {
-            border-color: #1e4a8a;
+            border-color: #2966e8;
             outline: 0;
-            box-shadow: 0 0 0 3px rgba(30, 74, 138, 0.18);
+            box-shadow: 0 0 0 3px rgba(41, 102, 232, 0.18);
         }
         .btn-primary {
             display: block;
             width: 100%;
             padding: 11px 16px;
             margin-top: 6px;
-            font-size: 15px;
-            font-weight: 600;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
             color: #ffffff;
-            background-color: #1e4a8a;
-            border: 1px solid #0b2a52;
+            background-color: #e21d2c;
+            border: 1px solid #c2101e;
             border-radius: 6px;
             cursor: pointer;
             transition: background-color 0.15s, transform 0.05s;
         }
-        .btn-primary:hover { background-color: #0b2a52; }
+        .btn-primary:hover { background-color: #5b1018; }
         .btn-primary:active { transform: translateY(1px); }
         .alert-danger {
             padding: 10px 14px;
             margin-bottom: 16px;
-            color: #a94442;
-            background-color: #fdecea;
-            border: 1px solid #f5c6cb;
+            color: #5b1018;
+            background-color: #fdecee;
+            border: 1px solid #e21d2c;
             border-radius: 6px;
             font-size: 14px;
         }
@@ -107,16 +112,25 @@
 <body>
     <div class="login-box">
         <div class="pp-login-logo">
-            <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Pancerna Panda">
-                <circle cx="20" cy="21" r="14" fill="#ffffff" stroke="#0b2a52" stroke-width="1"/>
-                <ellipse cx="10" cy="11" rx="5" ry="6" fill="#0b2a52"/>
-                <ellipse cx="30" cy="11" rx="5" ry="6" fill="#0b2a52"/>
-                <ellipse cx="13" cy="22" rx="4" ry="5" fill="#0b2a52"/>
-                <ellipse cx="27" cy="22" rx="4" ry="5" fill="#0b2a52"/>
-                <circle cx="13" cy="22" r="1.6" fill="#ffffff"/>
-                <circle cx="27" cy="22" r="1.6" fill="#ffffff"/>
-                <ellipse cx="20" cy="27" rx="2.2" ry="1.6" fill="#0b2a52"/>
-                <path d="M16.5 30 Q20 33 23.5 30" stroke="#0b2a52" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+            <svg viewBox="0 0 64 70" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Pancerna Panda">
+                <defs>
+                    <linearGradient id="ppShieldLogin" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#5a9bff"/>
+                        <stop offset="55%" stop-color="#2966e8"/>
+                        <stop offset="100%" stop-color="#12153d"/>
+                    </linearGradient>
+                </defs>
+                <path d="M32 2 L60 10 V34 C60 50 47 62 32 68 C17 62 4 50 4 34 V10 Z"
+                      fill="url(#ppShieldLogin)" stroke="#ffffff" stroke-width="1.2"/>
+                <ellipse cx="20" cy="26" rx="6" ry="7" fill="#0f1230"/>
+                <ellipse cx="44" cy="26" rx="6" ry="7" fill="#0f1230"/>
+                <circle cx="32" cy="38" r="13" fill="#ffffff"/>
+                <ellipse cx="25" cy="38" rx="3.2" ry="4" fill="#0f1230"/>
+                <ellipse cx="39" cy="38" rx="3.2" ry="4" fill="#0f1230"/>
+                <circle cx="25" cy="38" r="1.2" fill="#ffffff"/>
+                <circle cx="39" cy="38" r="1.2" fill="#ffffff"/>
+                <ellipse cx="32" cy="44" rx="2" ry="1.4" fill="#0f1230"/>
+                <path d="M28.5 47 Q32 50 35.5 47" stroke="#0f1230" stroke-width="1.3" fill="none" stroke-linecap="round"/>
             </svg>
         </div>
         <h1>Pancernapanda</h1>

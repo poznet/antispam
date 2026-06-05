@@ -55,6 +55,18 @@ class ConfigurationController extends Controller
             $c->set('scoring.dnsbl_enabled', array_key_exists('dnsbl_enabled', $post));
             $c->set('scoring.header_check_enabled', array_key_exists('header_check_enabled', $post));
             $c->set('scoring.log_enabled', array_key_exists('log_enabled', $post));
+            $c->set('scoring.clamav_enabled', array_key_exists('clamav_enabled', $post));
+            $c->set('scoring.clamav_dsn', trim($post['clamav_dsn'] ?? '') ?: ScoringService::DEFAULT_CLAMAV_DSN);
+            $c->set('scoring.clamav_score', max(1, (int)($post['clamav_score'] ?? ScoringService::DEFAULT_CLAMAV_SCORE)));
+            // Max attachment size is entered in MiB for readability, stored in bytes.
+            $maxMib = max(1, (int)($post['clamav_max_size_mib'] ?? (ScoringService::DEFAULT_CLAMAV_MAX_SIZE / 1048576)));
+            $c->set('scoring.clamav_max_size', $maxMib * 1048576);
+            $c->set('scoring.clamav_timeout', max(1, (int)($post['clamav_timeout'] ?? ScoringService::DEFAULT_CLAMAV_TIMEOUT)));
+            $c->set('scoring.vt_enabled', array_key_exists('vt_enabled', $post));
+            $c->set('scoring.vt_api_key', trim($post['vt_api_key'] ?? ''));
+            $c->set('scoring.vt_score', max(1, (int)($post['vt_score'] ?? ScoringService::DEFAULT_VT_SCORE)));
+            $c->set('scoring.vt_threshold', max(1, (int)($post['vt_threshold'] ?? ScoringService::DEFAULT_VT_THRESHOLD)));
+            $c->set('scoring.vt_timeout', max(1, (int)($post['vt_timeout'] ?? ScoringService::DEFAULT_VT_TIMEOUT)));
             $c->set('scoring.spam_threshold', max(1, (int)($post['spam_threshold'] ?? ScoringService::DEFAULT_SPAM_THRESHOLD)));
             $c->set('scoring.quarantine_threshold', max(0, (int)($post['quarantine_threshold'] ?? ScoringService::DEFAULT_QUARANTINE_THRESHOLD)));
             $this->addFlash('success', 'Settings saved');
@@ -66,6 +78,16 @@ class ConfigurationController extends Controller
             'dnsbl_enabled' => $c->get('scoring.dnsbl_enabled'),
             'header_check_enabled' => $c->get('scoring.header_check_enabled'),
             'log_enabled' => $c->get('scoring.log_enabled'),
+            'clamav_enabled' => $c->get('scoring.clamav_enabled'),
+            'clamav_dsn' => $c->get('scoring.clamav_dsn') ?: ScoringService::DEFAULT_CLAMAV_DSN,
+            'clamav_score' => $c->get('scoring.clamav_score') ?: ScoringService::DEFAULT_CLAMAV_SCORE,
+            'clamav_max_size_mib' => (int)(($c->get('scoring.clamav_max_size') ?: ScoringService::DEFAULT_CLAMAV_MAX_SIZE) / 1048576),
+            'clamav_timeout' => $c->get('scoring.clamav_timeout') ?: ScoringService::DEFAULT_CLAMAV_TIMEOUT,
+            'vt_enabled' => $c->get('scoring.vt_enabled'),
+            'vt_api_key' => $c->get('scoring.vt_api_key') ?: '',
+            'vt_score' => $c->get('scoring.vt_score') ?: ScoringService::DEFAULT_VT_SCORE,
+            'vt_threshold' => $c->get('scoring.vt_threshold') ?: ScoringService::DEFAULT_VT_THRESHOLD,
+            'vt_timeout' => $c->get('scoring.vt_timeout') ?: ScoringService::DEFAULT_VT_TIMEOUT,
             'spam_threshold' => $c->get('scoring.spam_threshold') ?: ScoringService::DEFAULT_SPAM_THRESHOLD,
             'quarantine_threshold' => $c->get('scoring.quarantine_threshold') ?: ScoringService::DEFAULT_QUARANTINE_THRESHOLD,
         ];
@@ -78,6 +100,44 @@ class ConfigurationController extends Controller
     public function uncheckAllAction()
     {
         $this->get('antispam.message')->unCheckAll();
+        return $this->redirectToRoute('antispam_spam_config');
+    }
+
+    /**
+     * @Route("/spam/clamav-test/", name="antispam_clamav_test")
+     */
+    public function clamavTestAction()
+    {
+        $c = $this->get('configuration');
+        $dsn = $c->get('scoring.clamav_dsn') ?: ScoringService::DEFAULT_CLAMAV_DSN;
+        $timeout = $c->get('scoring.clamav_timeout') ?: ScoringService::DEFAULT_CLAMAV_TIMEOUT;
+
+        if ($this->get('antispam.clamav')->ping($dsn, $timeout)) {
+            $this->addFlash('success', sprintf('ClamAV daemon reachable at %s', $dsn));
+        } else {
+            $this->addFlash('danger', sprintf('Could not reach ClamAV daemon at %s — check that clamd is running and the address is correct.', $dsn));
+        }
+
+        return $this->redirectToRoute('antispam_spam_config');
+    }
+
+    /**
+     * @Route("/spam/virustotal-test/", name="antispam_virustotal_test")
+     */
+    public function virusTotalTestAction()
+    {
+        $c = $this->get('configuration');
+        $apiKey = trim((string)$c->get('scoring.vt_api_key'));
+        $timeout = $c->get('scoring.vt_timeout') ?: ScoringService::DEFAULT_VT_TIMEOUT;
+
+        if ($apiKey === '') {
+            $this->addFlash('danger', 'No VirusTotal API key configured.');
+        } elseif ($this->get('antispam.virustotal')->ping($apiKey, $timeout)) {
+            $this->addFlash('success', 'VirusTotal API key is valid and reachable.');
+        } else {
+            $this->addFlash('danger', 'Could not reach VirusTotal or the API key was rejected.');
+        }
+
         return $this->redirectToRoute('antispam_spam_config');
     }
 

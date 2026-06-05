@@ -20,6 +20,10 @@
                 Check sender IP against configured DNSBL providers
             </label></div>
             <div class="checkbox"><label>
+                <input type="checkbox" name="config[clamav_enabled]" {% if config.clamav_enabled %}checked{% endif %}>
+                Scan attachments for malware with ClamAV (a virus hit marks the message as spam)
+            </label></div>
+            <div class="checkbox"><label>
                 <input type="checkbox" name="config[log_enabled]" {% if config.log_enabled %}checked{% endif %}>
                 Persist per-message score log (recommended)
             </label></div>
@@ -34,6 +38,87 @@
                     <label>Spam threshold</label>
                     <input type="number" name="config[spam_threshold]" class="form-control" value="{{ config.spam_threshold }}" min="1" max="200">
                     <small class="text-muted">Score ≥ this value → treat as spam.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-paperclip"></span> Attachment Scanning (ClamAV)</div>
+        <div class="panel-body">
+            <p class="text-muted">Requires a running ClamAV daemon (clamd) reachable from this application. Enable scanning in the Spam Scoring panel above.</p>
+            <div class="row">
+                <div class="col-sm-8">
+                    <label>clamd address</label>
+                    <input type="text" name="config[clamav_dsn]" class="form-control" value="{{ config.clamav_dsn }}" placeholder="tcp://127.0.0.1:3310">
+                    <small class="text-muted">TCP (<code>tcp://host:port</code> or <code>host:port</code>) or unix socket (<code>unix:///var/run/clamav/clamd.ctl</code>).</small>
+                </div>
+                <div class="col-sm-4">
+                    <label>Virus score</label>
+                    <input type="number" name="config[clamav_score]" class="form-control" value="{{ config.clamav_score }}" min="1" max="200">
+                    <small class="text-muted">Added on a malware hit (message is also flagged spam).</small>
+                </div>
+            </div>
+            <div class="row" style="margin-top:10px;">
+                <div class="col-sm-4">
+                    <label>Max attachment size (MiB)</label>
+                    <input type="number" name="config[clamav_max_size_mib]" class="form-control" value="{{ config.clamav_max_size_mib }}" min="1" max="500">
+                    <small class="text-muted">Larger attachments are skipped (must stay under clamd StreamMaxLength).</small>
+                </div>
+                <div class="col-sm-4">
+                    <label>Timeout (seconds)</label>
+                    <input type="number" name="config[clamav_timeout]" class="form-control" value="{{ config.clamav_timeout }}" min="1" max="300">
+                    <small class="text-muted">Connect / read timeout per scan.</small>
+                </div>
+                <div class="col-sm-4">
+                    <label>Connectivity</label>
+                    <div>
+                        <a href="{{ path('antispam_clamav_test') }}" class="btn btn-default">
+                            <span class="glyphicon glyphicon-link"></span> Test connection
+                        </a>
+                    </div>
+                    <small class="text-muted">Pings clamd at the saved address.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-globe"></span> Attachment Reputation (VirusTotal)</div>
+        <div class="panel-body">
+            <p class="text-muted">Looks up each attachment's SHA-256 hash on VirusTotal. Only the hash is sent — never the file contents. Requires a VirusTotal API key (the free key is rate-limited to ~4 requests/minute).</p>
+            <div class="checkbox"><label>
+                <input type="checkbox" name="config[vt_enabled]" {% if config.vt_enabled %}checked{% endif %}>
+                <strong>Enable VirusTotal attachment lookup</strong>
+            </label></div>
+            <div class="row" style="margin-top:10px;">
+                <div class="col-sm-12">
+                    <label>API key</label>
+                    <input type="password" name="config[vt_api_key]" class="form-control" value="{{ config.vt_api_key }}" autocomplete="off" placeholder="VirusTotal API key">
+                </div>
+            </div>
+            <div class="row" style="margin-top:10px;">
+                <div class="col-sm-4">
+                    <label>Detection threshold</label>
+                    <input type="number" name="config[vt_threshold]" class="form-control" value="{{ config.vt_threshold }}" min="1" max="90">
+                    <small class="text-muted">Min. engines flagging the file as malicious before acting.</small>
+                </div>
+                <div class="col-sm-4">
+                    <label>Hit score</label>
+                    <input type="number" name="config[vt_score]" class="form-control" value="{{ config.vt_score }}" min="1" max="200">
+                    <small class="text-muted">Added on a hit (message is also flagged spam).</small>
+                </div>
+                <div class="col-sm-2">
+                    <label>Timeout (s)</label>
+                    <input type="number" name="config[vt_timeout]" class="form-control" value="{{ config.vt_timeout }}" min="1" max="120">
+                </div>
+                <div class="col-sm-2">
+                    <label>Verify</label>
+                    <div>
+                        <a href="{{ path('antispam_virustotal_test') }}" class="btn btn-default">
+                            <span class="glyphicon glyphicon-link"></span> Test
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>

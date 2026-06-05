@@ -19,6 +19,15 @@ class ScoringService
     const DEFAULT_SPAM_THRESHOLD = 10;
     const DEFAULT_QUARANTINE_THRESHOLD = 5;
 
+    const DEFAULT_CLAMAV_DSN = 'tcp://127.0.0.1:3310';
+    const DEFAULT_CLAMAV_SCORE = 15;
+    const DEFAULT_CLAMAV_MAX_SIZE = 26214400; // 25 MiB
+    const DEFAULT_CLAMAV_TIMEOUT = 30;
+
+    const DEFAULT_VT_SCORE = 15;
+    const DEFAULT_VT_THRESHOLD = 3; // min. engines flagging malicious to act
+    const DEFAULT_VT_TIMEOUT = 15;
+
     private $em;
     private $config;
 
@@ -59,6 +68,88 @@ class ScoringService
     }
 
     /**
+     * ClamAV attachment scanning is opt-in: it stays disabled until an admin
+     * enables it and points it at a reachable clamd daemon.
+     */
+    public function isClamavEnabled()
+    {
+        return (bool)$this->readBool('scoring.clamav_enabled', false);
+    }
+
+    public function getClamavDsn()
+    {
+        return $this->readString('scoring.clamav_dsn', self::DEFAULT_CLAMAV_DSN);
+    }
+
+    public function getClamavScore()
+    {
+        return $this->readInt('scoring.clamav_score', self::DEFAULT_CLAMAV_SCORE);
+    }
+
+    public function getClamavMaxSize()
+    {
+        return $this->readInt('scoring.clamav_max_size', self::DEFAULT_CLAMAV_MAX_SIZE);
+    }
+
+    public function getClamavTimeout()
+    {
+        return $this->readInt('scoring.clamav_timeout', self::DEFAULT_CLAMAV_TIMEOUT);
+    }
+
+    /**
+     * VirusTotal attachment lookup is opt-in: it stays disabled until an admin
+     * enables it and provides an API key.
+     */
+    public function isVirusTotalEnabled()
+    {
+        return (bool)$this->readBool('scoring.vt_enabled', false);
+    }
+
+    public function getVirusTotalApiKey()
+    {
+        return trim($this->readString('scoring.vt_api_key', ''));
+    }
+
+    public function getVirusTotalScore()
+    {
+        return $this->readInt('scoring.vt_score', self::DEFAULT_VT_SCORE);
+    }
+
+    /**
+     * Minimum number of VirusTotal engines flagging a file as malicious before
+     * it is treated as a hit (guards against single-engine false positives).
+     */
+    public function getVirusTotalThreshold()
+    {
+        return max(1, $this->readInt('scoring.vt_threshold', self::DEFAULT_VT_THRESHOLD));
+    }
+
+    public function getVirusTotalTimeout()
+    {
+        return $this->readInt('scoring.vt_timeout', self::DEFAULT_VT_TIMEOUT);
+    }
+
+    /**
+     * Attachment-scanning settings in the shape the Maildir agent expects in
+     * the `settings` section of its import-rules payload.
+     */
+    public function exportAgentSettings()
+    {
+        return [
+            'clamav_enabled' => $this->isClamavEnabled(),
+            'clamav_dsn' => $this->getClamavDsn(),
+            'clamav_score' => $this->getClamavScore(),
+            'clamav_max_size' => $this->getClamavMaxSize(),
+            'clamav_timeout' => $this->getClamavTimeout(),
+            'vt_enabled' => $this->isVirusTotalEnabled(),
+            'vt_api_key' => $this->getVirusTotalApiKey(),
+            'vt_score' => $this->getVirusTotalScore(),
+            'vt_threshold' => $this->getVirusTotalThreshold(),
+            'vt_timeout' => $this->getVirusTotalTimeout(),
+        ];
+    }
+
+    /**
      * Apply the final spam/quarantine/ham decision to the event based on the
      * accumulated score and persist a SpamScoreLog entry.
      */
@@ -96,6 +187,13 @@ class ScoringService
         if (!$this->config) return $default;
         $v = $this->config->get($key);
         return ($v === null || $v === '') ? $default : (int)$v;
+    }
+
+    private function readString($key, $default)
+    {
+        if (!$this->config) return $default;
+        $v = $this->config->get($key);
+        return ($v === null || $v === '') ? $default : (string)$v;
     }
 
     private function readBool($key, $default)

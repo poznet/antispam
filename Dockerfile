@@ -53,7 +53,8 @@ RUN composer dump-autoload --no-dev --optimize --classmap-authoritative \
     && chown -R www-data:www-data var
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+COPY docker/scheduler.sh /usr/local/bin/scheduler.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/scheduler.sh
 
 EXPOSE 80
 

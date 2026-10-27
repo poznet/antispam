@@ -1,0 +1,97 @@
+services:
+  # Aplikacja Symfony (Apache + PHP 8.2) - w Coolify podepnij domene pod ten serwis, port 80
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - app-logs:/var/www/html/var/log
+      - app-data:/var/www/html/var/data
+    environment:
+      - APP_ENV=prod
+      - APP_SECRET=${APP_SECRET:-ChangeMeInProductionPlease}
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - DATABASE_HOST=db
+      - DATABASE_PORT=3306
+      - DATABASE_NAME=${DATABASE_NAME:-antispam}
+      - DATABASE_USER=${DATABASE_USER:-antispam}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-antispam}
+      - DATABASE_SERVER_VERSION=${DATABASE_SERVER_VERSION:-10.6.0-MariaDB}
+      # np. smtp://user:pass@smtp.example.com:587 (puste = wysylka wylaczona)
+      - MAILER_DSN=${MAILER_DSN:-}
+      - RUN_MIGRATIONS=true
+      # Traefik Coolify siedzi w prywatnej sieci Dockera - ufamy jego X-Forwarded-*
+      - SYMFONY_TRUSTED_PROXIES=${SYMFONY_TRUSTED_PROXIES:-127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+    # Apache startuje dopiero po migracjach, wiec "healthy" = schemat gotowy
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/80"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Baza danych MariaDB
+  db:
+    image: mariadb:10.6
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${DATABASE_NAME:-antispam}
+      MARIADB_ROOT_PASSWORD: ${DATABASE_ROOT_PASSWORD:-rootpassword}
+      MARIADB_USER: ${DATABASE_USER:-antispam}
+      MARIADB_PASSWORD: ${DATABASE_PASSWORD:-antispam}
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # Scheduler - zastepuje crona: skanowanie kont (scan-all), sync wspolnego feedu
+  # i digest kwarantanny. Ten sam obraz co app, ale bez Apache i bez migracji
+  # (schemat aktualizuje tylko app). Ma wlasny cache, zeby nie czyscic cache app.
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["/usr/local/bin/scheduler.sh"]
+    volumes:
+      - app-logs:/var/www/html/var/log
+      - app-data:/var/www/html/var/data
+    environment:
+      - APP_ENV=prod
+      - APP_SECRET=${APP_SECRET:-ChangeMeInProductionPlease}
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - DATABASE_HOST=db
+      - DATABASE_PORT=3306
+      - DATABASE_NAME=${DATABASE_NAME:-antispam}
+      - DATABASE_USER=${DATABASE_USER:-antispam}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-antispam}
+      - DATABASE_SERVER_VERSION=${DATABASE_SERVER_VERSION:-10.6.0-MariaDB}
+      # np. smtp://user:pass@smtp.example.com:587 (puste = wysylka wylaczona)
+      - MAILER_DSN=${MAILER_DSN:-}
+      - RUN_MIGRATIONS=false
+      - SCAN_INTERVAL=${SCAN_INTERVAL:-5}
+      - FEED_SYNC_INTERVAL=${FEED_SYNC_INTERVAL:-15}
+      - DIGEST_HOUR=${DIGEST_HOUR:-7}
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+
+volumes:
+  db-data:
+    driver: local
+  app-logs:
+    driver: local
+  app-data:
+    driver: local

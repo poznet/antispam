@@ -35,6 +35,7 @@ The repository ships a production-ready Docker setup:
 | `MAILER_DSN` | Symfony Mailer DSN, e.g. `smtp://user:pass@smtp.example.com:587` | _(empty = mail disabled)_ |
 | `MAILER_HOST` / `MAILER_USER` / `MAILER_PASSWORD` | Legacy (Swiftmailer) settings, used to build `MAILER_DSN` (`smtp://…:25`) when it is empty | _(empty)_ |
 | `RUN_MIGRATIONS` | Run `doctrine:schema:update --force` at boot | `true` |
+| `SYMFONY_TRUSTED_PROXIES` | Comma-separated IPs / CIDRs whose `X-Forwarded-*` headers are trusted (Coolify's Traefik), so Symfony sees `https://` | private ranges |
 
 The defaults marked above are **insecure** and only exist to let the stack
 boot for local testing. Override them in production.
@@ -73,6 +74,33 @@ boot for local testing. Override them in production.
    `db_data` (MariaDB), `app_data` (`var/data` - markers of already checked
    IMAP messages) and `app_logs` (Symfony logs). They survive redeploys and
    container restarts.
+
+### Production compose with scheduler (`docker-compose.prod.yml`)
+
+`docker-compose.prod.yml` is the recommended file for Coolify. It adds a
+`scheduler` service, so no host crontab is needed. In Coolify set
+*Docker Compose Location* to `/docker-compose.prod.yml` and bind the domain to
+the `app` service on port `80`.
+
+| Service | Role |
+| --- | --- |
+| `app` | Apache + PHP, web UI. Runs `doctrine:schema:update` at boot; healthy once Apache is up |
+| `db` | MariaDB 10.6 (volume `db-data`) |
+| `scheduler` | Same image, runs `docker/scheduler.sh` instead of Apache. No migrations; starts after `app` is healthy |
+
+`app` and `scheduler` share `app-data` (`var/data`) and `app-logs` (`var/log`).
+The scheduler ticks once a minute and runs each command as `www-data`. A job
+that is still running is skipped on the next tick (flock).
+
+| Variable | Command | Default |
+| --- | --- | --- |
+| `SCAN_INTERVAL` | `antispam:agent:scan-all` every N minutes (`0` = off) | `5` |
+| `FEED_SYNC_INTERVAL` | `antispam:feed:sync` every N minutes (`0` = off) | `15` |
+| `DIGEST_HOUR` | `antispam:digest:send` daily at HH:00, container time = UTC (`off` = off) | `7` |
+
+The feed sync and the digest do nothing while they are disabled in the panel
+settings, so leaving them on is safe. The scheduler's output is in the
+`scheduler` service logs in Coolify.
 
 ### Updating
 
@@ -117,8 +145,9 @@ Before exposing the instance publicly, make sure:
       should be reachable from the internet.
 - [ ] If you use the [quarantine digest](quarantine-digest.md), `/q/` must be
       reachable by mailbox owners. It is the only anonymous route besides
-      `/login` and `/api/feed`. Schedule `antispam:digest:send` in cron and
-      set `MAILER_DSN`.
+      `/login` and `/api/feed`. Set `MAILER_DSN` and either use
+      `docker-compose.prod.yml` (the scheduler sends it) or schedule
+      `antispam:digest:send` in cron.
 
 Note that IMAP passwords stored in the `account` table are currently kept in
 plain text. Treat access to the database (and its backups) as sensitive.

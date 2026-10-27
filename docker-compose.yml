@@ -39,6 +39,9 @@ services:
       MAILER_PASSWORD: ${MAILER_PASSWORD:-}
 
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+
+      # Coolify's Traefik lives on a private Docker network - trust its X-Forwarded-*.
+      SYMFONY_TRUSTED_PROXIES: ${SYMFONY_TRUSTED_PROXIES:-127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
     expose:
       - "80"
     volumes:

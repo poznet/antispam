@@ -22,6 +22,10 @@ Symfony-based application for cleaning spam from email accounts via IMAP or SSH+
 - **CLI commands** for batch processing
 - **Web interface** for managing filters
 - **Statistics tracking** with counter for each rule
+- **Impersonation / BEC protection**: VIP display-name spoofing, lookalike and homoglyph domains, own-domain spoofing
+- **Link protection**: text/target mismatch, IP and shortened links, punycode, URI block lists, Google Safe Browsing
+- **Attachment policy**: blocked file types (also inside ZIP), double extensions, disguised executables, macros, encrypted archives
+- **Quarantine digest**: periodic e-mail to mailbox owners with signed one-click deliver / always-accept / delete links
 
 ## Installation
 

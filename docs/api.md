@@ -27,6 +27,8 @@
 | GET/POST | `/config/email/` | Legacy email account settings |
 | GET/POST | `/config/spam/` | Spam processing settings |
 | GET/POST | `/config/feed/` | Shared spam feed settings |
+| GET/POST | `/config/digest/` | Quarantine digest settings, mailbox list, "send now" |
+| GET | `/config/digest/preview/{key}` | Render the digest a mailbox would get (last 7 days) |
 | GET | `/config/uncheck-all/` | Reset all checked messages |
 | GET | `/config/reset/countes/` | Reset all rule counters |
 
@@ -42,6 +44,16 @@ examples: **[feed-api.md](feed-api.md)** (concepts: [feed.md](feed.md)).
 | POST | `/api/feed/report` | Accept a batch of `{type, hash}` spam fingerprints |
 | GET | `/api/feed/pull` | Return signals updated since `?since=<ISO8601>` (incremental) |
 | GET | `/api/feed/stats` | Signal counts by origin (local/remote/total) |
+
+## Quarantine digest links (`/q`, public)
+
+| Method | URL | Description |
+|--------|-----|-------------|
+| GET | `/q/{token}` | Confirmation page for a digest action (no side effects) |
+| POST | `/q/{token}` | Perform the action (deliver / deliver + whitelist / delete) |
+
+No login. The signed, expiring token is the credential. Invalid or expired tokens
+get `410`, a failed action `409`. See [quarantine-digest.md](quarantine-digest.md).
 
 ## Whitelists
 

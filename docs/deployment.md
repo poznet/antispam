@@ -105,12 +105,19 @@ change `expose:` to `ports: ["8080:80"]` in `docker-compose.yml`.
 
 Before exposing the instance publicly, make sure:
 
-- [ ] `APP_SECRET` is a random 32+ char value, not the default.
+- [ ] `APP_SECRET` is a random 32+ char value, not the default. It also signs
+      the quarantine digest links. While it is the default, the digest is
+      disabled and `/q/` rejects every link. Changing it invalidates links
+      already sent.
 - [ ] `ADMIN_PASSWORD` is strong and not `admin`.
 - [ ] `DATABASE_PASSWORD` / `DATABASE_ROOT_PASSWORD` are random.
 - [ ] The domain is served over HTTPS (Coolify handles this automatically).
 - [ ] Access to the `db` service is not exposed - only the `app` service
       should be reachable from the internet.
+- [ ] If you use the [quarantine digest](quarantine-digest.md), `/q/` must be
+      reachable by mailbox owners. It is the only anonymous route besides
+      `/login` and `/api/feed`. Schedule `antispam:digest:send` in cron and
+      set `MAILER_*`.
 
 Note that IMAP passwords stored in the `account` table are currently kept in
 plain text. Treat access to the database (and its backups) as sensitive.

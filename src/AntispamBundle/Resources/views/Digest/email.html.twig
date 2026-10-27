@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Kwarantanna</title>
+</head>
+<body style="margin:0;padding:0;background:#eef3fa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:#1f2a44;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef3fa;padding:24px 12px;">
+    <tr><td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:720px;background:#ffffff;border:1px solid #d5e1f2;border-radius:8px;">
+            <tr><td style="background:#0b2a52;color:#ffffff;padding:18px 24px;border-radius:8px 8px 0 0;">
+                <strong style="font-size:18px;">Pancernapanda antispam</strong><br>
+                <span style="font-size:13px;opacity:.85;">Raport kwarantanny &middot; {{ mailbox.recipient }}</span>
+            </td></tr>
+            <tr><td style="padding:20px 24px 8px;font-size:14px;line-height:1.5;">
+                <p style="margin:0 0 10px;">
+                    {% set few = total % 10 >= 2 and total % 10 <= 4 and (total % 100 < 12 or total % 100 > 14) %}
+                    {% if total == 1 %}Jedna wiadomość została zatrzymana{% elseif few %}<strong>{{ total }}</strong> wiadomości zostały zatrzymane{% else %}<strong>{{ total }}</strong> wiadomości zostało zatrzymanych{% endif %}
+                    w kwarantannie{% if since %} od {{ since|date('d.m.Y H:i') }}{% endif %}.
+                    Nie trafiły do skrzynki odbiorczej, bo wyglądają podejrzanie.
+                </p>
+                <p style="margin:0 0 10px;color:#5b6b85;">
+                    Jeśli czekasz na którąś z nich, kliknij <strong>Dostarcz</strong>.
+                    <strong>Zawsze akceptuj</strong> dostarczy wiadomość i doda nadawcę do białej listy.
+                    Wiadomości, których nie ruszysz, zostaną w folderze QUARANTINE.
+                </p>
+            </td></tr>
+            <tr><td style="padding:0 12px 12px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;border-collapse:collapse;">
+                    {% for item in items %}
+                    <tr><td style="padding:12px;border-top:1px solid #e3eaf5;">
+                        <div style="color:#5b6b85;font-size:12px;">
+                            {% if item.date %}{{ item.date|date('d.m.Y H:i') }} &middot; {% endif %}
+                            {% if item.from_name %}{{ item.from_name }} &lt;{{ item.from }}&gt;{% else %}{{ item.from }}{% endif %}
+                            {% if item.score is not null %} &middot; wynik {{ item.score }}{% endif %}
+                        </div>
+                        <div style="font-weight:600;margin:3px 0;">{{ item.subject|default('(brak tematu)')|slice(0, 120) }}</div>
+                        {% if item.reason_labels %}
+                        <div style="color:#b45309;font-size:12px;margin-bottom:8px;">{{ item.reason_labels|join(' · ') }}</div>
+                        {% endif %}
+                        {% if not item.allow_whitelist %}
+                        <div style="color:#9b1c1c;font-size:12px;margin-bottom:8px;">Wysokie ryzyko oszustwa &mdash; dostarcz tylko, jeśli na pewno znasz nadawcę.</div>
+                        {% endif %}
+                        <a href="{{ item.links.release }}" style="display:inline-block;padding:6px 12px;margin:2px 4px 2px 0;background:#1e7e34;color:#ffffff;text-decoration:none;border-radius:4px;">Dostarcz</a>
+                        {% if item.links.whitelist is defined %}
+                        <a href="{{ item.links.whitelist }}" style="display:inline-block;padding:6px 12px;margin:2px 4px 2px 0;background:#1e4a8a;color:#ffffff;text-decoration:none;border-radius:4px;">Zawsze akceptuj</a>
+                        {% endif %}
+                        <a href="{{ item.links.delete }}" style="display:inline-block;padding:6px 12px;margin:2px 4px 2px 0;background:#f1f4f9;color:#9b1c1c;text-decoration:none;border-radius:4px;border:1px solid #e3eaf5;">Usuń</a>
+                    </td></tr>
+                    {% endfor %}
+                </table>
+                {% if total > items|length %}
+                <p style="font-size:13px;color:#5b6b85;padding:0 12px;">… i {{ total - items|length }} kolejnych. Pozostałe znajdziesz w folderze QUARANTINE.</p>
+                {% endif %}
+            </td></tr>
+            <tr><td style="padding:14px 24px;border-top:1px solid #e3eaf5;font-size:12px;color:#7a879c;">
+                Linki są ważne {{ ttl_days }} dni. Nigdy nie prosimy o hasło &mdash; jeśli strona po kliknięciu go wymaga, nie podawaj go.
+            </td></tr>
+        </table>
+    </td></tr>
+</table>
+</body>
+</html>

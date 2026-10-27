@@ -108,7 +108,7 @@ class AgentSyncCommand extends Command
                 'cache_ttl' => $prov->getCacheTtl(),
             ];
         }
-        $rules['settings'] = $this->scoring->exportAgentSettings();
+        $rules['settings'] = $this->scoring->exportAgentSettings($email);
         return $rules;
     }
 }

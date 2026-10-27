@@ -1,0 +1,96 @@
+{% extends 'AntispamBundle::main.html.twig' %}
+{% block title %}Quarantine Digest{% endblock %}
+{% block page_title %}Quarantine Digest{% endblock %}
+
+{% block body %}
+    <p class="text-muted">
+        Sends each mailbox owner an e-mail listing newly quarantined messages, with one-click
+        <strong>Deliver</strong>, <strong>Deliver &amp; always allow</strong> and <strong>Delete</strong> links.
+        Links are signed and expire; opening one only shows a confirmation page, so mail scanners that pre-fetch links can't release anything.
+    </p>
+
+    {% if errors %}
+    <div class="alert alert-warning">
+        {% for e in errors %}<div>{{ e }}</div>{% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="post">
+    <input type="hidden" name="_token" value="{{ csrf_token('digest_config') }}">
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-envelope"></span> Settings</div>
+        <div class="panel-body">
+            <div class="checkbox"><label>
+                <input type="checkbox" name="config[enabled]" {% if config.enabled %}checked{% endif %}>
+                <strong>Enable quarantine digest</strong>
+            </label></div>
+            <div class="row" style="margin-top:10px;">
+                <div class="col-sm-6">
+                    <label>Public base URL</label>
+                    <input type="url" name="config[base_url]" class="form-control" value="{{ config.base_url }}" placeholder="https://antispam.example.com">
+                    <small class="text-muted">How recipients reach this app. Links point to <code>&lt;base URL&gt;/q/…</code>.</small>
+                </div>
+                <div class="col-sm-3">
+                    <label>Sender address</label>
+                    <input type="email" name="config[from_email]" class="form-control" value="{{ config.from_email }}" placeholder="antispam@example.com">
+                </div>
+                <div class="col-sm-3">
+                    <label>Sender name</label>
+                    <input type="text" name="config[from_name]" class="form-control" value="{{ config.from_name }}" placeholder="Pancernapanda antispam">
+                </div>
+            </div>
+            <div class="row" style="margin-top:10px;">
+                <div class="col-sm-6">
+                    <label>Recipient for the legacy IMAP mailbox</label>
+                    <input type="email" name="config[imap_recipient]" class="form-control" value="{{ config.imap_recipient }}" placeholder="defaults to the configured IMAP e-mail">
+                    <small class="text-muted">SSH accounts always receive the digest at the account e-mail.</small>
+                </div>
+                <div class="col-sm-3">
+                    <label>Link validity (days)</label>
+                    <input type="number" name="config[token_ttl_days]" class="form-control" value="{{ config.token_ttl_days }}" min="1" max="30">
+                </div>
+                <div class="col-sm-3">
+                    <label>Max messages per digest</label>
+                    <input type="number" name="config[max_items]" class="form-control" value="{{ config.max_items }}" min="1" max="500">
+                </div>
+            </div>
+            <p class="text-muted" style="margin-top:15px;">
+                Mail is sent through the application mailer (<code>MAILER_*</code> settings). Schedule the digest with cron, e.g. daily at 7:00:<br>
+                <code>0 7 * * * php bin/console antispam:digest:send</code>
+            </p>
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-floppy-disk"></span> Save</button>
+    <button type="submit" name="send_now" value="1" class="btn btn-default" onclick="return confirm('Save settings and send digests now to every mailbox with new quarantined mail?')">
+        <span class="glyphicon glyphicon-send"></span> Save &amp; send now
+    </button>
+    </form>
+
+    <div class="panel panel-default" style="margin-top:20px;">
+        <div class="panel-heading"><span class="glyphicon glyphicon-inbox"></span> Mailboxes</div>
+        <div class="panel-body">
+        {% if mailboxes %}
+            <table class="table table-striped">
+                <thead><tr><th>Mailbox</th><th>Digest recipient</th><th>Last digest</th><th></th></tr></thead>
+                <tbody>
+                {% for m in mailboxes %}
+                    <tr>
+                        <td>{{ m.label }} <small class="text-muted">({{ m.key }})</small></td>
+                        <td>{{ m.recipient ?: '—' }}</td>
+                        <td>{{ m.last_sent ? m.last_sent|date('Y-m-d H:i') : 'never' }}</td>
+                        <td class="text-right">
+                            <a href="{{ path('antispam_digest_preview', {key: m.key}) }}" class="btn btn-xs btn-default" target="_blank">
+                                <span class="glyphicon glyphicon-eye-open"></span> Preview (7 days)
+                            </a>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p class="text-muted">No mailbox has a quarantine yet: configure the legacy IMAP account or deploy the agent to an SSH account.</p>
+        {% endif %}
+        </div>
+    </div>
+{% endblock %}

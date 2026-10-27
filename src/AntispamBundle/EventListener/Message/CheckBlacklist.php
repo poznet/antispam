@@ -8,6 +8,7 @@ use AntispamBundle\Services\PatternMatcher;
 use AntispamBundle\Services\ScoringService;
 use Ddeboer\Imap\Exception\Exception;
 use Doctrine\ORM\EntityManagerInterface;
+use AntispamBundle\Entity\Blacklist;
 
 /**
  * Domain blacklist check. Supports exact / wildcard / regex patterns and, when
@@ -44,7 +45,7 @@ class CheckBlacklist
 
         $cacheKey = (string)$event->getEmail();
         if (!isset($this->rulesCache[$cacheKey])) {
-            $this->rulesCache[$cacheKey] = $this->em->getRepository('AntispamBundle:Blacklist')
+            $this->rulesCache[$cacheKey] = $this->em->getRepository(Blacklist::class)
                 ->findBy(['email' => $event->getEmail()]);
         }
         $rules = $this->rulesCache[$cacheKey];

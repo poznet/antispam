@@ -7,6 +7,7 @@ use AntispamBundle\Entity\EmailWhitelist;
 use Doctrine\ORM\EntityManagerInterface;
 use Poznet\ConfigBundle\Service\ConfigService;
 use Psr\Container\ContainerInterface;
+use AntispamBundle\Entity\SpamScoreLog;
 
 /**
  * One API over both quarantine back-ends:
@@ -49,7 +50,7 @@ class QuarantineService
             $recipient = trim((string)$this->config->get('digest.imap_recipient')) ?: $email;
             $out[] = ['key' => self::IMAP_KEY, 'label' => 'IMAP: ' . ($email ?: $this->config->get('login')), 'account_email' => $email, 'recipient' => $recipient];
         }
-        foreach ($this->em->getRepository('AntispamBundle:Account')->findBy(['connectionType' => Account::CONNECTION_SSH]) as $account) {
+        foreach ($this->em->getRepository(Account::class)->findBy(['connectionType' => Account::CONNECTION_SSH]) as $account) {
             if (!$account->getAgentDeployed()) {
                 continue;
             }
@@ -182,7 +183,7 @@ class QuarantineService
      */
     public function whitelistSender($accountEmail, $sender)
     {
-        $repo = $this->em->getRepository('AntispamBundle:EmailWhitelist');
+        $repo = $this->em->getRepository(EmailWhitelist::class);
         if ($repo->findOneBy(['email' => $accountEmail, 'whitelistemail' => $sender])) {
             return false;
         }
@@ -231,7 +232,7 @@ class QuarantineService
      */
     private function attachImapScores(array $items)
     {
-        $repo = $this->em->getRepository('AntispamBundle:SpamScoreLog');
+        $repo = $this->em->getRepository(SpamScoreLog::class);
         foreach ($items as &$item) {
             $log = $repo->findOneBy(
                 ['sender' => $item['from'], 'subject' => mb_substr($item['subject'], 0, 500, 'UTF-8'), 'decision' => 'quarantine'],
@@ -262,7 +263,7 @@ class QuarantineService
         if (!preg_match('/^ssh-(\d+)$/', (string)$key, $m)) {
             throw new \InvalidArgumentException('Unknown mailbox: ' . $key);
         }
-        $account = $this->em->getRepository('AntispamBundle:Account')->find((int)$m[1]);
+        $account = $this->em->getRepository(Account::class)->find((int)$m[1]);
         if (!$account || !$account->isSsh()) {
             throw new \InvalidArgumentException('Unknown mailbox: ' . $key);
         }

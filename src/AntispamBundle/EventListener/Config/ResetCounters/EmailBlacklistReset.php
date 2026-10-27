@@ -25,7 +25,7 @@ class EmailBlacklistReset
      */
     public function reset(ConfigEvent $event){
         if($event->getJob()=='resetcounters'){
-            $this->em->createQuery('UPDATE AntispamBundle:EmailBlacklist b SET b.counter = 0')->execute();
+            $this->em->createQuery('UPDATE AntispamBundle\Entity\EmailBlacklist b SET b.counter = 0')->execute();
         }
     }
 

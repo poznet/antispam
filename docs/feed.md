@@ -46,7 +46,7 @@ Signals live in `antispam_shared_spam_signal`:
 Create the table after deploying:
 
 ```bash
-php bin/console doctrine:schema:update --force
+php app/console doctrine:schema:update --force
 ```
 
 ## Configuration
@@ -79,9 +79,9 @@ fingerprints (`origin = local`).
 seen yet and pulls signals updated since the last run:
 
 ```bash
-php bin/console antispam:feed:sync             # push then pull
-php bin/console antispam:feed:sync --push-only
-php bin/console antispam:feed:sync --pull-only
+php app/console antispam:feed:sync             # push then pull
+php app/console antispam:feed:sync --push-only
+php app/console antispam:feed:sync --pull-only
 ```
 
 Run it from cron (e.g. every 15 minutes). Push/pull checkpoints are stored in

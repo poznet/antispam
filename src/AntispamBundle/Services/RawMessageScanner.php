@@ -4,6 +4,10 @@ namespace AntispamBundle\Services;
 
 use AntispamBundle\Entity\SpamScoreLog;
 use Doctrine\ORM\EntityManagerInterface;
+use AntispamBundle\Entity\Blacklist;
+use AntispamBundle\Entity\EmailBlacklist;
+use AntispamBundle\Entity\EmailWhitelist;
+use AntispamBundle\Entity\Whitelist;
 
 /**
  * Scores a raw RFC 822 message (as submitted by the Thunderbird plugin) with
@@ -64,21 +68,21 @@ class RawMessageScanner
         $scoringOn = $this->scoring->isScoringEnabled();
 
         // Whitelists short-circuit, exactly like CheckWhitelist / CheckEmailWhitelist.
-        if ($host && ($rule = $this->matchRule('AntispamBundle:Whitelist', $accountEmail, $host, 'getHost'))) {
+        if ($host && ($rule = $this->matchRule(Whitelist::class, $accountEmail, $host, 'getHost'))) {
             $whitelisted = true;
             $reasons[] = ['rule' => 'whitelist:' . $rule->getHost(), 'score' => 0];
-        } elseif ($sender && ($rule = $this->matchRule('AntispamBundle:EmailWhitelist', $accountEmail, $sender, 'getWhitelistemail'))) {
+        } elseif ($sender && ($rule = $this->matchRule(EmailWhitelist::class, $accountEmail, $sender, 'getWhitelistemail'))) {
             $whitelisted = true;
             $reasons[] = ['rule' => 'email_whitelist:' . $rule->getWhitelistemail(), 'score' => 0];
         }
 
         if (!$whitelisted) {
-            if ($host && ($rule = $this->matchRule('AntispamBundle:Blacklist', $accountEmail, $host, 'getHost'))) {
+            if ($host && ($rule = $this->matchRule(Blacklist::class, $accountEmail, $host, 'getHost'))) {
                 $score += $rule->getScore();
                 $reasons[] = ['rule' => 'blacklist:' . $rule->getHost() . ' (' . $rule->getPatternType() . ')', 'score' => $rule->getScore()];
                 $forcedSpam = $forcedSpam || !$scoringOn;
             }
-            if ($sender && ($rule = $this->matchRule('AntispamBundle:EmailBlacklist', $accountEmail, $sender, 'getBlacklistemail'))) {
+            if ($sender && ($rule = $this->matchRule(EmailBlacklist::class, $accountEmail, $sender, 'getBlacklistemail'))) {
                 $score += $rule->getScore();
                 $reasons[] = ['rule' => 'email_blacklist:' . $rule->getBlacklistemail() . ' (' . $rule->getPatternType() . ')', 'score' => $rule->getScore()];
                 $forcedSpam = $forcedSpam || !$scoringOn;

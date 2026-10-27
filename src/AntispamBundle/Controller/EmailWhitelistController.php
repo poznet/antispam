@@ -15,12 +15,12 @@ class EmailWhitelistController extends Controller
 {
     /**
      * @Route("/index", name="antispam_emailwhitelist_index")
-     * @Template()
+     * @Template("@Antispam/EmailWhitelist/index.html.twig")
      */
     public function indexAction()
     {
         $em = $this->getDoctrine()->getManager();
-        $list = $em->getRepository('AntispamBundle:EmailWhitelist')->findAll();
+        $list = $em->getRepository(EmailWhitelist::class)->findAll();
         return ['list' => $list];
     }
 
@@ -38,7 +38,7 @@ class EmailWhitelistController extends Controller
         if (!$email) {
             return $this->redirectToRoute('antispam_emailwhitelist_index');
         }
-        $existing = $em->getRepository('AntispamBundle:EmailWhitelist')->findOneBy(['whitelistemail' => $email]);
+        $existing = $em->getRepository(EmailWhitelist::class)->findOneBy(['whitelistemail' => $email]);
         if (!$existing) {
             $entry = new EmailWhitelist();
             $entry->setEmail($this->get('configuration')->get('email'));
@@ -56,7 +56,7 @@ class EmailWhitelistController extends Controller
     public function delAction($id)
     {
         $em = $this->getDoctrine()->getManager();
-        $entry = $em->getRepository('AntispamBundle:EmailWhitelist')->find($id);
+        $entry = $em->getRepository(EmailWhitelist::class)->find($id);
         if ($entry) {
             $em->remove($entry);
             $em->flush();

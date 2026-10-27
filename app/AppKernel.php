@@ -28,6 +28,18 @@ class AppKernel extends Kernel
         return $bundles;
     }
 
+    // Keep the Symfony 3 layout (app/cache, app/logs) used by the Dockerfile,
+    // docker-compose volumes and docs instead of the Symfony 4 default var/.
+    public function getCacheDir()
+    {
+        return dirname(__DIR__).'/app/cache/'.$this->getEnvironment();
+    }
+
+    public function getLogDir()
+    {
+        return dirname(__DIR__).'/app/logs';
+    }
+
     public function registerContainerConfiguration(LoaderInterface $loader)
     {
         $loader->load($this->getRootDir().'/config/config_'.$this->getEnvironment().'.yml');

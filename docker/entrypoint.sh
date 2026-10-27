@@ -9,6 +9,7 @@ APP_DIR=/var/www/html
 : "${DATABASE_NAME:=antispam}"
 : "${DATABASE_USER:=antispam}"
 : "${DATABASE_PASSWORD:=antispam}"
+: "${DATABASE_SERVER_VERSION:=mariadb-10.6.0}"
 : "${MAILER_TRANSPORT:=smtp}"
 : "${MAILER_HOST:=127.0.0.1}"
 : "${MAILER_USER:=}"
@@ -47,6 +48,7 @@ parameters:
     database_name: '${DATABASE_NAME}'
     database_user: '${DATABASE_USER}'
     database_password: '${DATABASE_PASSWORD}'
+    database_server_version: '${DATABASE_SERVER_VERSION}'
 
     mailer_transport: '${MAILER_TRANSPORT}'
     mailer_host: '${MAILER_HOST}'
@@ -76,14 +78,14 @@ mkdir -p "${APP_DIR}/app/cache" "${APP_DIR}/app/logs"
 chown -R www-data:www-data "${APP_DIR}/app/cache" "${APP_DIR}/app/logs"
 
 # Warmup cache and install bundle assets
-php "${APP_DIR}/bin/console" cache:clear  --env="${SYMFONY_ENV}" --no-debug || true
-php "${APP_DIR}/bin/console" cache:warmup --env="${SYMFONY_ENV}" --no-debug || true
-php "${APP_DIR}/bin/console" assets:install "${APP_DIR}/web" --symlink --relative --env="${SYMFONY_ENV}" || true
+php "${APP_DIR}/app/console" cache:clear  --env="${SYMFONY_ENV}" --no-debug || true
+php "${APP_DIR}/app/console" cache:warmup --env="${SYMFONY_ENV}" --no-debug || true
+php "${APP_DIR}/app/console" assets:install "${APP_DIR}/web" --symlink --relative --env="${SYMFONY_ENV}" || true
 
 # Create schema on first boot / keep it in sync
 if [ "${RUN_MIGRATIONS}" = "true" ]; then
-    php "${APP_DIR}/bin/console" doctrine:database:create --if-not-exists --env="${SYMFONY_ENV}" || true
-    php "${APP_DIR}/bin/console" doctrine:schema:update --force --env="${SYMFONY_ENV}" || true
+    php "${APP_DIR}/app/console" doctrine:database:create --if-not-exists --env="${SYMFONY_ENV}" || true
+    php "${APP_DIR}/app/console" doctrine:schema:update --force --env="${SYMFONY_ENV}" || true
 fi
 
 chown -R www-data:www-data "${APP_DIR}/app/cache" "${APP_DIR}/app/logs"

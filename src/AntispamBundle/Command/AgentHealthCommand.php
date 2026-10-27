@@ -8,6 +8,7 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
+use AntispamBundle\Entity\Account;
 
 class AgentHealthCommand extends Command
 {
@@ -31,7 +32,7 @@ class AgentHealthCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $account = $this->em->getRepository('AntispamBundle:Account')->find($input->getArgument('accountId'));
+        $account = $this->em->getRepository(Account::class)->find($input->getArgument('accountId'));
         if (!$account || !$account->isSsh()) {
             $output->writeln('<error>Account not found or not SSH type</error>');
             return 1;

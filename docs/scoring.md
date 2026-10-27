@@ -166,7 +166,7 @@ php antispam-agent.php health --maildir=~/Maildir --db=/path/to/rules.sqlite
 ## Schema changes
 
 The following columns / tables are new and must be created via
-`bin/console doctrine:schema:update --force` (or equivalent migration):
+`app/console doctrine:schema:update --force` (or equivalent migration):
 
 ```sql
 -- existing rule tables gain:

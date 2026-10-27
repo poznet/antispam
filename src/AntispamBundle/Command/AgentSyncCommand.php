@@ -9,6 +9,12 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
+use AntispamBundle\Entity\Account;
+use AntispamBundle\Entity\Blacklist;
+use AntispamBundle\Entity\DnsblProvider;
+use AntispamBundle\Entity\EmailBlacklist;
+use AntispamBundle\Entity\EmailWhitelist;
+use AntispamBundle\Entity\Whitelist;
 
 class AgentSyncCommand extends Command
 {
@@ -34,7 +40,7 @@ class AgentSyncCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $account = $this->em->getRepository('AntispamBundle:Account')->find($input->getArgument('accountId'));
+        $account = $this->em->getRepository(Account::class)->find($input->getArgument('accountId'));
         if (!$account || !$account->isSsh()) {
             $output->writeln('<error>Account not found or not SSH type</error>');
             return 1;
@@ -69,21 +75,21 @@ class AgentSyncCommand extends Command
             'dnsbl' => [],
         ];
 
-        foreach ($this->em->getRepository('AntispamBundle:Whitelist')->findBy(['email' => $email]) as $item) {
+        foreach ($this->em->getRepository(Whitelist::class)->findBy(['email' => $email]) as $item) {
             $rules['whitelist'][] = [
                 'email' => $item->getEmail(),
                 'host' => $item->getHost(),
                 'pattern_type' => $item->getPatternType(),
             ];
         }
-        foreach ($this->em->getRepository('AntispamBundle:EmailWhitelist')->findBy(['email' => $email]) as $item) {
+        foreach ($this->em->getRepository(EmailWhitelist::class)->findBy(['email' => $email]) as $item) {
             $rules['email_whitelist'][] = [
                 'email' => $item->getEmail(),
                 'whitelistemail' => $item->getWhitelistemail(),
                 'pattern_type' => $item->getPatternType(),
             ];
         }
-        foreach ($this->em->getRepository('AntispamBundle:Blacklist')->findBy(['email' => $email]) as $item) {
+        foreach ($this->em->getRepository(Blacklist::class)->findBy(['email' => $email]) as $item) {
             $rules['blacklist'][] = [
                 'email' => $item->getEmail(),
                 'host' => $item->getHost(),
@@ -91,7 +97,7 @@ class AgentSyncCommand extends Command
                 'score' => $item->getScore(),
             ];
         }
-        foreach ($this->em->getRepository('AntispamBundle:EmailBlacklist')->findBy(['email' => $email]) as $item) {
+        foreach ($this->em->getRepository(EmailBlacklist::class)->findBy(['email' => $email]) as $item) {
             $rules['email_blacklist'][] = [
                 'email' => $item->getEmail(),
                 'blacklistemail' => $item->getBlacklistemail(),
@@ -99,7 +105,7 @@ class AgentSyncCommand extends Command
                 'score' => $item->getScore(),
             ];
         }
-        foreach ($this->em->getRepository('AntispamBundle:DnsblProvider')->findAll() as $prov) {
+        foreach ($this->em->getRepository(DnsblProvider::class)->findAll() as $prov) {
             $rules['dnsbl'][] = [
                 'name' => $prov->getName(),
                 'zone' => $prov->getZone(),

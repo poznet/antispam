@@ -11,6 +11,11 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
+use AntispamBundle\Entity\Blacklist;
+use AntispamBundle\Entity\DnsblProvider;
+use AntispamBundle\Entity\EmailBlacklist;
+use AntispamBundle\Entity\EmailWhitelist;
+use AntispamBundle\Entity\Whitelist;
 
 /**
  * @Route("/account")
@@ -19,18 +24,18 @@ class AccountController extends Controller
 {
     /**
      * @Route("/index", name="antispam_account_index")
-     * @Template
+     * @Template("@Antispam/Account/index.html.twig")
      */
     public function indexAction()
     {
         $em = $this->getDoctrine()->getManager();
-        $accounts = $em->getRepository('AntispamBundle:Account')->findAll();
+        $accounts = $em->getRepository(Account::class)->findAll();
         return ['accounts' => $accounts];
     }
 
     /**
      * @Route("/add", name="antispam_account_add")
-     * @Template
+     * @Template("@Antispam/Account/add.html.twig")
      */
     public function addAction(Request $request)
     {
@@ -46,12 +51,12 @@ class AccountController extends Controller
 
     /**
      * @Route("/edit/{id}", name="antispam_account_edit")
-     * @Template
+     * @Template("@Antispam/Account/edit.html.twig")
      */
     public function editAction($id, Request $request)
     {
         $em = $this->getDoctrine()->getManager();
-        $account = $em->getRepository('AntispamBundle:Account')->find($id);
+        $account = $em->getRepository(Account::class)->find($id);
         if (!$account) {
             return $this->redirectToRoute('antispam_account_index');
         }
@@ -71,7 +76,7 @@ class AccountController extends Controller
     public function delAction($id)
     {
         $em = $this->getDoctrine()->getManager();
-        $account = $em->getRepository('AntispamBundle:Account')->find($id);
+        $account = $em->getRepository(Account::class)->find($id);
         if ($account) {
             $em->remove($account);
             $em->flush();
@@ -81,12 +86,12 @@ class AccountController extends Controller
 
     /**
      * @Route("/test/{id}", name="antispam_account_test")
-     * @Template
+     * @Template("@Antispam/Account/test.html.twig")
      */
     public function testAction($id)
     {
         $em = $this->getDoctrine()->getManager();
-        $account = $em->getRepository('AntispamBundle:Account')->find($id);
+        $account = $em->getRepository(Account::class)->find($id);
         $result = ['success' => false, 'messages' => []];
 
         if (!$account) {
@@ -120,12 +125,12 @@ class AccountController extends Controller
 
     /**
      * @Route("/deploy/{id}", name="antispam_account_deploy")
-     * @Template
+     * @Template("@Antispam/Account/deploy.html.twig")
      */
     public function deployAction($id)
     {
         $em = $this->getDoctrine()->getManager();
-        $account = $em->getRepository('AntispamBundle:Account')->find($id);
+        $account = $em->getRepository(Account::class)->find($id);
         $result = ['success' => false, 'messages' => []];
 
         if (!$account || !$account->isSsh()) {
@@ -150,12 +155,12 @@ class AccountController extends Controller
 
     /**
      * @Route("/sync/{id}", name="antispam_account_sync")
-     * @Template
+     * @Template("@Antispam/Account/sync.html.twig")
      */
     public function syncAction($id)
     {
         $em = $this->getDoctrine()->getManager();
-        $account = $em->getRepository('AntispamBundle:Account')->find($id);
+        $account = $em->getRepository(Account::class)->find($id);
         $result = ['success' => false, 'messages' => []];
 
         if (!$account || !$account->isSsh()) {
@@ -179,12 +184,12 @@ class AccountController extends Controller
 
     /**
      * @Route("/scan/{id}", name="antispam_account_scan")
-     * @Template
+     * @Template("@Antispam/Account/scan.html.twig")
      */
     public function scanAction($id)
     {
         $em = $this->getDoctrine()->getManager();
-        $account = $em->getRepository('AntispamBundle:Account')->find($id);
+        $account = $em->getRepository(Account::class)->find($id);
         $result = ['success' => false, 'messages' => []];
 
         if (!$account) {
@@ -268,21 +273,21 @@ class AccountController extends Controller
             'dnsbl' => [],
         ];
 
-        foreach ($em->getRepository('AntispamBundle:Whitelist')->findBy(['email' => $email]) as $item) {
+        foreach ($em->getRepository(Whitelist::class)->findBy(['email' => $email]) as $item) {
             $rules['whitelist'][] = [
                 'email' => $item->getEmail(),
                 'host' => $item->getHost(),
                 'pattern_type' => $item->getPatternType(),
             ];
         }
-        foreach ($em->getRepository('AntispamBundle:EmailWhitelist')->findBy(['email' => $email]) as $item) {
+        foreach ($em->getRepository(EmailWhitelist::class)->findBy(['email' => $email]) as $item) {
             $rules['email_whitelist'][] = [
                 'email' => $item->getEmail(),
                 'whitelistemail' => $item->getWhitelistemail(),
                 'pattern_type' => $item->getPatternType(),
             ];
         }
-        foreach ($em->getRepository('AntispamBundle:Blacklist')->findBy(['email' => $email]) as $item) {
+        foreach ($em->getRepository(Blacklist::class)->findBy(['email' => $email]) as $item) {
             $rules['blacklist'][] = [
                 'email' => $item->getEmail(),
                 'host' => $item->getHost(),
@@ -290,7 +295,7 @@ class AccountController extends Controller
                 'score' => $item->getScore(),
             ];
         }
-        foreach ($em->getRepository('AntispamBundle:EmailBlacklist')->findBy(['email' => $email]) as $item) {
+        foreach ($em->getRepository(EmailBlacklist::class)->findBy(['email' => $email]) as $item) {
             $rules['email_blacklist'][] = [
                 'email' => $item->getEmail(),
                 'blacklistemail' => $item->getBlacklistemail(),
@@ -298,7 +303,7 @@ class AccountController extends Controller
                 'score' => $item->getScore(),
             ];
         }
-        foreach ($em->getRepository('AntispamBundle:DnsblProvider')->findAll() as $prov) {
+        foreach ($em->getRepository(DnsblProvider::class)->findAll() as $prov) {
             $rules['dnsbl'][] = [
                 'name' => $prov->getName(),
                 'zone' => $prov->getZone(),
@@ -315,12 +320,12 @@ class AccountController extends Controller
 
     /**
      * @Route("/health/{id}", name="antispam_account_health")
-     * @Template
+     * @Template("@Antispam/Account/health.html.twig")
      */
     public function healthAction($id)
     {
         $em = $this->getDoctrine()->getManager();
-        $account = $em->getRepository('AntispamBundle:Account')->find($id);
+        $account = $em->getRepository(Account::class)->find($id);
         $result = ['success' => false, 'messages' => []];
         if (!$account || !$account->isSsh()) {
             $result['messages'][] = 'Nie znaleziono konta lub konto nie jest typu SSH';

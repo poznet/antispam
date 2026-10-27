@@ -20,21 +20,23 @@
         ],
     "require": {
         "php": ">=7.1.3",
-        "ext-iconv": "*",
         "ext-curl": "*",
-        "symfony/symfony": "4.4.*",
-        "doctrine/orm": "^2.6",
-        "doctrine/doctrine-bundle": "^1.12|^2.0",
-        "symfony/swiftmailer-bundle": "^3.4",
-        "symfony/monolog-bundle": "^3.5",
-        "sensio/framework-extra-bundle": "^5.5",
-        "incenteev/composer-parameter-handler": "^2.1",
+        "ext-iconv": "*",
         "ddeboer/imap": "^1.0",
+        "doctrine/cache": "^1.11|^2.0",
+        "doctrine/doctrine-bundle": "^1.12|^2.0",
+        "doctrine/orm": "^2.6",
+        "doctrine/persistence": "^2.5",
+        "incenteev/composer-parameter-handler": "^2.1",
         "phpseclib/phpseclib": "^3.0",
         "poznet/configbundle": "dev-master",
+        "sensio/framework-extra-bundle": "^5.5",
         "symfony/asset": "4.4.*",
         "symfony/dotenv": "4.4.*",
         "symfony/form": "4.4.*",
+        "symfony/monolog-bundle": "^3.5",
+        "symfony/swiftmailer-bundle": "^3.4",
+        "symfony/symfony": "4.4.*",
         "symfony/validator": "4.4.*",
         "symfony/yaml": "4.4.*"
     },
@@ -63,6 +65,9 @@
         "sort-packages": true,
         "preferred-install": {
             "*": "dist"
+        },
+        "platform": {
+            "php": "7.4.33"
         }
     },
     "extra": {

@@ -25,7 +25,7 @@ class WhitelistReset
      */
     public function reset(ConfigEvent $event){
         if($event->getJob()=='resetcounters'){
-            $this->em->createQuery('UPDATE AntispamBundle:Whitelist w SET w.counter = 0')->execute();
+            $this->em->createQuery('UPDATE AntispamBundle\Entity\Whitelist w SET w.counter = 0')->execute();
         }
     }
 

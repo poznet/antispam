@@ -13,6 +13,7 @@ use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
 use Symfony\Bundle\FrameworkBundle\Controller\Controller;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use AntispamBundle\Entity\SharedSpamSignal;
 
 /**
  * @Route("/config")
@@ -21,7 +22,7 @@ class ConfigurationController extends Controller
 {
     /**
      * @Route("/email/", name="antispam_account_config")
-     * @Template
+     * @Template("@Antispam/Configuration/emailConfig.html.twig")
      */
     public function emailConfigAction(Request $request)
     {
@@ -47,7 +48,7 @@ class ConfigurationController extends Controller
     }
 
     /**
-     * @Template
+     * @Template("@Antispam/Configuration/spamConfig.html.twig")
      * @Route("/spam/", name="antispam_spam_config")
      */
     public function spamConfigAction(Request $request)
@@ -151,7 +152,7 @@ class ConfigurationController extends Controller
      * End-user quarantine digest: e-mail with one-click release / whitelist /
      * delete links, sent by `antispam:digest:send` from cron.
      *
-     * @Template
+     * @Template("@Antispam/Configuration/digestConfig.html.twig")
      * @Route("/digest/", name="antispam_digest_config")
      */
     public function digestConfigAction(Request $request)
@@ -241,7 +242,7 @@ class ConfigurationController extends Controller
      * participates, the local API key (so other instances can push to us), and
      * the remote hub URL + key we sync against.
      *
-     * @Template
+     * @Template("@Antispam/Configuration/feedConfig.html.twig")
      * @Route("/feed/", name="antispam_feed_config")
      */
     public function feedConfigAction(Request $request)
@@ -270,7 +271,7 @@ class ConfigurationController extends Controller
         ];
 
         $stats = $this->getDoctrine()->getManager()
-            ->getRepository('AntispamBundle:SharedSpamSignal')->countByOrigin();
+            ->getRepository(SharedSpamSignal::class)->countByOrigin();
 
         return ['config' => $config, 'stats' => $stats];
     }
@@ -279,7 +280,7 @@ class ConfigurationController extends Controller
      * Thunderbird plugin settings: download link, anonymous reporting,
      * on-arrival checks for logged-in users and rule learning.
      *
-     * @Template
+     * @Template("@Antispam/Configuration/pluginConfig.html.twig")
      * @Route("/plugin/", name="antispam_plugin_config")
      */
     public function pluginConfigAction(Request $request)

@@ -5,22 +5,29 @@ namespace AntispamBundle\Controller;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
 use Symfony\Bundle\FrameworkBundle\Controller\Controller;
+use AntispamBundle\Entity\Account;
+use AntispamBundle\Entity\Blacklist;
+use AntispamBundle\Entity\DnsblProvider;
+use AntispamBundle\Entity\EmailBlacklist;
+use AntispamBundle\Entity\EmailWhitelist;
+use AntispamBundle\Entity\SpamScoreLog;
+use AntispamBundle\Entity\Whitelist;
 
 class DefaultController extends Controller
 {
     /**
      * @Route("/", name="antispam_index")
-     * @Template
+     * @Template("@Antispam/Default/index.html.twig")
      */
     public function indexAction()
     {
         $em = $this->getDoctrine()->getManager();
 
-        $accounts = $em->getRepository('AntispamBundle:Account')->findAll();
-        $whitelistCount = count($em->getRepository('AntispamBundle:Whitelist')->findAll())
-            + count($em->getRepository('AntispamBundle:EmailWhitelist')->findAll());
-        $blacklistCount = count($em->getRepository('AntispamBundle:Blacklist')->findAll())
-            + count($em->getRepository('AntispamBundle:EmailBlacklist')->findAll());
+        $accounts = $em->getRepository(Account::class)->findAll();
+        $whitelistCount = count($em->getRepository(Whitelist::class)->findAll())
+            + count($em->getRepository(EmailWhitelist::class)->findAll());
+        $blacklistCount = count($em->getRepository(Blacklist::class)->findAll())
+            + count($em->getRepository(EmailBlacklist::class)->findAll());
 
         $recentScans = array_filter($accounts, function ($a) {
             return $a->getLastScanAt() !== null;
@@ -30,19 +37,19 @@ class DefaultController extends Controller
         });
         $recentScans = array_slice($recentScans, 0, 5);
 
-        $scoreRepo = $em->getRepository('AntispamBundle:SpamScoreLog');
+        $scoreRepo = $em->getRepository(SpamScoreLog::class);
         $stats30 = $scoreRepo->statsByDecision(new \DateTime('-30 days'));
         $daily = $scoreRepo->dailyCounts(14);
         $dailyChart = $this->groupDaily($daily);
 
-        $dnsblCount = count($em->getRepository('AntispamBundle:DnsblProvider')->findEnabled());
+        $dnsblCount = count($em->getRepository(DnsblProvider::class)->findEnabled());
 
         $topBlacklist = $em->createQuery(
-            'SELECT b FROM AntispamBundle:Blacklist b WHERE b.counter > 0 ORDER BY b.counter DESC'
+            'SELECT b FROM AntispamBundle\Entity\Blacklist b WHERE b.counter > 0 ORDER BY b.counter DESC'
         )->setMaxResults(5)->getResult();
 
         $topEmailBlacklist = $em->createQuery(
-            'SELECT b FROM AntispamBundle:EmailBlacklist b WHERE b.counter > 0 ORDER BY b.counter DESC'
+            'SELECT b FROM AntispamBundle\Entity\EmailBlacklist b WHERE b.counter > 0 ORDER BY b.counter DESC'
         )->setMaxResults(5)->getResult();
 
         return [

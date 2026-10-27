@@ -25,3 +25,5 @@ app/config/parameters.yml
 *.swo
 .DS_Store
 Thumbs.db
+var
+bin

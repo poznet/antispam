@@ -7,6 +7,26 @@ services:
         autoconfigure: false
         public: false
 
+    # Override of poznet/configbundle's "configuration" service (app-level
+    # definitions win over bundle extensions). The bundle wires it to
+    # @doctrine.orm.default_query_cache, which in doctrine-bundle 2.x is a PSR-6
+    # pool, while ConfigService requires a Doctrine CacheProvider. It must also
+    # be public because controllers fetch it with $this->get('configuration').
+    configuration:
+        class: Poznet\ConfigBundle\Service\ConfigService
+        arguments: ["@doctrine.orm.entity_manager", "@antispam.config_cache"]
+        public: true
+
+    # Per-process in-memory cache (same semantics as the old ArrayCache query
+    # cache), so values saved from the UI are never served stale by another process.
+    antispam.config_cache:
+        class: Doctrine\Common\Cache\CacheProvider
+        factory: ['Doctrine\Common\Cache\Psr6\DoctrineProvider', 'wrap']
+        arguments: ["@antispam.config_cache.pool"]
+
+    antispam.config_cache.pool:
+        class: Symfony\Component\Cache\Adapter\ArrayAdapter
+
     # Core services
     antispam.connection:
         class: AntispamBundle\Services\ConnectionService
@@ -125,7 +145,9 @@ services:
     # Commands
     AntispamBundle\Command\AntispamGoCommand:
         arguments:
-            - "@antispam.inbox"
+            # IMAP services connect on construction - resolve them lazily
+            - !service_locator
+                antispam.inbox: "@antispam.inbox"
             - "@event_dispatcher"
             - "@configuration"
         tags: ['console.command']

@@ -5,13 +5,13 @@
 ### antispam:check
 Validates email account configuration.
 ```bash
-php bin/console antispam:check
+php app/console antispam:check
 ```
 
 ### antispam:go
 Runs spam filtering on INBOX via IMAP (legacy single-account mode).
 ```bash
-php bin/console antispam:go
+php app/console antispam:go
 ```
 
 ## Agent Commands
@@ -19,25 +19,25 @@ php bin/console antispam:go
 ### antispam:agent:deploy
 Deploys the agent script to a hosting server via SSH.
 ```bash
-php bin/console antispam:agent:deploy {accountId}
+php app/console antispam:agent:deploy {accountId}
 ```
 
 ### antispam:agent:sync
 Syncs blacklist/whitelist rules to the remote agent's SQLite database.
 ```bash
-php bin/console antispam:agent:sync {accountId}
+php app/console antispam:agent:sync {accountId}
 ```
 
 ### antispam:agent:scan
 Runs a spam scan on a single account (works for both IMAP and SSH modes).
 ```bash
-php bin/console antispam:agent:scan {accountId}
+php app/console antispam:agent:scan {accountId}
 ```
 
 ### antispam:agent:scan-all
 Scans all configured accounts. Suitable for cron.
 ```bash
-php bin/console antispam:agent:scan-all
+php app/console antispam:agent:scan-all
 ```
 
 ## Quarantine Digest Commands
@@ -63,7 +63,7 @@ pulls everyone else's. Suitable for cron. Requires the shared feed to be enabled
 with a remote hub configured (**Settings → Shared Spam Feed**). See
 [feed.md](feed.md).
 ```bash
-php bin/console antispam:feed:sync
-php bin/console antispam:feed:sync --push-only
-php bin/console antispam:feed:sync --pull-only
+php app/console antispam:feed:sync
+php app/console antispam:feed:sync --push-only
+php app/console antispam:feed:sync --pull-only
 ```

@@ -30,7 +30,7 @@ class AgentScanAllCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $accounts = $this->em->getRepository('AntispamBundle:Account')->findAll();
+        $accounts = $this->em->getRepository(Account::class)->findAll();
 
         if (empty($accounts)) {
             $output->writeln('<comment>No accounts configured</comment>');

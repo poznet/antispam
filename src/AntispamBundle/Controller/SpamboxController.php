@@ -6,6 +6,7 @@ use Ddeboer\Imap\Exception\MessageUnsupportedEncodeException;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
 use Symfony\Bundle\FrameworkBundle\Controller\Controller;
+use AntispamBundle\Entity\SpamScoreLog;
 
 /**
  * @Route("/spambox")
@@ -13,7 +14,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\Controller;
 class SpamboxController extends Controller
 {
     /**
-     * @Template()
+     * @Template("@Antispam/Spambox/index.html.twig")
      * @Route("/index", name="antispam_spambox_index")
      */
     public function indexAction()
@@ -22,7 +23,7 @@ class SpamboxController extends Controller
     }
 
     /**
-     * @Template()
+     * @Template("@Antispam/Spambox/quarantine.html.twig")
      * @Route("/quarantine", name="antispam_spambox_quarantine")
      */
     public function quarantineAction()
@@ -64,14 +65,14 @@ class SpamboxController extends Controller
     /**
      * Recent score log with reasons - "why did X get flagged".
      *
-     * @Template()
+     * @Template("@Antispam/Spambox/scorelog.html.twig")
      * @Route("/scorelog", name="antispam_spambox_scorelog")
      */
     public function scorelogAction()
     {
         $em = $this->getDoctrine()->getManager();
-        $logs = $em->getRepository('AntispamBundle:SpamScoreLog')->findRecent(100);
-        $stats = $em->getRepository('AntispamBundle:SpamScoreLog')->statsByDecision(new \DateTime('-30 days'));
+        $logs = $em->getRepository(SpamScoreLog::class)->findRecent(100);
+        $stats = $em->getRepository(SpamScoreLog::class)->statsByDecision(new \DateTime('-30 days'));
         return ['logs' => $logs, 'stats' => $stats];
     }
 

@@ -3,10 +3,10 @@
 namespace AntispamBundle\Command;
 
 use AntispamBundle\Event\MessageEvent;
-use AntispamBundle\Services\InboxService;
 use Ddeboer\Imap\Exception\Exception;
 use Ddeboer\Imap\Exception\MessageUnsupportedEncodeException;
 use Poznet\ConfigBundle\Service\ConfigService;
+use Psr\Container\ContainerInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -17,13 +17,18 @@ class AntispamGoCommand extends Command
     protected static $defaultName = 'antispam:go';
 
     private $raport = ['whitelist' => 0, 'checkedbefore' => 0, 'blacklist' => 0, 'delete' => 0];
-    private $inbox;
+    private $imap;
     private $dispatcher;
     private $config;
 
-    public function __construct(InboxService $inbox, EventDispatcherInterface $dispatcher, ConfigService $config)
+    /**
+     * The inbox comes from a service locator because ConnectionService logs in
+     * to IMAP as soon as it is built - resolving it eagerly would break
+     * "app/console list" on installs without the legacy IMAP mailbox.
+     */
+    public function __construct(ContainerInterface $imap, EventDispatcherInterface $dispatcher, ConfigService $config)
     {
-        $this->inbox = $inbox;
+        $this->imap = $imap;
         $this->dispatcher = $dispatcher;
         $this->config = $config;
 
@@ -39,7 +44,7 @@ class AntispamGoCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         try {
-            $messages = $this->inbox->getInbox();
+            $messages = $this->imap->get('antispam.inbox')->getInbox();
             $checked = 0;
 
             foreach($messages as $msg) {

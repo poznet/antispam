@@ -43,8 +43,8 @@ cp app/config/parameters.yml.dist app/config/parameters.yml
 # Edit app/config/parameters.yml with your settings
 
 # Create database
-php bin/console doctrine:database:create
-php bin/console doctrine:schema:create
+php app/console doctrine:database:create
+php app/console doctrine:schema:create
 ```
 
 ### Docker / Coolify
@@ -57,12 +57,12 @@ deploying the app on Coolify or plain docker-compose.
 
 ### Check configuration
 ```bash
-php bin/console antispam:check
+php app/console antispam:check
 ```
 
 ### Run spam filtering
 ```bash
-php bin/console antispam:go
+php app/console antispam:go
 ```
 
 ### Web interface

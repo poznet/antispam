@@ -11,8 +11,12 @@ class SecurityController extends Controller
     /**
      * @Route("/login", name="login")
      */
-    public function loginAction(AuthenticationUtils $authenticationUtils)
+    public function loginAction()
     {
+        // Controllers are not registered as services, so the argument resolver
+        // cannot inject AuthenticationUtils (and the service itself is private).
+        $authenticationUtils = new AuthenticationUtils($this->get('request_stack'));
+
         return $this->render('@Antispam/Security/login.html.twig', [
             'last_username' => $authenticationUtils->getLastUsername(),
             'error' => $authenticationUtils->getLastAuthenticationError(),

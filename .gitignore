@@ -1,0 +1,10 @@
+/vendor/
+/bin/
+/var/
+/app/config/parameters.yml
+/app/cache/*
+!/app/cache/.gitkeep
+/app/logs/*
+!/app/logs/.gitkeep
+/web/bundles/
+/app/.phpunit.result.cache

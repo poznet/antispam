@@ -7,6 +7,7 @@ use AntispamBundle\Services\MessageService;
 use AntispamBundle\Services\PatternMatcher;
 use Ddeboer\Imap\Exception\Exception;
 use Doctrine\ORM\EntityManagerInterface;
+use AntispamBundle\Entity\EmailWhitelist;
 
 class CheckEmailWhitelist
 {
@@ -39,7 +40,7 @@ class CheckEmailWhitelist
 
         $cacheKey = (string)$event->getEmail();
         if (!isset($this->rulesCache[$cacheKey])) {
-            $this->rulesCache[$cacheKey] = $this->em->getRepository('AntispamBundle:EmailWhitelist')
+            $this->rulesCache[$cacheKey] = $this->em->getRepository(EmailWhitelist::class)
                 ->findBy(['email' => $event->getEmail()]);
         }
         $rules = $this->rulesCache[$cacheKey];

@@ -4,6 +4,7 @@ parameters:
     database_port: null
     database_user: travis
     database_password: ~
+    database_server_version: '5.7'
     mailer_transport: smtp
     mailer_host: 127.0.0.1
     mailer_user: null

@@ -25,13 +25,13 @@ class DnsblController extends Controller
     ];
 
     /**
-     * @Template()
+     * @Template("@Antispam/Dnsbl/index.html.twig")
      * @Route("/", name="antispam_dnsbl_index")
      */
     public function indexAction()
     {
         $em = $this->getDoctrine()->getManager();
-        $providers = $em->getRepository('AntispamBundle:DnsblProvider')->findBy([], ['name' => 'ASC']);
+        $providers = $em->getRepository(DnsblProvider::class)->findBy([], ['name' => 'ASC']);
         return ['providers' => $providers, 'presets' => self::$presets];
     }
 
@@ -50,7 +50,7 @@ class DnsblController extends Controller
             $this->addFlash('danger', 'Nazwa i strefa są wymagane');
             return $this->redirectToRoute('antispam_dnsbl_index');
         }
-        if ($em->getRepository('AntispamBundle:DnsblProvider')->findOneBy(['zone' => strtolower($zone)])) {
+        if ($em->getRepository(DnsblProvider::class)->findOneBy(['zone' => strtolower($zone)])) {
             $this->addFlash('warning', 'Ta strefa jest już skonfigurowana');
             return $this->redirectToRoute('antispam_dnsbl_index');
         }
@@ -75,7 +75,7 @@ class DnsblController extends Controller
         }
         $preset = self::$presets[$idx];
         $em = $this->getDoctrine()->getManager();
-        if ($em->getRepository('AntispamBundle:DnsblProvider')->findOneBy(['zone' => $preset['zone']])) {
+        if ($em->getRepository(DnsblProvider::class)->findOneBy(['zone' => $preset['zone']])) {
             $this->addFlash('warning', 'Ta strefa jest już skonfigurowana');
             return $this->redirectToRoute('antispam_dnsbl_index');
         }
@@ -93,7 +93,7 @@ class DnsblController extends Controller
     public function toggleAction($id)
     {
         $em = $this->getDoctrine()->getManager();
-        $p = $em->getRepository('AntispamBundle:DnsblProvider')->find($id);
+        $p = $em->getRepository(DnsblProvider::class)->find($id);
         if ($p) {
             $p->setEnabled(!$p->isEnabled());
             $em->flush();
@@ -107,7 +107,7 @@ class DnsblController extends Controller
     public function delAction($id)
     {
         $em = $this->getDoctrine()->getManager();
-        $p = $em->getRepository('AntispamBundle:DnsblProvider')->find($id);
+        $p = $em->getRepository(DnsblProvider::class)->find($id);
         if ($p) {
             $em->remove($p);
             $em->flush();
@@ -119,7 +119,7 @@ class DnsblController extends Controller
     /**
      * Test a specific IP against all enabled providers.
      *
-     * @Template()
+     * @Template("@Antispam/Dnsbl/test.html.twig")
      * @Route("/test", name="antispam_dnsbl_test")
      */
     public function testAction(Request $request)

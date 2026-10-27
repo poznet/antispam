@@ -8,6 +8,7 @@ use AntispamBundle\Services\PatternMatcher;
 use AntispamBundle\Services\ScoringService;
 use Ddeboer\Imap\Exception\Exception;
 use Doctrine\ORM\EntityManagerInterface;
+use AntispamBundle\Entity\EmailBlacklist;
 
 class CheckEmailBlacklist
 {
@@ -42,7 +43,7 @@ class CheckEmailBlacklist
 
         $cacheKey = (string)$event->getEmail();
         if (!isset($this->rulesCache[$cacheKey])) {
-            $this->rulesCache[$cacheKey] = $this->em->getRepository('AntispamBundle:EmailBlacklist')
+            $this->rulesCache[$cacheKey] = $this->em->getRepository(EmailBlacklist::class)
                 ->findBy(['email' => $event->getEmail()]);
         }
         $rules = $this->rulesCache[$cacheKey];

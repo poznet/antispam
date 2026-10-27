@@ -29,7 +29,7 @@ class DnsblService
             return $results;
         }
 
-        $providers = $this->em->getRepository('AntispamBundle:DnsblProvider')->findEnabled();
+        $providers = $this->em->getRepository(DnsblProvider::class)->findEnabled();
         foreach ($providers as $provider) {
             $results[] = [
                 'provider' => $provider,
@@ -67,7 +67,7 @@ class DnsblService
         $response = null;
         $zone = $provider->getZone();
 
-        $cache = $this->em->getRepository('AntispamBundle:DnsblCache')
+        $cache = $this->em->getRepository(DnsblCache::class)
             ->findFresh($ip, $zone);
 
         if ($cache && !$cache->isExpired($provider->getCacheTtl())) {

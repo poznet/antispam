@@ -15,12 +15,12 @@ class DomainBlacklistController extends Controller
 {
     /**
      * @Route("/index", name="antispam_blacklist_index")
-     * @Template
+     * @Template("@Antispam/DomainBlacklist/index.html.twig")
      */
     public function indexAction()
     {
         $em = $this->getDoctrine()->getManager();
-        $list = $em->getRepository('AntispamBundle:Blacklist')->findAll();
+        $list = $em->getRepository(Blacklist::class)->findAll();
         return ['list' => $list];
     }
 
@@ -41,7 +41,7 @@ class DomainBlacklistController extends Controller
             return $this->redirectToRoute('antispam_blacklist_index');
         }
 
-        $existing = $em->getRepository('AntispamBundle:Blacklist')->findOneBy(['host' => $host]);
+        $existing = $em->getRepository(Blacklist::class)->findOneBy(['host' => $host]);
         if (!$existing) {
             $entry = new Blacklist();
             $entry->setEmail($this->get('configuration')->get('email'));
@@ -60,7 +60,7 @@ class DomainBlacklistController extends Controller
     public function delAction($id)
     {
         $em = $this->getDoctrine()->getManager();
-        $entry = $em->getRepository('AntispamBundle:Blacklist')->find($id);
+        $entry = $em->getRepository(Blacklist::class)->find($id);
         if ($entry) {
             $em->remove($entry);
             $em->flush();

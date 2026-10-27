@@ -53,5 +53,5 @@ Triggers remote scan and retrieves results as JSON.
 
 For automatic scanning, add to crontab:
 ```
-*/5 * * * * php /path/to/bin/console antispam:agent:scan-all
+*/5 * * * * php /path/to/app/console antispam:agent:scan-all
 ```

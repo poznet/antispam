@@ -19,6 +19,9 @@ class ConnectionService
     public function __construct(ConfigService $config)
     {
         $this->config=$config;
+        if (!$this->config->get('imap')) {
+            throw new \RuntimeException('Legacy IMAP mailbox is not configured - set server, login and password at /config/email/');
+        }
         $server = new Server(
             $this->config->get('imap'),
             143,

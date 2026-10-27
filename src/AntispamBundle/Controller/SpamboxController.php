@@ -2,6 +2,7 @@
 
 namespace AntispamBundle\Controller;
 
+use AntispamBundle\Entity\PluginReport;
 use AntispamBundle\Entity\SpamScoreLog;
 use AntispamBundle\Services\ConnectionService;
 use AntispamBundle\Services\InboxService;
@@ -129,6 +130,25 @@ class SpamboxController extends AbstractController
         $logs = $this->em->getRepository(SpamScoreLog::class)->findRecent(100);
         $stats = $this->em->getRepository(SpamScoreLog::class)->statsByDecision(new \DateTime('-30 days'));
         return ['logs' => $logs, 'stats' => $stats];
+    }
+
+    /** Spam / not-spam reports from the Thunderbird plugin, anonymous ones included. */
+    #[Route('/plugin-reports', name: 'antispam_spambox_pluginreports')]
+    #[Template('@Antispam/Spambox/pluginReports.html.twig')]
+    public function pluginReportsAction(Request $request)
+    {
+        $verdict = in_array($request->query->get('verdict'), ['spam', 'ham'], true) ? $request->query->get('verdict') : null;
+        $who = in_array($request->query->get('who'), ['anonymous', 'account'], true) ? $request->query->get('who') : null;
+        $repo = $this->em->getRepository(PluginReport::class);
+        $since = new \DateTime('-30 days');
+
+        return [
+            'reports' => $repo->findRecent(200, $verdict, $who),
+            'stats' => $repo->stats($since),
+            'top' => $repo->topSenders($since),
+            'verdict' => $verdict,
+            'who' => $who,
+        ];
     }
 
     private function loadFolder($folderName)

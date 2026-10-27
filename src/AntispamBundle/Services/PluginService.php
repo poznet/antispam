@@ -5,6 +5,7 @@ namespace AntispamBundle\Services;
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Entity\EmailWhitelist;
+use AntispamBundle\Entity\PluginReport;
 use AntispamBundle\Entity\SharedSpamSignal;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Cache\CacheItemPoolInterface;
@@ -194,9 +195,12 @@ class PluginService
      * ham:  logged-in users only — the exact blacklist entry for the sender
      *       is dropped and the sender is whitelisted for the account.
      *
+     * Every report is logged in antispam_plugin_report (Spambox → Zgłoszenia
+     * z wtyczki), kept for PluginReport::RETENTION_DAYS.
+     *
      * @return array{verdict:string, sender:string, signals:int, rules:string[]}
      */
-    public function learn($raw, $verdict, ?Account $account = null)
+    public function learn($raw, $verdict, ?Account $account = null, $clientIp = null)
     {
         $msg = new RawMessageParser($raw);
         $sender = $msg->getFromAddress();
@@ -236,7 +240,19 @@ class PluginService
             }
         }
 
+        $log = new PluginReport();
+        $log->setVerdict($verdict)
+            ->setAccountEmail($account ? $account->getEmail() : null)
+            ->setSender($sender ?: null)
+            ->setSubject($msg->getSubject() ?: null)
+            ->setClientIp($clientIp ?: null)
+            ->setSignals($result['signals'])
+            ->setRules($result['rules']);
+        $this->em->persist($log);
+
         $this->em->flush();
+        $this->em->getRepository(PluginReport::class)
+            ->purgeOlderThan(new \DateTime('-' . PluginReport::RETENTION_DAYS . ' days'));
         return $result;
     }
 

@@ -33,6 +33,7 @@
 | GET | `/spambox/quarantine` | Quarantine of every mailbox (legacy IMAP `QUARANTINE` + each SSH account with a deployed agent) and the last 30 days of `quarantine` decisions from the score log (what the dashboard tile counts) |
 | POST | `/spambox/quarantine/action` | `mailbox` (`imap` / `ssh-<id>`), `id`, `action` (`release` / `whitelist` / `delete`); CSRF token `quarantine_action` |
 | GET | `/spambox/scorelog` | Last 100 score log entries with reasons |
+| GET | `/spambox/plugin-reports` | Thunderbird plugin reports (anonymous + logged in), filters `?verdict=spam\|ham`, `?who=anonymous\|account` |
 
 ## Configuration (`/config`)
 

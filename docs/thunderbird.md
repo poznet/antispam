@@ -21,6 +21,13 @@ even when the feed itself is disabled, so the data is ready once it is
 enabled. Anonymous "not spam" is refused (spammers could whitelist
 themselves).
 
+Every accepted report (anonymous or logged in) is also logged in
+`antispam_plugin_report` — verdict, account (empty = anonymous), sender,
+subject, client IP, fingerprints recorded and rule changes — and listed in the
+panel under *Skrzynki → Zgłoszenia z wtyczki* (`/spambox/plugin-reports`), with
+30-day counters and the most reported senders. Entries older than 180 days are
+purged automatically.
+
 The on-arrival check complements, not replaces, the cron scan: it uses the same
 rules (domain/e-mail white- and blacklists of the account, header heuristics,
 impersonation / BEC, DNSBL, link protection, shared feed, attachment policy) and thresholds, and is logged to `antispam_spam_score_log`
@@ -70,6 +77,19 @@ to another.
   check now.
 - **Decision handling** (logged in): spam → mark + move to Junk (default),
   quarantine → nothing (default); both configurable.
+- **Feedback**: explicit actions (toolbar button, context menu) show their result
+  as a badge on the toolbar button (✓ / !, details in its tooltip) besides the
+  system notification. An action that needs a login ("check", "not spam") or a
+  server URL opens the plugin settings.
+
+## Troubleshooting
+
+The settings page header shows the server URL and whether it is reachable.
+If it says *Brak połączenia z serwerem* with an `http://` URL, the `.xpi` was
+built behind a TLS-terminating proxy that Symfony did not trust: set
+`SYMFONY_TRUSTED_PROXIES` (or **Public URL** in the plugin settings) and
+download the plugin again, or change the address in the plugin settings to
+`https://…` and save (Thunderbird asks for the host permission).
 
 ## Settings (`plugin.*`, *Configuration → Thunderbird Plugin*)
 

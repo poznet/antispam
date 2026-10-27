@@ -9,7 +9,7 @@ Symfony 7.4 LTS application for email spam filtering via IMAP or SSH+Maildir age
 - `.env` - default env vars (override in `.env.local`; Docker freezes them into `.env.local.php`)
 - `src/AntispamBundle/Resources/agent/` - standalone Maildir agent PHP script
 - `src/AntispamBundle/Resources/thunderbird/` - Thunderbird plugin (MailExtension), served as .xpi by `/plugin/download`
-- `landing/` - static marketing page for antispam.pancernapanda.pl (plain HTML/CSS/JS, see `landing/README.md`)
+- Home page `/` (`HomeController`, `Resources/views/Home/index.html.twig`, assets in `Resources/public/landing/`) - public product page for antispam.pancernapanda.pl with the admin login form embedded (`#logowanie`); the admin dashboard is at `/panel`
 
 ## Key concepts
 - Two connection modes per account: IMAP (remote protocol) or SSH+Maildir (direct filesystem)

@@ -32,7 +32,7 @@ the first 1 MiB of each message.
 ## Distribution
 
 The `.xpi` is built on the fly by `GET /plugin/download` (public; linked from the
-login page, the account form and *Configuration → Thunderbird Plugin*). The build
+home page (Thunderbird section), the account form and *Configuration → Thunderbird Plugin*). The build
 bakes the server URL into `config.json` and adds its origin to the manifest's host
 permissions, so users only install and (optionally) log in. Set **Public URL**
 in the plugin settings when antispam runs behind a TLS-terminating proxy,

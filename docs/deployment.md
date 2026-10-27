@@ -71,8 +71,9 @@ check for local testing only.
 4. **Deploy.** Hit *Deploy*. First build takes a few minutes (composer
    install + PHP extension compile). After deployment:
 
-   - `https://antispam.example.com/` -> redirects to `/login`
-   - Log in with the credentials you set in step 2.
+   - `https://antispam.example.com/` -> public home page with the login form
+     (section *Zaloguj się do panelu*)
+   - Log in with the credentials you set in step 2; the dashboard is at `/panel`.
 
 5. **Persistence.** Coolify creates three named volumes automatically:
    `db_data` (MariaDB), `app_data` (`var/data` - markers of already checked
@@ -149,7 +150,7 @@ Before exposing the instance publicly, make sure:
       should be reachable from the internet.
 - [ ] If you use the [quarantine digest](quarantine-digest.md), `/q/` must be
       reachable by mailbox owners. It is the only anonymous route besides
-      `/login` and `/api/feed`. Set `MAILER_DSN` and either use
+      the home page `/`, `/login` and `/api/feed`. Set `MAILER_DSN` and either use
       `docker-compose.prod.yml` (the scheduler sends it) or schedule
       `antispam:digest:send` in cron.
 

@@ -36,11 +36,13 @@ services:
       MAILER_PASSWORD: ${MAILER_PASSWORD:-}
 
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
     expose:
       - "80"
     volumes:
-      - app_cache:/var/www/html/app/cache
-      - app_logs:/var/www/html/app/logs
+      - app_cache:/var/www/html/var/cache
+      - app_logs:/var/www/html/var/log
+      - app_data:/var/www/html/app/Data
     healthcheck:
       test: ["CMD", "bash", "-lc", "echo > /dev/tcp/127.0.0.1/80"]
       interval: 30s
@@ -68,4 +70,5 @@ services:
 volumes:
   app_cache:
   app_logs:
+  app_data:
   db_data:

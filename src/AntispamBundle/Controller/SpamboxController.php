@@ -13,7 +13,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\Controller;
 class SpamboxController extends Controller
 {
     /**
-     * @Template()
+     * @Template("@Antispam/Spambox/index.html.twig")
      * @Route("/index", name="antispam_spambox_index")
      */
     public function indexAction()
@@ -22,7 +22,7 @@ class SpamboxController extends Controller
     }
 
     /**
-     * @Template()
+     * @Template("@Antispam/Spambox/quarantine.html.twig")
      * @Route("/quarantine", name="antispam_spambox_quarantine")
      */
     public function quarantineAction()
@@ -64,7 +64,7 @@ class SpamboxController extends Controller
     /**
      * Recent score log with reasons - "why did X get flagged".
      *
-     * @Template()
+     * @Template("@Antispam/Spambox/scorelog.html.twig")
      * @Route("/scorelog", name="antispam_spambox_scorelog")
      */
     public function scorelogAction()

@@ -1,4 +1,6 @@
-FROM php:7.4-apache-bullseye
+# PHP 8.2 on Debian 12 (bookworm). Bullseye (PHP 7.4 images) is out of LTS,
+# and bookworm is the last Debian release that still ships libc-client for ext-imap.
+FROM php:8.2-apache-bookworm
 
 # System dependencies required for PHP extensions (imap, iconv, zip) and composer
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -53,8 +55,8 @@ COPY . .
 
 # Finalize autoload and asset install now that the source is present
 RUN composer dump-autoload --no-dev --optimize --classmap-authoritative \
-    && mkdir -p app/cache app/logs \
-    && chown -R www-data:www-data app/cache app/logs
+    && mkdir -p var/cache var/log app/Data \
+    && chown -R www-data:www-data var app/Data
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/scheduler.sh /usr/local/bin/scheduler.sh

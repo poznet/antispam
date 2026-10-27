@@ -17,6 +17,7 @@ framework:
         resource: "%kernel.root_dir%/config/routing.yml"
         strict_requirements: ~
         utf8: true
+    assets:          ~
     form:            ~
     csrf_protection: ~
     validation:      { enable_annotations: true }

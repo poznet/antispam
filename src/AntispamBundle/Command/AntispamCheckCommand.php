@@ -33,13 +33,13 @@ class AntispamCheckCommand extends Command
 
         if($event->getStatus() === true) {
             $output->writeln('<info>All OK</info>');
-            return Command::SUCCESS;
+            return 0;
         } else {
             $output->writeln('<error>Error:</error>');
             foreach ($event->getMessages() as $msg) {
                 $output->writeln('  - ' . $msg);
             }
-            return Command::FAILURE;
+            return 1;
         }
     }
 }

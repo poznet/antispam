@@ -72,21 +72,21 @@ until php -r "new PDO('mysql:host=${DATABASE_HOST};port=${DATABASE_PORT}', '${DA
 done
 
 # Make sure cache/log dirs are writable
-mkdir -p "${APP_DIR}/app/cache" "${APP_DIR}/app/logs"
-chown -R www-data:www-data "${APP_DIR}/app/cache" "${APP_DIR}/app/logs"
+mkdir -p "${APP_DIR}/var/cache" "${APP_DIR}/var/log" "${APP_DIR}/app/Data"
+chown -R www-data:www-data "${APP_DIR}/var" "${APP_DIR}/app/Data"
 
 # Warmup cache and install bundle assets
-php "${APP_DIR}/bin/console" cache:clear  --env="${SYMFONY_ENV}" --no-debug || true
-php "${APP_DIR}/bin/console" cache:warmup --env="${SYMFONY_ENV}" --no-debug || true
-php "${APP_DIR}/bin/console" assets:install "${APP_DIR}/web" --symlink --relative --env="${SYMFONY_ENV}" || true
+php "${APP_DIR}/app/console" cache:clear  --env="${SYMFONY_ENV}" --no-debug || true
+php "${APP_DIR}/app/console" cache:warmup --env="${SYMFONY_ENV}" --no-debug || true
+php "${APP_DIR}/app/console" assets:install "${APP_DIR}/web" --symlink --relative --env="${SYMFONY_ENV}" || true
 
 # Create schema on first boot / keep it in sync
 if [ "${RUN_MIGRATIONS}" = "true" ]; then
-    php "${APP_DIR}/bin/console" doctrine:database:create --if-not-exists --env="${SYMFONY_ENV}" || true
-    php "${APP_DIR}/bin/console" doctrine:schema:update --force --env="${SYMFONY_ENV}" || true
+    php "${APP_DIR}/app/console" doctrine:database:create --if-not-exists --env="${SYMFONY_ENV}" || true
+    php "${APP_DIR}/app/console" doctrine:schema:update --force --env="${SYMFONY_ENV}" || true
 fi
 
-chown -R www-data:www-data "${APP_DIR}/app/cache" "${APP_DIR}/app/logs"
+chown -R www-data:www-data "${APP_DIR}/var" "${APP_DIR}/app/Data"
 
 # Warn loudly if the operator left the defaults in place
 if [ "${APP_SECRET}" = "ChangeMeInProductionPlease" ]; then

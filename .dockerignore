@@ -9,9 +9,11 @@
 vendor
 node_modules
 bower_components
-app/cache/*
-app/logs/*
+var/
 web/bundles
+
+# Debug front controller - never ship it in the production image
+web/app_dev.php
 
 # Local env files - provide values through Coolify instead
 .env

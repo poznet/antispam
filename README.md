@@ -7,10 +7,10 @@ Symfony-based application for cleaning spam from email accounts via IMAP or SSH+
 
 ## Requirements
 
-- **PHP >= 7.1.3** (recommended: 7.2, 7.3, or 7.4)
+- **PHP 8.2** (dependencies in `composer.lock` are resolved for 8.2; the Docker image uses `php:8.2-apache-bookworm`)
 - **Symfony 4.4 LTS**
 - **MySQL 5.7+** or MariaDB 10.2+
-- **ext-iconv**
+- **ext-imap, ext-iconv, ext-curl, ext-mbstring, ext-intl, ext-zip, ext-pdo_mysql**
 - IMAP enabled email account
 
 ## Features

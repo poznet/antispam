@@ -7,3 +7,21 @@ services:
 #    service_name:
 #        class: AppBundle\Directory\ClassName
 #        arguments: ["@another_service_name", "plain_value", "%parameter_name%"]
+
+    # poznet/configbundle type-hints a Doctrine CacheProvider, but with
+    # doctrine-bundle 2.x "doctrine.orm.default_query_cache" is a PSR-6 pool.
+    # Give it an in-memory (per-process) PSR-6 pool wrapped as a CacheProvider,
+    # so values changed in the panel are seen by the next request/command.
+    antispam.configuration_cache:
+        class: Doctrine\Common\Cache\CacheProvider
+        factory: ['Doctrine\Common\Cache\Psr6\DoctrineProvider', 'wrap']
+        arguments: ['@antispam.configuration_cache_pool']
+
+    antispam.configuration_cache_pool:
+        class: Symfony\Component\Cache\Adapter\ArrayAdapter
+        arguments: [0, false]
+
+    configuration:
+        class: Poznet\ConfigBundle\Service\ConfigService
+        public: true
+        arguments: ['@doctrine.orm.entity_manager', '@antispam.configuration_cache']

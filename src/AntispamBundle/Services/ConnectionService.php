@@ -19,20 +19,25 @@ class ConnectionService
     public function __construct(ConfigService $config)
     {
         $this->config=$config;
-        $server = new Server(
-            $this->config->get('imap'),
-            143,
-            '/novalidate-cert/notls'
-        );
-        $this->connection = $server->authenticate($this->config->get('login'), $this->config->get('password'));
-
     }
 
     /**
-     * @return Server
+     * Connects on first use, so pages that only need folder names still work
+     * while the legacy IMAP account is not configured.
+     *
+     * @return \Ddeboer\Imap\ConnectionInterface
      */
     public function getConnection()
     {
+        if (null === $this->connection) {
+            $server = new Server(
+                (string)$this->config->get('imap'),
+                143,
+                '/novalidate-cert/notls'
+            );
+            $this->connection = $server->authenticate((string)$this->config->get('login'), (string)$this->config->get('password'));
+        }
+
         return $this->connection;
     }
 

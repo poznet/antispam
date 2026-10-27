@@ -25,7 +25,7 @@ class DnsblController extends Controller
     ];
 
     /**
-     * @Template()
+     * @Template("@Antispam/Dnsbl/index.html.twig")
      * @Route("/", name="antispam_dnsbl_index")
      */
     public function indexAction()
@@ -119,7 +119,7 @@ class DnsblController extends Controller
     /**
      * Test a specific IP against all enabled providers.
      *
-     * @Template()
+     * @Template("@Antispam/Dnsbl/test.html.twig")
      * @Route("/test", name="antispam_dnsbl_test")
      */
     public function testAction(Request $request)

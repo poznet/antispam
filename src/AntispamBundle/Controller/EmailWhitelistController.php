@@ -15,7 +15,7 @@ class EmailWhitelistController extends Controller
 {
     /**
      * @Route("/index", name="antispam_emailwhitelist_index")
-     * @Template()
+     * @Template("@Antispam/EmailWhitelist/index.html.twig")
      */
     public function indexAction()
     {

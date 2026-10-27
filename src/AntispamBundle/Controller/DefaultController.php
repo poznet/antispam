@@ -10,7 +10,7 @@ class DefaultController extends Controller
 {
     /**
      * @Route("/", name="antispam_index")
-     * @Template
+     * @Template("@Antispam/Default/index.html.twig")
      */
     public function indexAction()
     {

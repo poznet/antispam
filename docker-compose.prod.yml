@@ -1,13 +1,13 @@
 services:
-  # Aplikacja Symfony (Apache + PHP 7.4) - w Coolify podepnij domene pod ten serwis, port 80
+  # Aplikacja Symfony (Apache + PHP 8.2) - w Coolify podepnij domene pod ten serwis, port 80
   app:
     build:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
     volumes:
-      - app-cache:/var/www/html/app/cache
-      - app-logs:/var/www/html/app/logs
+      - app-logs:/var/www/html/var/log
+      - app-data:/var/www/html/app/Data
     environment:
       - SYMFONY_ENV=prod
       - APP_SECRET=${APP_SECRET:-ChangeMeInProductionPlease}
@@ -23,6 +23,8 @@ services:
       - MAILER_USER=${MAILER_USER:-}
       - MAILER_PASSWORD=${MAILER_PASSWORD:-}
       - RUN_MIGRATIONS=true
+      # Traefik Coolify siedzi w prywatnej sieci Dockera - ufamy jego X-Forwarded-*
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
     depends_on:
       db:
         condition: service_healthy
@@ -55,7 +57,8 @@ services:
     restart: unless-stopped
     command: ["/usr/local/bin/scheduler.sh"]
     volumes:
-      - app-logs:/var/www/html/app/logs
+      - app-logs:/var/www/html/var/log
+      - app-data:/var/www/html/app/Data
     environment:
       - SYMFONY_ENV=prod
       - APP_SECRET=${APP_SECRET:-ChangeMeInProductionPlease}
@@ -83,7 +86,7 @@ services:
 volumes:
   db-data:
     driver: local
-  app-cache:
-    driver: local
   app-logs:
+    driver: local
+  app-data:
     driver: local

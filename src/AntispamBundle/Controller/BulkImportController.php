@@ -27,7 +27,7 @@ class BulkImportController extends Controller
     ];
 
     /**
-     * @Template()
+     * @Template("@Antispam/BulkImport/index.html.twig")
      * @Route("/", name="antispam_bulk_index")
      */
     public function indexAction()

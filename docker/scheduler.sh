@@ -23,7 +23,7 @@ run() {
     (
         flock -n 9 || { echo "[scheduler] $name still running, skipping"; exit 0; }
         echo "[scheduler] $(date '+%F %T') start $name"
-        runuser -u www-data -- php "${APP_DIR}/bin/console" "$@" --env="${SYMFONY_ENV}" --no-debug \
+        runuser -u www-data -- php "${APP_DIR}/app/console" "$@" --env="${SYMFONY_ENV}" --no-debug \
             || echo "[scheduler] $name exited with $?"
         echo "[scheduler] $(date '+%F %T') done $name"
     ) 9>"/tmp/antispam-${name}.lock" &

@@ -19,7 +19,7 @@ class AccountController extends Controller
 {
     /**
      * @Route("/index", name="antispam_account_index")
-     * @Template
+     * @Template("@Antispam/Account/index.html.twig")
      */
     public function indexAction()
     {
@@ -30,7 +30,7 @@ class AccountController extends Controller
 
     /**
      * @Route("/add", name="antispam_account_add")
-     * @Template
+     * @Template("@Antispam/Account/add.html.twig")
      */
     public function addAction(Request $request)
     {
@@ -46,7 +46,7 @@ class AccountController extends Controller
 
     /**
      * @Route("/edit/{id}", name="antispam_account_edit")
-     * @Template
+     * @Template("@Antispam/Account/edit.html.twig")
      */
     public function editAction($id, Request $request)
     {
@@ -81,7 +81,7 @@ class AccountController extends Controller
 
     /**
      * @Route("/test/{id}", name="antispam_account_test")
-     * @Template
+     * @Template("@Antispam/Account/test.html.twig")
      */
     public function testAction($id)
     {
@@ -120,7 +120,7 @@ class AccountController extends Controller
 
     /**
      * @Route("/deploy/{id}", name="antispam_account_deploy")
-     * @Template
+     * @Template("@Antispam/Account/deploy.html.twig")
      */
     public function deployAction($id)
     {
@@ -150,7 +150,7 @@ class AccountController extends Controller
 
     /**
      * @Route("/sync/{id}", name="antispam_account_sync")
-     * @Template
+     * @Template("@Antispam/Account/sync.html.twig")
      */
     public function syncAction($id)
     {
@@ -179,7 +179,7 @@ class AccountController extends Controller
 
     /**
      * @Route("/scan/{id}", name="antispam_account_scan")
-     * @Template
+     * @Template("@Antispam/Account/scan.html.twig")
      */
     public function scanAction($id)
     {
@@ -315,7 +315,7 @@ class AccountController extends Controller
 
     /**
      * @Route("/health/{id}", name="antispam_account_health")
-     * @Template
+     * @Template("@Antispam/Account/health.html.twig")
      */
     public function healthAction($id)
     {

@@ -55,7 +55,7 @@ class AntispamGoCommand extends Command
 
         } catch(MessageUnsupportedEncodeException $e) {
             $output->writeln('<error>Error processing message: ' . $e->getMessage() . '</error>');
-            return Command::FAILURE;
+            return 1;
         }
 
         $output->writeln('All messages: ' . count($messages));
@@ -65,6 +65,6 @@ class AntispamGoCommand extends Command
         $output->writeln('Blacklisted: ' . $this->raport['blacklist']);
         $output->writeln('Deleted/Moved: ' . $this->raport['delete']);
 
-        return Command::SUCCESS;
+        return 0;
     }
 }

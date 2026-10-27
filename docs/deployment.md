@@ -4,13 +4,15 @@
 
 The repository ships a production-ready Docker setup:
 
-- `Dockerfile` - PHP 7.4 + Apache image with the IMAP / iconv / pdo_mysql /
-  intl / zip / opcache extensions required by the app. Document root is
-  pointed at `web/` and composer dependencies are installed without dev
-  packages.
+- `Dockerfile` - PHP 8.2 + Apache on Debian 12 (bookworm) with the IMAP /
+  iconv / pdo_mysql / intl / zip / opcache extensions required by the app.
+  Document root is pointed at `web/` and composer dependencies are installed
+  from `composer.lock` without dev packages. Bookworm is the last Debian
+  release that ships `libc-client` for `ext-imap` (removed from PHP core in 8.4).
 - `docker-compose.yml` - two services, `app` and `db` (MariaDB 10.6), linked
   through a private network with healthchecks and named volumes for the
-  database data, the Symfony cache and the log directory.
+  database data, the Symfony cache (`var/cache`), the logs (`var/log`) and
+  `app/Data` (markers of already checked IMAP messages).
 - `docker/entrypoint.sh` - renders `app/config/parameters.yml` from environment
   variables at every container start, waits for MySQL, warms Symfony cache,
   installs bundle assets and runs `doctrine:schema:update --force`. It also
@@ -35,6 +37,7 @@ The repository ships a production-ready Docker setup:
 | `MAILER_USER` | Swiftmailer user | _(empty)_ |
 | `MAILER_PASSWORD` | Swiftmailer password | _(empty)_ |
 | `RUN_MIGRATIONS` | Run `doctrine:schema:update --force` at boot | `true` |
+| `TRUSTED_PROXIES` | Comma-separated IPs / CIDRs whose `X-Forwarded-*` headers are trusted (Coolify's Traefik) | private ranges |
 
 The defaults marked above are **insecure** and only exist to let the stack
 boot for local testing. Override them in production.
@@ -69,9 +72,11 @@ boot for local testing. Override them in production.
    - `https://antispam.example.com/` -> redirects to `/login`
    - Log in with the credentials you set in step 2.
 
-5. **Persistence.** Coolify creates three named volumes automatically:
-   `db_data` (MariaDB), `app_cache` (Symfony prod cache) and `app_logs`
-   (Symfony logs). They survive redeploys and container restarts.
+5. **Persistence.** Coolify creates the named volumes automatically:
+   `db_data` (MariaDB), `app_cache` (Symfony prod cache), `app_logs`
+   (Symfony logs) and `app_data` (`app/Data`). They survive redeploys and
+   container restarts. `docker-compose.prod.yml` uses `db-data`, `app-logs`
+   and `app-data`; its cache is rebuilt on every start.
 
 ### Production compose with scheduler (`docker-compose.prod.yml`)
 

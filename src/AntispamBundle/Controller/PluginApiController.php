@@ -31,7 +31,7 @@ class PluginApiController extends AbstractController
     ) {
     }
 
-    const PLUGIN_VERSION = '1.0.0';
+    const PLUGIN_VERSION = '1.0.1';
 
     #[Route('/plugin/download', name: 'antispam_plugin_download', methods: ['GET'])]
     public function downloadAction(Request $request)
@@ -140,7 +140,7 @@ class PluginApiController extends AbstractController
             return $raw;
         }
 
-        $result = $this->plugin->learn($raw, $verdict, $account);
+        $result = $this->plugin->learn($raw, $verdict, $account, $this->clientIp($request));
         $result['authenticated'] = $account !== null;
         return new JsonResponse($result);
     }
@@ -213,8 +213,12 @@ class PluginApiController extends AbstractController
         $parts = parse_url($server);
         if (!empty($parts['scheme']) && !empty($parts['host'])) {
             // Match patterns cannot carry a port; the host alone covers every port.
-            $origin = $parts['scheme'] . '://' . $parts['host'] . '/*';
-            $manifest['permissions'][] = $origin;
+            $manifest['permissions'][] = $parts['scheme'] . '://' . $parts['host'] . '/*';
+            if ($parts['scheme'] === 'http') {
+                // The proxy may redirect http:// to https:// — without this the
+                // redirected request is blocked as cross-origin.
+                $manifest['permissions'][] = 'https://' . $parts['host'] . '/*';
+            }
             $manifest['permissions'] = array_values(array_unique($manifest['permissions']));
         }
         return json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);

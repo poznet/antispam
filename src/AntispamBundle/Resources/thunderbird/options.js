@@ -36,10 +36,13 @@ async function refresh() {
     if (!st.enabled) parts.push("wtyczka wyłączona na serwerze");
     if (!st.anonymous_reports && !st.authenticated) parts.push("zgłoszenia wymagają logowania");
     if (!st.check_enabled) parts.push("sprawdzanie poczty wyłączone na serwerze");
+    if (!s.token) parts.push("niezalogowano — działa tylko zgłaszanie spamu");
     $("serverState").textContent = parts.join(" · ");
     if (s.token && !st.authenticated) await refresh(); // token expired → logged out by background
   } catch (e) {
-    $("serverState").textContent = "Brak połączenia z serwerem: " + e.message;
+    let text = "Brak połączenia z serwerem " + (s.server || "(nie ustawiono)") + ": " + e.message;
+    if (/^http:\/\//i.test(s.server || "")) text += " — jeśli antyspam działa na https, zmień adres poniżej na https:// i zapisz.";
+    $("serverState").textContent = text;
   }
 }
 

@@ -1,5 +1,10 @@
 framework:
     secret: '%env(APP_SECRET)%'
+    # Behind a TLS-terminating proxy (Docker / Coolify) trust its X-Forwarded-*
+    # headers, so URLs built from the request (plugin download, digest links)
+    # come out as https://. Comma-separated IPs / CIDRs; empty = trust none.
+    trusted_proxies: '%env(default::SYMFONY_TRUSTED_PROXIES)%'
+    trusted_headers: ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-forwarded-port', 'x-forwarded-prefix']
     default_locale: pl
     translator:
         default_path: '%kernel.project_dir%/translations'

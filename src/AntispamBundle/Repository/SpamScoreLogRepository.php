@@ -76,6 +76,19 @@ class SpamScoreLogRepository extends EntityRepository
         return array_column($rows, 'email');
     }
 
+    public function findRecentByDecision($decision, ?\DateTime $since = null, $limit = 50)
+    {
+        $qb = $this->createQueryBuilder('l')
+            ->andWhere('l.decision = :d')
+            ->setParameter('d', $decision)
+            ->orderBy('l.scoredAt', \SortDirection::Descending)
+            ->setMaxResults($limit);
+        if ($since) {
+            $qb->andWhere('l.scoredAt >= :since')->setParameter('since', $since);
+        }
+        return $qb->getQuery()->getResult();
+    }
+
     public function statsByDecision(?\DateTime $since = null)
     {
         $qb = $this->createQueryBuilder('l')

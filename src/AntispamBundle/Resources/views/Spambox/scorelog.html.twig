@@ -3,24 +3,59 @@
 {% block page_title %}Dziennik ocen (score log){% endblock %}
 
 {% block body %}
+    {% set decisionLabels = {ham: 'Ham', quarantine: 'Kwarantanna', spam: 'Spam', whitelisted: 'Whitelista'} %}
+    {% set baseQuery = query|filter((v, k) => k != 'decision') %}
+
+    {# Decision tiles double as quick filters: click to show only that decision, click again to clear. #}
     <div class="row">
-        <div class="col-sm-3"><div class="panel panel-default"><div class="panel-body text-center">
-            <div class="stat-value text-success">{{ stats.ham|default(0) }}</div><div class="stat-label">Ham (30 dni)</div>
-        </div></div></div>
-        <div class="col-sm-3"><div class="panel panel-default"><div class="panel-body text-center">
-            <div class="stat-value text-warning">{{ stats.quarantine|default(0) }}</div><div class="stat-label">Kwarantanna (30 dni)</div>
-        </div></div></div>
-        <div class="col-sm-3"><div class="panel panel-default"><div class="panel-body text-center">
-            <div class="stat-value text-danger">{{ stats.spam|default(0) }}</div><div class="stat-label">Spam (30 dni)</div>
-        </div></div></div>
-        <div class="col-sm-3"><div class="panel panel-default"><div class="panel-body text-center">
-            <div class="stat-value text-info">{{ stats.whitelisted|default(0) }}</div><div class="stat-label">Whitelista (30 dni)</div>
-        </div></div></div>
+        {% for key, tile in {ham: 'text-success', quarantine: 'text-warning', spam: 'text-danger', whitelisted: 'text-info'} %}
+            {% set active = filters.decision == key %}
+            <div class="col-sm-3">
+                <a href="{{ path('antispam_spambox_scorelog', active ? baseQuery : baseQuery|merge({decision: key})) }}"
+                   class="panel panel-default stat-tile{{ active ? ' is-active' }}"
+                   title="{{ active ? 'Pokaż wszystkie decyzje' : 'Pokaż tylko: ' ~ decisionLabels[key]|lower }}">
+                    <div class="panel-body text-center">
+                        <div class="stat-value {{ tile }}">{{ stats[key]|default(0) }}</div>
+                        <div class="stat-label">{{ decisionLabels[key] }} (30 dni)</div>
+                    </div>
+                </a>
+            </div>
+        {% endfor %}
+    </div>
+
+    <div class="add-form scorelog-filter">
+        <form method="get" action="{{ path('antispam_spambox_scorelog') }}" class="form-inline">
+            <select name="decision" class="form-control" aria-label="Decyzja">
+                <option value="">Wszystkie decyzje</option>
+                {% for key, label in decisionLabels %}
+                    <option value="{{ key }}"{{ filters.decision == key ? ' selected' }}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <select name="account" class="form-control" aria-label="Konto">
+                <option value="">Wszystkie konta</option>
+                {% for a in accounts %}
+                    <option value="{{ a }}"{{ filters.account == a ? ' selected' }}>{{ a }}</option>
+                {% endfor %}
+            </select>
+            <input type="search" name="q" class="form-control" value="{{ filters.q }}" placeholder="Nadawca lub temat" aria-label="Szukaj" style="min-width:200px;">
+            <input type="date" name="from" class="form-control" value="{{ filters.from ? filters.from|date('Y-m-d') }}" aria-label="Od dnia" title="Od dnia">
+            <input type="date" name="to" class="form-control" value="{{ filters.to ? filters.to|date('Y-m-d') }}" aria-label="Do dnia" title="Do dnia">
+            <input type="number" name="min_score" class="form-control" value="{{ filters.minScore }}" placeholder="Min. pkt" aria-label="Minimalna liczba punktów" style="width:100px;">
+            <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-filter"></span> Filtruj</button>
+            {% if query is not empty %}
+                <a href="{{ path('antispam_spambox_scorelog') }}" class="btn btn-default"><span class="glyphicon glyphicon-remove"></span> Wyczyść</a>
+            {% endif %}
+        </form>
     </div>
 
     {% if logs|length > 0 %}
     <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-list-alt"></span> Ostatnie decyzje</div>
+        <div class="panel-heading">
+            <span class="glyphicon glyphicon-list-alt"></span>
+            {{ query is empty ? 'Ostatnie decyzje' : 'Wyniki filtrowania' }}
+            <span class="text-muted pull-right">{{ total }} {{ total == 1 ? 'wpis' : (total % 10 in [2, 3, 4] and total % 100 not in [12, 13, 14] ? 'wpisy' : 'wpisów') }}</span>
+        </div>
+        <div class="table-responsive">
         <table class="table table-striped" style="margin-bottom:0;">
             <thead><tr><th>Kiedy</th><th>Konto</th><th>Nadawca</th><th>Temat</th><th>Punkty</th><th>Decyzja</th><th>Powód</th></tr></thead>
             <tbody>
@@ -46,7 +81,32 @@
             {% endfor %}
             </tbody>
         </table>
+        </div>
     </div>
+
+    {% if pages > 1 %}
+        <nav class="text-center" aria-label="Strony dziennika">
+            <ul class="pagination">
+                <li class="{{ page <= 1 ? 'disabled' }}">
+                    <a href="{{ page > 1 ? path('antispam_spambox_scorelog', query|merge({page: page - 1})) : '#' }}" aria-label="Poprzednia">&laquo;</a>
+                </li>
+                {% for p in max(1, page - 3)..min(pages, page + 3) %}
+                    <li class="{{ p == page ? 'active' }}">
+                        <a href="{{ path('antispam_spambox_scorelog', query|merge({page: p})) }}">{{ p }}</a>
+                    </li>
+                {% endfor %}
+                <li class="{{ page >= pages ? 'disabled' }}">
+                    <a href="{{ page < pages ? path('antispam_spambox_scorelog', query|merge({page: page + 1})) : '#' }}" aria-label="Następna">&raquo;</a>
+                </li>
+            </ul>
+        </nav>
+    {% endif %}
+    {% elseif query is not empty %}
+        <div class="empty-state">
+            <span class="glyphicon glyphicon-filter"></span>
+            <p>Brak decyzji pasujących do filtra</p>
+            <p class="text-muted"><a href="{{ path('antispam_spambox_scorelog') }}">Wyczyść filtry</a></p>
+        </div>
     {% else %}
         <div class="empty-state">
             <span class="glyphicon glyphicon-list-alt"></span>

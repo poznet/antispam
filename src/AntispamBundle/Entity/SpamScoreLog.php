@@ -13,6 +13,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'antispam_spam_score_log')]
 #[ORM\Index(name: 'idx_account_email', columns: ['account_email'])]
 #[ORM\Index(name: 'idx_scored_at', columns: ['scored_at'])]
+#[ORM\Index(name: 'idx_decision_scored_at', columns: ['decision', 'scored_at'])]
 class SpamScoreLog
 {
     const DECISION_HAM = 'ham';

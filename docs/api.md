@@ -30,6 +30,8 @@
 | Method | URL | Description |
 |--------|-----|-------------|
 | GET | `/spambox/index` | View first 20 spam messages |
+| GET | `/spambox/quarantine` | View first 20 quarantined messages |
+| GET | `/spambox/scorelog` | Score log ("Dziennik ocen"), 50 per page. Query filters: `decision` (`ham`/`quarantine`/`spam`/`whitelisted`), `account`, `q` (sender/subject substring), `from`/`to` (`Y-m-d`), `min_score`, `page`. The decision tiles link to the matching `decision` filter |
 
 ## Configuration (`/config`)
 

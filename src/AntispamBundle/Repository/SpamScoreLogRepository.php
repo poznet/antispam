@@ -2,7 +2,9 @@
 
 namespace AntispamBundle\Repository;
 
+use AntispamBundle\Entity\SpamScoreLog;
 use Doctrine\ORM\EntityRepository;
+use Doctrine\ORM\Tools\Pagination\Paginator;
 
 class SpamScoreLogRepository extends EntityRepository
 {
@@ -15,6 +17,63 @@ class SpamScoreLogRepository extends EntityRepository
             $qb->andWhere('l.accountEmail = :e')->setParameter('e', $accountEmail);
         }
         return $qb->getQuery()->getResult();
+    }
+
+    /**
+     * Filtered, paginated score log for the "Dziennik ocen" view.
+     *
+     * Supported filters (all optional): decision (ham|quarantine|spam|whitelisted),
+     * account (exact account e-mail), q (substring of sender or subject),
+     * from / to (\DateTimeInterface, inclusive day range), minScore (int).
+     *
+     * @return array{items: SpamScoreLog[], total: int}
+     */
+    public function search(array $filters, int $page = 1, int $perPage = 50): array
+    {
+        $qb = $this->createQueryBuilder('l')
+            ->orderBy('l.scoredAt', \SortDirection::Descending)
+            ->addOrderBy('l.id', \SortDirection::Descending);
+
+        if (!empty($filters['decision'])) {
+            $qb->andWhere('l.decision = :decision')->setParameter('decision', $filters['decision']);
+        }
+        if (!empty($filters['account'])) {
+            $qb->andWhere('l.accountEmail = :account')->setParameter('account', $filters['account']);
+        }
+        if (isset($filters['q']) && $filters['q'] !== '') {
+            // Escape LIKE wildcards so "100%" or "a_b" match literally (portable ESCAPE char, not backslash).
+            $like = '%' . strtr($filters['q'], ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
+            $qb->andWhere("(l.sender LIKE :q ESCAPE '!' OR l.subject LIKE :q ESCAPE '!')")->setParameter('q', $like);
+        }
+        if (!empty($filters['from'])) {
+            $from = \DateTime::createFromInterface($filters['from'])->setTime(0, 0, 0);
+            $qb->andWhere('l.scoredAt >= :from')->setParameter('from', $from);
+        }
+        if (!empty($filters['to'])) {
+            $to = \DateTime::createFromInterface($filters['to'])->setTime(23, 59, 59);
+            $qb->andWhere('l.scoredAt <= :to')->setParameter('to', $to);
+        }
+        if (isset($filters['minScore'])) {
+            $qb->andWhere('l.score >= :minScore')->setParameter('minScore', (int)$filters['minScore']);
+        }
+
+        $page = max(1, $page);
+        $qb->setFirstResult(($page - 1) * $perPage)->setMaxResults($perPage);
+        $paginator = new Paginator($qb->getQuery(), false);
+
+        return ['items' => iterator_to_array($paginator), 'total' => count($paginator)];
+    }
+
+    /** Distinct account e-mails present in the log (for the filter dropdown). */
+    public function distinctAccounts(): array
+    {
+        $rows = $this->createQueryBuilder('l')
+            ->select('DISTINCT l.accountEmail AS email')
+            ->andWhere('l.accountEmail IS NOT NULL')
+            ->orderBy('email', \SortDirection::Ascending)
+            ->getQuery()
+            ->getArrayResult();
+        return array_column($rows, 'email');
     }
 
     public function statsByDecision(?\DateTime $since = null)

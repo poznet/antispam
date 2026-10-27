@@ -1,4 +1,4 @@
-# Pancernapanda antispam
+# Antispam Pancernapanda
 
 Symfony 4.4 application for email spam filtering via IMAP or SSH+Maildir agent. Part of the Pancernapanda security toolkit.
 
@@ -8,6 +8,7 @@ Symfony 4.4 application for email spam filtering via IMAP or SSH+Maildir agent. 
 - `web/` - public web root
 - `src/AntispamBundle/Resources/agent/` - standalone Maildir agent PHP script
 - `src/AntispamBundle/Resources/thunderbird/` - Thunderbird plugin (MailExtension), served as .xpi by `/plugin/download`
+- `landing/` - static marketing page for antispam.pancernapanda.pl (plain HTML/CSS/JS, see `landing/README.md`)
 
 ## Key concepts
 - Two connection modes per account: IMAP (remote protocol) or SSH+Maildir (direct filesystem)
@@ -32,5 +33,5 @@ See `docs/` directory for detailed documentation:
 ## Tech stack
 - PHP >= 7.1.3, Symfony 4.4, Doctrine ORM, MySQL
 - ddeboer/imap (IMAP mode), phpseclib/phpseclib (SSH mode)
-- Bootstrap 3 frontend (bundled in `Resources/public/vendor`) + custom theme `Resources/public/css/panel.css` (light/dark), Twig templates
+- Bootstrap 3 frontend (bundled in `Resources/public/vendor`) + custom theme `Resources/public/css/panel.css` (light/dark, Pancerna Panda brand colors, Montserrat + Open Sans), Twig templates
 - UI language: Polish (`locale: pl`)

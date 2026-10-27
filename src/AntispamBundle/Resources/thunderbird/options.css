@@ -1,15 +1,15 @@
 body {
   font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-  color: #1f2a44;
+  color: #060735;
   background: #ffffff;
   margin: 0;
   padding: 16px 20px 24px;
   max-width: 640px;
 }
 header { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
-h1 { font-size: 18px; margin: 0; color: #0b2a52; }
-h2 { font-size: 14px; margin: 0 0 8px; color: #0b2a52; text-transform: uppercase; letter-spacing: .5px; }
-section { border-top: 1px solid #e3ebf7; padding: 14px 0; }
+h1 { font-size: 18px; margin: 0; color: #060735; }
+h2 { font-size: 14px; margin: 0 0 8px; color: #060735; text-transform: uppercase; letter-spacing: .5px; }
+section { border-top: 1px solid #e3ecf7; padding: 14px 0; }
 label { display: block; margin: 8px 0; font-weight: 600; }
 label.check { font-weight: normal; }
 input[type=email], input[type=password], input[type=url], select {
@@ -17,20 +17,20 @@ input[type=email], input[type=password], input[type=url], select {
   padding: 6px 8px; border: 1px solid #c5d3ea; border-radius: 5px; font: inherit; font-weight: normal;
 }
 button {
-  padding: 7px 16px; border-radius: 5px; border: 1px solid #0b2a52;
-  background: #1e4a8a; color: #fff; font: inherit; font-weight: 600; cursor: pointer;
+  padding: 7px 16px; border-radius: 5px; border: 1px solid #005bba;
+  background: #005bba; color: #fff; font: inherit; font-weight: 600; cursor: pointer;
 }
-button:hover { background: #0b2a52; }
-button.secondary { background: #fff; color: #1e4a8a; }
-.muted { color: #5f7aa8; font-weight: normal; margin: 2px 0; }
+button:hover { background: #060735; border-color: #060735; }
+button.secondary { background: #fff; color: #005bba; }
+.muted { color: #636a8a; font-weight: normal; margin: 2px 0; }
 .msg { margin-left: 8px; }
 .msg.ok { color: #2e7d32; }
 .msg.err { color: #a94442; }
 @media (prefers-color-scheme: dark) {
-  body { background: #1c1b22; color: #e6e9f0; }
-  h1, h2 { color: #9cc0ff; }
-  section { border-color: #33364a; }
-  input[type=email], input[type=password], input[type=url], select { background: #2a2a36; color: #e6e9f0; border-color: #44485e; }
-  button.secondary { background: transparent; color: #9cc0ff; border-color: #9cc0ff; }
+  body { background: #060735; color: #e8ecfa; }
+  h1, h2 { color: #1fd7fd; }
+  section { border-color: #1d2163; }
+  input[type=email], input[type=password], input[type=url], select { background: #0b0d40; color: #e8ecfa; border-color: #2a2f78; }
+  button.secondary { background: transparent; color: #1fd7fd; border-color: #1fd7fd; }
   .muted { color: #9aa8c7; }
 }

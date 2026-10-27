@@ -1,5 +1,5 @@
 /*
- * Pancernapanda Antyspam — Thunderbird plugin (background script).
+ * Antispam Pancernapanda — Thunderbird plugin (background script).
  *
  * Not logged in: marking a message as junk (Thunderbird's own junk button, the
  * toolbar button or the context menu) reports it to antispam, which records
@@ -84,7 +84,7 @@ async function notify(title, message) {
   try {
     await messenger.notifications.create({
       type: "basic",
-      iconUrl: messenger.runtime.getURL("icons/icon.svg"),
+      iconUrl: messenger.runtime.getURL("icons/icon-64.png"),
       title,
       message,
     });
@@ -309,7 +309,7 @@ const MENU = {
   "antispam-check": "Sprawdź w Antyspamie",
 };
 for (const [id, title] of Object.entries(MENU)) {
-  messenger.menus.create({ id, title, contexts: ["message_list"], icons: { "32": "icons/icon.svg" } });
+  messenger.menus.create({ id, title, contexts: ["message_list"], icons: { "32": "icons/icon-32.png" } });
 }
 
 async function selectedMessages(info) {

@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="pl" class="no-js">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Antispam Pancernapanda – pancerna ochrona skrzynek pocztowych przed spamem</title>
+    <meta name="description" content="Antispam Pancernapanda filtruje pocztę przez IMAP lub bezpośrednio na serwerze (SSH + Maildir). Scoring SPF/DKIM/DMARC, DNSBL, ClamAV, VirusTotal, wspólna baza spamu i wtyczka do Thunderbirda.">
+    <meta name="theme-color" content="#060735">
+    <link rel="canonical" href="https://antispam.pancernapanda.pl/">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="pl_PL">
+    <meta property="og:site_name" content="Antispam Pancernapanda">
+    <meta property="og:title" content="Antispam Pancernapanda – pancerna ochrona skrzynek przed spamem">
+    <meta property="og:description" content="Wielowarstwowy filtr spamu dla skrzynek IMAP i serwerów z Maildirem. Jeden panel dla wszystkich kont.">
+    <meta property="og:url" content="https://antispam.pancernapanda.pl/">
+    <meta property="og:image" content="https://antispam.pancernapanda.pl/assets/img/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta name="twitter:card" content="summary_large_image">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap">
+    <link rel="stylesheet" href="assets/css/style.css">
+
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Antispam Pancernapanda",
+        "applicationCategory": "SecurityApplication",
+        "operatingSystem": "Linux, Docker",
+        "url": "https://antispam.pancernapanda.pl/",
+        "description": "Filtr spamu dla skrzynek e-mail: IMAP lub agent SSH + Maildir, scoring SPF/DKIM/DMARC, DNSBL, ClamAV, VirusTotal, wspólna baza spamu i wtyczka Thunderbird.",
+        "publisher": { "@type": "Organization", "name": "Pancerna Panda", "url": "https://pancernapanda.pl" }
+    }
+    </script>
+</head>
+<body>
+
+<!-- ============ Header ============ -->
+<header class="site-header">
+    <div class="wrap nav">
+        <a class="brand" href="#top" aria-label="Antispam Pancernapanda – strona główna">
+            <img src="assets/img/pp-shield.png" alt="" width="42" height="42">
+            <span class="brand-text"><strong>Antispam</strong><span>Pancernapanda</span></span>
+        </a>
+        <ul class="nav-links">
+            <li><a href="#funkcje">Funkcje</a></li>
+            <li><a href="#scoring">Scoring</a></li>
+            <li><a href="#tryby">IMAP i agent</a></li>
+            <li><a href="#baza">Wspólna baza</a></li>
+            <li><a href="#thunderbird">Thunderbird</a></li>
+            <li><a href="#faq">FAQ</a></li>
+        </ul>
+        <div class="nav-cta">
+            <a class="btn btn-ghost btn-sm" href="/login">Zaloguj się</a>
+            <a class="btn btn-primary btn-sm" href="#kontakt">Zamów ochronę</a>
+        </div>
+        <button class="nav-toggle" type="button" aria-label="Menu" aria-expanded="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+    </div>
+</header>
+
+<main id="top">
+
+<!-- ============ Hero ============ -->
+<section class="hero">
+    <div class="wrap hero-grid">
+        <div class="hero-text">
+            <span class="badge"><b>Nowość</b> Wtyczka do Thunderbirda i wspólna baza spamu</span>
+            <h1>Pancerna ochrona <span class="grad-text">Twojej skrzynki</span> przed spamem.</h1>
+            <p class="hero-lead">Antispam Pancernapanda ocenia każdą wiadomość kilkunastoma sygnałami: SPF, DKIM, DMARC, listami DNSBL, skanem załączników i bazą spamu zebraną przez innych użytkowników. Spam trafia do folderu SPAM, a wiadomości wątpliwe do kwarantanny. Działa przez IMAP albo bezpośrednio na serwerze hostingowym.</p>
+            <div class="hero-actions">
+                <a class="btn btn-primary" href="#kontakt">
+                    Chroń swoje skrzynki
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                </a>
+                <a class="btn btn-ghost" href="#jak-to-dziala">Zobacz, jak to działa</a>
+            </div>
+            <ul class="hero-points">
+                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Bez zmiany serwera poczty</li>
+                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Jeden panel dla wszystkich kont</li>
+                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Panel po polsku</li>
+            </ul>
+        </div>
+
+        <div class="hero-visual" aria-hidden="true">
+            <span class="hero-glow"></span>
+            <div class="mock">
+                <div class="mock-bar"><i></i><i></i><i></i><span>antispam.pancernapanda.pl</span></div>
+                <div class="mock-body">
+                    <div class="mock-side">
+                        <img src="assets/img/pp-shield.png" alt="">
+                        <i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+                    </div>
+                    <div class="mock-main">
+                        <div class="mock-hero">
+                            <div><b>Ochrona aktywna</b><small>ostatnie 30 dni · 12 skrzynek</small></div>
+                            <div class="pct">96,4%</div>
+                        </div>
+                        <div class="mock-stats">
+                            <div class="mock-stat s"><small>Spam</small><b>1 284</b></div>
+                            <div class="mock-stat q"><small>Kwarantanna</small><b>97</b></div>
+                            <div class="mock-stat h"><small>Czyste</small><b>4 512</b></div>
+                        </div>
+                        <div class="mock-log">
+                            <div class="mock-row"><span>„Twoja paczka czeka – dopłać 1,99 zł”</span><b>18</b><span class="tag tag-spam">spam</span></div>
+                            <div class="mock-row"><span>Faktura VAT 10/2026 – załącznik.zip</span><b>15</b><span class="tag tag-spam">spam</span></div>
+                            <div class="mock-row"><span>Oferta współpracy SEO</span><b>7</b><span class="tag tag-q">kwarant.</span></div>
+                            <div class="mock-row"><span>Re: wdrożenie – harmonogram</span><b>0</b><span class="tag tag-ham">czysta</span></div>
+                            <div class="mock-row"><span>Powiadomienie z banku</span><b>–</b><span class="tag tag-wl">whitelist</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="float-card float-a">
+                <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 9 6 6M15 9l-6 6"/></svg></span>
+                <div><b>Zablokowano malware</b><small>ClamAV: Win.Trojan.Agent</small></div>
+            </div>
+            <div class="float-card float-b">
+                <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span>
+                <div><b>Trafienie w DNSBL</b><small>zen.spamhaus.org · +5 pkt</small></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ Tech strip ============ -->
+<div class="strip">
+    <div class="wrap strip-inner">
+        <span class="strip-label">Pod maską</span>
+        <ul class="strip-items">
+            <li>IMAP</li><li>SSH + Maildir</li><li>SPF · DKIM · DMARC</li><li>Spamhaus i inne DNSBL</li><li>ClamAV</li><li>VirusTotal</li><li>Thunderbird 115+</li><li>Docker / Coolify</li>
+        </ul>
+    </div>
+</div>
+
+<!-- ============ How it works ============ -->
+<section class="section" id="jak-to-dziala">
+    <div class="wrap">
+        <div class="section-head center reveal">
+            <span class="eyebrow">Jak to działa</span>
+            <h2>Trzy kroki do czystej skrzynki</h2>
+            <p>Nie trzeba zmieniać serwera poczty ani rekordów MX. Antispam łączy się z istniejącymi skrzynkami i sprząta je na bieżąco.</p>
+        </div>
+        <div class="steps">
+            <article class="step reveal">
+                <div class="step-num">1</div>
+                <h3>Podłączasz skrzynkę</h3>
+                <p>Podajesz dane IMAP albo dostęp SSH do hostingu. Panel sprawdza połączenie i środowisko serwera (PHP, SQLite, Maildir).</p>
+                <div class="step-art">
+                    <svg viewBox="0 0 300 70" role="img" aria-label="Skrzynka połączona z antyspamem">
+                        <rect x="4" y="14" width="86" height="42" rx="10" fill="#e6f9ff" stroke="#00adef"/>
+                        <path d="M18 26h58v22H18z" fill="none" stroke="#005bba" stroke-width="2.5" stroke-linejoin="round"/>
+                        <path d="m18 26 29 14 29-14" fill="none" stroke="#005bba" stroke-width="2.5" stroke-linejoin="round"/>
+                        <path class="flow" d="M96 35h96" stroke="#00adef" stroke-width="3" stroke-linecap="round"/>
+                        <rect x="198" y="8" width="98" height="54" rx="12" fill="#060735"/>
+                        <image href="assets/img/pp-shield.png" x="208" y="17" width="36" height="36"/>
+                        <text x="250" y="32" fill="#fff" font-family="Montserrat, sans-serif" font-size="11" font-weight="700">IMAP</text>
+                        <text x="250" y="48" fill="#1fd7fd" font-family="Montserrat, sans-serif" font-size="11" font-weight="700">SSH</text>
+                    </svg>
+                </div>
+            </article>
+            <article class="step reveal">
+                <div class="step-num">2</div>
+                <h3>Każda wiadomość dostaje wynik</h3>
+                <p>Nagłówki, nadawca, listy DNSBL, załączniki i wspólna baza dodają punkty. Białe listy pomijają ocenę, czarne listy od razu podnoszą wynik.</p>
+                <div class="step-art">
+                    <svg viewBox="0 0 300 70" role="img" aria-label="Sumowanie punktów">
+                        <g font-family="JetBrains Mono, monospace" font-size="11" font-weight="700">
+                            <rect x="4" y="8" width="60" height="24" rx="7" fill="#fff" stroke="#e2e9f4"/><text x="12" y="24" fill="#005bba">SPF +6</text>
+                            <rect x="70" y="8" width="66" height="24" rx="7" fill="#fff" stroke="#e2e9f4"/><text x="78" y="24" fill="#005bba">DKIM +4</text>
+                            <rect x="142" y="8" width="70" height="24" rx="7" fill="#fff" stroke="#e2e9f4"/><text x="150" y="24" fill="#005bba">DNSBL +5</text>
+                            <rect x="4" y="40" width="76" height="24" rx="7" fill="#fff" stroke="#e2e9f4"/><text x="12" y="56" fill="#005bba">Feed +6</text>
+                            <rect x="86" y="40" width="96" height="24" rx="7" fill="#fff" stroke="#e2e9f4"/><text x="94" y="56" fill="#005bba">Reply-To +3</text>
+                        </g>
+                        <rect x="222" y="14" width="74" height="44" rx="12" fill="url(#g1)"/>
+                        <text x="259" y="43" text-anchor="middle" fill="#060735" font-family="Montserrat, sans-serif" font-size="20" font-weight="800">24</text>
+                        <defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1fd7fd"/><stop offset="1" stop-color="#00adef"/></linearGradient></defs>
+                    </svg>
+                </div>
+            </article>
+            <article class="step reveal">
+                <div class="step-num">3</div>
+                <h3>Spam wylatuje ze skrzynki odbiorczej</h3>
+                <p>Powyżej progu spamu wiadomość trafia do folderu SPAM (albo jest kasowana). Wiadomości z pogranicza idą do kwarantanny, a czyste zostają w INBOX.</p>
+                <div class="step-art">
+                    <svg viewBox="0 0 300 70" role="img" aria-label="Rozdział na foldery">
+                        <g font-family="Montserrat, sans-serif" font-size="11" font-weight="700">
+                            <rect x="4" y="4" width="92" height="62" rx="10" fill="#ecfdf5" stroke="#34d399"/><text x="50" y="32" text-anchor="middle" fill="#059669">INBOX</text><text x="50" y="50" text-anchor="middle" fill="#059669" font-size="10">&lt; 5 pkt</text>
+                            <rect x="104" y="4" width="92" height="62" rx="10" fill="#fffbeb" stroke="#fbbf24"/><text x="150" y="32" text-anchor="middle" fill="#b45309">KWARANTANNA</text><text x="150" y="50" text-anchor="middle" fill="#b45309" font-size="10">5–9 pkt</text>
+                            <rect x="204" y="4" width="92" height="62" rx="10" fill="#fef2f2" stroke="#f87171"/><text x="250" y="32" text-anchor="middle" fill="#dc2626">SPAM</text><text x="250" y="50" text-anchor="middle" fill="#dc2626" font-size="10">≥ 10 pkt</text>
+                        </g>
+                    </svg>
+                </div>
+            </article>
+        </div>
+    </div>
+</section>
+
+<!-- ============ Features ============ -->
+<section class="section section-soft" id="funkcje">
+    <div class="wrap">
+        <div class="section-head reveal">
+            <span class="eyebrow">Funkcje</span>
+            <h2>Wszystko, czego potrzebuje skrzynka pod ostrzałem</h2>
+            <p>Kilka niezależnych warstw ochrony zamiast jednej reguły, która łatwo się myli. Każdą warstwę włączasz, wyłączasz i ważysz w panelu.</p>
+        </div>
+        <div class="features">
+            <article class="feature reveal">
+                <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></div>
+                <h3>SPF, DKIM i DMARC</h3>
+                <p>Sprawdza uwierzytelnienie nadawcy i wyłapuje podszywanie się pod znane domeny, w tym niezgodny <code>Reply-To</code>.</p>
+            </article>
+            <article class="feature reveal">
+                <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></div>
+                <h3>Listy DNSBL</h3>
+                <p>Gotowe presety: Spamhaus, SORBS, Barracuda, SpamCop, PSBL i UCEPROTECT. Możesz też dodać własne strefy. Wyniki są cache'owane, więc DNS nie jest zasypywany zapytaniami.</p>
+            </article>
+            <article class="feature reveal">
+                <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.1 12.2 20.3a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg></div>
+                <h3>Skan załączników</h3>
+                <p>ClamAV sprawdza pliki w locie. VirusTotal dostaje tylko hash SHA-256, nigdy sam plik. Wykryte malware od razu oznacza wiadomość jako spam.</p>
+            </article>
+            <article class="feature reveal">
+                <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+                <h3>Białe i czarne listy</h3>
+                <p>Dla domen i adresów e-mail, osobno dla każdego konta. Wzorce dokładne, wieloznaczne (<code>*.example.com</code>) i wyrażenia regularne.</p>
+            </article>
+            <article class="feature reveal">
+                <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01"/></svg></div>
+                <h3>Kwarantanna</h3>
+                <p>Wiadomości z pogranicza nie giną. Lądują w osobnym folderze, gdzie przeglądasz je w panelu i jednym kliknięciem przywracasz.</p>
+            </article>
+            <article class="feature reveal">
+                <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></div>
+                <h3>Dziennik ocen</h3>
+                <p>Każda decyzja ma zapisany wynik i listę powodów (<code>spf:fail</code>, <code>dnsbl:zen</code>, <code>clamav:…</code>). Wiesz dokładnie, dlaczego wiadomość została oznaczona.</p>
+            </article>
+            <article class="feature feature-wide reveal">
+                <div>
+                    <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg></div>
+                    <h3>Wspólna baza spamu</h3>
+                    <p>Spam złapany na jednej instancji szybciej trafia na pozostałe. Wymieniane są tylko jednokierunkowe odciski SHA-256, bez adresów i treści.</p>
+                    <p><a href="#baza"><strong>Jak to działa →</strong></a></p>
+                </div>
+                <svg viewBox="0 0 260 150" aria-hidden="true">
+                    <defs><linearGradient id="g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1fd7fd"/><stop offset=".5" stop-color="#00adef"/><stop offset="1" stop-color="#005bba"/></linearGradient></defs>
+                    <g stroke="#00adef" stroke-width="2" fill="none" opacity=".6">
+                        <path class="flow" d="M130 75 50 30"/><path class="flow" d="M130 75 210 30"/><path class="flow" d="M130 75 50 120"/><path class="flow" d="M130 75 210 120"/>
+                    </g>
+                    <circle cx="130" cy="75" r="30" fill="url(#g2)"/>
+                    <image href="assets/img/pp-shield.png" x="112" y="57" width="36" height="36"/>
+                    <g fill="#fff" stroke="#00adef" stroke-width="2">
+                        <circle cx="50" cy="30" r="16"/><circle cx="210" cy="30" r="16"/><circle cx="50" cy="120" r="16"/><circle cx="210" cy="120" r="16"/>
+                    </g>
+                    <g fill="#005bba"><circle cx="50" cy="30" r="5"/><circle cx="210" cy="30" r="5"/><circle cx="50" cy="120" r="5"/><circle cx="210" cy="120" r="5"/></g>
+                </svg>
+            </article>
+            <article class="feature reveal">
+                <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></div>
+                <h3>Import i eksport</h3>
+                <p>Masowe dodawanie reguł i przenoszenie list między kontami i serwerami.</p>
+            </article>
+        </div>
+    </div>
+</section>
+
+<!-- ============ Scoring ============ -->
+<section class="section section-dark" id="scoring">
+    <div class="wrap">
+        <div class="section-head reveal">
+            <span class="eyebrow">Scoring</span>
+            <h2>Przejrzysty pipeline zamiast „czarnej skrzynki”</h2>
+            <p>Każda wiadomość przechodzi przez łańcuch sprawdzeń. Każde trafienie dodaje punkty, a o decyzji przesądza suma. Progi i wagi ustawiasz sam.</p>
+        </div>
+        <div class="pipeline-wrap">
+            <ol class="pipeline reveal">
+                <li>
+                    <span class="pipe-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                    <div><h4>Białe listy</h4><p>Zaufany nadawca? Wiadomość nie jest w ogóle oceniana.</p></div>
+                    <span class="pipe-score stop">STOP</span>
+                </li>
+                <li>
+                    <span class="pipe-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg></span>
+                    <div><h4>Czarne listy domen i adresów</h4><p>Dokładne dopasowanie, wildcard lub regex, każda reguła z własną wagą.</p></div>
+                    <span class="pipe-score">+10</span>
+                </li>
+                <li>
+                    <span class="pipe-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                    <div><h4>SPF · DKIM · DMARC</h4><p>Brak lub błąd uwierzytelnienia domeny nadawcy.</p></div>
+                    <span class="pipe-score">+4…6</span>
+                </li>
+                <li>
+                    <span class="pipe-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></span>
+                    <div><h4>Heurystyki nagłówków</h4><p>Niezgodny From/Reply-To, CAPS LOCK i „$$$” w temacie, brak Message-ID, długi łańcuch Received.</p></div>
+                    <span class="pipe-score">+2…3</span>
+                </li>
+                <li>
+                    <span class="pipe-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span>
+                    <div><h4>DNSBL</h4><p>IP serwera nadawcy sprawdzane na włączonych listach blokad.</p></div>
+                    <span class="pipe-score">+wg strefy</span>
+                </li>
+                <li>
+                    <span class="pipe-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.1 12.2 20.3a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg></span>
+                    <div><h4>ClamAV i VirusTotal</h4><p>Zainfekowany załącznik od razu oznacza wiadomość jako spam.</p></div>
+                    <span class="pipe-score force">+15 · SPAM</span>
+                </li>
+                <li>
+                    <span class="pipe-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg></span>
+                    <div><h4>Wspólna baza spamu</h4><p>Nadawca albo treść znane już z innych zgłoszeń.</p></div>
+                    <span class="pipe-score">+6</span>
+                </li>
+            </ol>
+
+            <aside class="decision-card reveal">
+                <h3>Decyzja</h3>
+                <p>Domyślne progi: kwarantanna od 5 pkt, spam od 10 pkt. Oba zmienisz w ustawieniach filtra.</p>
+                <div class="meter">
+                    <div class="meter-pin"><span style="left: 12.5%">Wynik 2 · czysta</span></div>
+                    <div class="meter-track"><i></i><i></i><i></i></div>
+                    <div class="meter-scale"><span>0</span><span>5</span><span>10+</span></div>
+                </div>
+                <div class="decisions">
+                    <div class="decision"><span class="tag tag-wl">whitelist</span><div><b>Zaufany</b><span>Pominięty, zostaje w skrzynce</span></div></div>
+                    <div class="decision"><span class="tag tag-ham">czysta</span><div><b>Poniżej progu kwarantanny</b><span>Zostaje w INBOX</span></div></div>
+                    <div class="decision"><span class="tag tag-q">kwarantanna</span><div><b>Od progu kwarantanny</b><span>Folder QUARANTINE do przejrzenia</span></div></div>
+                    <div class="decision"><span class="tag tag-spam">spam</span><div><b>Od progu spamu</b><span>Folder SPAM albo trwałe usunięcie</span></div></div>
+                </div>
+                <div class="patterns" aria-label="Przykładowe wzorce reguł">
+                    <code>spam-domain.com</code><code>*.example.ru</code><code>*@*.top</code><code>^mail\d+\.bad$</code>
+                </div>
+            </aside>
+        </div>
+    </div>
+</section>
+
+<!-- ============ Modes ============ -->
+<section class="section" id="tryby">
+    <div class="wrap">
+        <div class="section-head center reveal">
+            <span class="eyebrow">Dwa tryby pracy</span>
+            <h2>Przez IMAP albo prosto na serwerze</h2>
+            <p>Każde konto ma własny tryb połączenia. Skrzynki u zewnętrznych dostawców obsługujesz przez IMAP, a na własnym hostingu uruchamiasz lekkiego agenta.</p>
+        </div>
+        <div class="modes">
+            <article class="mode reveal">
+                <div class="mode-head">
+                    <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg></div>
+                    <div><small>Tryb zdalny</small><h3>IMAP</h3></div>
+                </div>
+                <p>Antispam łączy się ze skrzynką jak zwykły klient poczty, ocenia nowe wiadomości i przenosi spam do odpowiednich folderów.</p>
+                <ul class="checklist">
+                    <li>Działa z dowolnym serwerem poczty: hosting, Gmail z hasłem aplikacji, własny Dovecot</li>
+                    <li>Nic nie instalujesz po stronie serwera poczty</li>
+                    <li>Pełny pipeline: DNSBL, ClamAV, VirusTotal, wspólna baza</li>
+                    <li>Automatyczne skanowanie z crona co kilka minut</li>
+                </ul>
+                <div class="mode-flow">
+                    <svg viewBox="0 0 440 90" aria-hidden="true">
+                        <rect x="2" y="20" width="120" height="50" rx="12" fill="#f4f8fd" stroke="#e2e9f4"/>
+                        <text x="62" y="50" text-anchor="middle" font-family="Montserrat, sans-serif" font-size="13" font-weight="700" fill="#060735">Serwer poczty</text>
+                        <path class="flow" d="M126 45h150" stroke="#00adef" stroke-width="3" stroke-linecap="round"/>
+                        <text x="200" y="36" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#005bba">IMAP :143 / :993</text>
+                        <rect x="282" y="12" width="156" height="66" rx="14" fill="#060735"/>
+                        <image href="assets/img/pp-shield.png" x="294" y="25" width="40" height="40"/>
+                        <text x="342" y="42" font-family="Montserrat, sans-serif" font-size="13" font-weight="800" fill="#fff">ANTISPAM</text>
+                        <text x="342" y="58" font-family="Open Sans, sans-serif" font-size="11" fill="#1fd7fd">filtrowanie</text>
+                    </svg>
+                </div>
+            </article>
+            <article class="mode reveal">
+                <div class="mode-head">
+                    <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 7h.01M6 17h.01"/></svg></div>
+                    <div><small>Tryb hostingowy</small><h3>SSH + agent Maildir</h3></div>
+                </div>
+                <p>Jeden plik PHP na serwerze hostingowym pracuje bezpośrednio na katalogach Maildir, bez IMAP-a. Reguły trzyma lokalnie w SQLite.</p>
+                <ul class="checklist">
+                    <li>Wdrożenie agenta jednym kliknięciem z panelu (klucz SSH ed25519)</li>
+                    <li>Synchronizacja reguł, DNSBL i ustawień skanu załączników</li>
+                    <li>Zero zależności Composera: wystarczy PHP 7.1+ i SQLite3</li>
+                    <li>Raport ze skanu w JSON i kontrola stanu (<code>health</code>)</li>
+                </ul>
+                <div class="terminal">
+                    <div class="terminal-bar"><i></i><i></i><i></i></div>
+<pre><span class="t-c"># na serwerze hostingowym</span>
+<span class="t-p">$</span> php antispam-agent.php scan <span class="t-k">--maildir</span>=~/Maildir
+{
+  <span class="t-s">"checked"</span>: 120, <span class="t-s">"whitelisted"</span>: 45,
+  <span class="t-s">"blacklisted"</span>: 12, <span class="t-s">"attachments_flagged"</span>: 2,
+  <span class="t-s">"moved_to_spam"</span>: 12
+}</pre>
+                </div>
+            </article>
+        </div>
+    </div>
+</section>
+
+<!-- ============ Shared feed ============ -->
+<section class="section section-soft" id="baza">
+    <div class="wrap feed-grid">
+        <div class="reveal">
+            <span class="eyebrow">Wspólna baza spamu</span>
+            <h2>Spam zauważony raz jest blokowany wszędzie</h2>
+            <p style="margin-top:16px;font-size:18px;color:var(--muted)">Gdy któraś instancja uzna wiadomość za spam, zapisuje jej odcisk. Odciski trafiają do centralnego huba, a pozostałe instancje je pobierają. Kolejna fala tej samej kampanii jest wtedy blokowana od pierwszej wiadomości.</p>
+            <div class="hash-box">
+                <div class="hash-row"><b>sender</b><code>sha256(„jan.kowalski@spam.example”) → 9f2c…41ab</code></div>
+                <div class="hash-row"><b>body</b><code>treść bez podpisu, linków i cyfr → sha256 → c07e…d93f</code></div>
+            </div>
+            <div class="privacy-note">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                <span><strong>Prywatność:</strong> instancję opuszczają tylko jednokierunkowe hashe SHA-256. Ani adresy, ani treść wiadomości nie trafiają do wspólnej bazy.</span>
+            </div>
+        </div>
+        <div class="feed-art reveal" aria-hidden="true">
+            <svg viewBox="0 0 520 440">
+                <defs>
+                    <linearGradient id="g3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1fd7fd"/><stop offset=".5" stop-color="#00adef"/><stop offset="1" stop-color="#005bba"/></linearGradient>
+                    <radialGradient id="g4"><stop offset="0" stop-color="#1fd7fd" stop-opacity=".35"/><stop offset="1" stop-color="#1fd7fd" stop-opacity="0"/></radialGradient>
+                </defs>
+                <circle cx="260" cy="220" r="200" fill="url(#g4)"/>
+                <circle cx="260" cy="220" r="150" fill="none" stroke="#00adef" stroke-opacity=".25" stroke-dasharray="4 8"/>
+                <g stroke="#00adef" stroke-width="2.5" fill="none" stroke-linecap="round">
+                    <path class="flow" d="M260 220 92 92"/><path class="flow" d="M260 220 428 92"/><path class="flow" d="M260 220 92 348"/><path class="flow" d="M260 220 428 348"/><path class="flow" d="M260 220 260 40"/>
+                </g>
+                <circle class="pulse" cx="260" cy="220" r="70" fill="#1fd7fd" opacity=".4"/>
+                <circle cx="260" cy="220" r="66" fill="#060735"/>
+                <circle cx="260" cy="220" r="66" fill="none" stroke="url(#g3)" stroke-width="4"/>
+                <image href="assets/img/pp-shield.png" x="228" y="182" width="64" height="64"/>
+                <text x="260" y="268" text-anchor="middle" font-family="Montserrat, sans-serif" font-size="12" font-weight="800" fill="#1fd7fd">HUB</text>
+                <g font-family="Montserrat, sans-serif" font-size="12" font-weight="700" fill="#060735" text-anchor="middle">
+                    <g><rect x="40" y="58" width="104" height="68" rx="16" fill="#fff" stroke="#e2e9f4"/><text x="92" y="88">Instancja A</text><text x="92" y="108" font-size="10" fill="#dc2626">+ nowy spam</text></g>
+                    <g><rect x="376" y="58" width="104" height="68" rx="16" fill="#fff" stroke="#e2e9f4"/><text x="428" y="88">Instancja B</text><text x="428" y="108" font-size="10" fill="#059669">zablokowane ✓</text></g>
+                    <g><rect x="40" y="314" width="104" height="68" rx="16" fill="#fff" stroke="#e2e9f4"/><text x="92" y="344">Thunderbird</text><text x="92" y="364" font-size="10" fill="#005bba">zgłoszenie</text></g>
+                    <g><rect x="376" y="314" width="104" height="68" rx="16" fill="#fff" stroke="#e2e9f4"/><text x="428" y="344">Instancja C</text><text x="428" y="364" font-size="10" fill="#059669">zablokowane ✓</text></g>
+                    <g><rect x="208" y="8" width="104" height="58" rx="16" fill="#fff" stroke="#e2e9f4"/><text x="260" y="34">Agent</text><text x="260" y="52" font-size="10" fill="#005bba">Maildir</text></g>
+                </g>
+            </svg>
+        </div>
+    </div>
+</section>
+
+<!-- ============ Thunderbird ============ -->
+<section class="section" id="thunderbird">
+    <div class="wrap tb-grid">
+        <div class="tb-mock reveal" aria-hidden="true">
+            <div class="tb-top"><img src="assets/img/pp-shield.png" alt="">Odebrane – biuro@firma.pl<span class="tb-btn">Zgłoś spam</span></div>
+            <div class="tb-list">
+                <div class="tb-mail"><i></i><span>Anna Nowak</span><span>Spotkanie w czwartek – potwierdzenie</span></div>
+                <div class="tb-mail sel"><i></i><span>Kurier Express24</span><span>Twoja paczka czeka – dopłać 1,99 zł</span></div>
+                <div class="tb-mail"><i></i><span>Księgowość</span><span>Zestawienie za październik</span></div>
+                <div class="tb-mail junk"><i></i><span>Bank Premium</span><span>Pilne: zweryfikuj konto</span></div>
+                <div class="tb-mail"><i></i><span>Hosting</span><span>Odnowienie domeny firma.pl</span></div>
+                <div class="tb-mail"><i></i><span>Jan Kowalski</span><span>Re: oferta</span></div>
+                <div class="tb-mail"><i></i><span>Newsletter</span><span>Nowości w październiku</span></div>
+            </div>
+            <div class="tb-menu">
+                <div>Odpowiedz</div>
+                <div>Przekaż dalej</div>
+                <hr>
+                <div class="hl"><img src="assets/img/pp-shield.png" alt="">Zgłoś jako spam (Antyspam)</div>
+                <div><img src="assets/img/pp-shield.png" alt="">To nie spam (Antyspam)</div>
+                <div><img src="assets/img/pp-shield.png" alt="">Sprawdź w Antyspamie</div>
+            </div>
+            <div class="tb-toast"><img src="assets/img/pp-shield.png" alt=""><div><b>Antyspam: SPAM</b><span>Wynik 16 · przeniesiono do folderu Spam</span></div></div>
+        </div>
+        <div class="reveal">
+            <span class="eyebrow">Wtyczka Thunderbird</span>
+            <h2>Antyspam bezpośrednio w kliencie poczty</h2>
+            <p style="margin-top:16px;font-size:18px;color:var(--muted)">Wtyczka do Thunderbirda 115+ łączy klienta poczty z antyspamem. Pobierasz ją jako gotowy plik <code>.xpi</code> z adresem serwera już w środku, więc nic nie trzeba konfigurować.</p>
+            <table class="tb-table">
+                <thead><tr><th>Funkcja</th><th>Bez logowania</th><th>Zalogowany</th></tr></thead>
+                <tbody>
+                    <tr><td>Zgłoś jako spam (do wspólnej bazy)</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+                    <tr><td>Dopisanie nadawcy do czarnej listy konta</td><td class="no">–</td><td class="yes">✓</td></tr>
+                    <tr><td>„To nie spam”, czyli nadawca na białą listę</td><td class="no">–</td><td class="yes">✓</td></tr>
+                    <tr><td>Sprawdzanie nowej poczty przy odbiorze</td><td class="no">–</td><td class="yes">✓</td></tr>
+                    <tr><td>Ręczne „Sprawdź w Antyspamie”</td><td class="no">–</td><td class="yes">✓</td></tr>
+                </tbody>
+            </table>
+            <p style="margin-top:22px"><a class="btn btn-primary" href="/plugin/download">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                Pobierz wtyczkę (.xpi)</a></p>
+        </div>
+    </div>
+</section>
+
+<!-- ============ Panel ============ -->
+<section class="section section-dark" id="panel">
+    <div class="wrap">
+        <div class="section-head reveal">
+            <span class="eyebrow">Panel administracyjny</span>
+            <h2>Jeden panel, wszystkie skrzynki</h2>
+            <p>Czytelny panel po polsku, z trybem jasnym i ciemnym. Konta, listy, kwarantanna, statystyki i konfiguracja w jednym miejscu.</p>
+        </div>
+        <div class="panel-grid">
+            <article class="panel-card reveal"><div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></svg></div><h3>Pulpit</h3><p>Skuteczność ochrony, liczba spamu i kwarantanny, najczęstsi spamerzy.</p></article>
+            <article class="panel-card reveal"><div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.3A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></div><h3>Konta</h3><p>Test połączenia, wdrożenie agenta, synchronizacja reguł i skan na żądanie.</p></article>
+            <article class="panel-card reveal"><div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/></svg></div><h3>Folder spamu i kwarantanna</h3><p>Przegląd złapanych wiadomości i przywracanie fałszywych alarmów.</p></article>
+            <article class="panel-card reveal"><div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></div><h3>Ustawienia filtra</h3><p>Progi, wagi sygnałów, ClamAV, VirusTotal i wspólna baza.</p></article>
+        </div>
+    </div>
+</section>
+
+<!-- ============ Audience ============ -->
+<section class="section" id="dla-kogo">
+    <div class="wrap">
+        <div class="section-head center reveal">
+            <span class="eyebrow">Dla kogo</span>
+            <h2>Od jednej skrzynki do całego hostingu</h2>
+        </div>
+        <div class="audience">
+            <article class="aud reveal">
+                <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></div>
+                <h3>Firmy i biura</h3>
+                <p>Koniec z fałszywymi fakturami, „dopłatami do paczki” i phishingiem na skrzynkach pracowników.</p>
+                <ul class="checklist"><li>Ochrona skrzynek firmowych</li><li>Kwarantanna zamiast utraconych maili</li><li>Wtyczka dla pracowników</li></ul>
+            </article>
+            <article class="aud reveal">
+                <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 7h.01M6 17h.01"/></svg></div>
+                <h3>Firmy hostingowe</h3>
+                <p>Agent Maildir działa bezpośrednio na serwerach klientów, bez przebudowy infrastruktury pocztowej.</p>
+                <ul class="checklist"><li>Wdrożenie przez SSH z panelu</li><li>Skan wszystkich kont z crona</li><li>Mniej zgłoszeń do supportu</li></ul>
+            </article>
+            <article class="aud reveal">
+                <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg></div>
+                <h3>Administratorzy IT</h3>
+                <p>Przejrzyste reguły, dziennik powodów, CLI i API wspólnej bazy. Pełna kontrola bez magii.</p>
+                <ul class="checklist"><li>Regex i wildcard w regułach</li><li>Komendy konsoli Symfony</li><li>Docker i Coolify</li></ul>
+            </article>
+        </div>
+    </div>
+</section>
+
+<!-- ============ Deploy ============ -->
+<section class="section section-soft" id="wdrozenie">
+    <div class="wrap deploy">
+        <div class="reveal">
+            <span class="eyebrow">Wdrożenie</span>
+            <h2>Gotowe do uruchomienia w kilka minut</h2>
+            <ul class="deploy-list">
+                <li><span class="n">1</span><div><b>Docker Compose albo Coolify</b><span>Gotowy obraz PHP + Apache z MariaDB. Konfiguracja przez zmienne środowiskowe.</span></div></li>
+                <li><span class="n">2</span><div><b>Dodajesz konta</b><span>IMAP albo SSH. Klucz ed25519, test środowiska i wdrożenie agenta z panelu.</span></div></li>
+                <li><span class="n">3</span><div><b>Cron i gotowe</b><span>Skan co kilka minut, a reguły same synchronizują się z agentami.</span></div></li>
+            </ul>
+        </div>
+        <div class="terminal reveal">
+            <div class="terminal-bar"><i></i><i></i><i></i></div>
+<pre><span class="t-c"># 1. uruchom aplikację</span>
+<span class="t-p">$</span> cp .env.example .env
+<span class="t-p">$</span> docker compose up -d
+
+<span class="t-c"># 2. wdroż agenta i zsynchronizuj reguły</span>
+<span class="t-p">$</span> bin/console antispam:agent:sync
+
+<span class="t-c"># 3. skan wszystkich kont co 5 minut</span>
+<span class="t-k">*/5 * * * *</span> php bin/console antispam:agent:scan-all</pre>
+        </div>
+    </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section class="section" id="faq">
+    <div class="wrap">
+        <div class="section-head center reveal">
+            <span class="eyebrow">FAQ</span>
+            <h2>Najczęstsze pytania</h2>
+        </div>
+        <div class="faq reveal">
+            <details open>
+                <summary>Czy muszę zmieniać rekordy MX albo serwer poczty?</summary>
+                <p>Nie. Antispam nie stoi na drodze poczty jak bramka SMTP. Łączy się z istniejącymi skrzynkami przez IMAP albo pracuje na Maildirze przez agenta i sprząta je po dostarczeniu wiadomości.</p>
+            </details>
+            <details>
+                <summary>Co jeśli ważna wiadomość zostanie uznana za spam?</summary>
+                <p>Wiadomości z pogranicza trafiają do kwarantanny, nie do kosza. W panelu widzisz wynik i listę powodów, przywracasz wiadomość, a nadawcę dopisujesz do białej listy. W Thunderbirdzie wystarczy kliknąć „To nie spam”.</p>
+            </details>
+            <details>
+                <summary>Czy treść moich maili trafia do zewnętrznych serwisów?</summary>
+                <p>Nie. Wspólna baza spamu wymienia wyłącznie jednokierunkowe hashe SHA-256 nadawcy i znormalizowanej treści. VirusTotal dostaje tylko hash załącznika, nigdy sam plik. ClamAV może działać lokalnie na Twoim serwerze.</p>
+            </details>
+            <details>
+                <summary>Jakie wymagania ma agent Maildir?</summary>
+                <p>PHP 7.1+ z rozszerzeniem SQLite3 i dostęp do katalogu Maildir. Nie wymaga Composera. ClamAV i rozszerzenie curl (VirusTotal) są opcjonalne.</p>
+            </details>
+            <details>
+                <summary>Czy działa z Gmailem albo zewnętrzną pocztą?</summary>
+                <p>Tryb IMAP działa z każdym serwerem, który pozwala logować się do IMAP hasłem. W Gmailu wystarczy wygenerować dla antyspamu hasło aplikacji. Dostawcy, którzy wymagają wyłącznie logowania OAuth (np. Microsoft 365), nie są obecnie obsługiwani.</p>
+            </details>
+            <details>
+                <summary>Czy mogę mieć własną instancję i własny hub wspólnej bazy?</summary>
+                <p>Tak. Każda instancja może być jednocześnie hubem i klientem wspólnej bazy. O roli decyduje to, które pola konfiguracji wypełnisz.</p>
+            </details>
+        </div>
+    </div>
+</section>
+
+<!-- ============ CTA ============ -->
+<section class="section" id="kontakt" style="padding-top:0">
+    <div class="wrap">
+        <div class="cta reveal">
+            <img src="assets/img/pp-shield.png" alt="" width="120" height="120">
+            <div>
+                <h2>Załóż pancerz swojej poczcie</h2>
+                <p>Chcesz chronić skrzynki w firmie albo na serwerach klientów? Pomożemy wdrożyć Antispam Pancernapanda.</p>
+            </div>
+            <div class="cta-actions">
+                <a class="btn btn-primary" href="https://pancernapanda.pl" style="background:#fff;color:var(--royal)">Skontaktuj się z nami</a>
+                <a class="btn btn-ghost" href="/login">Mam konto – zaloguj</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+</main>
+
+<!-- ============ Footer ============ -->
+<footer class="site-footer">
+    <div class="wrap">
+        <div class="foot-grid">
+            <div>
+                <a class="foot-logo" href="https://pancernapanda.pl"><img src="assets/img/pancerna-panda-logo.png" alt="Pancerna Panda" width="190" height="61"></a>
+                <p>Antispam Pancernapanda to część zestawu narzędzi bezpieczeństwa Pancerna Panda.</p>
+            </div>
+            <div>
+                <h4>Produkt</h4>
+                <ul><li><a href="#funkcje">Funkcje</a></li><li><a href="#scoring">Scoring</a></li><li><a href="#tryby">IMAP i agent</a></li><li><a href="#baza">Wspólna baza</a></li></ul>
+            </div>
+            <div>
+                <h4>Narzędzia</h4>
+                <ul><li><a href="#thunderbird">Wtyczka Thunderbird</a></li><li><a href="/plugin/download">Pobierz .xpi</a></li><li><a href="#wdrozenie">Wdrożenie</a></li><li><a href="/login">Panel</a></li></ul>
+            </div>
+            <div>
+                <h4>Pancerna Panda</h4>
+                <ul><li><a href="https://pancernapanda.pl">pancernapanda.pl</a></li><li><a href="#faq">FAQ</a></li><li><a href="#kontakt">Kontakt</a></li></ul>
+            </div>
+        </div>
+        <div class="foot-bottom">
+            <span>&copy; <span id="year">2026</span> Pancerna Panda · antispam.pancernapanda.pl</span>
+            <span>Pancerna ochrona Twojej skrzynki przed spamem</span>
+        </div>
+    </div>
+</footer>
+
+<script src="assets/js/main.js"></script>
+<script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+</body>
+</html>

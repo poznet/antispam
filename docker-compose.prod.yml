@@ -1,0 +1,89 @@
+services:
+  # Aplikacja Symfony (Apache + PHP 7.4) - w Coolify podepnij domene pod ten serwis, port 80
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - app-cache:/var/www/html/app/cache
+      - app-logs:/var/www/html/app/logs
+    environment:
+      - SYMFONY_ENV=prod
+      - APP_SECRET=${APP_SECRET:-ChangeMeInProductionPlease}
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - DATABASE_HOST=db
+      - DATABASE_PORT=3306
+      - DATABASE_NAME=${DATABASE_NAME:-antispam}
+      - DATABASE_USER=${DATABASE_USER:-antispam}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-antispam}
+      - MAILER_TRANSPORT=${MAILER_TRANSPORT:-smtp}
+      - MAILER_HOST=${MAILER_HOST:-127.0.0.1}
+      - MAILER_USER=${MAILER_USER:-}
+      - MAILER_PASSWORD=${MAILER_PASSWORD:-}
+      - RUN_MIGRATIONS=true
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Baza danych MariaDB
+  db:
+    image: mariadb:10.6
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${DATABASE_NAME:-antispam}
+      MARIADB_ROOT_PASSWORD: ${DATABASE_ROOT_PASSWORD:-rootpassword}
+      MARIADB_USER: ${DATABASE_USER:-antispam}
+      MARIADB_PASSWORD: ${DATABASE_PASSWORD:-antispam}
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # Scheduler - zastepuje crona: skanowanie kont (scan-all), sync wspolnego feedu
+  # i digest kwarantanny. Ten sam obraz co app, ale bez Apache i bez migracji
+  # (schemat aktualizuje tylko app). Ma wlasny cache, zeby nie czyscic cache app.
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["/usr/local/bin/scheduler.sh"]
+    volumes:
+      - app-logs:/var/www/html/app/logs
+    environment:
+      - SYMFONY_ENV=prod
+      - APP_SECRET=${APP_SECRET:-ChangeMeInProductionPlease}
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - DATABASE_HOST=db
+      - DATABASE_PORT=3306
+      - DATABASE_NAME=${DATABASE_NAME:-antispam}
+      - DATABASE_USER=${DATABASE_USER:-antispam}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-antispam}
+      - MAILER_TRANSPORT=${MAILER_TRANSPORT:-smtp}
+      - MAILER_HOST=${MAILER_HOST:-127.0.0.1}
+      - MAILER_USER=${MAILER_USER:-}
+      - MAILER_PASSWORD=${MAILER_PASSWORD:-}
+      - RUN_MIGRATIONS=false
+      - SCAN_INTERVAL=${SCAN_INTERVAL:-5}
+      - FEED_SYNC_INTERVAL=${FEED_SYNC_INTERVAL:-15}
+      - DIGEST_HOUR=${DIGEST_HOUR:-7}
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_started
+
+volumes:
+  db-data:
+    driver: local
+  app-cache:
+    driver: local
+  app-logs:
+    driver: local

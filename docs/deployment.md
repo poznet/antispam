@@ -73,6 +73,32 @@ boot for local testing. Override them in production.
    `db_data` (MariaDB), `app_cache` (Symfony prod cache) and `app_logs`
    (Symfony logs). They survive redeploys and container restarts.
 
+### Production compose with scheduler (`docker-compose.prod.yml`)
+
+`docker-compose.prod.yml` is the recommended file for Coolify. It adds a
+`scheduler` service, so no host crontab is needed. In Coolify set
+*Docker Compose Location* to `/docker-compose.prod.yml` and bind the domain to
+the `app` service on port `80`.
+
+| Service | Role |
+| --- | --- |
+| `app` | Apache + PHP, web UI. Runs `doctrine:schema:update` at boot |
+| `db` | MariaDB 10.6 (volume `db-data`) |
+| `scheduler` | Same image, runs `docker/scheduler.sh` instead of Apache. No migrations, own cache |
+
+The scheduler ticks once a minute and runs each command as `www-data`. A job
+that is still running is skipped on the next tick (flock).
+
+| Variable | Command | Default |
+| --- | --- | --- |
+| `SCAN_INTERVAL` | `antispam:agent:scan-all` every N minutes (`0` = off) | `5` |
+| `FEED_SYNC_INTERVAL` | `antispam:feed:sync` every N minutes (`0` = off) | `15` |
+| `DIGEST_HOUR` | `antispam:digest:send` daily at HH:00, container time = UTC (empty = off) | `7` |
+
+The feed sync and the digest do nothing while they are disabled in the panel
+settings, so leaving them on is safe. Watch the scheduler's output in the
+`scheduler` service logs in Coolify.
+
 ### Updating
 
 Push a new commit to the branch Coolify is tracking and press *Redeploy*.

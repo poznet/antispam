@@ -23,13 +23,15 @@ security:
             form_login:
                 login_path: login
                 check_path: login
-                default_target_path: /
+                default_target_path: antispam_index
                 enable_csrf: true
             logout:
                 path: logout
-                target: /login
+                target: antispam_home
 
     access_control:
+        # Public home page (landing) with the embedded login form.
+        - { path: ^/$, roles: PUBLIC_ACCESS }
         - { path: ^/login, roles: PUBLIC_ACCESS }
         # Shared spam feed API authenticates via the X-Feed-Key header, not the
         # form-login firewall, so it must be reachable anonymously.
@@ -37,7 +39,7 @@ security:
         # Quarantine digest links: the signed token in the URL is the credential.
         - { path: ^/q/, roles: PUBLIC_ACCESS }
         # Thunderbird plugin: bearer-token API and the public .xpi download
-        # (offered on the login page).
+        # (offered on the home page).
         - { path: ^/api/plugin, roles: PUBLIC_ACCESS }
         - { path: ^/plugin/download, roles: PUBLIC_ACCESS }
         - { path: ^/, roles: ROLE_ADMIN }

@@ -21,7 +21,7 @@ class DefaultController extends AbstractController
     ) {
     }
 
-    #[Route('/', name: 'antispam_index')]
+    #[Route('/panel', name: 'antispam_index')]
     #[Template('@Antispam/Default/index.html.twig')]
     public function indexAction()
     {

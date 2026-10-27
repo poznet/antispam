@@ -68,7 +68,7 @@ sender and subject is used.
 - A released message is marked as checked, so the next scan won't quarantine it
   again.
 
-`/q/` is the only anonymous route besides `/login` and `/api/feed`
+`/q/` is the only anonymous route besides the home page `/`, `/login` and `/api/feed`
 (`config/packages/security.yaml`).
 
 ## Configuration

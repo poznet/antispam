@@ -3,18 +3,21 @@
 namespace AntispamBundle\Controller;
 
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Security\Http\Authentication\AuthenticationUtils;
 
 class SecurityController extends AbstractController
 {
+    /**
+     * POST is handled by the form_login firewall (check_path). GET - the entry
+     * point for anonymous visitors and the redirect after a failed login - sends
+     * the user to the login form on the home page; the authentication error
+     * stays in the session and is shown there.
+     */
     #[Route('/login', name: 'login')]
-    public function loginAction(AuthenticationUtils $authenticationUtils)
+    public function loginAction(): RedirectResponse
     {
-        return $this->render('@Antispam/Security/login.html.twig', [
-            'last_username' => $authenticationUtils->getLastUsername(),
-            'error' => $authenticationUtils->getLastAuthenticationError(),
-        ]);
+        return $this->redirect($this->generateUrl('antispam_home') . '#logowanie');
     }
 
     #[Route('/logout', name: 'logout')]

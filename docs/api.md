@@ -1,5 +1,15 @@
 # Web Endpoints
 
+## Home page and login
+
+| Method | URL | Description |
+|--------|-----|-------------|
+| GET | `/` | Public home page (product landing) with the admin login form (`#logowanie`); logged-in admins see a link to the panel |
+| GET | `/login` | Redirects to `/#logowanie` (form_login entry point and failed-login redirect; the error is shown on the home page) |
+| POST | `/login` | Form login check (`_username`, `_password`, CSRF token `authenticate`) → `/panel` |
+| GET | `/logout` | Log out → `/` |
+| GET | `/panel` | Admin dashboard |
+
 ## Account Management (`/account`)
 
 | Method | URL | Description |

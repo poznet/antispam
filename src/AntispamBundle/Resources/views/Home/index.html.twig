@@ -1,3 +1,5 @@
+{% set shield = asset('bundles/antispam/img/pp-shield.png') %}
+{% set panel_url = path('antispam_index') %}
 <!DOCTYPE html>
 <html lang="pl" class="no-js">
 <head>
@@ -6,17 +8,17 @@
     <title>Antispam Pancernapanda – pancerna ochrona skrzynek pocztowych przed spamem</title>
     <meta name="description" content="Antispam Pancernapanda filtruje pocztę przez IMAP lub bezpośrednio na serwerze (SSH + Maildir). Scoring SPF/DKIM/DMARC, DNSBL, ClamAV, VirusTotal, wspólna baza spamu i wtyczka do Thunderbirda.">
     <meta name="theme-color" content="#060735">
-    <link rel="canonical" href="https://antispam.pancernapanda.pl/">
-    <link rel="icon" type="image/x-icon" href="favicon.ico">
-    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="canonical" href="{{ url('antispam_home') }}">
+    <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}">
+    <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
 
     <meta property="og:type" content="website">
     <meta property="og:locale" content="pl_PL">
     <meta property="og:site_name" content="Antispam Pancernapanda">
     <meta property="og:title" content="Antispam Pancernapanda – pancerna ochrona skrzynek przed spamem">
     <meta property="og:description" content="Wielowarstwowy filtr spamu dla skrzynek IMAP i serwerów z Maildirem. Jeden panel dla wszystkich kont.">
-    <meta property="og:url" content="https://antispam.pancernapanda.pl/">
-    <meta property="og:image" content="https://antispam.pancernapanda.pl/assets/img/og-image.png">
+    <meta property="og:url" content="{{ url('antispam_home') }}">
+    <meta property="og:image" content="{{ absolute_url(asset('bundles/antispam/img/og-image.png')) }}">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta name="twitter:card" content="summary_large_image">
@@ -24,7 +26,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap">
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="{{ asset('bundles/antispam/landing/css/style.css') }}">
 
     <script type="application/ld+json">
     {
@@ -33,7 +35,7 @@
         "name": "Antispam Pancernapanda",
         "applicationCategory": "SecurityApplication",
         "operatingSystem": "Linux, Docker",
-        "url": "https://antispam.pancernapanda.pl/",
+        "url": "{{ url('antispam_home') }}",
         "description": "Filtr spamu dla skrzynek e-mail: IMAP lub agent SSH + Maildir, scoring SPF/DKIM/DMARC, DNSBL, ClamAV, VirusTotal, wspólna baza spamu i wtyczka Thunderbird.",
         "publisher": { "@type": "Organization", "name": "Pancerna Panda", "url": "https://pancernapanda.pl" }
     }
@@ -45,7 +47,7 @@
 <header class="site-header">
     <div class="wrap nav">
         <a class="brand" href="#top" aria-label="Antispam Pancernapanda – strona główna">
-            <img src="assets/img/pp-shield.png" alt="" width="42" height="42">
+            <img src="{{ shield }}" alt="" width="42" height="42">
             <span class="brand-text"><strong>Antispam</strong><span>Pancernapanda</span></span>
         </a>
         <ul class="nav-links">
@@ -57,7 +59,11 @@
             <li><a href="#faq">FAQ</a></li>
         </ul>
         <div class="nav-cta">
-            <a class="btn btn-ghost btn-sm" href="/login">Zaloguj się</a>
+            {% if app.user %}
+            <a class="btn btn-ghost btn-sm" href="{{ panel_url }}">Panel</a>
+            {% else %}
+            <a class="btn btn-ghost btn-sm" href="#logowanie">Zaloguj się</a>
+            {% endif %}
             <a class="btn btn-primary btn-sm" href="#kontakt">Zamów ochronę</a>
         </div>
         <button class="nav-toggle" type="button" aria-label="Menu" aria-expanded="false">
@@ -95,7 +101,7 @@
                 <div class="mock-bar"><i></i><i></i><i></i><span>antispam.pancernapanda.pl</span></div>
                 <div class="mock-body">
                     <div class="mock-side">
-                        <img src="assets/img/pp-shield.png" alt="">
+                        <img src="{{ shield }}" alt="">
                         <i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
                     </div>
                     <div class="mock-main">
@@ -160,7 +166,7 @@
                         <path d="m18 26 29 14 29-14" fill="none" stroke="#005bba" stroke-width="2.5" stroke-linejoin="round"/>
                         <path class="flow" d="M96 35h96" stroke="#00adef" stroke-width="3" stroke-linecap="round"/>
                         <rect x="198" y="8" width="98" height="54" rx="12" fill="#060735"/>
-                        <image href="assets/img/pp-shield.png" x="208" y="17" width="36" height="36"/>
+                        <image href="{{ shield }}" x="208" y="17" width="36" height="36"/>
                         <text x="250" y="32" fill="#fff" font-family="Montserrat, sans-serif" font-size="11" font-weight="700">IMAP</text>
                         <text x="250" y="48" fill="#1fd7fd" font-family="Montserrat, sans-serif" font-size="11" font-weight="700">SSH</text>
                     </svg>
@@ -255,7 +261,7 @@
                         <path class="flow" d="M130 75 50 30"/><path class="flow" d="M130 75 210 30"/><path class="flow" d="M130 75 50 120"/><path class="flow" d="M130 75 210 120"/>
                     </g>
                     <circle cx="130" cy="75" r="30" fill="url(#g2)"/>
-                    <image href="assets/img/pp-shield.png" x="112" y="57" width="36" height="36"/>
+                    <image href="{{ shield }}" x="112" y="57" width="36" height="36"/>
                     <g fill="#fff" stroke="#00adef" stroke-width="2">
                         <circle cx="50" cy="30" r="16"/><circle cx="210" cy="30" r="16"/><circle cx="50" cy="120" r="16"/><circle cx="210" cy="120" r="16"/>
                     </g>
@@ -368,7 +374,7 @@
                         <path class="flow" d="M126 45h150" stroke="#00adef" stroke-width="3" stroke-linecap="round"/>
                         <text x="200" y="36" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#005bba">IMAP :143 / :993</text>
                         <rect x="282" y="12" width="156" height="66" rx="14" fill="#060735"/>
-                        <image href="assets/img/pp-shield.png" x="294" y="25" width="40" height="40"/>
+                        <image href="{{ shield }}" x="294" y="25" width="40" height="40"/>
                         <text x="342" y="42" font-family="Montserrat, sans-serif" font-size="13" font-weight="800" fill="#fff">ANTISPAM</text>
                         <text x="342" y="58" font-family="Open Sans, sans-serif" font-size="11" fill="#1fd7fd">filtrowanie</text>
                     </svg>
@@ -431,7 +437,7 @@
                 <circle class="pulse" cx="260" cy="220" r="70" fill="#1fd7fd" opacity=".4"/>
                 <circle cx="260" cy="220" r="66" fill="#060735"/>
                 <circle cx="260" cy="220" r="66" fill="none" stroke="url(#g3)" stroke-width="4"/>
-                <image href="assets/img/pp-shield.png" x="228" y="182" width="64" height="64"/>
+                <image href="{{ shield }}" x="228" y="182" width="64" height="64"/>
                 <text x="260" y="268" text-anchor="middle" font-family="Montserrat, sans-serif" font-size="12" font-weight="800" fill="#1fd7fd">HUB</text>
                 <g font-family="Montserrat, sans-serif" font-size="12" font-weight="700" fill="#060735" text-anchor="middle">
                     <g><rect x="40" y="58" width="104" height="68" rx="16" fill="#fff" stroke="#e2e9f4"/><text x="92" y="88">Instancja A</text><text x="92" y="108" font-size="10" fill="#dc2626">+ nowy spam</text></g>
@@ -449,7 +455,7 @@
 <section class="section" id="thunderbird">
     <div class="wrap tb-grid">
         <div class="tb-mock reveal" aria-hidden="true">
-            <div class="tb-top"><img src="assets/img/pp-shield.png" alt="">Odebrane – biuro@firma.pl<span class="tb-btn">Zgłoś spam</span></div>
+            <div class="tb-top"><img src="{{ shield }}" alt="">Odebrane – biuro@firma.pl<span class="tb-btn">Zgłoś spam</span></div>
             <div class="tb-list">
                 <div class="tb-mail"><i></i><span>Anna Nowak</span><span>Spotkanie w czwartek – potwierdzenie</span></div>
                 <div class="tb-mail sel"><i></i><span>Kurier Express24</span><span>Twoja paczka czeka – dopłać 1,99 zł</span></div>
@@ -463,11 +469,11 @@
                 <div>Odpowiedz</div>
                 <div>Przekaż dalej</div>
                 <hr>
-                <div class="hl"><img src="assets/img/pp-shield.png" alt="">Zgłoś jako spam (Antyspam)</div>
-                <div><img src="assets/img/pp-shield.png" alt="">To nie spam (Antyspam)</div>
-                <div><img src="assets/img/pp-shield.png" alt="">Sprawdź w Antyspamie</div>
+                <div class="hl"><img src="{{ shield }}" alt="">Zgłoś jako spam (Antyspam)</div>
+                <div><img src="{{ shield }}" alt="">To nie spam (Antyspam)</div>
+                <div><img src="{{ shield }}" alt="">Sprawdź w Antyspamie</div>
             </div>
-            <div class="tb-toast"><img src="assets/img/pp-shield.png" alt=""><div><b>Antyspam: SPAM</b><span>Wynik 16 · przeniesiono do folderu Spam</span></div></div>
+            <div class="tb-toast"><img src="{{ shield }}" alt=""><div><b>Antyspam: SPAM</b><span>Wynik 16 · przeniesiono do folderu Spam</span></div></div>
         </div>
         <div class="reveal">
             <span class="eyebrow">Wtyczka Thunderbird</span>
@@ -483,7 +489,7 @@
                     <tr><td>Ręczne „Sprawdź w Antyspamie”</td><td class="no">–</td><td class="yes">✓</td></tr>
                 </tbody>
             </table>
-            <p style="margin-top:22px"><a class="btn btn-primary" href="/plugin/download">
+            <p style="margin-top:22px"><a class="btn btn-primary" href="{{ path('antispam_plugin_download') }}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                 Pobierz wtyczkę (.xpi)</a></p>
         </div>
@@ -492,7 +498,8 @@
 
 <!-- ============ Panel ============ -->
 <section class="section section-dark" id="panel">
-    <div class="wrap">
+    <div class="wrap panel-split">
+        <div>
         <div class="section-head reveal">
             <span class="eyebrow">Panel administracyjny</span>
             <h2>Jeden panel, wszystkie skrzynki</h2>
@@ -504,6 +511,55 @@
             <article class="panel-card reveal"><div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/></svg></div><h3>Folder spamu i kwarantanna</h3><p>Przegląd złapanych wiadomości i przywracanie fałszywych alarmów.</p></article>
             <article class="panel-card reveal"><div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></div><h3>Ustawienia filtra</h3><p>Progi, wagi sygnałów, ClamAV, VirusTotal i wspólna baza.</p></article>
         </div>
+        </div>
+
+        <aside class="login-card reveal" id="logowanie" aria-labelledby="login-title">
+            {% if app.user %}
+                <h3 id="login-title">Jesteś zalogowany</h3>
+                <p class="login-lead">Zalogowano jako <strong>{{ app.user.userIdentifier }}</strong>.</p>
+                <a class="btn btn-primary login-submit" href="{{ panel_url }}">
+                    Przejdź do panelu
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                </a>
+                <a class="login-alt" href="{{ path('logout') }}">Wyloguj się</a>
+            {% else %}
+                <h3 id="login-title">Zaloguj się do panelu</h3>
+                <p class="login-lead">Wprowadź dane dostępowe administratora.</p>
+
+                {% if error %}
+                    <div class="login-alert" role="alert">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                        <span>{{ error.messageKey|trans(error.messageData, 'security') }}</span>
+                    </div>
+                {% endif %}
+
+                <form action="{{ path('login') }}" method="post">
+                    <label class="login-field">
+                        <span>Użytkownik</span>
+                        <span class="login-input">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+                            <input type="text" name="_username" value="{{ last_username }}" placeholder="admin" autocomplete="username" required{% if error %} autofocus{% endif %}>
+                        </span>
+                    </label>
+                    <label class="login-field">
+                        <span>Hasło</span>
+                        <span class="login-input">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+                            <input type="password" name="_password" placeholder="••••••••" autocomplete="current-password" required>
+                        </span>
+                    </label>
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
+                    <button type="submit" class="btn btn-primary login-submit">
+                        Zaloguj się
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                    </button>
+                </form>
+            {% endif %}
+            <p class="login-secure">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+                Połączenie chronione · Pancerna Panda security toolkit
+            </p>
+        </aside>
     </div>
 </section>
 
@@ -604,14 +660,14 @@
 <section class="section" id="kontakt" style="padding-top:0">
     <div class="wrap">
         <div class="cta reveal">
-            <img src="assets/img/pp-shield.png" alt="" width="120" height="120">
+            <img src="{{ shield }}" alt="" width="120" height="120">
             <div>
                 <h2>Załóż pancerz swojej poczcie</h2>
                 <p>Chcesz chronić skrzynki w firmie albo na serwerach klientów? Pomożemy wdrożyć Antispam Pancernapanda.</p>
             </div>
             <div class="cta-actions">
                 <a class="btn btn-primary" href="https://pancernapanda.pl" style="background:#fff;color:var(--royal)">Skontaktuj się z nami</a>
-                <a class="btn btn-ghost" href="/login">Mam konto – zaloguj</a>
+                <a class="btn btn-ghost" href="{{ app.user ? panel_url : '#logowanie' }}">{{ app.user ? 'Przejdź do panelu' : 'Mam konto – zaloguj' }}</a>
             </div>
         </div>
     </div>
@@ -624,7 +680,7 @@
     <div class="wrap">
         <div class="foot-grid">
             <div>
-                <a class="foot-logo" href="https://pancernapanda.pl"><img src="assets/img/pancerna-panda-logo.png" alt="Pancerna Panda" width="190" height="61"></a>
+                <a class="foot-logo" href="https://pancernapanda.pl"><img src="{{ asset('bundles/antispam/img/pancerna-panda-logo.png') }}" alt="Pancerna Panda" width="190" height="61"></a>
                 <p>Antispam Pancernapanda to część zestawu narzędzi bezpieczeństwa Pancerna Panda.</p>
             </div>
             <div>
@@ -633,7 +689,7 @@
             </div>
             <div>
                 <h4>Narzędzia</h4>
-                <ul><li><a href="#thunderbird">Wtyczka Thunderbird</a></li><li><a href="/plugin/download">Pobierz .xpi</a></li><li><a href="#wdrozenie">Wdrożenie</a></li><li><a href="/login">Panel</a></li></ul>
+                <ul><li><a href="#thunderbird">Wtyczka Thunderbird</a></li><li><a href="{{ path('antispam_plugin_download') }}">Pobierz .xpi</a></li><li><a href="#wdrozenie">Wdrożenie</a></li><li><a href="{{ app.user ? panel_url : '#logowanie' }}">Panel</a></li></ul>
             </div>
             <div>
                 <h4>Pancerna Panda</h4>
@@ -647,7 +703,7 @@
     </div>
 </footer>
 
-<script src="assets/js/main.js"></script>
+<script src="{{ asset('bundles/antispam/landing/js/main.js') }}"></script>
 <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 </body>
 </html>

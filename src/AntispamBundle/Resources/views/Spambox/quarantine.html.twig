@@ -4,28 +4,96 @@
 
 {% block body %}
     <p class="text-muted">Wiadomości, których wynik spamu mieści się między progiem kwarantanny a progiem spamu.</p>
-    {% if messages|length > 0 %}
-    <table class="table table-striped">
-        <thead><tr><th>Data</th><th>Nadawca</th><th>Temat</th><th></th></tr></thead>
-        <tbody>
-        {% for msg in messages %}
-            <tr>
-                <td>{{ msg.date | date("Y-m-d H:i") }}</td>
-                <td>{{ msg.from }}</td>
-                <td>{{ msg.subject[:80] }}</td>
-                <td class="text-right">
-                    <a href="{{ path('antispam_spambox_restore', {folder: 'QUARANTINE', id: msg.id}) }}" class="btn btn-xs btn-success">
-                        <span class="glyphicon glyphicon-ok"></span> Przywróć
-                    </a>
-                </td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
+
+    {% set token = csrf_token('quarantine_action') %}
+
+    {% for mailbox in mailboxes %}
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            <span class="glyphicon glyphicon-inbox"></span> {{ mailbox.label }}
+            <span class="badge pull-right">{{ mailbox.items|length }}</span>
+        </div>
+        {% if mailbox.error %}
+            <div class="panel-body">
+                <div class="alert alert-danger" style="margin:0;">Nie udało się odczytać kwarantanny: {{ mailbox.error }}</div>
+            </div>
+        {% elseif mailbox.items|length > 0 %}
+        <table class="table table-striped" style="margin-bottom:0;">
+            <thead><tr><th>Data</th><th>Nadawca</th><th>Temat</th><th>Punkty</th><th>Powód</th><th></th></tr></thead>
+            <tbody>
+            {% for item in mailbox.items %}
+                <tr>
+                    <td>{{ item.date ? item.date|date('Y-m-d H:i') : '—' }}</td>
+                    <td>{% if item.from_name %}{{ item.from_name }}<br>{% endif %}<small>{{ item.from }}</small></td>
+                    <td>{{ item.subject[:80] }}</td>
+                    <td>{% if item.score is not null %}<strong>{{ item.score }}</strong>{% endif %}</td>
+                    <td>
+                        {% if item.high_risk %}<span class="label label-danger">wysokie ryzyko</span><br>{% endif %}
+                        {% for label in item.labels %}<small>{{ label }}</small><br>{% endfor %}
+                    </td>
+                    <td class="text-right" style="white-space:nowrap;">
+                        <form method="post" action="{{ path('antispam_spambox_quarantine_action') }}" style="display:inline;">
+                            <input type="hidden" name="_token" value="{{ token }}">
+                            <input type="hidden" name="mailbox" value="{{ mailbox.key }}">
+                            <input type="hidden" name="id" value="{{ item.id }}">
+                            <button type="submit" name="action" value="release" class="btn btn-xs btn-success" title="Przenieś do skrzynki odbiorczej">
+                                <span class="glyphicon glyphicon-ok"></span> Dostarcz
+                            </button>
+                            {% if not item.high_risk %}
+                            <button type="submit" name="action" value="whitelist" class="btn btn-xs btn-info" title="Dostarcz i dodaj nadawcę do białej listy">
+                                <span class="glyphicon glyphicon-star"></span> Zawsze akceptuj
+                            </button>
+                            {% endif %}
+                            <button type="submit" name="action" value="delete" class="btn btn-xs btn-danger" title="Usuń trwale" onclick="return confirm('Usunąć wiadomość na stałe?');">
+                                <span class="glyphicon glyphicon-trash"></span>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+            <div class="panel-body text-muted">Kwarantanna jest pusta</div>
+        {% endif %}
+    </div>
     {% else %}
     <div class="empty-state">
         <span class="glyphicon glyphicon-ok-circle"></span>
-        <p>Kwarantanna jest pusta</p>
+        <p>Brak skrzynek z kwarantanną</p>
+        <p class="text-muted">Skonfiguruj konto IMAP w <a href="{{ path('antispam_account_config') }}">ustawieniach poczty</a> albo wdróż agenta na <a href="{{ path('antispam_account_index') }}">koncie SSH</a>.</p>
     </div>
-    {% endif %}
+    {% endfor %}
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-list-alt"></span> Decyzje „kwarantanna” z ostatnich 30 dni</div>
+        <div class="panel-body text-muted" style="padding-bottom:0;">
+            <p>Na tej podstawie liczony jest kafelek na pulpicie. Wpis zostaje w dzienniku także wtedy, gdy wiadomości nie ma już w kwarantannie:
+            została dostarczona lub usunięta, przeniesienie do folderu się nie udało, albo ocenę wykonała wtyczka Thunderbird
+            (ona niczego nie przenosi na serwerze).</p>
+        </div>
+        {% if logs|length > 0 %}
+        <table class="table table-striped" style="margin-bottom:0;">
+            <thead><tr><th>Kiedy</th><th>Konto</th><th>Nadawca</th><th>Temat</th><th>Punkty</th><th>Powód</th></tr></thead>
+            <tbody>
+            {% for l in logs %}
+                <tr>
+                    <td>{{ l.scoredAt|date('Y-m-d H:i') }}</td>
+                    <td>{{ l.accountEmail }}</td>
+                    <td>{{ l.sender }}</td>
+                    <td>{{ l.subject[:60] }}</td>
+                    <td><strong>{{ l.score }}</strong></td>
+                    <td>
+                        {% for r in l.reasonsDecoded %}
+                            <small>{{ r.rule }} (+{{ r.score }})</small><br>
+                        {% endfor %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+            <div class="panel-body text-muted">Brak decyzji w dzienniku.</div>
+        {% endif %}
+    </div>
 {% endblock %}

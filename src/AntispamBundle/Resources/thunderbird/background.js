@@ -39,6 +39,7 @@ const bundledServer = fetch(messenger.runtime.getURL("config.json"))
   .then(r => r.json())
   .then(c => (c.server || "").replace(/\/+$/, ""))
   .catch(() => "");
+const BUTTON_TITLE = "Zgłoś spam (Antyspam)";
 const ownChanges = new Set();   // message ids whose junk flag we changed ourselves
 const arrivals = new Map();     // message id → arrival timestamp
 
@@ -89,6 +90,32 @@ async function notify(title, message) {
       message,
     });
   } catch (e) { console.warn("antispam: notification failed", e); }
+}
+
+/**
+ * Result of an explicit action (button / menu) on the toolbar button, so the
+ * user sees something even when system notifications are off.
+ */
+let badgeTimer = null;
+async function feedback(ok, text) {
+  const btn = messenger.messageDisplayAction;
+  try {
+    await btn.setBadgeText({ text: ok ? "✓" : "!" });
+    await btn.setBadgeBackgroundColor({ color: ok ? "#2e7d32" : "#c62828" });
+    await btn.setTitle({ title: "Antyspam: " + text });
+  } catch (e) { /* older Thunderbird */ }
+  clearTimeout(badgeTimer);
+  badgeTimer = setTimeout(() => {
+    btn.setBadgeText({ text: "" }).catch(() => {});
+    btn.setTitle({ title: BUTTON_TITLE }).catch(() => {});
+  }, 30000);
+}
+
+/** Explicit action that cannot run as configured: tell the user and open the settings. */
+async function needsSetup(text) {
+  await notify("Antyspam", text);
+  await feedback(false, text);
+  try { await messenger.runtime.openOptionsPage(); } catch (e) { /* ignore */ }
 }
 
 // --- message helpers --------------------------------------------------------
@@ -170,10 +197,18 @@ async function moveToJunk(message) {
 // --- actions ----------------------------------------------------------------
 
 /** Send a user verdict ("spam" | "ham") to antispam. */
-async function report(message, verdict, { quiet = false } = {}) {
+async function report(message, verdict, { quiet = false, manual = false } = {}) {
   const s = await settings();
   if (verdict === "ham" && !s.token) {
-    if (!quiet) await notify("Antyspam", "Zgłoszenie „to nie spam” wymaga zalogowania we wtyczce.");
+    const text = "Zgłoszenie „to nie spam” wymaga zalogowania we wtyczce.";
+    if (manual) await needsSetup(text);
+    else if (!quiet) await notify("Antyspam", text);
+    return null;
+  }
+  if (!s.server) {
+    const text = "Nie ustawiono adresu serwera antyspamu.";
+    if (manual) await needsSetup(text);
+    else if (!quiet) await notify("Antyspam — błąd", text);
     return null;
   }
   try {
@@ -181,31 +216,32 @@ async function report(message, verdict, { quiet = false } = {}) {
       method: "POST",
       body: { verdict, raw_base64: await rawBase64(message.id) },
     });
-    if (!quiet) {
-      const who = message.author || res.sender || "";
-      await notify("Antyspam",
-        verdict === "spam"
-          ? "Zgłoszono spam: " + who + (res.rules && res.rules.length ? " (nadawca zablokowany)" : "")
-          : "Oznaczono jako nie-spam: " + who + (res.rules && res.rules.length ? " (nadawca na białej liście)" : ""));
-    }
+    const who = message.author || res.sender || "";
+    const text = verdict === "spam"
+      ? "Zgłoszono spam: " + who + (res.rules && res.rules.length ? " (nadawca zablokowany)" : "")
+      : "Oznaczono jako nie-spam: " + who + (res.rules && res.rules.length ? " (nadawca na białej liście)" : "");
+    if (!quiet) await notify("Antyspam", text);
+    if (manual) await feedback(true, text);
     return res;
   } catch (e) {
     console.warn("antispam: report failed", e);
-    if (!quiet) await notify("Antyspam — błąd", "Nie udało się wysłać zgłoszenia: " + e.message);
+    const text = "Nie udało się wysłać zgłoszenia do " + s.server + ": " + e.message;
+    if (!quiet) await notify("Antyspam — błąd", text);
+    if (manual) await feedback(false, text);
     return null;
   }
 }
 
 /** Report as spam from the button / menu and handle the message locally. */
 async function reportSpamAndFile(message) {
-  await report(message, "spam");
+  await report(message, "spam", { manual: true });
   const s = await settings();
   await setJunk(message, true);
   if (s.moveOnReport) await moveToJunk(message);
 }
 
 async function reportHam(message) {
-  const res = await report(message, "ham");
+  const res = await report(message, "ham", { manual: true });
   if (res) await setJunk(message, false);
 }
 
@@ -213,7 +249,7 @@ async function reportHam(message) {
 async function check(message, { manual = false } = {}) {
   const s = await settings();
   if (!s.token) {
-    if (manual) await notify("Antyspam", "Sprawdzanie wiadomości wymaga zalogowania we wtyczce.");
+    if (manual) await needsSetup("Sprawdzanie wiadomości wymaga zalogowania we wtyczce (adres skrzynki + hasło wtyczki lub IMAP).");
     return null;
   }
   let res;
@@ -221,7 +257,11 @@ async function check(message, { manual = false } = {}) {
     res = await api("/api/plugin/check", { method: "POST", body: { raw_base64: await rawBase64(message.id) } });
   } catch (e) {
     console.warn("antispam: check failed", e);
-    if (manual) await notify("Antyspam — błąd", "Sprawdzenie nie powiodło się: " + e.message);
+    if (manual) {
+      const text = "Sprawdzenie nie powiodło się (" + s.server + "): " + e.message;
+      await notify("Antyspam — błąd", text);
+      await feedback(false, text);
+    }
     return null;
   }
 
@@ -232,8 +272,10 @@ async function check(message, { manual = false } = {}) {
 
   if (manual || res.decision === "spam") {
     const labels = { spam: "SPAM", quarantine: "podejrzana", ham: "czysta", whitelisted: "biała lista" };
-    await notify("Antyspam: " + (labels[res.decision] || res.decision),
-      (message.subject || "(bez tematu)") + " — wynik " + res.score + "/" + res.spam_threshold);
+    const label = labels[res.decision] || res.decision;
+    const text = (message.subject || "(bez tematu)") + " — wynik " + res.score + "/" + res.spam_threshold;
+    await notify("Antyspam: " + label, text);
+    if (manual) await feedback(true, label + ": " + text);
   }
   return res;
 }

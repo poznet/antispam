@@ -1,0 +1,86 @@
+{% extends '@Antispam/main.html.twig' %}
+{% block title %}Zgłoszenia z wtyczki{% endblock %}
+{% block page_title %}Zgłoszenia z wtyczki Thunderbird{% endblock %}
+
+{% block body %}
+    <div class="row">
+        <div class="col-sm-3"><div class="panel panel-default"><div class="panel-body text-center">
+            <div class="stat-value text-danger">{{ stats.spam }}</div><div class="stat-label">Spam (30 dni)</div>
+        </div></div></div>
+        <div class="col-sm-3"><div class="panel panel-default"><div class="panel-body text-center">
+            <div class="stat-value text-success">{{ stats.ham }}</div><div class="stat-label">Nie spam (30 dni)</div>
+        </div></div></div>
+        <div class="col-sm-3"><div class="panel panel-default"><div class="panel-body text-center">
+            <div class="stat-value text-warning">{{ stats.anonymous }}</div><div class="stat-label">Niezalogowani (30 dni)</div>
+        </div></div></div>
+        <div class="col-sm-3"><div class="panel panel-default"><div class="panel-body text-center">
+            <div class="stat-value text-info">{{ stats.senders }}</div><div class="stat-label">Różnych nadawców (30 dni)</div>
+        </div></div></div>
+    </div>
+
+    {% if top|length > 0 %}
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-fire"></span> Najczęściej zgłaszani nadawcy (30 dni)</div>
+        <table class="table table-striped" style="margin-bottom:0;">
+            <thead><tr><th>Nadawca</th><th>Zgłoszeń</th><th>Ostatnie</th></tr></thead>
+            <tbody>
+            {% for t in top %}
+                <tr>
+                    <td>{{ t.sender }}</td>
+                    <td><strong>{{ t.cnt }}</strong></td>
+                    <td>{{ t.last|date('Y-m-d H:i') }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <p>
+        <a href="{{ path('antispam_spambox_pluginreports') }}" class="btn btn-sm {{ not verdict and not who ? 'btn-primary' : 'btn-default' }}">Wszystkie</a>
+        <a href="{{ path('antispam_spambox_pluginreports', {verdict: 'spam', who: who}) }}" class="btn btn-sm {{ verdict == 'spam' ? 'btn-primary' : 'btn-default' }}">Spam</a>
+        <a href="{{ path('antispam_spambox_pluginreports', {verdict: 'ham', who: who}) }}" class="btn btn-sm {{ verdict == 'ham' ? 'btn-primary' : 'btn-default' }}">Nie spam</a>
+        &nbsp;
+        <a href="{{ path('antispam_spambox_pluginreports', {verdict: verdict, who: 'anonymous'}) }}" class="btn btn-sm {{ who == 'anonymous' ? 'btn-primary' : 'btn-default' }}">Niezalogowani</a>
+        <a href="{{ path('antispam_spambox_pluginreports', {verdict: verdict, who: 'account'}) }}" class="btn btn-sm {{ who == 'account' ? 'btn-primary' : 'btn-default' }}">Zalogowani</a>
+    </p>
+
+    {% if reports|length > 0 %}
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-flag"></span> Ostatnie zgłoszenia</div>
+        <table class="table table-striped" style="margin-bottom:0;">
+            <thead><tr><th>Kiedy</th><th>Zgłoszenie</th><th>Kto</th><th>Nadawca</th><th>Temat</th><th>Odciski</th><th>Reguły</th></tr></thead>
+            <tbody>
+            {% for r in reports %}
+                <tr>
+                    <td>{{ r.reportedAt|date('m-d H:i') }}</td>
+                    <td>
+                        {% if r.verdict == 'spam' %}<span class="label label-danger">spam</span>
+                        {% else %}<span class="label label-success">nie spam</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if r.accountEmail %}{{ r.accountEmail }}
+                        {% else %}<span class="text-muted">niezalogowany</span>{% endif %}
+                        {% if r.clientIp %}<br><small class="text-muted">{{ r.clientIp }}</small>{% endif %}
+                    </td>
+                    <td>{{ r.sender }}</td>
+                    <td>{{ r.subject[:60] }}</td>
+                    <td>{{ r.signals }}</td>
+                    <td>
+                        {% for rule in r.rulesDecoded %}
+                            <small>{{ rule }}</small><br>
+                        {% endfor %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+        <div class="empty-state">
+            <span class="glyphicon glyphicon-flag"></span>
+            <p>Brak zgłoszeń</p>
+            <p class="text-muted">Zgłoszenia pojawią się tu, gdy użytkownicy wtyczki <a href="{{ path('antispam_plugin_config') }}">Thunderbird</a> oznaczą wiadomość jako spam / nie spam.</p>
+        </div>
+    {% endif %}
+{% endblock %}

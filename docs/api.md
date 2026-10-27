@@ -30,6 +30,7 @@
 | Method | URL | Description |
 |--------|-----|-------------|
 | GET | `/spambox/index` | View first 20 spam messages |
+| GET | `/spambox/plugin-reports` | Thunderbird plugin reports (anonymous + logged in), filters `?verdict=spam\|ham`, `?who=anonymous\|account` |
 
 ## Configuration (`/config`)
 

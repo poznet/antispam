@@ -1,69 +1,68 @@
 {% extends 'AntispamBundle::main.html.twig' %}
-{% block title %}Thunderbird Plugin{% endblock %}
-{% block page_title %}Thunderbird Plugin{% endblock %}
+{% block title %}Wtyczka Thunderbird{% endblock %}
+{% block page_title %}Wtyczka Thunderbird{% endblock %}
 
 {% block body %}
     <p class="text-muted">
-        The Thunderbird plugin lets mailbox owners work with antispam from their mail client.
-        Without logging in, anyone with the plugin can mark messages as spam — the sender and
-        body fingerprints feed the shared spam DB, so antispam learns. Users logged in with
-        their mailbox e-mail and plugin (or IMAP) password can additionally have every new
-        message checked by antispam on arrival, and their spam / not-spam verdicts create
-        e-mail blacklist / whitelist rules for their account.
+        Wtyczka do Thunderbirda pozwala właścicielom skrzynek pracować z antyspamem z poziomu klienta poczty.
+        Bez logowania każdy użytkownik wtyczki może oznaczać wiadomości jako spam — odciski nadawcy i treści
+        trafiają do wspólnej bazy spamu, więc antyspam się uczy. Użytkownik zalogowany adresem skrzynki i hasłem
+        wtyczki (lub hasłem IMAP) może dodatkowo mieć sprawdzaną każdą nową wiadomość, a jego zgłoszenia
+        spam / nie-spam tworzą reguły czarnej / białej listy e-mail dla jego konta.
     </p>
 
     <p>
         <a href="{{ path('antispam_plugin_download') }}" class="btn btn-success">
-            <span class="glyphicon glyphicon-download-alt"></span> Download antispam-thunderbird.xpi
+            <span class="glyphicon glyphicon-download-alt"></span> Pobierz antispam-thunderbird.xpi
         </a>
-        <span class="text-muted">&nbsp;Also offered on the login page. In Thunderbird: Add-ons and Themes → ⚙ → Install Add-on From File…</span>
+        <span class="text-muted">&nbsp;Link jest też na stronie logowania. W Thunderbirdzie: Dodatki i motywy → ⚙ → Zainstaluj dodatek z pliku…</span>
     </p>
 
     <form method="post">
     <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-envelope"></span> Features</div>
+        <div class="panel-heading"><span class="glyphicon glyphicon-envelope"></span> Funkcje</div>
         <div class="panel-body">
             <div class="checkbox"><label>
                 <input type="checkbox" name="config[enabled]" {% if config.enabled %}checked{% endif %}>
-                <strong>Enable the plugin API and download</strong>
+                <strong>Włącz API wtyczki i pobieranie</strong>
             </label></div>
             <div class="checkbox"><label>
                 <input type="checkbox" name="config[anonymous_reports]" {% if config.anonymous_reports %}checked{% endif %}>
-                <strong>Accept spam reports from users who are not logged in</strong> — only fingerprints are recorded; not-spam reports always require login.
+                <strong>Przyjmuj zgłoszenia spamu od niezalogowanych</strong> — zapisywane są tylko odciski; zgłoszenia „nie spam” zawsze wymagają logowania.
             </label></div>
             <div class="checkbox"><label>
                 <input type="checkbox" name="config[check_enabled]" {% if config.check_enabled %}checked{% endif %}>
-                <strong>Check new mail on arrival</strong> for logged-in users (the plugin sends the message to antispam and acts on the decision).
+                <strong>Sprawdzaj nową pocztę</strong> zalogowanych użytkowników (wtyczka przekazuje wiadomość do antyspamu i działa według decyzji).
             </label></div>
             <div class="checkbox"><label>
                 <input type="checkbox" name="config[learn_rules]" {% if config.learn_rules %}checked{% endif %}>
-                <strong>Learn rules from logged-in reports</strong> — spam adds the sender to the account's e-mail blacklist, not-spam moves it to the whitelist.
+                <strong>Ucz reguł ze zgłoszeń zalogowanych</strong> — spam dodaje nadawcę do czarnej listy e-mail konta, nie-spam przenosi go na białą listę.
             </label></div>
         </div>
     </div>
 
     <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-cog"></span> Limits</div>
+        <div class="panel-heading"><span class="glyphicon glyphicon-cog"></span> Limity</div>
         <div class="panel-body">
             <div class="row">
                 <div class="col-sm-4">
-                    <label>Login token lifetime (days)</label>
+                    <label>Ważność logowania (dni)</label>
                     <input type="number" name="config[token_ttl_days]" class="form-control" value="{{ config.token_ttl_days }}" min="1" max="3650">
                 </div>
                 <div class="col-sm-4">
-                    <label>Reports per hour</label>
+                    <label>Zgłoszeń na godzinę</label>
                     <input type="number" name="config[report_rate_limit]" class="form-control" value="{{ config.report_rate_limit }}" min="1" max="100000">
-                    <small class="text-muted">Per IP (anonymous) or per account (logged in).</small>
+                    <small class="text-muted">Na adres IP (niezalogowani) lub na konto (zalogowani).</small>
                 </div>
                 <div class="col-sm-4">
-                    <label>Public URL</label>
+                    <label>Publiczny adres</label>
                     <input type="text" name="config[public_url]" class="form-control" value="{{ config.public_url }}" placeholder="https://antispam.example.com">
-                    <small class="text-muted">Baked into the downloaded plugin. Empty = taken from the current request (set it when running behind a TLS proxy).</small>
+                    <small class="text-muted">Wpisywany do pobieranej wtyczki. Puste = adres z bieżącego żądania (ustaw za proxy TLS).</small>
                 </div>
             </div>
         </div>
     </div>
 
-    <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-floppy-disk"></span> Save</button>
+    <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-floppy-disk"></span> Zapisz</button>
     </form>
 {% endblock %}

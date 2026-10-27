@@ -4,163 +4,253 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Logowanie &middot; Pancernapanda antispam</title>
+    <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
     <style>
         * { box-sizing: border-box; }
+        html, body { height: 100%; }
         body {
             margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: linear-gradient(135deg, #0b2a52 0%, #1e4a8a 55%, #3b82f6 100%);
-            color: #1f2a44;
-            display: flex;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            color: #e6ebf5;
+            background: #060914;
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(380px, 1fr);
             min-height: 100vh;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
         }
-        .login-box {
-            width: 100%;
-            max-width: 400px;
-            padding: 36px 32px;
-            background: #ffffff;
-            border: 1px solid #d5e1f2;
-            border-radius: 10px;
-            box-shadow: 0 14px 40px rgba(11, 42, 82, 0.25);
+        /* ---- Showcase side ---- */
+        .showcase {
+            position: relative; overflow: hidden;
+            padding: 48px 56px;
+            display: flex; flex-direction: column; justify-content: space-between;
+            background:
+                radial-gradient(600px 400px at 15% 10%, rgba(99, 102, 241, .55), transparent 70%),
+                radial-gradient(500px 400px at 90% 90%, rgba(14, 165, 233, .40), transparent 70%),
+                linear-gradient(160deg, #0b1020 0%, #1e1b4b 100%);
         }
-        .pp-login-logo {
-            display: flex;
-            justify-content: center;
-            margin-bottom: 14px;
+        .showcase::before {
+            content: ''; position: absolute; inset: 0;
+            background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);
+            background-size: 36px 36px;
+            -webkit-mask-image: radial-gradient(circle at 50% 40%, #000, transparent 75%);
+            mask-image: radial-gradient(circle at 50% 40%, #000, transparent 75%);
         }
-        .pp-login-logo svg {
-            width: 64px;
-            height: 64px;
-            filter: drop-shadow(0 3px 6px rgba(11, 42, 82, 0.2));
+        .orb {
+            position: absolute; border-radius: 50%; filter: blur(60px); opacity: .55;
+            animation: float 14s ease-in-out infinite;
         }
-        .login-box h1 {
-            margin: 0 0 6px;
-            font-size: 22px;
-            text-align: center;
-            color: #0b2a52;
-            font-weight: 700;
-            letter-spacing: 0.3px;
+        .orb.a { width: 280px; height: 280px; background: #6366f1; top: 18%; left: 52%; }
+        .orb.b { width: 220px; height: 220px; background: #0ea5e9; bottom: 12%; left: 10%; animation-delay: -6s; }
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50%      { transform: translate(-30px, 24px) scale(1.08); }
         }
-        .login-box .subtitle {
-            margin: 0 0 24px;
-            text-align: center;
-            color: #5f7aa8;
-            font-size: 13px;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
+        .brand { position: relative; display: flex; align-items: center; gap: 12px; }
+        .brand-logo {
+            width: 44px; height: 44px; border-radius: 13px;
+            display: grid; place-items: center;
+            background: linear-gradient(135deg, #4f46e5, #2563eb 50%, #0ea5e9);
+            box-shadow: 0 10px 30px -8px rgba(79, 70, 229, .8), inset 0 1px 0 rgba(255,255,255,.25);
         }
-        .form-group { margin-bottom: 16px; }
-        .form-group label {
-            display: block;
-            margin-bottom: 6px;
-            font-size: 14px;
-            font-weight: 600;
-            color: #0b2a52;
+        .brand-logo svg { width: 30px; height: 30px; }
+        .brand strong { display: block; font-size: 16px; color: #fff; }
+        .brand span { font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; color: #a5b4fc; font-weight: 600; }
+        .pitch { position: relative; max-width: 480px; }
+        .pitch h2 {
+            margin: 0 0 16px; font-size: 40px; line-height: 1.1; font-weight: 800; letter-spacing: -.035em; color: #fff;
+        }
+        .pitch h2 em {
+            font-style: normal;
+            background: linear-gradient(90deg, #a5b4fc, #67e8f9);
+            -webkit-background-clip: text; background-clip: text; color: transparent;
+        }
+        .pitch p { margin: 0 0 28px; color: #a5b0c9; font-size: 15px; line-height: 1.6; }
+        .features { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+        .features li { display: flex; align-items: center; gap: 12px; color: #cbd5e1; font-size: 14px; }
+        .features li i {
+            width: 30px; height: 30px; border-radius: 9px; flex: none;
+            display: grid; place-items: center;
+            background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
+        }
+        .features svg { width: 15px; height: 15px; }
+        .copy { position: relative; font-size: 12px; color: #64748b; }
+
+        /* ---- Form side ---- */
+        .form-side {
+            display: flex; align-items: center; justify-content: center;
+            padding: 40px 24px;
+            background: #0b1020;
+        }
+        .card { width: 100%; max-width: 380px; }
+        .card h1 { margin: 0 0 6px; font-size: 26px; font-weight: 750; letter-spacing: -.03em; color: #fff; }
+        .card .lead { margin: 0 0 28px; color: #8391ad; font-size: 14px; }
+        .field { margin-bottom: 18px; }
+        .field label { display: block; margin-bottom: 7px; font-size: 12.5px; font-weight: 600; color: #c3cbdc; }
+        .input-wrap { position: relative; }
+        .input-wrap svg {
+            position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+            width: 17px; height: 17px; color: #64748b; pointer-events: none;
+            transition: color .15s;
         }
         .form-control {
-            display: block;
-            width: 100%;
-            padding: 9px 12px;
-            font-size: 14px;
-            line-height: 1.5;
-            color: #1f2a44;
-            background-color: #ffffff;
-            border: 1px solid #c5d3ea;
-            border-radius: 6px;
-            transition: border-color 0.15s, box-shadow 0.15s;
+            display: block; width: 100%;
+            height: 46px; padding: 0 14px 0 42px;
+            font: inherit; font-size: 14.5px;
+            color: #fff;
+            background: #0f1526;
+            border: 1px solid #222c45;
+            border-radius: 12px;
+            transition: border-color .15s, box-shadow .15s, background .15s;
         }
+        .form-control::placeholder { color: #4b5876; }
+        .form-control:hover { border-color: #2f3b5c; }
         .form-control:focus {
-            border-color: #1e4a8a;
-            outline: 0;
-            box-shadow: 0 0 0 3px rgba(30, 74, 138, 0.18);
+            outline: 0; border-color: #818cf8; background: #111832;
+            box-shadow: 0 0 0 4px rgba(129, 140, 248, .18);
         }
-        .btn-primary {
-            display: block;
-            width: 100%;
-            padding: 11px 16px;
-            margin-top: 6px;
-            font-size: 15px;
-            font-weight: 600;
-            color: #ffffff;
-            background-color: #1e4a8a;
-            border: 1px solid #0b2a52;
-            border-radius: 6px;
+        .input-wrap:focus-within svg { color: #a5b4fc; }
+        .btn {
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            width: 100%; height: 48px; margin-top: 8px;
+            font: inherit; font-size: 15px; font-weight: 650;
+            color: #fff;
+            background: linear-gradient(135deg, #4f46e5 0%, #2563eb 55%, #0ea5e9 100%);
+            border: 0; border-radius: 12px;
+            box-shadow: 0 12px 28px -12px rgba(79, 70, 229, .9), inset 0 1px 0 rgba(255,255,255,.2);
             cursor: pointer;
-            transition: background-color 0.15s, transform 0.05s;
+            transition: transform .12s, filter .15s;
         }
-        .btn-primary:hover { background-color: #0b2a52; }
-        .btn-primary:active { transform: translateY(1px); }
-        .pp-plugin {
-            margin-top: 22px;
-            padding-top: 16px;
-            border-top: 1px solid #e3ebf7;
-            text-align: center;
-            font-size: 13px;
-            color: #5f7aa8;
+        .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+        .btn:active { transform: none; }
+        .btn:focus-visible { outline: 0; box-shadow: 0 0 0 4px rgba(129, 140, 248, .35); }
+        .btn svg { width: 17px; height: 17px; }
+        .alert {
+            display: flex; gap: 10px; align-items: flex-start;
+            padding: 12px 14px; margin-bottom: 20px;
+            color: #fecaca; background: rgba(239, 68, 68, .12);
+            border: 1px solid rgba(239, 68, 68, .35); border-radius: 12px;
+            font-size: 13.5px;
         }
-        .pp-plugin a {
-            display: inline-block;
-            margin-top: 6px;
-            color: #1e4a8a;
-            font-weight: 600;
-            text-decoration: none;
+        .alert svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }
+        .plugin-dl {
+            margin-top: 22px; padding: 14px 16px;
+            display: flex; align-items: center; gap: 12px;
+            background: rgba(99, 102, 241, .08); border: 1px solid rgba(129, 140, 248, .25); border-radius: 12px;
+            color: #a5b0c9; font-size: 13px; line-height: 1.45; text-decoration: none;
+            transition: border-color .15s, background .15s;
         }
-        .pp-plugin a:hover { text-decoration: underline; }
-        .alert-danger {
-            padding: 10px 14px;
-            margin-bottom: 16px;
-            color: #a94442;
-            background-color: #fdecea;
-            border: 1px solid #f5c6cb;
-            border-radius: 6px;
-            font-size: 14px;
+        .plugin-dl:hover { border-color: #818cf8; background: rgba(99, 102, 241, .14); }
+        .plugin-dl svg { width: 22px; height: 22px; flex: none; color: #a5b4fc; }
+        .plugin-dl strong { display: block; color: #fff; font-size: 13.5px; }
+        .secure {
+            margin-top: 26px; display: flex; align-items: center; justify-content: center; gap: 8px;
+            font-size: 12px; color: #64748b;
         }
+        .secure svg { width: 14px; height: 14px; }
+        .mobile-brand { display: none; }
+
+        @media (max-width: 900px) {
+            body { grid-template-columns: 1fr; }
+            .showcase { display: none; }
+            .form-side {
+                background:
+                    radial-gradient(500px 300px at 50% 0%, rgba(99, 102, 241, .35), transparent 70%),
+                    #0b1020;
+            }
+            .mobile-brand { display: flex; margin-bottom: 32px; }
+        }
+        @media (prefers-reduced-motion: reduce) { .orb { animation: none; } }
     </style>
 </head>
 <body>
-    <div class="login-box">
-        <div class="pp-login-logo">
-            <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Pancerna Panda">
-                <circle cx="20" cy="21" r="14" fill="#ffffff" stroke="#0b2a52" stroke-width="1"/>
-                <ellipse cx="10" cy="11" rx="5" ry="6" fill="#0b2a52"/>
-                <ellipse cx="30" cy="11" rx="5" ry="6" fill="#0b2a52"/>
-                <ellipse cx="13" cy="22" rx="4" ry="5" fill="#0b2a52"/>
-                <ellipse cx="27" cy="22" rx="4" ry="5" fill="#0b2a52"/>
-                <circle cx="13" cy="22" r="1.6" fill="#ffffff"/>
-                <circle cx="27" cy="22" r="1.6" fill="#ffffff"/>
-                <ellipse cx="20" cy="27" rx="2.2" ry="1.6" fill="#0b2a52"/>
-                <path d="M16.5 30 Q20 33 23.5 30" stroke="#0b2a52" stroke-width="1.4" fill="none" stroke-linecap="round"/>
-            </svg>
+    {% set panda %}
+        <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="20" cy="21" r="14" fill="#ffffff"/>
+            <ellipse cx="10" cy="11" rx="5" ry="6" fill="#1e1b4b"/>
+            <ellipse cx="30" cy="11" rx="5" ry="6" fill="#1e1b4b"/>
+            <ellipse cx="13" cy="22" rx="4" ry="5" fill="#1e1b4b"/>
+            <ellipse cx="27" cy="22" rx="4" ry="5" fill="#1e1b4b"/>
+            <circle cx="13" cy="22" r="1.6" fill="#ffffff"/>
+            <circle cx="27" cy="22" r="1.6" fill="#ffffff"/>
+            <ellipse cx="20" cy="27" rx="2.2" ry="1.6" fill="#1e1b4b"/>
+            <path d="M16.5 30 Q20 33 23.5 30" stroke="#1e1b4b" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+        </svg>
+    {% endset %}
+
+    <section class="showcase">
+        <span class="orb a"></span><span class="orb b"></span>
+        <div class="brand">
+            <span class="brand-logo">{{ panda }}</span>
+            <div><strong>Pancernapanda</strong><span>antispam</span></div>
         </div>
-        <h1>Pancernapanda</h1>
-        <p class="subtitle">antispam</p>
-
-        {% if error %}
-            <div class="alert-danger">
-                {{ error.messageKey|trans(error.messageData, 'security') }}
-            </div>
-        {% endif %}
-
-        <form action="{{ path('login') }}" method="post">
-            <div class="form-group">
-                <label for="inputUsername">Username</label>
-                <input type="text" id="inputUsername" name="_username" value="{{ last_username }}" class="form-control" autofocus required>
-            </div>
-            <div class="form-group">
-                <label for="inputPassword">Password</label>
-                <input type="password" id="inputPassword" name="_password" class="form-control" required>
-            </div>
-            <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
-            <button type="submit" class="btn-primary">Sign in</button>
-        </form>
-
-        <div class="pp-plugin">
-            Oznaczaj spam prosto z Thunderbirda — wtyczka uczy antyspam i może sprawdzać nową pocztę.<br>
-            <a href="{{ path('antispam_plugin_download') }}">&#8681; Pobierz wtyczkę do Thunderbirda (.xpi)</a>
+        <div class="pitch">
+            <h2>Pancerna ochrona <em>Twojej skrzynki</em> przed spamem.</h2>
+            <p>Scoring wiadomości, listy DNSBL, reputacja załączników i współdzielony feed spamu — w jednym panelu dla wszystkich kont.</p>
+            <ul class="features">
+                <li><i><svg viewBox="0 0 24 24" fill="none" stroke="#a5b4fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></i>Wielowarstwowy scoring pipeline</li>
+                <li><i><svg viewBox="0 0 24 24" fill="none" stroke="#67e8f9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg></i>IMAP oraz agent SSH + Maildir</li>
+                <li><i><svg viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></i>DNSBL, ClamAV i VirusTotal</li>
+            </ul>
         </div>
-    </div>
+        <div class="copy">&copy; {{ 'now'|date('Y') }} Pancernapanda &middot; pancernapanda.pl</div>
+    </section>
+
+    <main class="form-side">
+        <div class="card">
+            <div class="brand mobile-brand">
+                <span class="brand-logo">{{ panda }}</span>
+                <div><strong>Pancernapanda</strong><span>antispam</span></div>
+            </div>
+
+            <h1>Zaloguj się</h1>
+            <p class="lead">Wprowadź dane dostępowe do panelu administracyjnego.</p>
+
+            {% if error %}
+                <div class="alert" role="alert">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                    <span>{{ error.messageKey|trans(error.messageData, 'security') }}</span>
+                </div>
+            {% endif %}
+
+            <form action="{{ path('login') }}" method="post">
+                <div class="field">
+                    <label for="inputUsername">Użytkownik</label>
+                    <div class="input-wrap">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+                        <input type="text" id="inputUsername" name="_username" value="{{ last_username }}" class="form-control" placeholder="admin" autocomplete="username" autofocus required>
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="inputPassword">Hasło</label>
+                    <div class="input-wrap">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+                        <input type="password" id="inputPassword" name="_password" class="form-control" placeholder="••••••••" autocomplete="current-password" required>
+                    </div>
+                </div>
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
+                <button type="submit" class="btn">
+                    Zaloguj się
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                </button>
+            </form>
+
+            <a class="plugin-dl" href="{{ path('antispam_plugin_download') }}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+                <span>
+                    <strong>Pobierz wtyczkę do Thunderbirda (.xpi)</strong>
+                    Oznaczaj spam prosto z poczty — antyspam uczy się na zgłoszeniach i może sprawdzać nowe wiadomości.
+                </span>
+            </a>
+
+            <div class="secure">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+                Połączenie chronione &middot; Pancernapanda security toolkit
+            </div>
+        </div>
+    </main>
 </body>
 </html>

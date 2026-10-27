@@ -1,14 +1,14 @@
 {% extends 'AntispamBundle::main.html.twig' %}
-{% block title %}Shared Spam Feed{% endblock %}
-{% block page_title %}Shared Spam Feed{% endblock %}
+{% block title %}Wspólna baza spamu{% endblock %}
+{% block page_title %}Wspólna baza spamu (feed){% endblock %}
 
 {% block body %}
     <p class="text-muted">
-        The shared spam feed is a centralized spam DB across antispam instances. Each
-        instance can act as a <strong>hub</strong> (other instances push their findings to it)
-        and a <strong>client</strong> (it pulls everyone else's). Only one-way SHA-256
-        fingerprints are exchanged — a hash of the normalized sender address and of the
-        signature-stripped message body — never raw e-mail content.
+        Wspólny feed spamu to scentralizowana baza spamu współdzielona między instancjami antispamu.
+        Każda instancja może działać jako <strong>hub</strong> (inne instancje wysyłają do niej swoje wykrycia)
+        oraz jako <strong>klient</strong> (pobiera wykrycia pozostałych). Wymieniane są wyłącznie jednokierunkowe
+        odciski SHA-256 — hash znormalizowanego adresu nadawcy i treści wiadomości bez podpisu —
+        nigdy surowa treść e-maili.
     </p>
 
     <div class="row">
@@ -16,7 +16,7 @@
             <div class="panel panel-info">
                 <div class="panel-body text-center">
                     <h3 style="margin:0;">{{ stats.total }}</h3>
-                    <small class="text-muted">signals total</small>
+                    <small class="text-muted">sygnałów łącznie</small>
                 </div>
             </div>
         </div>
@@ -24,7 +24,7 @@
             <div class="panel panel-default">
                 <div class="panel-body text-center">
                     <h3 style="margin:0;">{{ stats.local }}</h3>
-                    <small class="text-muted">detected locally</small>
+                    <small class="text-muted">wykrytych lokalnie</small>
                 </div>
             </div>
         </div>
@@ -32,7 +32,7 @@
             <div class="panel panel-default">
                 <div class="panel-body text-center">
                     <h3 style="margin:0;">{{ stats.remote }}</h3>
-                    <small class="text-muted">pulled from hub</small>
+                    <small class="text-muted">pobranych z huba</small>
                 </div>
             </div>
         </div>
@@ -40,57 +40,57 @@
 
     <form method="post">
     <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-transfer"></span> Participation</div>
+        <div class="panel-heading"><span class="glyphicon glyphicon-transfer"></span> Udział w feedzie</div>
         <div class="panel-body">
             <div class="checkbox"><label>
                 <input type="checkbox" name="config[enabled]" {% if config.enabled %}checked{% endif %}>
-                <strong>Participate in the shared spam feed</strong> — record fingerprints of detected spam and score incoming mail against known signals.
+                <strong>Uczestnicz we wspólnym feedzie spamu</strong> — zapisuj odciski wykrytego spamu i oceniaj przychodzącą pocztę na podstawie znanych sygnałów.
             </label></div>
             <div class="row" style="margin-top:10px;">
                 <div class="col-sm-6">
-                    <label>Match score</label>
+                    <label>Punkty za dopasowanie</label>
                     <input type="number" name="config[score]" class="form-control" value="{{ config.score }}" min="1" max="200">
-                    <small class="text-muted">Added when an incoming message matches a trusted shared signal.</small>
+                    <small class="text-muted">Dodawane, gdy wiadomość pasuje do zaufanego, współdzielonego sygnału.</small>
                 </div>
                 <div class="col-sm-6">
-                    <label>Minimum reports</label>
+                    <label>Minimalna liczba zgłoszeń</label>
                     <input type="number" name="config[min_reports]" class="form-control" value="{{ config.min_reports }}" min="1" max="1000">
-                    <small class="text-muted">A signal is only trusted once seen this many times (corroboration).</small>
+                    <small class="text-muted">Sygnał jest zaufany dopiero po tylu zgłoszeniach (potwierdzenie).</small>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-home"></span> This instance as a hub</div>
+        <div class="panel-heading"><span class="glyphicon glyphicon-home"></span> Ta instancja jako hub</div>
         <div class="panel-body">
-            <p class="text-muted">Other instances push to / pull from <code>/api/feed</code> on this server using the key below in an <code>X-Feed-Key</code> header. Leave empty to disable the incoming API.</p>
-            <label>Local API key (server key)</label>
-            <input type="text" name="config[server_key]" class="form-control" value="{{ config.server_key }}" autocomplete="off" placeholder="a long random secret">
+            <p class="text-muted">Inne instancje wysyłają do / pobierają z <code>/api/feed</code> na tym serwerze, podając poniższy klucz w nagłówku <code>X-Feed-Key</code>. Pozostaw puste, aby wyłączyć przychodzące API.</p>
+            <label>Lokalny klucz API (klucz serwera)</label>
+            <input type="text" name="config[server_key]" class="form-control" value="{{ config.server_key }}" autocomplete="off" placeholder="długi, losowy sekret">
         </div>
     </div>
 
     <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-cloud-upload"></span> Remote hub (client sync)</div>
+        <div class="panel-heading"><span class="glyphicon glyphicon-cloud-upload"></span> Zdalny hub (synchronizacja klienta)</div>
         <div class="panel-body">
-            <p class="text-muted">Where this instance pushes its findings and pulls others'. Run <code>php bin/console antispam:feed:sync</code> (e.g. from cron) to sync. Leave the URL empty to act as a hub only.</p>
+            <p class="text-muted">Adres, do którego ta instancja wysyła swoje wykrycia i z którego pobiera cudze. Uruchom <code>php bin/console antispam:feed:sync</code> (np. z crona), aby zsynchronizować. Pozostaw URL pusty, aby działać wyłącznie jako hub.</p>
             <div class="row">
                 <div class="col-sm-7">
-                    <label>Remote hub URL</label>
+                    <label>URL zdalnego huba</label>
                     <input type="text" name="config[remote_url]" class="form-control" value="{{ config.remote_url }}" placeholder="https://hub.example.com">
-                    <small class="text-muted">Base URL only — <code>/api/feed/...</code> is appended automatically.</small>
+                    <small class="text-muted">Tylko bazowy URL — <code>/api/feed/...</code> zostanie dodane automatycznie.</small>
                 </div>
                 <div class="col-sm-5">
-                    <label>Remote key</label>
-                    <input type="text" name="config[remote_key]" class="form-control" value="{{ config.remote_key }}" autocomplete="off" placeholder="the hub's server key">
+                    <label>Klucz zdalny</label>
+                    <input type="text" name="config[remote_key]" class="form-control" value="{{ config.remote_key }}" autocomplete="off" placeholder="klucz serwera huba">
                 </div>
             </div>
             {% if config.last_pull_at %}
-                <p class="text-muted" style="margin-top:10px;"><span class="glyphicon glyphicon-time"></span> Last pull: {{ config.last_pull_at }}</p>
+                <p class="text-muted" style="margin-top:10px;"><span class="glyphicon glyphicon-time"></span> Ostatnie pobranie: {{ config.last_pull_at }}</p>
             {% endif %}
         </div>
     </div>
 
-    <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-floppy-disk"></span> Save</button>
+    <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-floppy-disk"></span> Zapisz</button>
     </form>
 {% endblock %}

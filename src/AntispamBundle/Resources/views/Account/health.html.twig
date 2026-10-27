@@ -1,13 +1,13 @@
 {% extends 'AntispamBundle::main.html.twig' %}
-{% block title %}Agent Health{% endblock %}
-{% block page_title %}Agent Health — {{ account.name|default('?') }}{% endblock %}
+{% block title %}Stan agenta{% endblock %}
+{% block page_title %}Stan agenta — {{ account.name|default('?') }}{% endblock %}
 
 {% block body %}
     {% if result.success %}
-        <div class="alert alert-success">Agent responded</div>
+        <div class="alert alert-success">Agent odpowiada</div>
         <table class="table table-bordered">
         {% for k, v in result.health %}
-            <tr><th style="width:30%;">{{ k }}</th><td><pre style="margin:0; background:#f9f9f9;">{{ v is iterable ? v|json_encode : v }}</pre></td></tr>
+            <tr><th style="width:30%;">{{ k }}</th><td><pre style="margin:0;">{{ v is iterable ? v|json_encode : v }}</pre></td></tr>
         {% endfor %}
         </table>
     {% else %}
@@ -15,5 +15,5 @@
             {% for m in result.messages %}{{ m }}<br>{% endfor %}
         </div>
     {% endif %}
-    <a href="{{ path('antispam_account_index') }}" class="btn btn-default">Back</a>
+    <a href="{{ path('antispam_account_index') }}" class="btn btn-default"><span class="glyphicon glyphicon-arrow-left"></span> Powrót do kont</a>
 {% endblock %}

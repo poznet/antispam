@@ -69,7 +69,7 @@ class ConfigurationController extends Controller
             $c->set('scoring.vt_timeout', max(1, (int)($post['vt_timeout'] ?? ScoringService::DEFAULT_VT_TIMEOUT)));
             $c->set('scoring.spam_threshold', max(1, (int)($post['spam_threshold'] ?? ScoringService::DEFAULT_SPAM_THRESHOLD)));
             $c->set('scoring.quarantine_threshold', max(0, (int)($post['quarantine_threshold'] ?? ScoringService::DEFAULT_QUARANTINE_THRESHOLD)));
-            $this->addFlash('success', 'Settings saved');
+            $this->addFlash('success', 'Ustawienia zapisane');
         }
 
         $config = [
@@ -113,7 +113,7 @@ class ConfigurationController extends Controller
             $c->set('feed.server_key', trim($post['server_key'] ?? ''));
             $c->set('feed.remote_url', rtrim(trim($post['remote_url'] ?? ''), '/'));
             $c->set('feed.remote_key', trim($post['remote_key'] ?? ''));
-            $this->addFlash('success', 'Shared feed settings saved');
+            $this->addFlash('success', 'Ustawienia wspólnej bazy spamu zapisane');
             return $this->redirectToRoute('antispam_feed_config');
         }
 
@@ -152,7 +152,7 @@ class ConfigurationController extends Controller
             $c->set('plugin.token_ttl_days', max(1, (int)($post['token_ttl_days'] ?? 90)));
             $c->set('plugin.report_rate_limit', max(1, (int)($post['report_rate_limit'] ?? 120)));
             $c->set('plugin.public_url', rtrim(trim($post['public_url'] ?? ''), '/'));
-            $this->addFlash('success', 'Thunderbird plugin settings saved');
+            $this->addFlash('success', 'Ustawienia wtyczki Thunderbird zapisane');
             return $this->redirectToRoute('antispam_plugin_config');
         }
 
@@ -189,9 +189,9 @@ class ConfigurationController extends Controller
         $timeout = $c->get('scoring.clamav_timeout') ?: ScoringService::DEFAULT_CLAMAV_TIMEOUT;
 
         if ($this->get('antispam.clamav')->ping($dsn, $timeout)) {
-            $this->addFlash('success', sprintf('ClamAV daemon reachable at %s', $dsn));
+            $this->addFlash('success', sprintf('Demon ClamAV odpowiada pod adresem %s', $dsn));
         } else {
-            $this->addFlash('danger', sprintf('Could not reach ClamAV daemon at %s — check that clamd is running and the address is correct.', $dsn));
+            $this->addFlash('danger', sprintf('Brak połączenia z demonem ClamAV pod adresem %s — sprawdź, czy clamd działa i czy adres jest poprawny.', $dsn));
         }
 
         return $this->redirectToRoute('antispam_spam_config');
@@ -207,11 +207,11 @@ class ConfigurationController extends Controller
         $timeout = $c->get('scoring.vt_timeout') ?: ScoringService::DEFAULT_VT_TIMEOUT;
 
         if ($apiKey === '') {
-            $this->addFlash('danger', 'No VirusTotal API key configured.');
+            $this->addFlash('danger', 'Nie skonfigurowano klucza API VirusTotal.');
         } elseif ($this->get('antispam.virustotal')->ping($apiKey, $timeout)) {
-            $this->addFlash('success', 'VirusTotal API key is valid and reachable.');
+            $this->addFlash('success', 'Klucz API VirusTotal jest poprawny, usługa odpowiada.');
         } else {
-            $this->addFlash('danger', 'Could not reach VirusTotal or the API key was rejected.');
+            $this->addFlash('danger', 'Brak połączenia z VirusTotal lub klucz API został odrzucony.');
         }
 
         return $this->redirectToRoute('antispam_spam_config');

@@ -156,30 +156,49 @@ class ScoringService
     public function decide(MessageEvent $event, array $reasons, $sender = null, $subject = null)
     {
         $score = $event->getSpamscore();
-        $decision = SpamScoreLog::DECISION_HAM;
-
-        if ($event->isWhitelist()) {
-            $decision = SpamScoreLog::DECISION_WHITELISTED;
-        } elseif ($event->isSpam() || $score >= $this->getSpamThreshold()) {
-            $decision = SpamScoreLog::DECISION_SPAM;
+        $decision = $this->classify($score, $event->isSpam(), $event->isWhitelist());
+        if ($decision === SpamScoreLog::DECISION_SPAM) {
             $event->setSpam(true);
-        } elseif ($score >= $this->getQuarantineThreshold()) {
-            $decision = SpamScoreLog::DECISION_QUARANTINE;
         }
 
-        if ($this->isLoggingEnabled()) {
-            $log = new SpamScoreLog();
-            $log->setAccountEmail($event->getEmail())
-                ->setSender($sender)
-                ->setSubject($subject)
-                ->setScore($score)
-                ->setDecision($decision)
-                ->setReasons($reasons);
-            $this->em->persist($log);
-            $this->em->flush();
-        }
+        $this->logDecision($event->getEmail(), $score, $decision, $reasons, $sender, $subject);
 
         return $decision;
+    }
+
+    /**
+     * Turn a score into ham/quarantine/spam/whitelisted. Shared by the IMAP
+     * pipeline and the raw-message scanner used by the Thunderbird plugin.
+     */
+    public function classify($score, $forcedSpam = false, $whitelisted = false)
+    {
+        if ($whitelisted) {
+            return SpamScoreLog::DECISION_WHITELISTED;
+        }
+        if ($forcedSpam || $score >= $this->getSpamThreshold()) {
+            return SpamScoreLog::DECISION_SPAM;
+        }
+        if ($score >= $this->getQuarantineThreshold()) {
+            return SpamScoreLog::DECISION_QUARANTINE;
+        }
+        return SpamScoreLog::DECISION_HAM;
+    }
+
+    /** Persist a SpamScoreLog entry when decision logging is enabled. */
+    public function logDecision($accountEmail, $score, $decision, array $reasons, $sender = null, $subject = null)
+    {
+        if (!$this->isLoggingEnabled()) {
+            return;
+        }
+        $log = new SpamScoreLog();
+        $log->setAccountEmail($accountEmail)
+            ->setSender($sender)
+            ->setSubject($subject)
+            ->setScore($score)
+            ->setDecision($decision)
+            ->setReasons($reasons);
+        $this->em->persist($log);
+        $this->em->flush();
     }
 
     private function readInt($key, $default)

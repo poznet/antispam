@@ -106,16 +106,10 @@ class SpamSignalService
      */
     public function signalsForMessage(Message $message)
     {
-        $signals = [];
-
         $sender = null;
         try {
             if ($message->getFrom()) { $sender = $message->getFrom()->getAddress(); }
         } catch (\Throwable $e) {}
-
-        if ($hash = $this->hashSender($sender)) {
-            $signals[] = ['type' => SharedSpamSignal::TYPE_SENDER, 'hash' => $hash];
-        }
 
         $body = null;
         try {
@@ -123,10 +117,25 @@ class SpamSignalService
             if ($body === null || $body === '') { $body = strip_tags((string)$message->getBodyHtml()); }
         } catch (\Throwable $e) {}
 
+        return $this->signalsFor($sender, $body);
+    }
+
+    /**
+     * Compute the {type, hash} signals from an already-extracted sender address
+     * and plain-text body (used for raw messages submitted by the Thunderbird
+     * plugin, which never pass through Ddeboer\Imap).
+     *
+     * @return array<int, array{type:string, hash:string}>
+     */
+    public function signalsFor($sender, $body)
+    {
+        $signals = [];
+        if ($hash = $this->hashSender($sender)) {
+            $signals[] = ['type' => SharedSpamSignal::TYPE_SENDER, 'hash' => $hash];
+        }
         if ($hash = $this->hashBody($body)) {
             $signals[] = ['type' => SharedSpamSignal::TYPE_BODY, 'hash' => $hash];
         }
-
         return $signals;
     }
 
@@ -257,14 +266,21 @@ class SpamSignalService
      */
     public function matchMessage(Message $message)
     {
-        $repo = $this->em->getRepository(SharedSpamSignal::class);
-        $minReports = $this->getMinReports();
-        $hits = [];
+        return $this->matchSignals($this->signalsForMessage($message));
+    }
 
-        $signals = $this->signalsForMessage($message);
+    /**
+     * @param array<int, array{type:string, hash:string}> $signals
+     * @return array<int, array{type:string, reports:int}>
+     */
+    public function matchSignals(array $signals)
+    {
+        $hits = [];
         if (!$signals) {
             return $hits;
         }
+        $repo = $this->em->getRepository(SharedSpamSignal::class);
+        $minReports = $this->getMinReports();
         $entities = $repo->findByTypeHashPairs($signals);
         foreach ($signals as $sig) {
             $entity = $entities[$sig['type'] . ':' . $sig['hash']] ?? null;

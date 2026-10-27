@@ -134,6 +134,43 @@ class ConfigurationController extends Controller
     }
 
     /**
+     * Thunderbird plugin settings: download link, anonymous reporting,
+     * on-arrival checks for logged-in users and rule learning.
+     *
+     * @Template
+     * @Route("/plugin/", name="antispam_plugin_config")
+     */
+    public function pluginConfigAction(Request $request)
+    {
+        $c = $this->get('configuration');
+        if ($request->getMethod() == 'POST') {
+            $post = $request->get('config', []);
+            // Stored as '1'/'0' so an unchecked box is not mistaken for "unset" (default on).
+            foreach (['enabled', 'anonymous_reports', 'check_enabled', 'learn_rules'] as $flag) {
+                $c->set('plugin.' . $flag, array_key_exists($flag, $post) ? '1' : '0');
+            }
+            $c->set('plugin.token_ttl_days', max(1, (int)($post['token_ttl_days'] ?? 90)));
+            $c->set('plugin.report_rate_limit', max(1, (int)($post['report_rate_limit'] ?? 120)));
+            $c->set('plugin.public_url', rtrim(trim($post['public_url'] ?? ''), '/'));
+            $this->addFlash('success', 'Thunderbird plugin settings saved');
+            return $this->redirectToRoute('antispam_plugin_config');
+        }
+
+        $plugin = $this->get('antispam.plugin');
+        $config = [
+            'enabled' => $plugin->isEnabled(),
+            'anonymous_reports' => $plugin->isAnonymousReportEnabled(),
+            'check_enabled' => $plugin->isCheckEnabled(),
+            'learn_rules' => $plugin->isLearnRulesEnabled(),
+            'token_ttl_days' => $plugin->getTokenTtlDays(),
+            'report_rate_limit' => $plugin->getReportRateLimit(),
+            'public_url' => $plugin->getPublicUrl(),
+        ];
+
+        return ['config' => $config];
+    }
+
+    /**
      * @Route("/uncheck-all/", name="antispam_spam_unchekall")
      */
     public function uncheckAllAction()

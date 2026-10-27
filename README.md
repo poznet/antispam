@@ -22,6 +22,7 @@ Symfony-based application for cleaning spam from email accounts via IMAP or SSH+
 - **CLI commands** for batch processing
 - **Web interface** for managing filters
 - **Statistics tracking** with counter for each rule
+- **Thunderbird plugin** — report spam from the mail client (no login needed) and, when logged in, have new mail checked by antispam on arrival ([docs/thunderbird.md](docs/thunderbird.md))
 
 ## Installation
 

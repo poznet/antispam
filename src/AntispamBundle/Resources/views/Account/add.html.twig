@@ -85,6 +85,17 @@
             </div>
         </div>
 
+        <div class="panel panel-default">
+            <div class="panel-heading">Thunderbird plugin</div>
+            <div class="panel-body">
+                <p class="text-muted">The mailbox owner logs in to the Thunderbird plugin with this e-mail and either the password below or (IMAP accounts) the IMAP password. Logged-in users can have new mail checked on arrival and their spam / not-spam reports create rules for this account. Download: <a href="{{ path('antispam_plugin_download') }}">antispam-thunderbird.xpi</a>.</p>
+                <div class="form-group">
+                    <label>Plugin password</label>
+                    <input type="password" class="form-control" name="account[plugin_password]" value="" autocomplete="new-password">
+                </div>
+            </div>
+        </div>
+
         <button type="submit" class="btn btn-primary">Save</button>
         <a href="{{ path('antispam_account_index') }}" class="btn btn-default">Cancel</a>
     </form>

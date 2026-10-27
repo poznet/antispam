@@ -39,4 +39,8 @@ security:
         # Shared spam feed API authenticates via the X-Feed-Key header, not the
         # form-login firewall, so it must be reachable anonymously.
         - { path: ^/api/feed, roles: IS_AUTHENTICATED_ANONYMOUSLY }
+        # Thunderbird plugin: bearer-token API and the public .xpi download
+        # (offered on the login page).
+        - { path: ^/api/plugin, roles: IS_AUTHENTICATED_ANONYMOUSLY }
+        - { path: ^/plugin/download, roles: IS_AUTHENTICATED_ANONYMOUSLY }
         - { path: ^/, roles: ROLE_ADMIN }

@@ -93,6 +93,22 @@
         }
         .btn-primary:hover { background-color: #0b2a52; }
         .btn-primary:active { transform: translateY(1px); }
+        .pp-plugin {
+            margin-top: 22px;
+            padding-top: 16px;
+            border-top: 1px solid #e3ebf7;
+            text-align: center;
+            font-size: 13px;
+            color: #5f7aa8;
+        }
+        .pp-plugin a {
+            display: inline-block;
+            margin-top: 6px;
+            color: #1e4a8a;
+            font-weight: 600;
+            text-decoration: none;
+        }
+        .pp-plugin a:hover { text-decoration: underline; }
         .alert-danger {
             padding: 10px 14px;
             margin-bottom: 16px;
@@ -140,6 +156,11 @@
             <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
             <button type="submit" class="btn-primary">Sign in</button>
         </form>
+
+        <div class="pp-plugin">
+            Oznaczaj spam prosto z Thunderbirda — wtyczka uczy antyspam i może sprawdzać nową pocztę.<br>
+            <a href="{{ path('antispam_plugin_download') }}">&#8681; Pobierz wtyczkę do Thunderbirda (.xpi)</a>
+        </div>
     </div>
 </body>
 </html>

@@ -20,10 +20,10 @@ use Symfony\Component\HttpFoundation\Response;
 class BulkImportController extends Controller
 {
     const TYPES = [
-        'blacklist'       => ['entity' => Blacklist::class,      'field' => 'host',           'label' => 'Domain blacklist'],
-        'whitelist'       => ['entity' => Whitelist::class,      'field' => 'host',           'label' => 'Domain whitelist'],
-        'email_blacklist' => ['entity' => EmailBlacklist::class, 'field' => 'blacklistemail', 'label' => 'Email blacklist'],
-        'email_whitelist' => ['entity' => EmailWhitelist::class, 'field' => 'whitelistemail', 'label' => 'Email whitelist'],
+        'blacklist'       => ['entity' => Blacklist::class,      'field' => 'host',           'label' => 'Blacklista domen'],
+        'whitelist'       => ['entity' => Whitelist::class,      'field' => 'host',           'label' => 'Whitelista domen'],
+        'email_blacklist' => ['entity' => EmailBlacklist::class, 'field' => 'blacklistemail', 'label' => 'Blacklista adresów e-mail'],
+        'email_whitelist' => ['entity' => EmailWhitelist::class, 'field' => 'whitelistemail', 'label' => 'Whitelista adresów e-mail'],
     ];
 
     /**
@@ -41,7 +41,7 @@ class BulkImportController extends Controller
     public function importAction(Request $request, $type)
     {
         if (!isset(self::TYPES[$type])) {
-            $this->addFlash('danger', 'Unknown list type');
+            $this->addFlash('danger', 'Nieznany typ listy');
             return $this->redirectToRoute('antispam_bulk_index');
         }
 
@@ -84,7 +84,7 @@ class BulkImportController extends Controller
         }
         $em->flush();
 
-        $this->addFlash('success', sprintf('Imported %d entries (skipped %d duplicates)', $added, $skipped));
+        $this->addFlash('success', sprintf('Zaimportowano wpisy: %d (pominięte duplikaty: %d)', $added, $skipped));
         return $this->redirectToRoute('antispam_bulk_index');
     }
 
@@ -101,7 +101,7 @@ class BulkImportController extends Controller
         $items = $em->getRepository($conf['entity'])->findAll();
 
         $getter = 'get' . ucfirst($conf['field']);
-        $lines = ['# ' . $conf['label'] . ' - exported ' . date('c')];
+        $lines = ['# ' . $conf['label'] . ' - eksport ' . date('c')];
         foreach ($items as $it) {
             $patternType = method_exists($it, 'getPatternType') ? $it->getPatternType() : 'exact';
             $lines[] = $it->$getter() . "\t" . $patternType

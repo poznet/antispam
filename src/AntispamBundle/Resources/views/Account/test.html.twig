@@ -1,13 +1,13 @@
 {% extends 'AntispamBundle::main.html.twig' %}
 
-{% block title %}Connection Test{% if account %}: {{ account.name }}{% endif %}{% endblock %}
-{% block page_title %}Connection Test{% if account %}: {{ account.name }}{% endif %}{% endblock %}
+{% block title %}Test połączenia{% if account %}: {{ account.name }}{% endif %}{% endblock %}
+{% block page_title %}Test połączenia{% if account %}: {{ account.name }}{% endif %}{% endblock %}
 
 {% block body %}
     {% if result.success %}
-        <div class="alert alert-success"><strong>Connection successful!</strong></div>
+        <div class="alert alert-success"><strong>Połączenie udane!</strong></div>
     {% else %}
-        <div class="alert alert-danger"><strong>Connection failed</strong></div>
+        <div class="alert alert-danger"><strong>Połączenie nieudane</strong></div>
     {% endif %}
 
     <ul class="list-group">
@@ -16,5 +16,5 @@
     {% endfor %}
     </ul>
 
-    <a href="{{ path('antispam_account_index') }}" class="btn btn-default">Back to Accounts</a>
+    <a href="{{ path('antispam_account_index') }}" class="btn btn-default"><span class="glyphicon glyphicon-arrow-left"></span> Powrót do kont</a>
 {% endblock %}

@@ -366,6 +366,10 @@ small, .small { color: var(--muted); }
 .table-bordered > tbody:first-child > tr:first-child > td,
 .table-bordered > tbody:first-child > tr:first-child > th { border-top: 0; }
 .table-responsive { border: 0 !important; }
+.table > tbody > tr.danger > td { background: var(--danger-soft); }
+.table > tbody > tr.success > td { background: var(--success-soft); }
+.table > tbody > tr.warning > td { background: var(--warning-soft); }
+.table > tbody > tr.info > td { background: var(--info-soft); }
 .table td.pp-subrow { background: var(--surface-2) !important; color: var(--muted); font-size: 12px; }
 
 /* ---------- Buttons ---------- */

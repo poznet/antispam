@@ -28,4 +28,5 @@ See `docs/` directory for detailed documentation:
 ## Tech stack
 - PHP >= 7.1.3, Symfony 4.4, Doctrine ORM, MySQL
 - ddeboer/imap (IMAP mode), phpseclib/phpseclib (SSH mode)
-- Bootstrap 3 frontend, Twig templates
+- Bootstrap 3 frontend (bundled in `Resources/public/vendor`) + custom theme `Resources/public/css/panel.css` (light/dark), Twig templates
+- UI language: Polish (`locale: pl`)

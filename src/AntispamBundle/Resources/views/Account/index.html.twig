@@ -1,26 +1,26 @@
 {% extends 'AntispamBundle::main.html.twig' %}
 
-{% block title %}Accounts{% endblock %}
-{% block page_title %}Accounts{% endblock %}
+{% block title %}Konta{% endblock %}
+{% block page_title %}Konta pocztowe{% endblock %}
 
 {% block body %}
     <div class="pp-toolbar">
-        <a href="{{ path('antispam_account_add') }}" class="btn btn-primary"><span class="glyphicon glyphicon-plus"></span> Add Account</a>
+        <a href="{{ path('antispam_account_add') }}" class="btn btn-primary"><span class="glyphicon glyphicon-plus"></span> Dodaj konto</a>
         <span class="pp-spacer"></span>
-        <a href="{{ path('antispam_account_download_agent') }}" class="btn btn-default"><span class="glyphicon glyphicon-download-alt"></span> Download Agent</a>
+        <a href="{{ path('antispam_account_download_agent') }}" class="btn btn-default"><span class="glyphicon glyphicon-download-alt"></span> Pobierz agenta</a>
     </div>
 
     <div class="table-responsive">
     <table class="table table-bordered">
         <thead>
             <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Type</th>
+                <th>Nazwa</th>
+                <th>E-mail</th>
+                <th>Typ</th>
                 <th>Host</th>
                 <th>Agent</th>
-                <th>Last Scan</th>
-                <th>Actions</th>
+                <th>Ostatni skan</th>
+                <th>Akcje</th>
             </tr>
         </thead>
         <tbody>
@@ -45,32 +45,32 @@
                 <td>
                     {% if account.connectionType == 'ssh' %}
                         {% if account.agentDeployed %}
-                            <span class="label label-success">Deployed</span>
+                            <span class="label label-success">Wdrożony</span>
                         {% else %}
-                            <span class="label label-warning">Not deployed</span>
+                            <span class="label label-warning">Niewdrożony</span>
                         {% endif %}
                     {% else %}
-                        <span class="label label-default">N/A</span>
+                        <span class="label label-default">n/d</span>
                     {% endif %}
                 </td>
                 <td class="pp-mono">
                     {% if account.lastScanAt %}
                         {{ account.lastScanAt|date('Y-m-d H:i') }}
                     {% else %}
-                        <span class="text-muted">Never</span>
+                        <span class="text-muted">Nigdy</span>
                     {% endif %}
                 </td>
                 <td>
                     <div class="btn-group btn-group-xs">
-                        <a href="{{ path('antispam_account_edit', {id: account.id}) }}" class="btn btn-default" title="Edit"><span class="glyphicon glyphicon-pencil"></span> Edit</a>
-                        <a href="{{ path('antispam_account_test', {id: account.id}) }}" class="btn btn-info" title="Test connection"><span class="glyphicon glyphicon-link"></span> Test</a>
-                        <a href="{{ path('antispam_account_scan', {id: account.id}) }}" class="btn btn-primary" title="Run scan"><span class="glyphicon glyphicon-play"></span> Scan</a>
+                        <a href="{{ path('antispam_account_edit', {id: account.id}) }}" class="btn btn-default" title="Edytuj"><span class="glyphicon glyphicon-pencil"></span> Edytuj</a>
+                        <a href="{{ path('antispam_account_test', {id: account.id}) }}" class="btn btn-info" title="Test połączenia"><span class="glyphicon glyphicon-link"></span> Test</a>
+                        <a href="{{ path('antispam_account_scan', {id: account.id}) }}" class="btn btn-primary" title="Uruchom skan"><span class="glyphicon glyphicon-play"></span> Skanuj</a>
                         {% if account.connectionType == 'ssh' %}
-                            <a href="{{ path('antispam_account_deploy', {id: account.id}) }}" class="btn btn-warning" title="Deploy agent"><span class="glyphicon glyphicon-cloud-upload"></span> Deploy</a>
-                            <a href="{{ path('antispam_account_sync', {id: account.id}) }}" class="btn btn-success" title="Sync rules"><span class="glyphicon glyphicon-refresh"></span> Sync</a>
-                            <a href="{{ path('antispam_account_health', {id: account.id}) }}" class="btn btn-info" title="Health check"><span class="glyphicon glyphicon-heart"></span> Health</a>
+                            <a href="{{ path('antispam_account_deploy', {id: account.id}) }}" class="btn btn-warning" title="Wdróż agenta"><span class="glyphicon glyphicon-cloud-upload"></span> Wdróż</a>
+                            <a href="{{ path('antispam_account_sync', {id: account.id}) }}" class="btn btn-success" title="Synchronizuj reguły"><span class="glyphicon glyphicon-refresh"></span> Synchronizuj</a>
+                            <a href="{{ path('antispam_account_health', {id: account.id}) }}" class="btn btn-info" title="Sprawdź stan agenta"><span class="glyphicon glyphicon-heart"></span> Stan</a>
                         {% endif %}
-                        <a href="{{ path('antispam_account_del', {id: account.id}) }}" class="btn btn-danger" title="Delete" onclick="return confirm('Delete this account?')"><span class="glyphicon glyphicon-trash"></span></a>
+                        <a href="{{ path('antispam_account_del', {id: account.id}) }}" class="btn btn-danger" title="Usuń" onclick="return confirm('Usunąć to konto?')"><span class="glyphicon glyphicon-trash"></span></a>
                     </div>
                 </td>
             </tr>
@@ -80,19 +80,19 @@
                     {% set scanData = account.lastScanResultDecoded %}
                     {% if scanData %}
                         <div class="pp-scan-stats">
-                            <span>Total <b>{{ scanData.total|default(0) }}</b></span>
-                            <span>Checked <b>{{ scanData.checked|default(0) }}</b></span>
-                            <span>Skipped <b>{{ scanData.skipped|default(0) }}</b></span>
-                            <span>Whitelisted <b>{{ scanData.whitelisted|default(0) }}</b></span>
-                            <span>Blacklisted <b>{{ scanData.blacklisted|default(0) }}</b></span>
-                            <span>Moved to spam <b>{{ scanData.moved_to_spam|default(0) }}</b></span>
+                            <span>Wszystkie <b>{{ scanData.total|default(0) }}</b></span>
+                            <span>Sprawdzone <b>{{ scanData.checked|default(0) }}</b></span>
+                            <span>Pominięte <b>{{ scanData.skipped|default(0) }}</b></span>
+                            <span>Whitelista <b>{{ scanData.whitelisted|default(0) }}</b></span>
+                            <span>Blacklista <b>{{ scanData.blacklisted|default(0) }}</b></span>
+                            <span>Do spamu <b>{{ scanData.moved_to_spam|default(0) }}</b></span>
                         </div>
                     {% endif %}
                 </td>
             </tr>
             {% endif %}
         {% else %}
-            <tr><td colspan="7" class="text-center text-muted" style="padding:40px;">No accounts configured yet &mdash; <a href="{{ path('antispam_account_add') }}">add your first account</a></td></tr>
+            <tr><td colspan="7" class="text-center text-muted" style="padding:40px;">Brak skonfigurowanych kont &mdash; <a href="{{ path('antispam_account_add') }}">dodaj pierwsze konto</a></td></tr>
         {% endfor %}
         </tbody>
     </table>

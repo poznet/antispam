@@ -1,18 +1,18 @@
 {% extends 'AntispamBundle::main.html.twig' %}
-{% block title %}E-mail Blacklist{% endblock %}
-{% block page_title %}E-mail Blacklist{% endblock %}
+{% block title %}Blacklista e-mail{% endblock %}
+{% block page_title %}Blacklista adresów e-mail{% endblock %}
 
 {% block body %}
     <div class="add-form">
         <form method="post" action="{{ path('antispam_emailblacklist_add') }}" class="form-inline">
-            <input type="text" class="form-control" name="email" placeholder="spammer@example.com or *@*.ru or regex" required style="min-width:280px;">
+            <input type="text" class="form-control" name="email" placeholder="spammer@example.com, *@*.ru lub regex" required style="min-width:280px;">
             <select name="pattern_type" class="form-control">
-                <option value="exact">Exact</option>
+                <option value="exact">Dokładny</option>
                 <option value="wildcard">Wildcard</option>
                 <option value="regex">Regex</option>
             </select>
-            <input type="number" class="form-control" name="score" value="10" min="1" max="50" title="Spam score added on hit" style="width:90px;">
-            <button type="submit" class="btn btn-danger"><span class="glyphicon glyphicon-plus"></span> Add</button>
+            <input type="number" class="form-control" name="score" value="10" min="1" max="50" title="Punkty spamu dodawane przy trafieniu" style="width:90px;">
+            <button type="submit" class="btn btn-danger"><span class="glyphicon glyphicon-plus"></span> Dodaj</button>
         </form>
     </div>
 
@@ -20,12 +20,12 @@
     <ul class="list-group">
         {% for l in list %}
         <li class="list-group-item">
-            <a href="{{ path('antispam_emailblacklist_del',{'id':l.id}) }}" class="btn btn-danger btn-xs list-actions" onclick="return confirm('Delete this email from blacklist?')">
-                <span class="glyphicon glyphicon-remove"></span> Delete
+            <a href="{{ path('antispam_emailblacklist_del',{'id':l.id}) }}" class="btn btn-danger btn-xs list-actions" onclick="return confirm('Usunąć ten adres z blacklisty?')">
+                <span class="glyphicon glyphicon-remove"></span> Usuń
             </a>
-            <span class="badge badge-counter">{{ l.counter }} hits</span>
+            <span class="badge badge-counter">{{ l.counter }} trafień</span>
             <span class="label label-default">{{ l.patternType }}</span>
-            <span class="label label-warning">score {{ l.score }}</span>
+            <span class="label label-warning">punkty {{ l.score }}</span>
             <span class="glyphicon glyphicon-envelope"></span> {{ l.blacklistemail }}
         </li>
         {% endfor %}
@@ -33,8 +33,8 @@
     {% else %}
     <div class="empty-state">
         <span class="glyphicon glyphicon-ban-circle"></span>
-        <p>No emails in blacklist yet</p>
-        <p class="text-muted">Supports exact, wildcard and regex patterns</p>
+        <p>Blacklista adresów e-mail jest pusta</p>
+        <p class="text-muted">Obsługuje wzorce dokładne, wildcard i regex</p>
     </div>
     {% endif %}
 {% endblock %}

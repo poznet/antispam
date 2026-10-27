@@ -25,27 +25,27 @@
 </head>
 {% set route = app.request.attributes.get('_route') %}
 {% set nav = [
-    {section: 'Overview'},
-    {label: 'Dashboard',        icon: 'dashboard',     path: 'antispam_index',               match: ['antispam_index']},
-    {label: 'Accounts',         icon: 'cloud',         path: 'antispam_account_index',       match: ['antispam_account_index', 'antispam_account_add', 'antispam_account_edit', 'antispam_account_test', 'antispam_account_scan', 'antispam_account_deploy', 'antispam_account_sync', 'antispam_account_health']},
-    {section: 'Mailboxes'},
-    {label: 'Spambox',          icon: 'inbox',         path: 'antispam_spambox_index',       match: ['antispam_spambox_index']},
-    {label: 'Quarantine',       icon: 'warning-sign',  path: 'antispam_spambox_quarantine',  match: ['antispam_spambox_quarantine']},
-    {label: 'Score Log',        icon: 'list-alt',      path: 'antispam_spambox_scorelog',    match: ['antispam_spambox_scorelog']},
-    {section: 'Whitelists'},
-    {label: 'Domain Whitelist', icon: 'ok-circle',     path: 'antispam_whitelist_index',     match: ['antispam_whitelist_index']},
-    {label: 'E-mail Whitelist', icon: 'check',         path: 'antispam_emailwhitelist_index', match: ['antispam_emailwhitelist_index']},
-    {section: 'Blacklists'},
-    {label: 'Domain Blacklist', icon: 'ban-circle',    path: 'antispam_blacklist_index',     match: ['antispam_blacklist_index']},
-    {label: 'E-mail Blacklist', icon: 'envelope',      path: 'antispam_emailblacklist_index', match: ['antispam_emailblacklist_index']},
-    {label: 'DNSBL Providers',  icon: 'globe',         path: 'antispam_dnsbl_index',         match: ['antispam_dnsbl_index', 'antispam_dnsbl_test']},
-    {label: 'Import / Export',  icon: 'transfer',      path: 'antispam_bulk_index',          match: ['antispam_bulk_index']},
-    {section: 'Settings'},
-    {label: 'Spam Filter',      icon: 'tasks',         path: 'antispam_spam_config',         match: ['antispam_spam_config']},
-    {label: 'Shared Spam Feed', icon: 'signal',        path: 'antispam_feed_config',         match: ['antispam_feed_config']},
-    {label: 'Legacy Config',    icon: 'cog',           path: 'antispam_account_config',      match: ['antispam_account_config']}
+    {section: 'Przegląd'},
+    {label: 'Pulpit',               icon: 'dashboard',    path: 'antispam_index',                match: ['antispam_index']},
+    {label: 'Konta',                icon: 'cloud',        path: 'antispam_account_index',        match: ['antispam_account_index', 'antispam_account_add', 'antispam_account_edit', 'antispam_account_test', 'antispam_account_scan', 'antispam_account_deploy', 'antispam_account_sync', 'antispam_account_health']},
+    {section: 'Skrzynki'},
+    {label: 'Folder spamu',         icon: 'inbox',        path: 'antispam_spambox_index',        match: ['antispam_spambox_index']},
+    {label: 'Kwarantanna',          icon: 'warning-sign', path: 'antispam_spambox_quarantine',   match: ['antispam_spambox_quarantine']},
+    {label: 'Dziennik ocen',        icon: 'list-alt',     path: 'antispam_spambox_scorelog',     match: ['antispam_spambox_scorelog']},
+    {section: 'Whitelisty'},
+    {label: 'Whitelista domen',     icon: 'ok-circle',    path: 'antispam_whitelist_index',      match: ['antispam_whitelist_index']},
+    {label: 'Whitelista e-mail',    icon: 'check',        path: 'antispam_emailwhitelist_index', match: ['antispam_emailwhitelist_index']},
+    {section: 'Blacklisty'},
+    {label: 'Blacklista domen',     icon: 'ban-circle',   path: 'antispam_blacklist_index',      match: ['antispam_blacklist_index']},
+    {label: 'Blacklista e-mail',    icon: 'envelope',     path: 'antispam_emailblacklist_index', match: ['antispam_emailblacklist_index']},
+    {label: 'Dostawcy DNSBL',       icon: 'globe',        path: 'antispam_dnsbl_index',          match: ['antispam_dnsbl_index', 'antispam_dnsbl_test']},
+    {label: 'Import / eksport',     icon: 'transfer',     path: 'antispam_bulk_index',           match: ['antispam_bulk_index']},
+    {section: 'Ustawienia'},
+    {label: 'Filtr spamu',          icon: 'tasks',        path: 'antispam_spam_config',          match: ['antispam_spam_config']},
+    {label: 'Wspólna baza spamu',   icon: 'signal',       path: 'antispam_feed_config',          match: ['antispam_feed_config']},
+    {label: 'Konfiguracja (stara)', icon: 'cog',          path: 'antispam_account_config',       match: ['antispam_account_config']}
 ] %}
-{% set crumb = 'Overview' %}
+{% set crumb = 'Przegląd' %}
 {% for item in nav %}
     {% if item.section is defined %}{% set section = item.section %}{% elseif route in item.match %}{% set crumb = section %}{% endif %}
 {% endfor %}
@@ -72,7 +72,7 @@
         </span>
     </a>
 
-    <nav class="pp-nav" aria-label="Main navigation">
+    <nav class="pp-nav" aria-label="Menu główne">
         {% for item in nav %}
             {% if item.section is defined %}
                 <div class="pp-nav-section">{{ item.section }}</div>
@@ -93,14 +93,14 @@
 
 <div class="pp-main">
     <header class="pp-topbar">
-        <button type="button" class="pp-icon-btn pp-menu-btn" data-pp-toggle-nav aria-label="Toggle navigation" aria-controls="pp-sidebar">
+        <button type="button" class="pp-icon-btn pp-menu-btn" data-pp-toggle-nav aria-label="Pokaż/ukryj menu" aria-controls="pp-sidebar">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
         <div class="pp-topbar-title">
-            <div class="pp-crumb">Antispam<span class="glyphicon glyphicon-menu-right"></span>{{ crumb }}</div>
+            <div class="pp-crumb">Antyspam<span class="glyphicon glyphicon-menu-right"></span>{{ crumb }}</div>
             <h1>{% block page_title %}{% endblock %}</h1>
         </div>
-        <button type="button" class="pp-icon-btn" id="pp-theme-toggle" aria-label="Toggle dark mode" title="Light / dark mode">
+        <button type="button" class="pp-icon-btn" id="pp-theme-toggle" aria-label="Przełącz tryb ciemny" title="Tryb jasny / ciemny">
             <svg class="pp-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
             <svg class="pp-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
         </button>
@@ -111,10 +111,10 @@
                     <span class="pp-user-name">{{ app.user.username }}</span>
                 </a>
                 <ul class="dropdown-menu dropdown-menu-right">
-                    <li class="dropdown-header">Signed in as {{ app.user.username }}</li>
-                    <li><a href="{{ path('antispam_spam_config') }}"><span class="glyphicon glyphicon-cog"></span> Settings</a></li>
+                    <li class="dropdown-header">Zalogowano jako {{ app.user.username }}</li>
+                    <li><a href="{{ path('antispam_spam_config') }}"><span class="glyphicon glyphicon-cog"></span> Ustawienia</a></li>
                     <li role="separator" class="divider"></li>
-                    <li><a href="{{ path('logout') }}"><span class="glyphicon glyphicon-log-out"></span> Logout</a></li>
+                    <li><a href="{{ path('logout') }}"><span class="glyphicon glyphicon-log-out"></span> Wyloguj</a></li>
                 </ul>
             </div>
         {% endif %}
@@ -124,7 +124,7 @@
         {% for type, messages in app.session.flashbag.all() %}
             {% for message in messages %}
                 <div class="alert alert-{{ type }} alert-dismissible" role="alert">
-                    <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Zamknij"><span aria-hidden="true">&times;</span></button>
                     {{ message }}
                 </div>
             {% endfor %}

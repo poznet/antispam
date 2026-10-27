@@ -1,7 +1,7 @@
 {% extends 'AntispamBundle::main.html.twig' %}
 
-{% block page_title %}Dashboard{% endblock %}
-{% block title %}Dashboard{% endblock %}
+{% block page_title %}Pulpit{% endblock %}
+{% block title %}Pulpit{% endblock %}
 
 {% block body %}
     {% set ham = stats30.ham|default(0) %}
@@ -23,7 +23,7 @@
         </div>
         <div class="pp-hero-actions">
             <a href="{{ path('antispam_account_index') }}" class="btn btn-white"><span class="glyphicon glyphicon-play"></span> Uruchom skan</a>
-            <a href="{{ path('antispam_spambox_scorelog') }}" class="btn btn-glass"><span class="glyphicon glyphicon-list-alt"></span> Score Log</a>
+            <a href="{{ path('antispam_spambox_scorelog') }}" class="btn btn-glass"><span class="glyphicon glyphicon-list-alt"></span> Dziennik ocen</a>
         </div>
     </section>
 
@@ -55,7 +55,7 @@
             {label: 'Ham (30 dni)',        value: ham,         color: '#10b981', icon: 'ok'},
             {label: 'Kwarantanna (30 dni)', value: quarantine, color: '#f59e0b', icon: 'warning-sign'},
             {label: 'Spam (30 dni)',       value: spam,        color: '#ef4444', icon: 'fire'},
-            {label: 'Whitelisted (30 dni)', value: whitelisted, color: '#0ea5e9', icon: 'star'}
+            {label: 'Whitelista (30 dni)', value: whitelisted, color: '#0ea5e9', icon: 'star'}
         ] %}
             {% set pct = total30 > 0 ? (k.value / total30 * 100)|round : 0 %}
             <div class="pp-kpi" style="--kpi-c:{{ k.color }}">
@@ -74,7 +74,7 @@
                     <span><i class="c-ham"></i>Ham</span>
                     <span><i class="c-quarantine"></i>Kwarantanna</span>
                     <span><i class="c-spam"></i>Spam</span>
-                    <span><i class="c-white"></i>Whitelisted</span>
+                    <span><i class="c-white"></i>Whitelista</span>
                 </span>
             </div>
             <div class="panel-body">
@@ -84,7 +84,7 @@
                         {% set t = d.ham + d.quarantine + d.spam + d.whitelisted|default(0) %}
                         {% if t > maxv %}{% set maxv = t %}{% endif %}
                     {% endfor %}
-                    <div class="pp-chart" role="img" aria-label="Daily message decisions">
+                    <div class="pp-chart" role="img" aria-label="Dzienne decyzje dla wiadomości">
                         {% for d in dailyChart %}
                             {% set w = d.whitelisted|default(0) %}
                             {% set t = d.ham + d.quarantine + d.spam + w %}
@@ -92,7 +92,7 @@
                                 <div class="pp-chart-tip">
                                     <strong>{{ d.day|date('d.m.Y') }}</strong><br>
                                     Ham: {{ d.ham }} · Kwar.: {{ d.quarantine }}<br>
-                                    Spam: {{ d.spam }} · White: {{ w }}
+                                    Spam: {{ d.spam }} · Whitelista: {{ w }}
                                 </div>
                                 <div class="pp-chart-area"><div class="pp-chart-stack" style="height:{{ max(3, (t / maxv * 100)|round) }}%">
                                     {% if t > 0 %}
@@ -130,7 +130,7 @@
                     </div>
                     <ul class="pp-breakdown">
                         <li><i class="c-ham"></i>Ham<b>{{ ham }}</b><em>{{ (ham / denom * 100)|round(1) }}%</em></li>
-                        <li><i class="c-white"></i>Whitelisted<b>{{ whitelisted }}</b><em>{{ (whitelisted / denom * 100)|round(1) }}%</em></li>
+                        <li><i class="c-white"></i>Whitelista<b>{{ whitelisted }}</b><em>{{ (whitelisted / denom * 100)|round(1) }}%</em></li>
                         <li><i class="c-quarantine"></i>Kwarantanna<b>{{ quarantine }}</b><em>{{ (quarantine / denom * 100)|round(1) }}%</em></li>
                         <li><i class="c-spam"></i>Spam<b>{{ spam }}</b><em>{{ (spam / denom * 100)|round(1) }}%</em></li>
                     </ul>

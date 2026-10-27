@@ -97,7 +97,7 @@ class AccountController extends AbstractController
     #[Route('/imap-check', name: 'antispam_account_imap_check', methods: ['POST'])]
     public function imapCheckAction(Request $request)
     {
-        $this->checkActionToken($request, 'account_form');
+        $this->checkActionToken($request, 'imap_check');
         $data = $request->request->all('account');
         $host = (string)($data['imap_host'] ?? '');
 

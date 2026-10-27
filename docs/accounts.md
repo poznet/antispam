@@ -18,7 +18,8 @@ Traditional mode using IMAP protocol to connect to mail server.
 
 ### SSL/TLS options in the form
 
-The add/edit form builds the flags from clickable options (`AntispamBundle\Services\ImapFlags`):
+The account add/edit form and the legacy global config (`/config/email/`) build the flags from clickable
+options (`AntispamBundle\Services\ImapFlags`, shared template `Account/_imap_security.html.twig`):
 
 | Encryption | Flag | Default port |
 |---|---|---|
@@ -34,7 +35,7 @@ The add/edit form builds the flags from clickable options (`AntispamBundle\Servi
 - Switching encryption swaps the port between 993 and 143 if it still holds a default value; the full
   mailbox string (`{host:port/flags}`) is previewed live.
 
-**Check connection and certificate** (`POST /account/imap-check`, CSRF `account_form`, works before saving):
+**Check connection and certificate** (`POST /account/imap-check`, CSRF `imap_check`, works before saving):
 DNS, TCP, TLS handshake (implicit or STARTTLS), TLS version and cipher, the server certificate (CN, SANs,
 issuer, validity, days left, hostname match, trusted chain, self-signed, SHA-256 fingerprint), server
 capabilities (`STARTTLS`, `LOGINDISABLED`...) and, with a login given, a real c-client login with the chosen

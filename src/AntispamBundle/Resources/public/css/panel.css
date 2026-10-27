@@ -951,3 +951,4 @@ a.pp-kpi:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); bord
 .pp-imap-cert th { width: 170px; color: var(--muted); font-weight: 600; }
 .pp-imap-cert td { word-break: break-all; }
 .pp-imap-result .label { display: inline-block; margin: 0 2px 4px 0; }
+.form-horizontal .pp-imap-security .form-group { margin-left: 0; margin-right: 0; }

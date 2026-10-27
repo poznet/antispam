@@ -6,7 +6,6 @@
 {% block body %}
     <form method="post" action="{{ path('antispam_account_edit', {id: account.id}) }}">
         <input type="hidden" name="_token" value="{{ csrf_token('account_form') }}">
-        <input type="hidden" name="account[id]" value="{{ account.id }}">
         <div class="panel panel-default">
             <div class="panel-heading"><span class="glyphicon glyphicon-user"></span> Ogólne</div>
             <div class="panel-body">
@@ -51,7 +50,7 @@
                     <input type="password" class="form-control" id="imapPassword" name="account[imap_password]" value="" placeholder="(bez zmian)" autocomplete="new-password">
                     <p class="help-block">Zostaw puste, żeby zachować obecne hasło.</p>
                 </div>
-                {% include '@Antispam/Account/_imap_security.html.twig' %}
+                {% include '@Antispam/Account/_imap_security.html.twig' with {account_id: account.id} %}
             </div>
         </div>
 

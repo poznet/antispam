@@ -1,12 +1,13 @@
 /*
- * Account form: clickable SSL/TLS options, live c-client flag preview and the
+ * IMAP forms (accounts, legacy global config): clickable SSL/TLS options, live c-client flag preview and the
  * connection / certificate check (AccountController::imapCheckAction).
  * Mirrors AntispamBundle\Services\ImapFlags::build().
  */
 (function () {
     var box = document.getElementById('imapSecurity');
     if (!box) { return; }
-    var form = box.closest('form');
+    var login = document.getElementById('imapLogin');
+    var password = document.getElementById('imapPassword');
     var host = document.getElementById('imapHost');
     var port = document.getElementById('imapPort');
     var custom = document.getElementById('imapFlagsCustom');
@@ -17,7 +18,7 @@
     var defaultPorts = ['993', '143', ''];
 
     function checked(name) {
-        var el = form.querySelector('input[name="account[imap_tls][' + name + ']"]:checked');
+        var el = box.querySelector('input[data-imap-opt="' + name + '"]:checked');
         return el ? el.value : null;
     }
 
@@ -55,7 +56,7 @@
     }
 
     box.addEventListener('change', function (e) {
-        if (e.target.name === 'account[imap_tls][encryption]' && defaultPorts.indexOf(port.value) !== -1) {
+        if (e.target.getAttribute('data-imap-opt') === 'encryption' && defaultPorts.indexOf(port.value) !== -1) {
             port.value = e.target.getAttribute('data-port');
         }
         refresh();
@@ -115,7 +116,7 @@
     }
 
     function setChoice(name, value) {
-        var el = form.querySelector('input[name="account[imap_tls][' + name + ']"][value="' + value + '"]');
+        var el = box.querySelector('input[data-imap-opt="' + name + '"][value="' + value + '"]');
         if (el) { el.checked = true; }
     }
 
@@ -144,7 +145,22 @@
             host.focus();
             return;
         }
-        var data = new FormData(form);
+        // The check endpoint always reads account[...] fields, whatever the form's own prefix.
+        var data = new FormData();
+        data.append('_token', box.getAttribute('data-check-token'));
+        data.append('account[imap_host]', host.value);
+        data.append('account[imap_port]', port.value);
+        data.append('account[imap_login]', login ? login.value : '');
+        data.append('account[imap_password]', password ? password.value : '');
+        data.append('account[id]', box.getAttribute('data-account-id') || '');
+        if (custom.checked) {
+            data.append('account[imap_flags_custom]', '1');
+            data.append('account[imap_flags]', customInput.value);
+        }
+        ['encryption', 'validate_cert', 'secure', 'norsh', 'debug'].forEach(function (k) {
+            var v = checked(k);
+            if (v !== null) { data.append('account[imap_tls][' + k + ']', v); }
+        });
         if (mode) { data.append('mode', mode); }
         var buttons = box.querySelectorAll('.pp-imap-actions .btn');
         Array.prototype.forEach.call(buttons, function (b) { b.disabled = true; });

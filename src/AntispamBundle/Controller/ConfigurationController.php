@@ -10,6 +10,7 @@ use AntispamBundle\Entity\Whitelist;
 use AntispamBundle\Services\AttachmentPolicyAnalyzer;
 use AntispamBundle\Services\ClamavService;
 use AntispamBundle\Services\ConfigService;
+use AntispamBundle\Services\ImapFlags;
 use AntispamBundle\Services\ImpersonationAnalyzer;
 use AntispamBundle\Services\MessageService;
 use AntispamBundle\Services\PluginService;
@@ -46,10 +47,14 @@ class ConfigurationController extends AbstractController
     public function emailConfigAction(Request $request)
     {
         if ($request->isMethod('POST')) {
+            if (!$this->isCsrfTokenValid('email_config', (string)$request->request->get('_token'))) {
+                throw $this->createAccessDeniedException('Nieprawidłowy token CSRF');
+            }
             $post = $request->request->all('config');
-            foreach (['email', 'password', 'login', 'imap', 'imap_port', 'imap_flags'] as $key) {
+            foreach (['email', 'password', 'login', 'imap', 'imap_port'] as $key) {
                 $this->config->set($key, $post[$key] ?? '');
             }
+            $this->config->set('imap_flags', ImapFlags::fromFormData($post));
             $this->config->set('delete', array_key_exists('delete', $post));
         }
         $config = [
@@ -61,7 +66,7 @@ class ConfigurationController extends AbstractController
             'imap_flags' => $this->config->get('imap_flags') ?: '/imap/ssl',
             'delete' => $this->config->get('delete'),
         ];
-        return ['config' => $config];
+        return ['config' => $config, 'imap_tls' => ImapFlags::parse($config['imap_flags'])];
     }
 
     #[Route('/spam/', name: 'antispam_spam_config')]

@@ -6,9 +6,44 @@ use AntispamBundle\Entity\Account;
 use phpseclib3\Net\SSH2;
 use phpseclib3\Net\SFTP;
 use phpseclib3\Crypt\PublicKeyLoader;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 class SshService
 {
+    /** Directory under which every account's SSH private key must live. */
+    private string $keysDir;
+
+    public function __construct(#[Autowire('%antispam.ssh_keys_dir%')] string $keysDir)
+    {
+        $this->keysDir = rtrim($keysDir, '/');
+    }
+
+    /**
+     * Quotes a remote path for the shell. A leading "~/" is turned into
+     * "$HOME"/ so it still expands (it would not inside single quotes, nor
+     * after "--maildir=").
+     */
+    public static function shellPath($path)
+    {
+        $path = (string)$path;
+        if ($path === '~') {
+            return '"$HOME"';
+        }
+        if (strncmp($path, '~/', 2) === 0) {
+            return '"$HOME"/' . escapeshellarg(substr($path, 2));
+        }
+        return escapeshellarg($path);
+    }
+
+    private function agentCommand(Account $account)
+    {
+        return 'php ' . self::shellPath(rtrim((string)$account->getAgentPath(), '/') . '/antispam-agent.php');
+    }
+
+    private function maildirArg(Account $account)
+    {
+        return '--maildir=' . self::shellPath($account->getMaildirPath());
+    }
     public function testConnection(Account $account)
     {
         $result = ['success' => false, 'messages' => []];
@@ -24,7 +59,7 @@ class SshService
             $result['messages'][] = trim($output) ? 'SQLite3: available' : 'SQLite3: NOT available';
 
             $maildirPath = $account->getMaildirPath();
-            $output = $ssh->exec("test -d {$maildirPath} && echo 'exists' || echo 'not found'");
+            $output = $ssh->exec('test -d ' . self::shellPath($maildirPath) . " && echo 'exists' || echo 'not found'");
             $result['messages'][] = 'Maildir (' . $maildirPath . '): ' . trim($output);
 
             $result['success'] = true;
@@ -39,15 +74,9 @@ class SshService
     public function connect(Account $account)
     {
         $ssh = new SSH2($account->getSshHost(), $account->getSshPort());
-
-        $keyPath = $account->getSshKeyPath();
-        if ($keyPath && file_exists($keyPath)) {
-            $key = PublicKeyLoader::load(file_get_contents($keyPath));
-            if (!$ssh->login($account->getSshUser(), $key)) {
-                throw new \RuntimeException('SSH key authentication failed');
-            }
-        } else {
-            throw new \RuntimeException('SSH key file not found: ' . $keyPath);
+        $key = PublicKeyLoader::load($this->loadKeyMaterial($account));
+        if (!$ssh->login($account->getSshUser(), $key)) {
+            throw new \RuntimeException('SSH key authentication failed');
         }
 
         return $ssh;
@@ -65,8 +94,7 @@ class SshService
     {
         $sftp = new SFTP($account->getSshHost(), $account->getSshPort());
 
-        $keyPath = $account->getSshKeyPath();
-        $key = PublicKeyLoader::load(file_get_contents($keyPath));
+        $key = PublicKeyLoader::load($this->loadKeyMaterial($account));
         if (!$sftp->login($account->getSshUser(), $key)) {
             throw new \RuntimeException('SFTP authentication failed');
         }
@@ -87,24 +115,20 @@ class SshService
 
         $this->upload($account, $agentSource, $remotePath);
 
-        $output = $this->exec($account, "php {$remotePath} test 2>&1");
+        $output = $this->exec($account, $this->agentCommand($account) . ' test 2>&1');
         return json_decode($output, true) ?: ['success' => false, 'error' => $output];
     }
 
     public function syncRules(Account $account, $rulesJson)
     {
-        $remotePath = $account->getAgentPath() . '/antispam-agent.php';
-        $escapedJson = escapeshellarg($rulesJson);
-        $output = $this->exec($account, "echo {$escapedJson} | php {$remotePath} import-rules 2>&1");
+        $cmd = 'echo ' . escapeshellarg($rulesJson) . ' | ' . $this->agentCommand($account) . ' import-rules 2>&1';
+        $output = $this->exec($account, $cmd);
         return json_decode($output, true) ?: ['success' => false, 'error' => $output];
     }
 
     public function runScan(Account $account, array $options = [])
     {
-        $remotePath = $account->getAgentPath() . '/antispam-agent.php';
-        $maildirPath = $account->getMaildirPath();
-
-        $args = "--maildir={$maildirPath}";
+        $args = $this->maildirArg($account);
         if (isset($options['spam_threshold'])) {
             $args .= ' --spam-threshold=' . (int)$options['spam_threshold'];
         }
@@ -114,7 +138,7 @@ class SshService
         if (!empty($options['no_dnsbl'])) { $args .= ' --no-dnsbl'; }
         if (!empty($options['no_headers'])) { $args .= ' --no-headers'; }
 
-        $output = $this->exec($account, "php {$remotePath} scan {$args} 2>&1");
+        $output = $this->exec($account, $this->agentCommand($account) . ' scan ' . $args . ' 2>&1');
         return json_decode($output, true) ?: ['success' => false, 'error' => $output];
     }
 
@@ -123,13 +147,11 @@ class SshService
      */
     public function quarantineList(Account $account, $since = null, $limit = 200)
     {
-        $remotePath = $account->getAgentPath() . '/antispam-agent.php';
-        $maildirPath = $account->getMaildirPath();
-        $args = "--maildir={$maildirPath} --limit=" . (int)$limit;
+        $args = $this->maildirArg($account) . ' --limit=' . (int)$limit;
         if ($since) {
             $args .= ' --since=' . (int)$since;
         }
-        $output = $this->exec($account, "php {$remotePath} quarantine-list {$args} 2>&1");
+        $output = $this->exec($account, $this->agentCommand($account) . ' quarantine-list ' . $args . ' 2>&1');
         return json_decode($output, true) ?: ['success' => false, 'error' => $output];
     }
 
@@ -141,21 +163,42 @@ class SshService
         if (!in_array($action, ['release', 'delete'], true)) {
             throw new \InvalidArgumentException('Unknown quarantine action: ' . $action);
         }
-        $remotePath = $account->getAgentPath() . '/antispam-agent.php';
-        $maildirPath = $account->getMaildirPath();
-        $args = "--maildir={$maildirPath} --id=" . escapeshellarg((string)$id);
+        $args = $this->maildirArg($account) . ' --id=' . escapeshellarg((string)$id);
         if ($whitelist && $action === 'release') {
             $args .= ' --whitelist';
         }
-        $output = $this->exec($account, "php {$remotePath} quarantine-{$action} {$args} 2>&1");
+        $output = $this->exec($account, $this->agentCommand($account) . ' quarantine-' . $action . ' ' . $args . ' 2>&1');
         return json_decode($output, true) ?: ['success' => false, 'error' => $output];
     }
 
     public function runHealth(Account $account)
     {
-        $remotePath = $account->getAgentPath() . '/antispam-agent.php';
-        $maildirPath = $account->getMaildirPath();
-        $output = $this->exec($account, "php {$remotePath} health --maildir={$maildirPath} 2>&1");
+        $output = $this->exec($account, $this->agentCommand($account) . ' health ' . $this->maildirArg($account) . ' 2>&1');
         return json_decode($output, true) ?: ['success' => false, 'error' => $output];
+    }
+
+    /**
+     * Reads the account's private key. The path must resolve inside the keys
+     * directory, so the ssh_key_path field cannot be used to read other local
+     * files.
+     */
+    private function loadKeyMaterial(Account $account)
+    {
+        $keyPath = (string)$account->getSshKeyPath();
+        if ($keyPath === '') {
+            throw new \RuntimeException('SSH key path is not set');
+        }
+        if (strpos($keyPath, '/') !== 0) {
+            $keyPath = $this->keysDir . '/' . $keyPath;
+        }
+        $real = realpath($keyPath);
+        $base = realpath($this->keysDir);
+        if ($real === false || !is_file($real)) {
+            throw new \RuntimeException('SSH key file not found: ' . $account->getSshKeyPath());
+        }
+        if ($base === false || strncmp($real, $base . '/', strlen($base) + 1) !== 0) {
+            throw new \RuntimeException('SSH key must be inside the keys directory: ' . $this->keysDir);
+        }
+        return file_get_contents($real);
     }
 }

@@ -61,17 +61,21 @@
                     {% endif %}
                 </td>
                 <td>
+                    {# Actions are POST + CSRF token; the buttons share one form. #}
+                    <form method="post" style="margin:0">
+                    <input type="hidden" name="_token" value="{{ csrf_token('account_action_' ~ account.id) }}">
                     <div class="btn-group btn-group-xs">
                         <a href="{{ path('antispam_account_edit', {id: account.id}) }}" class="btn btn-default" title="Edytuj"><span class="glyphicon glyphicon-pencil"></span> Edytuj</a>
-                        <a href="{{ path('antispam_account_test', {id: account.id}) }}" class="btn btn-info" title="Test połączenia"><span class="glyphicon glyphicon-link"></span> Test</a>
-                        <a href="{{ path('antispam_account_scan', {id: account.id}) }}" class="btn btn-primary" title="Uruchom skan"><span class="glyphicon glyphicon-play"></span> Skanuj</a>
+                        <button type="submit" formaction="{{ path('antispam_account_test', {id: account.id}) }}" class="btn btn-info" title="Test połączenia"><span class="glyphicon glyphicon-link"></span> Test</button>
+                        <button type="submit" formaction="{{ path('antispam_account_scan', {id: account.id}) }}" class="btn btn-primary" title="Uruchom skan"><span class="glyphicon glyphicon-play"></span> Skanuj</button>
                         {% if account.connectionType == 'ssh' %}
-                            <a href="{{ path('antispam_account_deploy', {id: account.id}) }}" class="btn btn-warning" title="Wdróż agenta"><span class="glyphicon glyphicon-cloud-upload"></span> Wdróż</a>
-                            <a href="{{ path('antispam_account_sync', {id: account.id}) }}" class="btn btn-success" title="Synchronizuj reguły"><span class="glyphicon glyphicon-refresh"></span> Synchronizuj</a>
-                            <a href="{{ path('antispam_account_health', {id: account.id}) }}" class="btn btn-info" title="Sprawdź stan agenta"><span class="glyphicon glyphicon-heart"></span> Stan</a>
+                            <button type="submit" formaction="{{ path('antispam_account_deploy', {id: account.id}) }}" class="btn btn-warning" title="Wdróż agenta"><span class="glyphicon glyphicon-cloud-upload"></span> Wdróż</button>
+                            <button type="submit" formaction="{{ path('antispam_account_sync', {id: account.id}) }}" class="btn btn-success" title="Synchronizuj reguły"><span class="glyphicon glyphicon-refresh"></span> Synchronizuj</button>
+                            <button type="submit" formaction="{{ path('antispam_account_health', {id: account.id}) }}" class="btn btn-info" title="Sprawdź stan agenta"><span class="glyphicon glyphicon-heart"></span> Stan</button>
                         {% endif %}
-                        <a href="{{ path('antispam_account_del', {id: account.id}) }}" class="btn btn-danger" title="Usuń" onclick="return confirm('Usunąć to konto?')"><span class="glyphicon glyphicon-trash"></span></a>
+                        <button type="submit" formaction="{{ path('antispam_account_del', {id: account.id}) }}" class="btn btn-danger" title="Usuń" onclick="return confirm('Usunąć to konto?')"><span class="glyphicon glyphicon-trash"></span></button>
                     </div>
+                    </form>
                 </td>
             </tr>
             {% if account.lastScanResult %}

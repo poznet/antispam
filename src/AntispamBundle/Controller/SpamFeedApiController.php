@@ -22,6 +22,10 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/api/feed')]
 class SpamFeedApiController extends AbstractController
 {
+    /** Upper bounds for one /report call, so a peer cannot flood the database. */
+    const MAX_SIGNALS_PER_REPORT = 1000;
+    const MAX_REPORT_BYTES = 262144;
+
     public function __construct(
         private EntityManagerInterface $em,
         private SpamSignalService $feed,
@@ -40,9 +44,16 @@ class SpamFeedApiController extends AbstractController
             return $deny;
         }
 
-        $payload = json_decode($request->getContent(), true);
+        $body = $request->getContent();
+        if (strlen($body) > self::MAX_REPORT_BYTES) {
+            return new JsonResponse(['error' => 'payload too large'], 413);
+        }
+        $payload = json_decode($body, true);
         if (!is_array($payload) || !isset($payload['signals']) || !is_array($payload['signals'])) {
             return new JsonResponse(['error' => 'invalid payload'], 400);
+        }
+        if (count($payload['signals']) > self::MAX_SIGNALS_PER_REPORT) {
+            return new JsonResponse(['error' => 'too many signals'], 413);
         }
 
         $feed = $this->feed;

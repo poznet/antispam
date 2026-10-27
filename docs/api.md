@@ -5,13 +5,14 @@
 | Method | URL | Description |
 |--------|-----|-------------|
 | GET | `/account/index` | List all accounts |
-| GET/POST | `/account/add` | Add new account form |
-| GET/POST | `/account/edit/{id}` | Edit account |
-| GET | `/account/del/{id}` | Delete account |
-| GET | `/account/test/{id}` | Test connection (IMAP or SSH) |
-| GET | `/account/deploy/{id}` | Deploy agent to hosting (SSH only) |
-| GET | `/account/sync/{id}` | Sync rules to hosting (SSH only) |
-| GET | `/account/scan/{id}` | Run spam scan |
+| GET/POST | `/account/add` | Add new account form (POST needs CSRF token `account_form`) |
+| GET/POST | `/account/edit/{id}` | Edit account (POST needs CSRF token `account_form`) |
+| POST | `/account/del/{id}` | Delete account (CSRF token `account_action_{id}`) |
+| POST | `/account/test/{id}` | Test connection (IMAP or SSH) (CSRF token `account_action_{id}`) |
+| POST | `/account/deploy/{id}` | Deploy agent to hosting (SSH only) (CSRF token `account_action_{id}`) |
+| POST | `/account/sync/{id}` | Sync rules to hosting (SSH only) (CSRF token `account_action_{id}`) |
+| POST | `/account/scan/{id}` | Run spam scan (CSRF token `account_action_{id}`) |
+| POST | `/account/health/{id}` | Agent health check (SSH only, CSRF token `account_action_{id}`) |
 | GET | `/account/download-agent` | Download agent PHP script |
 
 ## Spambox (`/spambox`)

@@ -59,7 +59,7 @@ php bin/console doctrine:schema:update --force
 | Match score       | `feed.score`       | points added when incoming mail matches a trusted signal (default 6) |
 | Minimum reports   | `feed.min_reports` | a signal is trusted only after this many observations (default 1) |
 | Local API key     | `feed.server_key`  | secret other instances present to push/pull here; empty disables the API |
-| Remote hub URL    | `feed.remote_url`  | base URL this instance syncs against (empty → hub-only) |
+| Remote hub URL    | `feed.remote_url`  | base URL this instance syncs against, `https://` only (empty or non-https → hub-only) |
 | Remote key        | `feed.remote_key`  | secret presented to the remote hub |
 
 ## Scoring

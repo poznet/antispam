@@ -69,6 +69,8 @@ The API never sees or stores raw addresses or message bodies.
 
 ### POST `/api/feed/report`
 
+Limits: at most 1000 signals and 256 KiB per request, otherwise `413`.
+
 Submit a batch of spam fingerprints. Existing signals have their `reports`
 counter incremented; new ones are created with `origin = remote`.
 

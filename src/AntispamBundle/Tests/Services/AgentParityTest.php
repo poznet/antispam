@@ -5,6 +5,7 @@ namespace AntispamBundle\Tests\Services;
 use AntispamBundle\Services\AttachmentPolicyAnalyzer;
 use AntispamBundle\Services\ImpersonationAnalyzer;
 use AntispamBundle\Services\UrlAnalyzer;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -22,7 +23,7 @@ class AgentParityTest extends TestCase
         require_once __DIR__ . '/../../Resources/agent/antispam-agent.php';
     }
 
-    public function impersonationCases()
+    public static function impersonationCases()
     {
         return [
             ['Jan Kowalski', 'jan.kowalski.ceo@gmail.com', ''],
@@ -41,9 +42,7 @@ class AgentParityTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider impersonationCases
-     */
+    #[DataProvider('impersonationCases')]
     public function testImpersonation($name, $email, $auth)
     {
         $vips = "Jan Kowalski <jan@firma.pl>\nAnna Nowak";

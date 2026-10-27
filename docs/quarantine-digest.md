@@ -69,7 +69,7 @@ sender and subject is used.
   again.
 
 `/q/` is the only anonymous route besides `/login` and `/api/feed`
-(`app/config/security.yml`).
+(`config/packages/security.yaml`).
 
 ## Configuration
 
@@ -88,8 +88,8 @@ The page lists every mailbox with its recipient and last digest time, offers a
 **Preview** of the e-mail (last 7 days) and a **Save & send now** button. The last
 send time per mailbox is stored as `digest.last_sent.<key>`.
 
-Mail goes through the application's Swiftmailer transport (`MAILER_*` environment
-variables / `mailer_*` parameters). Send from an address whose SPF/DKIM is set up for
+Mail goes through Symfony Mailer (`MAILER_DSN` environment
+variable). Send from an address whose SPF/DKIM is set up for
 that transport, or the digest itself may be filtered.
 
 ## Scheduling

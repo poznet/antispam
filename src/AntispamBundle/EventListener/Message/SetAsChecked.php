@@ -1,33 +1,24 @@
 <?php
-/**
- * Created by PhpStorm.
- * User: joseph
- * Date: 19.06.16
- * Time: 00:20
- */
 
 namespace AntispamBundle\EventListener\Message;
 
-
 use AntispamBundle\Event\MessageEvent;
-use AntispamBundle\Services\InboxService;
-use Poznet\ConfigBundle\Service\ConfigService;
 use AntispamBundle\Services\MessageService;
 
+/**
+ * Last pipeline step: remembers the message so the next run skips it.
+ */
 class SetAsChecked
 {
     private $ms;
 
-
-    public function __construct(MessageService $ms){
-        $this->ms=$ms;
-
+    public function __construct(MessageService $ms)
+    {
+        $this->ms = $ms;
     }
 
-
-    public function set(MessageEvent $event){
-         $msg=$event->getMessage();
-         $this->ms->setAsChecked($msg);
+    public function set(MessageEvent $event)
+    {
+        $this->ms->setAsChecked($event->getMessage());
     }
-
 }

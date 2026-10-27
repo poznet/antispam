@@ -2,7 +2,7 @@
 #
 # Coolify will read this file, build the `app` image, expose port 80 on the
 # managed reverse proxy (using the FQDN you configure in the Coolify UI) and
-# persist the `db_data`, `app_cache` and `app_logs` volumes across restarts.
+# persist the `db_data`, `app_data` and `app_logs` volumes across restarts.
 #
 # All sensitive values should be set through Coolify's environment variables
 # screen (or a local `.env` file for docker-compose outside of Coolify).
@@ -17,7 +17,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      SYMFONY_ENV: prod
+      APP_ENV: prod
       APP_SECRET: ${APP_SECRET:-ChangeMeInProductionPlease}
 
       # Application login (form-based, required to access every page).
@@ -29,9 +29,12 @@ services:
       DATABASE_NAME: ${DATABASE_NAME:-antispam}
       DATABASE_USER: ${DATABASE_USER:-antispam}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:-antispam}
+      DATABASE_SERVER_VERSION: ${DATABASE_SERVER_VERSION:-10.6.0-MariaDB}
 
-      MAILER_TRANSPORT: ${MAILER_TRANSPORT:-smtp}
-      MAILER_HOST: ${MAILER_HOST:-127.0.0.1}
+      # e.g. smtp://user:pass@smtp.example.com:587 (empty = built from the
+      # legacy MAILER_HOST / MAILER_USER / MAILER_PASSWORD variables)
+      MAILER_DSN: ${MAILER_DSN:-}
+      MAILER_HOST: ${MAILER_HOST:-}
       MAILER_USER: ${MAILER_USER:-}
       MAILER_PASSWORD: ${MAILER_PASSWORD:-}
 
@@ -39,8 +42,8 @@ services:
     expose:
       - "80"
     volumes:
-      - app_cache:/var/www/html/app/cache
-      - app_logs:/var/www/html/app/logs
+      - app_data:/var/www/html/var/data
+      - app_logs:/var/www/html/var/log
     healthcheck:
       test: ["CMD", "bash", "-lc", "echo > /dev/tcp/127.0.0.1/80"]
       interval: 30s
@@ -66,6 +69,6 @@ services:
       start_period: 20s
 
 volumes:
-  app_cache:
+  app_data:
   app_logs:
   db_data:

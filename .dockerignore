@@ -3,21 +3,18 @@
 .idea
 .vscode
 .github
-.travis.yml
 
 # Build artifacts / caches that must be regenerated in the image
 vendor
-node_modules
-bower_components
-app/cache/*
-app/logs/*
-web/bundles
+var
+public/bundles
+.phpunit.cache
 
-# Local env files - provide values through Coolify instead
-.env
+# Local env files - provide values through Coolify instead (the committed
+# .env with defaults must stay in the image)
 .env.local
+.env.local.php
 .env.*.local
-app/config/parameters.yml
 
 # Editor / OS junk
 *.log

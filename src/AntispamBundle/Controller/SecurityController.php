@@ -2,15 +2,13 @@
 
 namespace AntispamBundle\Controller;
 
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
-use Symfony\Bundle\FrameworkBundle\Controller\Controller;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Authentication\AuthenticationUtils;
 
-class SecurityController extends Controller
+class SecurityController extends AbstractController
 {
-    /**
-     * @Route("/login", name="login")
-     */
+    #[Route('/login', name: 'login')]
     public function loginAction(AuthenticationUtils $authenticationUtils)
     {
         return $this->render('@Antispam/Security/login.html.twig', [
@@ -19,9 +17,7 @@ class SecurityController extends Controller
         ]);
     }
 
-    /**
-     * @Route("/logout", name="logout")
-     */
+    #[Route('/logout', name: 'logout')]
     public function logoutAction()
     {
         // Handled by the security firewall; this method is never executed.

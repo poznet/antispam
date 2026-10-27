@@ -40,7 +40,7 @@ class ApplyScoreDecision
             $subject = (string)$msg->getSubject();
         } catch (\Throwable $e) {}
 
-        $reasons = CheckHeaders::getReasons($event);
+        $reasons = $event->getReasons();
         $decision = $this->scoring->decide($event, $reasons, $sender, $subject);
 
         if ($decision === \AntispamBundle\Entity\SpamScoreLog::DECISION_QUARANTINE && !$event->isSpam()) {

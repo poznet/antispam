@@ -3,90 +3,84 @@
 namespace AntispamBundle\Controller;
 
 use AntispamBundle\Entity\Account;
+use AntispamBundle\Services\AgentRulesExporter;
 use AntispamBundle\Services\SshService;
-use Symfony\Bundle\FrameworkBundle\Controller\Controller;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bridge\Twig\Attribute\Template;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
+use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
-/**
- * @Route("/account")
- */
-class AccountController extends Controller
+#[Route('/account')]
+class AccountController extends AbstractController
 {
-    /**
-     * @Route("/index", name="antispam_account_index")
-     * @Template
-     */
+    public function __construct(
+        private EntityManagerInterface $em,
+        private SshService $ssh,
+        private AgentRulesExporter $rulesExporter,
+        private EventDispatcherInterface $dispatcher,
+    ) {
+    }
+
+    #[Route('/index', name: 'antispam_account_index')]
+    #[Template('@Antispam/Account/index.html.twig')]
     public function indexAction()
     {
-        $em = $this->getDoctrine()->getManager();
-        $accounts = $em->getRepository('AntispamBundle:Account')->findAll();
+        $accounts = $this->em->getRepository(Account::class)->findAll();
         return ['accounts' => $accounts];
     }
 
-    /**
-     * @Route("/add", name="antispam_account_add")
-     * @Template
-     */
+    #[Route('/add', name: 'antispam_account_add')]
+    #[Template('@Antispam/Account/add.html.twig')]
     public function addAction(Request $request)
     {
         if ($request->getMethod() === 'POST') {
-            $em = $this->getDoctrine()->getManager();
-            $account = $this->fillAccountFromRequest(new Account(), $request);
-            $em->persist($account);
-            $em->flush();
+                $account = $this->fillAccountFromRequest(new Account(), $request);
+            $this->em->persist($account);
+            $this->em->flush();
             return $this->redirectToRoute('antispam_account_index');
         }
         return [];
     }
 
-    /**
-     * @Route("/edit/{id}", name="antispam_account_edit")
-     * @Template
-     */
+    #[Route('/edit/{id}', name: 'antispam_account_edit')]
+    #[Template('@Antispam/Account/edit.html.twig')]
     public function editAction($id, Request $request)
     {
-        $em = $this->getDoctrine()->getManager();
-        $account = $em->getRepository('AntispamBundle:Account')->find($id);
+        $account = $this->em->getRepository(Account::class)->find($id);
         if (!$account) {
             return $this->redirectToRoute('antispam_account_index');
         }
 
         if ($request->getMethod() === 'POST') {
             $account = $this->fillAccountFromRequest($account, $request);
-            $em->flush();
+            $this->em->flush();
             return $this->redirectToRoute('antispam_account_index');
         }
 
         return ['account' => $account];
     }
 
-    /**
-     * @Route("/del/{id}", name="antispam_account_del")
-     */
+    #[Route('/del/{id}', name: 'antispam_account_del')]
     public function delAction($id)
     {
-        $em = $this->getDoctrine()->getManager();
-        $account = $em->getRepository('AntispamBundle:Account')->find($id);
+        $account = $this->em->getRepository(Account::class)->find($id);
         if ($account) {
-            $em->remove($account);
-            $em->flush();
+            $this->em->remove($account);
+            $this->em->flush();
         }
         return $this->redirectToRoute('antispam_account_index');
     }
 
-    /**
-     * @Route("/test/{id}", name="antispam_account_test")
-     * @Template
-     */
+    #[Route('/test/{id}', name: 'antispam_account_test')]
+    #[Template('@Antispam/Account/test.html.twig')]
     public function testAction($id)
     {
-        $em = $this->getDoctrine()->getManager();
-        $account = $em->getRepository('AntispamBundle:Account')->find($id);
+        $account = $this->em->getRepository(Account::class)->find($id);
         $result = ['success' => false, 'messages' => []];
 
         if (!$account) {
@@ -95,7 +89,7 @@ class AccountController extends Controller
         }
 
         if ($account->isSsh()) {
-            $sshService = $this->get('antispam.ssh');
+            $sshService = $this->ssh;
             $result = $sshService->testConnection($account);
         } else {
             try {
@@ -118,14 +112,11 @@ class AccountController extends Controller
         return ['account' => $account, 'result' => $result];
     }
 
-    /**
-     * @Route("/deploy/{id}", name="antispam_account_deploy")
-     * @Template
-     */
+    #[Route('/deploy/{id}', name: 'antispam_account_deploy')]
+    #[Template('@Antispam/Account/deploy.html.twig')]
     public function deployAction($id)
     {
-        $em = $this->getDoctrine()->getManager();
-        $account = $em->getRepository('AntispamBundle:Account')->find($id);
+        $account = $this->em->getRepository(Account::class)->find($id);
         $result = ['success' => false, 'messages' => []];
 
         if (!$account || !$account->isSsh()) {
@@ -134,10 +125,10 @@ class AccountController extends Controller
         }
 
         try {
-            $sshService = $this->get('antispam.ssh');
+            $sshService = $this->ssh;
             $deployResult = $sshService->deployAgent($account);
             $account->setAgentDeployed(true);
-            $em->flush();
+            $this->em->flush();
             $result['success'] = true;
             $result['messages'][] = 'Agent został wdrożony';
             $result['deploy_result'] = $deployResult;
@@ -148,14 +139,11 @@ class AccountController extends Controller
         return ['account' => $account, 'result' => $result];
     }
 
-    /**
-     * @Route("/sync/{id}", name="antispam_account_sync")
-     * @Template
-     */
+    #[Route('/sync/{id}', name: 'antispam_account_sync')]
+    #[Template('@Antispam/Account/sync.html.twig')]
     public function syncAction($id)
     {
-        $em = $this->getDoctrine()->getManager();
-        $account = $em->getRepository('AntispamBundle:Account')->find($id);
+        $account = $this->em->getRepository(Account::class)->find($id);
         $result = ['success' => false, 'messages' => []];
 
         if (!$account || !$account->isSsh()) {
@@ -164,8 +152,8 @@ class AccountController extends Controller
         }
 
         try {
-            $rules = $this->exportRules($em, $account->getEmail());
-            $sshService = $this->get('antispam.ssh');
+            $rules = $this->rulesExporter->export($account->getEmail());
+            $sshService = $this->ssh;
             $syncResult = $sshService->syncRules($account, json_encode($rules));
             $result['success'] = true;
             $result['messages'][] = 'Reguły zostały zsynchronizowane';
@@ -177,14 +165,11 @@ class AccountController extends Controller
         return ['account' => $account, 'result' => $result];
     }
 
-    /**
-     * @Route("/scan/{id}", name="antispam_account_scan")
-     * @Template
-     */
+    #[Route('/scan/{id}', name: 'antispam_account_scan')]
+    #[Template('@Antispam/Account/scan.html.twig')]
     public function scanAction($id)
     {
-        $em = $this->getDoctrine()->getManager();
-        $account = $em->getRepository('AntispamBundle:Account')->find($id);
+        $account = $this->em->getRepository(Account::class)->find($id);
         $result = ['success' => false, 'messages' => []];
 
         if (!$account) {
@@ -194,7 +179,7 @@ class AccountController extends Controller
 
         try {
             if ($account->isSsh()) {
-                $sshService = $this->get('antispam.ssh');
+                $sshService = $this->ssh;
                 $scanResult = $sshService->runScan($account);
             } else {
                 $scanResult = $this->runImapScan($account);
@@ -202,7 +187,7 @@ class AccountController extends Controller
 
             $account->setLastScanAt(new \DateTime());
             $account->setLastScanResult(json_encode($scanResult));
-            $em->flush();
+            $this->em->flush();
 
             $result['success'] = true;
             $result['scan_result'] = $scanResult;
@@ -213,9 +198,7 @@ class AccountController extends Controller
         return ['account' => $account, 'result' => $result];
     }
 
-    /**
-     * @Route("/download-agent", name="antispam_account_download_agent")
-     */
+    #[Route('/download-agent', name: 'antispam_account_download_agent')]
     public function downloadAgentAction()
     {
         $agentPath = __DIR__ . '/../Resources/agent/antispam-agent.php';
@@ -226,7 +209,7 @@ class AccountController extends Controller
 
     private function fillAccountFromRequest(Account $account, Request $request)
     {
-        $data = $request->get('account');
+        $data = $request->request->all('account');
 
         $account->setName($data['name'] ?? '');
         $account->setEmail($data['email'] ?? '');
@@ -258,76 +241,18 @@ class AccountController extends Controller
         return $account;
     }
 
-    private function exportRules($em, $email)
-    {
-        $rules = [
-            'whitelist' => [],
-            'email_whitelist' => [],
-            'blacklist' => [],
-            'email_blacklist' => [],
-            'dnsbl' => [],
-        ];
-
-        foreach ($em->getRepository('AntispamBundle:Whitelist')->findBy(['email' => $email]) as $item) {
-            $rules['whitelist'][] = [
-                'email' => $item->getEmail(),
-                'host' => $item->getHost(),
-                'pattern_type' => $item->getPatternType(),
-            ];
-        }
-        foreach ($em->getRepository('AntispamBundle:EmailWhitelist')->findBy(['email' => $email]) as $item) {
-            $rules['email_whitelist'][] = [
-                'email' => $item->getEmail(),
-                'whitelistemail' => $item->getWhitelistemail(),
-                'pattern_type' => $item->getPatternType(),
-            ];
-        }
-        foreach ($em->getRepository('AntispamBundle:Blacklist')->findBy(['email' => $email]) as $item) {
-            $rules['blacklist'][] = [
-                'email' => $item->getEmail(),
-                'host' => $item->getHost(),
-                'pattern_type' => $item->getPatternType(),
-                'score' => $item->getScore(),
-            ];
-        }
-        foreach ($em->getRepository('AntispamBundle:EmailBlacklist')->findBy(['email' => $email]) as $item) {
-            $rules['email_blacklist'][] = [
-                'email' => $item->getEmail(),
-                'blacklistemail' => $item->getBlacklistemail(),
-                'pattern_type' => $item->getPatternType(),
-                'score' => $item->getScore(),
-            ];
-        }
-        foreach ($em->getRepository('AntispamBundle:DnsblProvider')->findAll() as $prov) {
-            $rules['dnsbl'][] = [
-                'name' => $prov->getName(),
-                'zone' => $prov->getZone(),
-                'score' => $prov->getScore(),
-                'enabled' => $prov->isEnabled(),
-                'cache_ttl' => $prov->getCacheTtl(),
-            ];
-        }
-
-        $rules['settings'] = $this->get('antispam.scoring')->exportAgentSettings($email);
-
-        return $rules;
-    }
-
-    /**
-     * @Route("/health/{id}", name="antispam_account_health")
-     * @Template
-     */
+    #[Route('/health/{id}', name: 'antispam_account_health')]
+    #[Template('@Antispam/Account/health.html.twig')]
     public function healthAction($id)
     {
-        $em = $this->getDoctrine()->getManager();
-        $account = $em->getRepository('AntispamBundle:Account')->find($id);
+        $account = $this->em->getRepository(Account::class)->find($id);
         $result = ['success' => false, 'messages' => []];
         if (!$account || !$account->isSsh()) {
             $result['messages'][] = 'Nie znaleziono konta lub konto nie jest typu SSH';
             return ['account' => $account, 'result' => $result];
         }
         try {
-            $health = $this->get('antispam.ssh')->runHealth($account);
+            $health = $this->ssh->runHealth($account);
             $result['success'] = true;
             $result['health'] = $health;
         } catch (\Exception $e) {
@@ -347,7 +272,6 @@ class AccountController extends Controller
         $inbox = $connection->getMailbox('INBOX');
         $messages = $inbox->getMessages();
 
-        $dispatcher = $this->get('event_dispatcher');
         $stats = ['total' => 0, 'checked' => 0, 'whitelisted' => 0, 'blacklisted' => 0,
                   'quarantined' => 0, 'moved_to_spam' => 0];
 
@@ -355,7 +279,7 @@ class AccountController extends Controller
             $stats['total']++;
             try {
                 $event = new \AntispamBundle\Event\MessageEvent($msg, $account->getEmail());
-                $dispatcher->dispatch('antispam.check.message', $event);
+                $this->dispatcher->dispatch($event, 'antispam.check.message');
 
                 if ($event->isCheckedbefore()) { continue; }
                 $stats['checked']++;
@@ -369,6 +293,7 @@ class AccountController extends Controller
             }
         }
 
+        $connection->expunge();
         $connection->close();
         return $stats;
     }

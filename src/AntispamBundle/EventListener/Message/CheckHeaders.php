@@ -10,13 +10,11 @@ use AntispamBundle\Services\ScoringService;
  * Runs header-based heuristics (SPF/DKIM/DMARC, mismatched reply-to, suspicious
  * subject, missing Message-ID, etc.) and adds their points to the event score.
  *
- * Reasons are stashed on the event via the message-level reasons list so the
- * final decision listener can log them.
+ * Reasons are collected on the event so the final decision listener can log
+ * them.
  */
 class CheckHeaders
 {
-    public static $REASONS_KEY = '_antispam_reasons';
-
     private $analyzer;
     private $scoring;
 
@@ -43,20 +41,7 @@ class CheckHeaders
 
         if ($analysis['score'] > 0) {
             $event->setSpamscore($event->getSpamscore() + $analysis['score']);
-            self::addReasons($event, $analysis['reasons']);
+            $event->addReasons($analysis['reasons']);
         }
-    }
-
-    public static function addReasons(MessageEvent $event, array $reasons)
-    {
-        $existing = self::getReasons($event);
-        $event->{self::$REASONS_KEY} = array_merge($existing, $reasons);
-    }
-
-    public static function getReasons(MessageEvent $event)
-    {
-        return isset($event->{self::$REASONS_KEY}) && is_array($event->{self::$REASONS_KEY})
-            ? $event->{self::$REASONS_KEY}
-            : [];
     }
 }

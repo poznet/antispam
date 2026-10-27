@@ -2,6 +2,7 @@
 
 namespace AntispamBundle\Services;
 
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 /**
  * Signed, expiring action tokens for the quarantine digest links. Lets an
  * end user release / whitelist / delete one quarantined message without
@@ -17,7 +18,7 @@ class DigestTokenService
 
     private $secret;
 
-    public function __construct($secret)
+    public function __construct(#[Autowire('%kernel.secret%')] string $secret)
     {
         if ((string)$secret === '') {
             throw new \InvalidArgumentException('DigestTokenService needs a non-empty secret');

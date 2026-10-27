@@ -3,10 +3,11 @@
 namespace AntispamBundle\Controller;
 
 use AntispamBundle\Services\DigestTokenService;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
-use Symfony\Bundle\FrameworkBundle\Controller\Controller;
+use AntispamBundle\Services\QuarantineService;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Routing\Attribute\Route;
 
 /**
  * Public endpoints behind the quarantine digest links (no login - the signed
@@ -15,19 +16,21 @@ use Symfony\Component\HttpFoundation\Response;
  * GET only shows a confirmation page; the action runs on POST. Mail security
  * gateways and link scanners pre-fetch every URL in a message, so a GET that
  * released mail would release everything in every digest.
- *
- * @Route("/q")
  */
-class QuarantineActionController extends Controller
+#[Route('/q')]
+class QuarantineActionController extends AbstractController
 {
-    /**
-     * @Route("/{token}", name="antispam_quarantine_action", requirements={"token"="[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+"}, methods={"GET","POST"})
-     */
+    public function __construct(
+        private DigestTokenService $tokens,
+        private QuarantineService $quarantine,
+    ) {
+    }
+
+    #[Route('/{token}', name: 'antispam_quarantine_action', requirements: ['token' => '[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+'], methods: ['GET', 'POST'])]
     public function actionAction(Request $request, $token)
     {
-        $tokens = $this->get('antispam.digest_token');
         // With a published default secret anyone could mint tokens.
-        $data = $tokens->usesDefaultSecret() ? null : $tokens->verify($token);
+        $data = $this->tokens->usesDefaultSecret() ? null : $this->tokens->verify($token);
         if (!$data) {
             return $this->page('invalid', null, null, Response::HTTP_GONE);
         }
@@ -36,12 +39,11 @@ class QuarantineActionController extends Controller
             return $this->page('confirm', $data, null);
         }
 
-        $quarantine = $this->get('antispam.quarantine');
         try {
             if ($data['action'] === DigestTokenService::ACTION_DELETE) {
-                $result = $quarantine->delete($data['mailbox'], $data['id']);
+                $result = $this->quarantine->delete($data['mailbox'], $data['id']);
             } else {
-                $result = $quarantine->release($data['mailbox'], $data['id'], $data['action'] === DigestTokenService::ACTION_WHITELIST);
+                $result = $this->quarantine->release($data['mailbox'], $data['id'], $data['action'] === DigestTokenService::ACTION_WHITELIST);
             }
         } catch (\Throwable $e) {
             $result = ['success' => false, 'message' => 'Nie udało się połączyć z serwerem poczty. Spróbuj ponownie później.'];

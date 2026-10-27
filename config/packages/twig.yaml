@@ -1,0 +1,6 @@
+twig:
+    strict_variables: '%kernel.debug%'
+
+when@test:
+    twig:
+        strict_variables: true

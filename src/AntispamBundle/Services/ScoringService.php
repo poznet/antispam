@@ -2,15 +2,15 @@
 
 namespace AntispamBundle\Services;
 
+use AntispamBundle\Entity\ListSetting;
 use AntispamBundle\Entity\SpamScoreLog;
 use AntispamBundle\Event\MessageEvent;
 use Doctrine\ORM\EntityManagerInterface;
-use Poznet\ConfigBundle\Service\ConfigService;
 
 /**
  * Centralizes spam scoring configuration and the ham/quarantine/spam decision.
  *
- * Thresholds are stored in ConfigBundle (antispam.scoring.*) with sane
+ * Thresholds are stored in the config table (scoring.*) with sane
  * defaults. The service also writes a SpamScoreLog entry per processed message
  * so admins can audit "why was this flagged".
  */
@@ -37,7 +37,7 @@ class ScoringService
     private $config;
     private $listCache = [];
 
-    public function __construct(EntityManagerInterface $em, ConfigService $config = null)
+    public function __construct(EntityManagerInterface $em, ?ConfigService $config = null)
     {
         $this->em = $em;
         $this->config = $config;
@@ -243,7 +243,7 @@ class ScoringService
 
     public function setListSetting($name, $value)
     {
-        $this->em->getRepository('AntispamBundle:ListSetting')->setValue($name, $value);
+        $this->em->getRepository(ListSetting::class)->setValue($name, $value);
         unset($this->listCache[$name]);
     }
 
@@ -354,7 +354,7 @@ class ScoringService
     {
         if (!array_key_exists($name, $this->listCache)) {
             try {
-                $this->listCache[$name] = $this->em->getRepository('AntispamBundle:ListSetting')->getValue($name);
+                $this->listCache[$name] = $this->em->getRepository(ListSetting::class)->getValue($name);
             } catch (\Throwable $e) {
                 $this->listCache[$name] = null; // table not created yet
             }

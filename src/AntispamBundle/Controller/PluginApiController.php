@@ -3,13 +3,14 @@
 namespace AntispamBundle\Controller;
 
 use AntispamBundle\Services\PluginService;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
-use Symfony\Bundle\FrameworkBundle\Controller\Controller;
+use AntispamBundle\Services\RawMessageScanner;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
+use Symfony\Component\Routing\Attribute\Route;
 
 /**
  * Endpoints used by the Thunderbird plugin (see docs/thunderbird.md).
@@ -22,24 +23,27 @@ use Symfony\Component\HttpFoundation\ResponseHeaderBag;
  * Routes are exempt from form login (security.yml: ^/api/plugin and
  * ^/plugin/download); auth is a bearer token issued by /api/plugin/login.
  */
-class PluginApiController extends Controller
+class PluginApiController extends AbstractController
 {
+    public function __construct(
+        private RawMessageScanner $rawScanner,
+        private PluginService $plugin,
+    ) {
+    }
+
     const PLUGIN_VERSION = '1.0.0';
 
-    /**
-     * @Route("/plugin/download", name="antispam_plugin_download", methods={"GET"})
-     */
+    #[Route('/plugin/download', name: 'antispam_plugin_download', methods: ['GET'])]
     public function downloadAction(Request $request)
     {
-        $plugin = $this->plugin();
-        if (!$plugin->isEnabled()) {
+        if (!$this->plugin->isEnabled()) {
             throw $this->createNotFoundException('Thunderbird plugin is disabled');
         }
         if (!class_exists(\ZipArchive::class)) {
             return new Response('PHP zip extension is required to build the plugin', 500);
         }
 
-        $server = $plugin->getPublicUrl() ?: $request->getSchemeAndHttpHost() . $request->getBasePath();
+        $server = $this->plugin->getPublicUrl() ?: $request->getSchemeAndHttpHost() . $request->getBasePath();
         $src = __DIR__ . '/../Resources/thunderbird';
         $tmp = tempnam(sys_get_temp_dir(), 'tbxpi');
 
@@ -65,46 +69,39 @@ class PluginApiController extends Controller
         return $response;
     }
 
-    /**
-     * @Route("/api/plugin/status", name="antispam_plugin_api_status", methods={"GET"})
-     */
+    #[Route('/api/plugin/status', name: 'antispam_plugin_api_status', methods: ['GET'])]
     public function statusAction(Request $request)
     {
-        $plugin = $this->plugin();
-        $account = $plugin->accountForToken($this->bearer($request));
+        $account = $this->plugin->accountForToken($this->bearer($request));
 
         return new JsonResponse([
-            'enabled' => $plugin->isEnabled(),
+            'enabled' => $this->plugin->isEnabled(),
             'version' => self::PLUGIN_VERSION,
-            'anonymous_reports' => $plugin->isAnonymousReportEnabled(),
-            'check_enabled' => $plugin->isCheckEnabled(),
+            'anonymous_reports' => $this->plugin->isAnonymousReportEnabled(),
+            'check_enabled' => $this->plugin->isCheckEnabled(),
             'authenticated' => $account !== null,
             'email' => $account ? $account->getEmail() : null,
         ]);
     }
 
-    /**
-     * POST {"email": "...", "password": "..."} → {"token", "email", "expires_at"}
-     *
-     * @Route("/api/plugin/login", name="antispam_plugin_api_login", methods={"POST"})
-     */
+    /** POST {"email": "...", "password": "..."} → {"token", "email", "expires_at"} */
+    #[Route('/api/plugin/login', name: 'antispam_plugin_api_login', methods: ['POST'])]
     public function loginAction(Request $request)
     {
-        $plugin = $this->plugin();
-        if (!$plugin->isEnabled()) {
+        if (!$this->plugin->isEnabled()) {
             return new JsonResponse(['error' => 'plugin disabled'], 403);
         }
-        if (!$plugin->hit('login', $this->clientIp($request), PluginService::LOGIN_RATE_LIMIT, 900)) {
+        if (!$this->plugin->hit('login', $this->clientIp($request), PluginService::LOGIN_RATE_LIMIT, 900)) {
             return new JsonResponse(['error' => 'too many attempts, try again later'], 429);
         }
 
         $data = json_decode($request->getContent(), true);
-        $account = $plugin->authenticate($data['email'] ?? '', $data['password'] ?? '');
+        $account = $this->plugin->authenticate($data['email'] ?? '', $data['password'] ?? '');
         if (!$account) {
             return new JsonResponse(['error' => 'invalid e-mail or password'], 401);
         }
 
-        $token = $plugin->issueToken($account);
+        $token = $this->plugin->issueToken($account);
         return new JsonResponse([
             'token' => $token['token'],
             'email' => $account->getEmail(),
@@ -115,20 +112,18 @@ class PluginApiController extends Controller
     /**
      * User verdict on a message. POST {"raw_base64": "...", "verdict": "spam|ham"}
      * Token optional for "spam" (anonymous report), required for "ham".
-     *
-     * @Route("/api/plugin/report", name="antispam_plugin_api_report", methods={"POST"})
      */
+    #[Route('/api/plugin/report', name: 'antispam_plugin_api_report', methods: ['POST'])]
     public function reportAction(Request $request)
     {
-        $plugin = $this->plugin();
-        if (!$plugin->isEnabled()) {
+        if (!$this->plugin->isEnabled()) {
             return new JsonResponse(['error' => 'plugin disabled'], 403);
         }
-        $account = $plugin->accountForToken($this->bearer($request));
-        if (!$account && !$plugin->isAnonymousReportEnabled()) {
+        $account = $this->plugin->accountForToken($this->bearer($request));
+        if (!$account && !$this->plugin->isAnonymousReportEnabled()) {
             return new JsonResponse(['error' => 'login required'], 401);
         }
-        if (!$plugin->hit('report', $account ? 'acc:' . $account->getId() : $this->clientIp($request), $plugin->getReportRateLimit(), 3600)) {
+        if (!$this->plugin->hit('report', $account ? 'acc:' . $account->getId() : $this->clientIp($request), $this->plugin->getReportRateLimit(), 3600)) {
             return new JsonResponse(['error' => 'rate limit exceeded'], 429);
         }
 
@@ -145,23 +140,19 @@ class PluginApiController extends Controller
             return $raw;
         }
 
-        $result = $plugin->learn($raw, $verdict, $account);
+        $result = $this->plugin->learn($raw, $verdict, $account);
         $result['authenticated'] = $account !== null;
         return new JsonResponse($result);
     }
 
-    /**
-     * Score a newly arrived message. POST {"raw_base64": "..."} (token required)
-     *
-     * @Route("/api/plugin/check", name="antispam_plugin_api_check", methods={"POST"})
-     */
+    /** Score a newly arrived message. POST {"raw_base64": "..."} (token required) */
+    #[Route('/api/plugin/check', name: 'antispam_plugin_api_check', methods: ['POST'])]
     public function checkAction(Request $request)
     {
-        $plugin = $this->plugin();
-        if (!$plugin->isEnabled() || !$plugin->isCheckEnabled()) {
+        if (!$this->plugin->isEnabled() || !$this->plugin->isCheckEnabled()) {
             return new JsonResponse(['error' => 'checks disabled'], 403);
         }
-        $account = $plugin->accountForToken($this->bearer($request));
+        $account = $this->plugin->accountForToken($this->bearer($request));
         if (!$account) {
             return new JsonResponse(['error' => 'login required'], 401);
         }
@@ -171,7 +162,7 @@ class PluginApiController extends Controller
             return $raw;
         }
 
-        return new JsonResponse($this->get('antispam.raw_scanner')->scan($raw, $account->getEmail()));
+        return new JsonResponse($this->rawScanner->scan($raw, $account->getEmail()));
     }
 
     /** @return string|JsonResponse decoded message source or an error response */
@@ -227,11 +218,5 @@ class PluginApiController extends Controller
             $manifest['permissions'] = array_values(array_unique($manifest['permissions']));
         }
         return json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-    }
-
-    /** @return PluginService */
-    private function plugin()
-    {
-        return $this->get('antispam.plugin');
     }
 }

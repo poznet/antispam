@@ -86,7 +86,7 @@ Additional tables:
   (sender/body), SHA-256 `hash`, `origin` (local/remote) and `reports` count.
   See `feed.md`.
 - `antispam_list_setting` — long list-shaped settings (protected domains, VIPs,
-  URI block list zones, blocked extensions) that don't fit ConfigBundle's
+  URI block list zones, blocked extensions) that don't fit the config table's
   255-character values. See `protection.md`.
 
 Account table: `antispam_account` - stores connection settings (IMAP or SSH) per email account.

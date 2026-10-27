@@ -122,9 +122,9 @@ to 0 to disable a single rule.
 
 ## Settings storage
 
-Scores and switches live in ConfigBundle (`impersonation.*`, `url.*`,
+Scores and switches live in the `config` table (`impersonation.*`, `url.*`,
 `attachment.*`). The list-shaped settings (protected domains, VIPs, URI block list
-zones, blocked extensions) can exceed ConfigBundle's 255-character limit, so they
+zones, blocked extensions) can exceed the config table's 255-character limit, so they
 are stored in the `antispam_list_setting` table:
 
 ```sql

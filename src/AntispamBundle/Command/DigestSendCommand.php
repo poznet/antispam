@@ -3,6 +3,7 @@
 namespace AntispamBundle\Command;
 
 use AntispamBundle\Services\QuarantineDigestService;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Helper\Table;
 use Symfony\Component\Console\Input\InputInterface;
@@ -14,10 +15,9 @@ use Symfony\Component\Console\Output\OutputInterface;
  *
  *   0 7 * * * php bin/console antispam:digest:send
  */
+#[AsCommand(name: 'antispam:digest:send', description: 'Send the quarantine digest e-mail to every mailbox with newly quarantined messages')]
 class DigestSendCommand extends Command
 {
-    protected static $defaultName = 'antispam:digest:send';
-
     private $digest;
 
     public function __construct(QuarantineDigestService $digest)
@@ -26,16 +26,15 @@ class DigestSendCommand extends Command
         $this->digest = $digest;
     }
 
-    protected function configure()
+    protected function configure(): void
     {
-        $this->setDescription('Send the quarantine digest e-mail to every mailbox with newly quarantined messages')
-             ->addOption('mailbox', 'm', InputOption::VALUE_REQUIRED, 'Only this mailbox key ("imap" or "ssh-<accountId>")')
+        $this->addOption('mailbox', 'm', InputOption::VALUE_REQUIRED, 'Only this mailbox key ("imap" or "ssh-<accountId>")')
              ->addOption('since', null, InputOption::VALUE_REQUIRED, 'Include messages since this date/time (e.g. "-3 days"); default: since the previous digest')
              ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Build digests and report counts without sending')
              ->addOption('force', 'f', InputOption::VALUE_NONE, 'Send even when the digest is disabled in settings');
     }
 
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         if (!$this->digest->isEnabled() && !$input->getOption('force') && !$input->getOption('dry-run')) {
             $output->writeln('<comment>Quarantine digest is disabled (Ustawienia → Raport kwarantanny). Use --force to send anyway.</comment>');

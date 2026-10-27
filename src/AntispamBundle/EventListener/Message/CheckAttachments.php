@@ -62,7 +62,7 @@ class CheckAttachments
             if (!$result['clean']) {
                 $event->setSpamscore($event->getSpamscore() + $score);
                 $event->setSpam(true);
-                CheckHeaders::addReasons($event, [[
+                $event->addReasons([[
                     'rule' => 'clamav:' . ($result['signature'] ?: 'unknown'),
                     'score' => $score,
                     'filename' => $this->filenameOf($attachment),

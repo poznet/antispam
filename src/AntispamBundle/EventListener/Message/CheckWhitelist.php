@@ -2,10 +2,10 @@
 
 namespace AntispamBundle\EventListener\Message;
 
+use AntispamBundle\Entity\Whitelist;
 use AntispamBundle\Event\MessageEvent;
 use AntispamBundle\Services\MessageService;
 use AntispamBundle\Services\PatternMatcher;
-use Ddeboer\Imap\Exception\Exception;
 use Doctrine\ORM\EntityManagerInterface;
 
 class CheckWhitelist
@@ -27,8 +27,6 @@ class CheckWhitelist
 
         try {
             $host = strtolower((string)$msg->getHeaders()->get('sender')[0]->host);
-        } catch (Exception $e) {
-            return;
         } catch (\Throwable $e) {
             return;
         }
@@ -36,7 +34,7 @@ class CheckWhitelist
 
         $cacheKey = (string)$event->getEmail();
         if (!isset($this->rulesCache[$cacheKey])) {
-            $this->rulesCache[$cacheKey] = $this->em->getRepository('AntispamBundle:Whitelist')
+            $this->rulesCache[$cacheKey] = $this->em->getRepository(Whitelist::class)
                 ->findBy(['email' => $event->getEmail()]);
         }
         $rules = $this->rulesCache[$cacheKey];

@@ -3,10 +3,12 @@
 namespace AntispamBundle\Controller;
 
 use AntispamBundle\Entity\SharedSpamSignal;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
-use Symfony\Bundle\FrameworkBundle\Controller\Controller;
+use AntispamBundle\Services\SpamSignalService;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\Routing\Attribute\Route;
 
 /**
  * Hub side of the centralized spam DB. Other instances (and this instance's own
@@ -16,18 +18,22 @@ use Symfony\Component\HttpFoundation\Request;
  * the `feed.server_key` config value. When that value is empty the API is
  * considered disabled and every request is rejected. These routes are exempt
  * from the form-login firewall via security.yml (^/api/feed).
- *
- * @Route("/api/feed")
  */
-class SpamFeedApiController extends Controller
+#[Route('/api/feed')]
+class SpamFeedApiController extends AbstractController
 {
+    public function __construct(
+        private EntityManagerInterface $em,
+        private SpamSignalService $feed,
+    ) {
+    }
+
     /**
      * Receive a batch of signals from another instance.
      *
      * POST body: {"signals": [{"type": "sender|body", "hash": "<sha256>"}, ...]}
-     *
-     * @Route("/report", name="antispam_feed_api_report", methods={"POST"})
      */
+    #[Route('/report', name: 'antispam_feed_api_report', methods: ['POST'])]
     public function reportAction(Request $request)
     {
         if (($deny = $this->denyUnlessAuthorized($request)) !== null) {
@@ -39,7 +45,7 @@ class SpamFeedApiController extends Controller
             return new JsonResponse(['error' => 'invalid payload'], 400);
         }
 
-        $feed = $this->get('antispam.spam_signal');
+        $feed = $this->feed;
         $clean = [];
         foreach ($payload['signals'] as $sig) {
             if (is_array($sig) && $feed->isValidType($sig['type'] ?? null) && $feed->isValidHash($sig['hash'] ?? null)) {
@@ -60,9 +66,8 @@ class SpamFeedApiController extends Controller
      * Serve signals updated since a timestamp (incremental pull).
      *
      * GET /api/feed/pull?since=<ISO8601>&limit=<n>
-     *
-     * @Route("/pull", name="antispam_feed_api_pull", methods={"GET"})
      */
+    #[Route('/pull', name: 'antispam_feed_api_pull', methods: ['GET'])]
     public function pullAction(Request $request)
     {
         if (($deny = $this->denyUnlessAuthorized($request)) !== null) {
@@ -78,7 +83,7 @@ class SpamFeedApiController extends Controller
         }
         $limit = min(5000, max(1, (int)$request->query->get('limit', 5000)));
 
-        $repo = $this->getDoctrine()->getManager()->getRepository(SharedSpamSignal::class);
+        $repo = $this->em->getRepository(SharedSpamSignal::class);
         $signals = [];
         foreach ($repo->findUpdatedSince($since, $limit) as $s) {
             $signals[] = [
@@ -96,17 +101,14 @@ class SpamFeedApiController extends Controller
         ]);
     }
 
-    /**
-     * Lightweight health/stats endpoint (also confirms the key works).
-     *
-     * @Route("/stats", name="antispam_feed_api_stats", methods={"GET"})
-     */
+    /** Lightweight health/stats endpoint (also confirms the key works). */
+    #[Route('/stats', name: 'antispam_feed_api_stats', methods: ['GET'])]
     public function statsAction(Request $request)
     {
         if (($deny = $this->denyUnlessAuthorized($request)) !== null) {
             return $deny;
         }
-        $repo = $this->getDoctrine()->getManager()->getRepository(SharedSpamSignal::class);
+        $repo = $this->em->getRepository(SharedSpamSignal::class);
         return new JsonResponse(['signals' => $repo->countByOrigin()]);
     }
 
@@ -115,7 +117,7 @@ class SpamFeedApiController extends Controller
      */
     private function denyUnlessAuthorized(Request $request)
     {
-        $serverKey = $this->get('antispam.spam_signal')->getServerKey();
+        $serverKey = $this->feed->getServerKey();
         if ($serverKey === '') {
             return new JsonResponse(['error' => 'feed api disabled'], 403);
         }

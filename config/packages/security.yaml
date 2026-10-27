@@ -1,0 +1,52 @@
+# Authentication and access control.
+#
+# The single administrator account comes from the ADMIN_USER and
+# ADMIN_PASSWORD_HASH environment variables (see AdminUserProvider). The Docker
+# entrypoint derives ADMIN_PASSWORD_HASH from ADMIN_PASSWORD; outside Docker
+# generate it with `php bin/console security:hash-password`.
+security:
+    password_hashers:
+        Symfony\Component\Security\Core\User\InMemoryUser: auto
+
+    providers:
+        admin:
+            id: AntispamBundle\Security\AdminUserProvider
+
+    firewalls:
+        dev:
+            pattern: ^/(_(profiler|wdt)|css|images|js)/
+            security: false
+
+        main:
+            lazy: true
+            provider: admin
+            form_login:
+                login_path: login
+                check_path: login
+                default_target_path: /
+                enable_csrf: true
+            logout:
+                path: logout
+                target: /login
+
+    access_control:
+        - { path: ^/login, roles: PUBLIC_ACCESS }
+        # Shared spam feed API authenticates via the X-Feed-Key header, not the
+        # form-login firewall, so it must be reachable anonymously.
+        - { path: ^/api/feed, roles: PUBLIC_ACCESS }
+        # Quarantine digest links: the signed token in the URL is the credential.
+        - { path: ^/q/, roles: PUBLIC_ACCESS }
+        # Thunderbird plugin: bearer-token API and the public .xpi download
+        # (offered on the login page).
+        - { path: ^/api/plugin, roles: PUBLIC_ACCESS }
+        - { path: ^/plugin/download, roles: PUBLIC_ACCESS }
+        - { path: ^/, roles: ROLE_ADMIN }
+
+when@test:
+    security:
+        password_hashers:
+            Symfony\Component\Security\Core\User\InMemoryUser:
+                algorithm: auto
+                cost: 4
+                time_cost: 3
+                memory_cost: 10

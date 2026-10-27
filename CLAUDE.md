@@ -1,11 +1,12 @@
 # Antispam Pancernapanda
 
-Symfony 4.4 application for email spam filtering via IMAP or SSH+Maildir agent. Part of the Pancernapanda security toolkit.
+Symfony 7.4 LTS application for email spam filtering via IMAP or SSH+Maildir agent. Part of the Pancernapanda security toolkit.
 
 ## Project structure
 - `src/AntispamBundle/` - main bundle (entities, controllers, services, commands, event listeners)
-- `app/` - Symfony app config (config.yml, routing.yml, parameters.yml)
-- `web/` - public web root
+- `src/Kernel.php` - MicroKernel; `config/` - bundles, packages (`*.yaml`), routes, `services.yaml` (autowiring + listener priorities)
+- `public/` - web root (`index.php` front controller); `var/` - cache, logs, `var/data` (checked-message markers)
+- `.env` - default env vars (override in `.env.local`; Docker freezes them into `.env.local.php`)
 - `src/AntispamBundle/Resources/agent/` - standalone Maildir agent PHP script
 - `src/AntispamBundle/Resources/thunderbird/` - Thunderbird plugin (MailExtension), served as .xpi by `/plugin/download`
 - `landing/` - static marketing page for antispam.pancernapanda.pl (plain HTML/CSS/JS, see `landing/README.md`)
@@ -31,7 +32,9 @@ See `docs/` directory for detailed documentation:
 - `docs/thunderbird.md` - Thunderbird plugin: spam reports, on-arrival checks, login, `/api/plugin`
 
 ## Tech stack
-- PHP >= 7.1.3, Symfony 4.4, Doctrine ORM, MySQL
+- PHP >= 8.2 (ext-imap, so not 8.4+), Symfony 7.4, Doctrine ORM 3 / DBAL 4 (PHP attributes mapping), MySQL/MariaDB
+- Symfony Mailer (`MAILER_DSN`), PHPUnit 11 (`vendor/bin/phpunit`)
+- Settings: key/value `config` table via `AntispamBundle\Services\ConfigService` (formerly poznet/configbundle)
 - ddeboer/imap (IMAP mode), phpseclib/phpseclib (SSH mode)
 - Bootstrap 3 frontend (bundled in `Resources/public/vendor`) + custom theme `Resources/public/css/panel.css` (light/dark, Pancerna Panda brand colors, Montserrat + Open Sans), Twig templates
 - UI language: Polish (`locale: pl`)

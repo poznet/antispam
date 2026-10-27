@@ -95,7 +95,7 @@ delta.
 
 All routes are under `/api/feed` and require the `X-Feed-Key` header to match
 `feed.server_key`. They are exempt from the form-login firewall in
-`security.yml`. Responses are JSON.
+`config/packages/security.yaml`. Responses are JSON.
 
 | Method | Path               | Body / query                              | Returns |
 |--------|--------------------|-------------------------------------------|---------|

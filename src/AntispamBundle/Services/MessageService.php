@@ -1,89 +1,61 @@
 <?php
-/**
- * Created by PhpStorm.
- * User: joseph
- * Date: 18.06.16
- * Time: 12:21
- */
 
 namespace AntispamBundle\Services;
 
-use Ddeboer\Imap\Message;
+use Ddeboer\Imap\MessageInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Filesystem\Filesystem;
 
+/**
+ * Remembers which IMAP messages were already checked (one marker file per
+ * message id in var/data/checked).
+ */
 class MessageService
 {
-    /**
-     * data directory
-     * @var string
-     */
-    private $dir=__DIR__.'/../../../app/Data/checked';
+    private $dir;
+    private $fs;
 
-    public function __construct()
+    public function __construct(#[Autowire('%kernel.project_dir%/var/data/checked')] string $dir)
     {
-        $fs=new Filesystem();
-        if(!$fs->exists($this->dir))
-            $fs->mkdir($this->dir);
+        $this->dir = $dir;
+        $this->fs = new Filesystem();
     }
 
     /**
-     * Sets message as checked ( create fle on hdd)
-     * @param Message $msg
+     * Marks the message as checked (creates its marker file).
      */
-    public function setAsChecked(Message $msg){
-        $id=$msg->getId();
-        $nr=$msg->getNumber();
-        $fs=new Filesystem();
-        $name=$this->dir.'/'.$id;
-        if(!$fs->exists($name))
-            file_put_contents($name,$nr);
+    public function setAsChecked(MessageInterface $msg)
+    {
+        $name = $this->path($msg->getId());
+        if (!$this->fs->exists($name)) {
+            $this->fs->dumpFile($name, (string)$msg->getNumber());
+        }
+    }
+
+    public function isChecked(MessageInterface $msg)
+    {
+        return $this->fs->exists($this->path($msg->getId()));
     }
 
     /**
-     * Chceck if message exists
-     * @param Message $msg
-     * @return bool
+     * Forgets the message (removes its marker file).
      */
-    public function isChecked( Message $msg){
-        $id=$msg->getId();
-        $fs=new Filesystem();
-        $name=$this->dir.'/'.$id;
-        return $fs->exists($name);
+    public function unCheck(MessageInterface $msg)
+    {
+        $this->fs->remove($this->path($msg->getId()));
     }
 
     /**
-     * Uncheck meessage (removes file)
-     * @param Message $msg
+     * Forgets all messages (removes every marker file).
      */
-    public function unCheck(Message $msg){
-        $id=$msg->getId();
-        $fs=new Filesystem();
-        $name=$this->dir.'/'.$id;
-        if($fs->exists($name))
-            $fs->remove($name);
+    public function unCheckAll()
+    {
+        $this->fs->remove($this->dir);
     }
 
-    /**
-     * Unchecks  all messages  ( delete all messages files)
-     */
-    public function unCheckAll(){
-        $fs=new Filesystem();
-        $name=$this->dir.'/';
-        $fs->remove($name);
+    private function path($id)
+    {
+        // Message-ID headers may contain "/" - keep the marker inside the dir.
+        return $this->dir . '/' . str_replace(['/', '\\'], '_', (string)$id);
     }
-
-    /**
-     * Returns  internal  msg  id
-     * @param $id
-     * @return string
-     */
-    public function getId($id){
-        $fs=new Filesystem();
-        $name=$this->dir.'/'.$id;
-        if($fs->exists($name))
-            return file_get_contents($name);
-        return null;
-    }
-
-
 }

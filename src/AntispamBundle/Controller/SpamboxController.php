@@ -17,6 +17,14 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/spambox')]
 class SpamboxController extends AbstractController
 {
+    private const SCORELOG_PER_PAGE = 50;
+    private const DECISIONS = [
+        SpamScoreLog::DECISION_HAM,
+        SpamScoreLog::DECISION_QUARANTINE,
+        SpamScoreLog::DECISION_SPAM,
+        SpamScoreLog::DECISION_WHITELISTED,
+    ];
+
     public function __construct(
         private EntityManagerInterface $em,
         private InboxService $inbox,
@@ -125,11 +133,58 @@ class SpamboxController extends AbstractController
     /** Recent score log with reasons - "why did X get flagged". */
     #[Route('/scorelog', name: 'antispam_spambox_scorelog')]
     #[Template('@Antispam/Spambox/scorelog.html.twig')]
-    public function scorelogAction()
+    public function scorelogAction(Request $request)
     {
-        $logs = $this->em->getRepository(SpamScoreLog::class)->findRecent(100);
-        $stats = $this->em->getRepository(SpamScoreLog::class)->statsByDecision(new \DateTime('-30 days'));
-        return ['logs' => $logs, 'stats' => $stats];
+        $repo = $this->em->getRepository(SpamScoreLog::class);
+        $filters = $this->scorelogFilters($request);
+        $page = max(1, $request->query->getInt('page', 1));
+
+        $result = $repo->search($filters, $page, self::SCORELOG_PER_PAGE);
+        $pages = max(1, (int)ceil($result['total'] / self::SCORELOG_PER_PAGE));
+
+        // Query params of the active filter (without page) - reused by pagination and the decision tiles.
+        $query = array_filter([
+            'decision' => $filters['decision'],
+            'account' => $filters['account'],
+            'q' => $filters['q'],
+            'from' => $filters['from']?->format('Y-m-d'),
+            'to' => $filters['to']?->format('Y-m-d'),
+            'min_score' => $filters['minScore'],
+        ], fn($v) => $v !== null && $v !== '');
+
+        return [
+            'logs' => $result['items'],
+            'total' => $result['total'],
+            'page' => min($page, $pages),
+            'pages' => $pages,
+            'filters' => $filters,
+            'query' => $query,
+            'accounts' => $repo->distinctAccounts(),
+            'stats' => $repo->statsByDecision(new \DateTime('-30 days')),
+        ];
+    }
+
+    /** Parse and validate the score log filter from the query string; invalid values are ignored. */
+    private function scorelogFilters(Request $request): array
+    {
+        $q = $request->query;
+        $decision = (string)$q->get('decision', '');
+        $date = function (string $key) use ($q): ?\DateTime {
+            $value = (string)$q->get($key, '');
+            $dt = $value !== '' ? \DateTime::createFromFormat('!Y-m-d', $value) : false;
+            // Reject overflowing dates like 2026-13-45 that createFromFormat silently rolls over.
+            return $dt && $dt->format('Y-m-d') === $value ? $dt : null;
+        };
+        $minScore = (string)$q->get('min_score', '');
+
+        return [
+            'decision' => in_array($decision, self::DECISIONS, true) ? $decision : null,
+            'account' => trim((string)$q->get('account', '')) ?: null,
+            'q' => trim((string)$q->get('q', '')),
+            'from' => $date('from'),
+            'to' => $date('to'),
+            'minScore' => preg_match('/^-?\d+$/', $minScore) ? (int)$minScore : null,
+        ];
     }
 
     /** Spam / not-spam reports from the Thunderbird plugin, anonymous ones included. */

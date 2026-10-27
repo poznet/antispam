@@ -1,13 +1,13 @@
 {% extends 'AntispamBundle::main.html.twig' %}
 
-{% block title %}Sync Rules{% if account %}: {{ account.name }}{% endif %}{% endblock %}
-{% block page_title %}Sync Rules{% if account %}: {{ account.name }}{% endif %}{% endblock %}
+{% block title %}Synchronizacja reguł{% if account %}: {{ account.name }}{% endif %}{% endblock %}
+{% block page_title %}Synchronizacja reguł{% if account %}: {{ account.name }}{% endif %}{% endblock %}
 
 {% block body %}
     {% if result.success %}
-        <div class="alert alert-success"><strong>Rules synced successfully!</strong></div>
+        <div class="alert alert-success"><strong>Reguły zostały zsynchronizowane!</strong></div>
     {% else %}
-        <div class="alert alert-danger"><strong>Sync failed</strong></div>
+        <div class="alert alert-danger"><strong>Synchronizacja nie powiodła się</strong></div>
     {% endif %}
 
     <ul class="list-group">
@@ -17,9 +17,9 @@
     </ul>
 
     {% if result.sync_result is defined %}
-        <h4>Sync result:</h4>
+        <h4>Wynik synchronizacji:</h4>
         <pre>{{ result.sync_result|json_encode(constant('JSON_PRETTY_PRINT')) }}</pre>
     {% endif %}
 
-    <a href="{{ path('antispam_account_index') }}" class="btn btn-default">Back to Accounts</a>
+    <a href="{{ path('antispam_account_index') }}" class="btn btn-default"><span class="glyphicon glyphicon-arrow-left"></span> Powrót do kont</a>
 {% endblock %}

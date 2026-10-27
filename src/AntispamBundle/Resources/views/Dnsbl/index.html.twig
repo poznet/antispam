@@ -1,30 +1,30 @@
 {% extends 'AntispamBundle::main.html.twig' %}
-{% block title %}DNSBL Providers{% endblock %}
-{% block page_title %}DNSBL Providers{% endblock %}
+{% block title %}Dostawcy DNSBL{% endblock %}
+{% block page_title %}Dostawcy DNSBL{% endblock %}
 
 {% block body %}
     <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-plus"></span> Add custom DNSBL zone</div>
+        <div class="panel-heading"><span class="glyphicon glyphicon-plus"></span> Dodaj własną strefę DNSBL</div>
         <div class="panel-body">
             <form method="post" action="{{ path('antispam_dnsbl_add') }}" class="form-horizontal">
                 <div class="form-group">
-                    <label class="col-sm-2 control-label">Name</label>
+                    <label class="col-sm-2 control-label">Nazwa</label>
                     <div class="col-sm-3"><input type="text" name="name" class="form-control" placeholder="Spamhaus ZEN" required></div>
-                    <label class="col-sm-1 control-label">Zone</label>
+                    <label class="col-sm-1 control-label">Strefa</label>
                     <div class="col-sm-3"><input type="text" name="zone" class="form-control" placeholder="zen.spamhaus.org" required></div>
-                    <label class="col-sm-1 control-label">Score</label>
+                    <label class="col-sm-1 control-label">Punkty</label>
                     <div class="col-sm-1"><input type="number" name="score" class="form-control" value="5" min="1" max="50"></div>
-                    <div class="col-sm-1"><button type="submit" class="btn btn-primary">Add</button></div>
+                    <div class="col-sm-1"><button type="submit" class="btn btn-primary">Dodaj</button></div>
                 </div>
             </form>
         </div>
     </div>
 
     <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-th-list"></span> Configured providers</div>
+        <div class="panel-heading"><span class="glyphicon glyphicon-th-list"></span> Skonfigurowani dostawcy</div>
         {% if providers|length > 0 %}
             <table class="table table-striped" style="margin-bottom:0;">
-                <thead><tr><th>Name</th><th>Zone</th><th>Score</th><th>TTL</th><th>Hits</th><th>Status</th><th></th></tr></thead>
+                <thead><tr><th>Nazwa</th><th>Strefa</th><th>Punkty</th><th>TTL</th><th>Trafienia</th><th>Status</th><th></th></tr></thead>
                 <tbody>
                 {% for p in providers %}
                 <tr>
@@ -35,35 +35,35 @@
                     <td>{{ p.hits }}</td>
                     <td>
                         {% if p.enabled %}
-                            <span class="label label-success">enabled</span>
+                            <span class="label label-success">włączony</span>
                         {% else %}
-                            <span class="label label-default">disabled</span>
+                            <span class="label label-default">wyłączony</span>
                         {% endif %}
                     </td>
                     <td class="text-right">
-                        <a class="btn btn-xs btn-default" href="{{ path('antispam_dnsbl_toggle', {id: p.id}) }}">Toggle</a>
-                        <a class="btn btn-xs btn-danger" href="{{ path('antispam_dnsbl_del', {id: p.id}) }}" onclick="return confirm('Delete {{ p.zone }}?')">Delete</a>
+                        <a class="btn btn-xs btn-default" href="{{ path('antispam_dnsbl_toggle', {id: p.id}) }}">{{ p.enabled ? 'Wyłącz' : 'Włącz' }}</a>
+                        <a class="btn btn-xs btn-danger" href="{{ path('antispam_dnsbl_del', {id: p.id}) }}" onclick="return confirm('Usunąć {{ p.zone }}?')">Usuń</a>
                     </td>
                 </tr>
                 {% endfor %}
                 </tbody>
             </table>
         {% else %}
-            <div class="panel-body text-muted">No providers yet. Add one from the presets below.</div>
+            <div class="panel-body text-muted">Brak dostawców. Dodaj jednego z gotowych presetów poniżej.</div>
         {% endif %}
     </div>
 
     <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-th"></span> Well-known presets</div>
+        <div class="panel-heading"><span class="glyphicon glyphicon-th"></span> Popularne presety</div>
         <table class="table table-striped" style="margin-bottom:0;">
-            <thead><tr><th>Name</th><th>Zone</th><th>Suggested score</th><th></th></tr></thead>
+            <thead><tr><th>Nazwa</th><th>Strefa</th><th>Sugerowane punkty</th><th></th></tr></thead>
             <tbody>
             {% for idx, preset in presets %}
                 <tr>
                     <td>{{ preset.name }}</td>
                     <td><code>{{ preset.zone }}</code></td>
                     <td>{{ preset.score }}</td>
-                    <td class="text-right"><a class="btn btn-xs btn-success" href="{{ path('antispam_dnsbl_add_preset', {idx: idx}) }}">Add</a></td>
+                    <td class="text-right"><a class="btn btn-xs btn-success" href="{{ path('antispam_dnsbl_add_preset', {idx: idx}) }}">Dodaj</a></td>
                 </tr>
             {% endfor %}
             </tbody>
@@ -71,11 +71,11 @@
     </div>
 
     <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-search"></span> Test an IP</div>
+        <div class="panel-heading"><span class="glyphicon glyphicon-search"></span> Sprawdź adres IP</div>
         <div class="panel-body">
             <form method="get" action="{{ path('antispam_dnsbl_test') }}" class="form-inline">
                 <input type="text" name="ip" class="form-control" placeholder="1.2.3.4" style="min-width:220px;">
-                <button type="submit" class="btn btn-default">Check</button>
+                <button type="submit" class="btn btn-default">Sprawdź</button>
             </form>
         </div>
     </div>

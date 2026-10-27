@@ -90,7 +90,7 @@ class AccountController extends Controller
         $result = ['success' => false, 'messages' => []];
 
         if (!$account) {
-            $result['messages'][] = 'Account not found';
+            $result['messages'][] = 'Nie znaleziono konta';
             return ['account' => null, 'result' => $result];
         }
 
@@ -106,12 +106,12 @@ class AccountController extends Controller
                 );
                 $connection = $server->authenticate($account->getImapLogin(), $account->getImapPassword());
                 $result['success'] = true;
-                $result['messages'][] = 'IMAP connection OK';
+                $result['messages'][] = 'Połączenie IMAP działa';
                 $mailboxes = $connection->getMailboxes();
-                $result['messages'][] = 'Mailboxes found: ' . count($mailboxes);
+                $result['messages'][] = 'Znalezione foldery: ' . count($mailboxes);
                 $connection->close();
             } catch (\Exception $e) {
-                $result['messages'][] = 'Error: ' . $e->getMessage();
+                $result['messages'][] = 'Błąd: ' . $e->getMessage();
             }
         }
 
@@ -129,7 +129,7 @@ class AccountController extends Controller
         $result = ['success' => false, 'messages' => []];
 
         if (!$account || !$account->isSsh()) {
-            $result['messages'][] = 'Account not found or not SSH type';
+            $result['messages'][] = 'Nie znaleziono konta lub konto nie jest typu SSH';
             return ['account' => $account, 'result' => $result];
         }
 
@@ -139,10 +139,10 @@ class AccountController extends Controller
             $account->setAgentDeployed(true);
             $em->flush();
             $result['success'] = true;
-            $result['messages'][] = 'Agent deployed successfully';
+            $result['messages'][] = 'Agent został wdrożony';
             $result['deploy_result'] = $deployResult;
         } catch (\Exception $e) {
-            $result['messages'][] = 'Deploy failed: ' . $e->getMessage();
+            $result['messages'][] = 'Wdrożenie nie powiodło się: ' . $e->getMessage();
         }
 
         return ['account' => $account, 'result' => $result];
@@ -159,7 +159,7 @@ class AccountController extends Controller
         $result = ['success' => false, 'messages' => []];
 
         if (!$account || !$account->isSsh()) {
-            $result['messages'][] = 'Account not found or not SSH type';
+            $result['messages'][] = 'Nie znaleziono konta lub konto nie jest typu SSH';
             return ['account' => $account, 'result' => $result];
         }
 
@@ -168,10 +168,10 @@ class AccountController extends Controller
             $sshService = $this->get('antispam.ssh');
             $syncResult = $sshService->syncRules($account, json_encode($rules));
             $result['success'] = true;
-            $result['messages'][] = 'Rules synced successfully';
+            $result['messages'][] = 'Reguły zostały zsynchronizowane';
             $result['sync_result'] = $syncResult;
         } catch (\Exception $e) {
-            $result['messages'][] = 'Sync failed: ' . $e->getMessage();
+            $result['messages'][] = 'Synchronizacja nie powiodła się: ' . $e->getMessage();
         }
 
         return ['account' => $account, 'result' => $result];
@@ -188,7 +188,7 @@ class AccountController extends Controller
         $result = ['success' => false, 'messages' => []];
 
         if (!$account) {
-            $result['messages'][] = 'Account not found';
+            $result['messages'][] = 'Nie znaleziono konta';
             return ['account' => $account, 'result' => $result];
         }
 
@@ -207,7 +207,7 @@ class AccountController extends Controller
             $result['success'] = true;
             $result['scan_result'] = $scanResult;
         } catch (\Exception $e) {
-            $result['messages'][] = 'Scan failed: ' . $e->getMessage();
+            $result['messages'][] = 'Skanowanie nie powiodło się: ' . $e->getMessage();
         }
 
         return ['account' => $account, 'result' => $result];
@@ -316,7 +316,7 @@ class AccountController extends Controller
         $account = $em->getRepository('AntispamBundle:Account')->find($id);
         $result = ['success' => false, 'messages' => []];
         if (!$account || !$account->isSsh()) {
-            $result['messages'][] = 'Account not found or not SSH type';
+            $result['messages'][] = 'Nie znaleziono konta lub konto nie jest typu SSH';
             return ['account' => $account, 'result' => $result];
         }
         try {
@@ -324,7 +324,7 @@ class AccountController extends Controller
             $result['success'] = true;
             $result['health'] = $health;
         } catch (\Exception $e) {
-            $result['messages'][] = 'Health check failed: ' . $e->getMessage();
+            $result['messages'][] = 'Sprawdzenie stanu agenta nie powiodło się: ' . $e->getMessage();
         }
         return ['account' => $account, 'result' => $result];
     }

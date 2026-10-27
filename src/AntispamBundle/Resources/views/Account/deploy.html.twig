@@ -1,13 +1,13 @@
 {% extends 'AntispamBundle::main.html.twig' %}
 
-{% block title %}Deploy Agent{% if account %}: {{ account.name }}{% endif %}{% endblock %}
-{% block page_title %}Deploy Agent{% if account %}: {{ account.name }}{% endif %}{% endblock %}
+{% block title %}Wdrożenie agenta{% if account %}: {{ account.name }}{% endif %}{% endblock %}
+{% block page_title %}Wdrożenie agenta{% if account %}: {{ account.name }}{% endif %}{% endblock %}
 
 {% block body %}
     {% if result.success %}
-        <div class="alert alert-success"><strong>Agent deployed successfully!</strong></div>
+        <div class="alert alert-success"><strong>Agent został wdrożony!</strong></div>
     {% else %}
-        <div class="alert alert-danger"><strong>Deploy failed</strong></div>
+        <div class="alert alert-danger"><strong>Wdrożenie nie powiodło się</strong></div>
     {% endif %}
 
     <ul class="list-group">
@@ -17,9 +17,9 @@
     </ul>
 
     {% if result.deploy_result is defined %}
-        <h4>Agent test output:</h4>
+        <h4>Wynik testu agenta:</h4>
         <pre>{{ result.deploy_result|json_encode(constant('JSON_PRETTY_PRINT')) }}</pre>
     {% endif %}
 
-    <a href="{{ path('antispam_account_index') }}" class="btn btn-default">Back to Accounts</a>
+    <a href="{{ path('antispam_account_index') }}" class="btn btn-default"><span class="glyphicon glyphicon-arrow-left"></span> Powrót do kont</a>
 {% endblock %}

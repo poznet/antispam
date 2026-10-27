@@ -14,6 +14,7 @@ APP_DIR=/var/www/html
 : "${APP_SECRET:=ChangeMeInProductionPlease}"
 : "${ADMIN_USER:=admin}"
 : "${RUN_MIGRATIONS:=true}"
+: "${SYMFONY_TRUSTED_PROXIES:=}"
 
 # Accept a pre-computed hash (ADMIN_PASSWORD_HASH) or derive one from
 # ADMIN_PASSWORD.
@@ -39,14 +40,16 @@ if [ -z "${MAILER_DSN:-}" ]; then
 fi
 
 export APP_ENV APP_SECRET ADMIN_USER ADMIN_PASSWORD_HASH MAILER_DSN \
-    DATABASE_HOST DATABASE_PORT DATABASE_NAME DATABASE_USER DATABASE_PASSWORD DATABASE_SERVER_VERSION
+    DATABASE_HOST DATABASE_PORT DATABASE_NAME DATABASE_USER DATABASE_PASSWORD DATABASE_SERVER_VERSION \
+    SYMFONY_TRUSTED_PROXIES
 
 # Freeze the configuration into .env.local.php: Apache/mod_php does not expose
 # the container environment to $_SERVER, and this also skips parsing .env on
 # every request.
 php -r '
     $vars = ["APP_ENV", "APP_SECRET", "ADMIN_USER", "ADMIN_PASSWORD_HASH", "MAILER_DSN",
-        "DATABASE_HOST", "DATABASE_PORT", "DATABASE_NAME", "DATABASE_USER", "DATABASE_PASSWORD", "DATABASE_SERVER_VERSION"];
+        "DATABASE_HOST", "DATABASE_PORT", "DATABASE_NAME", "DATABASE_USER", "DATABASE_PASSWORD", "DATABASE_SERVER_VERSION",
+        "SYMFONY_TRUSTED_PROXIES"];
     $env = ["APP_DEBUG" => getenv("APP_ENV") === "prod" ? "0" : "1"];
     foreach ($vars as $v) { $env[$v] = (string)getenv($v); }
     file_put_contents($argv[1], "<?php\n\n// Auto-generated from environment variables at container start.\nreturn " . var_export($env, true) . ";\n");

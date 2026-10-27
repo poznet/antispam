@@ -6,6 +6,8 @@ use AntispamBundle\Entity\PluginReport;
 use AntispamBundle\Entity\SpamScoreLog;
 use AntispamBundle\Services\ConnectionService;
 use AntispamBundle\Services\InboxService;
+use AntispamBundle\Services\QuarantineDigestService;
+use AntispamBundle\Services\QuarantineService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -19,6 +21,7 @@ class SpamboxController extends AbstractController
         private EntityManagerInterface $em,
         private InboxService $inbox,
         private ConnectionService $connection,
+        private QuarantineService $quarantine,
     ) {
     }
 
@@ -29,11 +32,65 @@ class SpamboxController extends AbstractController
         return ['messages' => $this->loadFolder($this->inbox->getSpamFolderName())];
     }
 
-    #[Route('/quarantine', name: 'antispam_spambox_quarantine')]
+    /**
+     * Quarantine of every mailbox: the legacy IMAP QUARANTINE folder and the
+     * Maildir quarantine of each SSH account with a deployed agent. The
+     * dashboard counts quarantine decisions from the score log, so those are
+     * listed too - a decision can outlive its message (released, deleted, or
+     * a Thunderbird plugin check that never moves anything on the server).
+     */
+    #[Route('/quarantine', name: 'antispam_spambox_quarantine', methods: ['GET'])]
     #[Template('@Antispam/Spambox/quarantine.html.twig')]
     public function quarantineAction()
     {
-        return ['messages' => $this->loadFolder($this->inbox->getQuarantineFolderName())];
+        $mailboxes = [];
+        foreach ($this->quarantine->getMailboxes() as $mailbox) {
+            $items = [];
+            $error = null;
+            try {
+                foreach ($this->quarantine->listItems($mailbox['key'], null, 100) as $item) {
+                    $item['labels'] = QuarantineDigestService::reasonLabels($item['reasons']);
+                    $item['high_risk'] = QuarantineDigestService::isHighRisk($item['reasons']);
+                    $items[] = $item;
+                }
+            } catch (\Throwable $e) {
+                $error = $e->getMessage();
+            }
+            $mailboxes[] = $mailbox + ['items' => $items, 'error' => $error];
+        }
+
+        $logs = $this->em->getRepository(SpamScoreLog::class)
+            ->findRecentByDecision(SpamScoreLog::DECISION_QUARANTINE, new \DateTime('-30 days'), 50);
+
+        return ['mailboxes' => $mailboxes, 'logs' => $logs];
+    }
+
+    /** Release (optionally whitelisting the sender) or delete a quarantined message. */
+    #[Route('/quarantine/action', name: 'antispam_spambox_quarantine_action', methods: ['POST'])]
+    public function quarantineItemAction(Request $request)
+    {
+        if (!$this->isCsrfTokenValid('quarantine_action', (string)$request->request->get('_token'))) {
+            $this->addFlash('danger', 'Nieprawidłowy token formularza, spróbuj ponownie');
+            return $this->redirectToRoute('antispam_spambox_quarantine');
+        }
+
+        $key = (string)$request->request->get('mailbox');
+        $id = (string)$request->request->get('id');
+        $action = (string)$request->request->get('action');
+
+        try {
+            $result = match ($action) {
+                'release' => $this->quarantine->release($key, $id),
+                'whitelist' => $this->quarantine->release($key, $id, true),
+                'delete' => $this->quarantine->delete($key, $id),
+                default => ['success' => false, 'message' => 'Nieznana akcja'],
+            };
+        } catch (\Throwable $e) {
+            $result = ['success' => false, 'message' => 'Operacja nie powiodła się: ' . $e->getMessage()];
+        }
+
+        $this->addFlash($result['success'] ? 'success' : 'danger', $result['message']);
+        return $this->redirectToRoute('antispam_spambox_quarantine');
     }
 
     /** Move a message from SPAM or QUARANTINE back to INBOX. */

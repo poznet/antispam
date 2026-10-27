@@ -27,6 +27,15 @@ class InboxService
         return $this->mailbox->getMessage($id);
     }
 
+    /**
+     * Permanently removes messages flagged as deleted - IMAP "move" leaves
+     * the original in the source folder until the mailbox is expunged.
+     */
+    public function expunge()
+    {
+        $this->connection->getConnection()->expunge();
+    }
+
     public function getSpamFolder()
     {
         return $this->getOrCreateFolder($this->spamboxname);

@@ -2,17 +2,18 @@
 
 namespace AntispamBundle\Command;
 
+use AntispamBundle\Entity\Account;
 use AntispamBundle\Services\SshService;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
+#[AsCommand(name: 'antispam:agent:deploy', description: 'Deploy agent to hosting server via SSH')]
 class AgentDeployCommand extends Command
 {
-    protected static $defaultName = 'antispam:agent:deploy';
-
     private $em;
     private $ssh;
 
@@ -23,15 +24,14 @@ class AgentDeployCommand extends Command
         $this->ssh = $ssh;
     }
 
-    protected function configure()
+    protected function configure(): void
     {
-        $this->setDescription('Deploy agent to hosting server via SSH')
-             ->addArgument('accountId', InputArgument::REQUIRED, 'Account ID');
+        $this->addArgument('accountId', InputArgument::REQUIRED, 'Account ID');
     }
 
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $account = $this->em->getRepository('AntispamBundle:Account')->find($input->getArgument('accountId'));
+        $account = $this->em->getRepository(Account::class)->find($input->getArgument('accountId'));
         if (!$account || !$account->isSsh()) {
             $output->writeln('<error>Account not found or not SSH type</error>');
             return 1;

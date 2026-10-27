@@ -2,48 +2,33 @@
 
 namespace AntispamBundle\Entity;
 
+use AntispamBundle\Repository\DnsblCacheRepository;
 use Doctrine\ORM\Mapping as ORM;
 
-/**
- * Cache of DNSBL lookups so we don't hammer DNS on every scan.
- *
- * @ORM\Table(name="antispam_dnsbl_cache", indexes={
- *   @ORM\Index(name="idx_ip_zone", columns={"ip", "zone"})
- * })
- * @ORM\Entity(repositoryClass="AntispamBundle\Repository\DnsblCacheRepository")
- */
+/** Cache of DNSBL lookups so we don't hammer DNS on every scan. */
+#[ORM\Entity(repositoryClass: DnsblCacheRepository::class)]
+#[ORM\Table(name: 'antispam_dnsbl_cache')]
+#[ORM\Index(name: 'idx_ip_zone', columns: ['ip', 'zone'])]
 class DnsblCache
 {
-    /**
-     * @ORM\Column(name="id", type="integer")
-     * @ORM\Id
-     * @ORM\GeneratedValue(strategy="AUTO")
-     */
+    #[ORM\Column(name: 'id', type: 'integer')]
+    #[ORM\Id]
+    #[ORM\GeneratedValue(strategy: 'AUTO')]
     private $id;
 
-    /**
-     * @ORM\Column(name="ip", type="string", length=45)
-     */
+    #[ORM\Column(name: 'ip', type: 'string', length: 45)]
     private $ip;
 
-    /**
-     * @ORM\Column(name="zone", type="string", length=255)
-     */
+    #[ORM\Column(name: 'zone', type: 'string', length: 255)]
     private $zone;
 
-    /**
-     * @ORM\Column(name="listed", type="boolean")
-     */
+    #[ORM\Column(name: 'listed', type: 'boolean')]
     private $listed = false;
 
-    /**
-     * @ORM\Column(name="response", type="string", length=64, nullable=true)
-     */
+    #[ORM\Column(name: 'response', type: 'string', length: 64, nullable: true)]
     private $response;
 
-    /**
-     * @ORM\Column(name="checked_at", type="datetime")
-     */
+    #[ORM\Column(name: 'checked_at', type: 'datetime')]
     private $checkedAt;
 
     public function __construct()

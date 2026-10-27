@@ -1,4 +1,4 @@
-{% extends 'AntispamBundle::main.html.twig' %}
+{% extends '@Antispam/main.html.twig' %}
 
 {% block page_title %}Pulpit{% endblock %}
 {% block title %}Pulpit{% endblock %}
@@ -14,7 +14,7 @@
 
     <section class="pp-hero">
         <div class="pp-hero-text">
-            <h2>Witaj{% if app.user %}, {{ app.user.username }}{% endif %}</h2>
+            <h2>Witaj{% if app.user %}, {{ app.user.userIdentifier }}{% endif %}</h2>
             <p>Pancerna ochrona działa. W ciągu ostatnich 30 dni przeanalizowano <strong>{{ total30 }}</strong> wiadomości, z czego <strong>{{ blocked }}</strong> zatrzymano jako spam lub kwarantannę.</p>
         </div>
         <div class="pp-shield-rate">

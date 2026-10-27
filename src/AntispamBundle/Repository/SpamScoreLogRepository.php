@@ -9,7 +9,7 @@ class SpamScoreLogRepository extends EntityRepository
     public function findRecent($limit = 50, $accountEmail = null)
     {
         $qb = $this->createQueryBuilder('l')
-            ->orderBy('l.scoredAt', 'DESC')
+            ->orderBy('l.scoredAt', \SortDirection::Descending)
             ->setMaxResults($limit);
         if ($accountEmail) {
             $qb->andWhere('l.accountEmail = :e')->setParameter('e', $accountEmail);
@@ -17,7 +17,7 @@ class SpamScoreLogRepository extends EntityRepository
         return $qb->getQuery()->getResult();
     }
 
-    public function statsByDecision(\DateTime $since = null)
+    public function statsByDecision(?\DateTime $since = null)
     {
         $qb = $this->createQueryBuilder('l')
             ->select('l.decision AS decision, COUNT(l.id) AS cnt')
@@ -41,7 +41,7 @@ class SpamScoreLogRepository extends EntityRepository
             ->andWhere('l.scoredAt >= :since')
             ->setParameter('since', $since)
             ->groupBy('day, decision')
-            ->orderBy('day', 'ASC')
+            ->orderBy('day', \SortDirection::Ascending)
             ->getQuery()
             ->getArrayResult();
         return $rows;

@@ -2,7 +2,7 @@
 
 namespace AntispamBundle\Services;
 
-use Ddeboer\Imap\Message;
+use Ddeboer\Imap\MessageInterface;
 
 /**
  * Analyses message headers for classic spam signals:
@@ -31,11 +31,11 @@ class HeaderAnalyzer
     }
 
     /**
-     * Analyse Ddeboer\Imap\Message headers.
+     * Analyse Ddeboer\Imap message headers.
      *
      * @return array ['score' => int, 'reasons' => [['rule'=>..,'score'=>..], ...]]
      */
-    public function analyzeImap(Message $msg)
+    public function analyzeImap(MessageInterface $msg)
     {
         $headers = [];
         try {
@@ -45,7 +45,7 @@ class HeaderAnalyzer
         } catch (\Throwable $e) { $headers['authentication-results'] = ''; }
 
         try { $headers['received-spf'] = (string)$msg->getHeaders()->get('received-spf'); } catch (\Throwable $e) {}
-        try { $headers['message-id'] = (string)$msg->getHeaders()->get('message-id'); } catch (\Throwable $e) {}
+        try { $headers['message-id'] = (string)$msg->getHeaders()->get('message_id'); } catch (\Throwable $e) {}
         try { $headers['subject'] = (string)$msg->getHeaders()->get('subject'); } catch (\Throwable $e) {}
 
         try {

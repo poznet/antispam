@@ -1,39 +1,27 @@
 <?php
-/**
- * Created by PhpStorm.
- * User: joseph
- * Date: 17.06.16
- * Time: 23:42
- */
 
 namespace AntispamBundle\EventListener\Message;
 
-
 use AntispamBundle\Event\MessageEvent;
 use AntispamBundle\Services\MessageService;
-use Ddeboer\Imap\Exception\Exception;
-use Doctrine\ORM\EntityManager;
 
+/**
+ * Stops the pipeline for messages already processed by a previous run.
+ */
 class CheckIfIsAlreadyChecked
 {
-
     private $ms;
 
     public function __construct(MessageService $ms)
     {
-        $this->ms=$ms;
+        $this->ms = $ms;
     }
 
-    /**
-     * @param MessageEvent $event
-     */
-    public function check(MessageEvent $event){
-        $msg=$event->getMessage();
-        if($this->ms->isChecked($msg)) {
+    public function check(MessageEvent $event)
+    {
+        if ($this->ms->isChecked($event->getMessage())) {
             $event->setCheckedbefore(true);
             $event->stopPropagation();
         }
-
     }
-
 }

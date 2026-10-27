@@ -2,11 +2,11 @@
 
 namespace AntispamBundle\EventListener\Message;
 
+use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Event\MessageEvent;
 use AntispamBundle\Services\MessageService;
 use AntispamBundle\Services\PatternMatcher;
 use AntispamBundle\Services\ScoringService;
-use Ddeboer\Imap\Exception\Exception;
 use Doctrine\ORM\EntityManagerInterface;
 
 class CheckEmailBlacklist
@@ -17,7 +17,7 @@ class CheckEmailBlacklist
     /** @var array<string, array> rules cached per account email for the lifetime of this listener */
     private $rulesCache = [];
 
-    public function __construct(EntityManagerInterface $em, MessageService $ms, ScoringService $scoring = null)
+    public function __construct(EntityManagerInterface $em, MessageService $ms, ?ScoringService $scoring = null)
     {
         $this->em = $em;
         $this->ms = $ms;
@@ -33,8 +33,6 @@ class CheckEmailBlacklist
                 $msg->getHeaders()->get('sender')[0]->mailbox
                 . '@' . $msg->getHeaders()->get('sender')[0]->host
             );
-        } catch (Exception $e) {
-            return;
         } catch (\Throwable $e) {
             return;
         }
@@ -42,7 +40,7 @@ class CheckEmailBlacklist
 
         $cacheKey = (string)$event->getEmail();
         if (!isset($this->rulesCache[$cacheKey])) {
-            $this->rulesCache[$cacheKey] = $this->em->getRepository('AntispamBundle:EmailBlacklist')
+            $this->rulesCache[$cacheKey] = $this->em->getRepository(EmailBlacklist::class)
                 ->findBy(['email' => $event->getEmail()]);
         }
         $rules = $this->rulesCache[$cacheKey];
@@ -57,7 +55,7 @@ class CheckEmailBlacklist
 
         if ($this->scoring && $this->scoring->isScoringEnabled()) {
             $event->setSpamscore($event->getSpamscore() + $match->getScore());
-            CheckHeaders::addReasons($event, [[
+            $event->addReasons([[
                 'rule' => 'email_blacklist:' . $match->getBlacklistemail() . ' (' . $match->getPatternType() . ')',
                 'score' => $match->getScore(),
             ]]);

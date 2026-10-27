@@ -3,66 +3,59 @@ set -e
 
 APP_DIR=/var/www/html
 
-: "${SYMFONY_ENV:=prod}"
+# SYMFONY_ENV is the pre-Symfony-7 name, still honoured.
+: "${APP_ENV:=${SYMFONY_ENV:-prod}}"
 : "${DATABASE_HOST:=db}"
 : "${DATABASE_PORT:=3306}"
 : "${DATABASE_NAME:=antispam}"
 : "${DATABASE_USER:=antispam}"
 : "${DATABASE_PASSWORD:=antispam}"
-: "${MAILER_TRANSPORT:=smtp}"
-: "${MAILER_HOST:=127.0.0.1}"
-: "${MAILER_USER:=}"
-: "${MAILER_PASSWORD:=}"
+: "${DATABASE_SERVER_VERSION:=10.6.0-MariaDB}"
 : "${APP_SECRET:=ChangeMeInProductionPlease}"
 : "${ADMIN_USER:=admin}"
-: "${ADMIN_PASSWORD:=admin}"
 : "${RUN_MIGRATIONS:=true}"
 
-export SYMFONY_ENV
-
-MAILER_USER_YAML="null"
-if [ -n "$MAILER_USER" ]; then
-    MAILER_USER_YAML="'${MAILER_USER}'"
-fi
-
-MAILER_PASSWORD_YAML="null"
-if [ -n "$MAILER_PASSWORD" ]; then
-    MAILER_PASSWORD_YAML="'${MAILER_PASSWORD}'"
-fi
-
-# Accept a pre-computed bcrypt hash (ADMIN_PASSWORD_HASH) or derive one from
-# ADMIN_PASSWORD. "%" characters are escaped to "%%" because Symfony parameter
-# resolution otherwise tries to expand them.
+# Accept a pre-computed hash (ADMIN_PASSWORD_HASH) or derive one from
+# ADMIN_PASSWORD.
 if [ -z "${ADMIN_PASSWORD_HASH:-}" ]; then
+    : "${ADMIN_PASSWORD:=admin}"
+    if [ "${ADMIN_PASSWORD}" = "admin" ]; then
+        echo "[entrypoint] WARNING: ADMIN_PASSWORD is set to 'admin' - change it before exposing the app!"
+    fi
     ADMIN_PASSWORD_HASH=$(ADMIN_PASSWORD="$ADMIN_PASSWORD" php -r 'echo password_hash(getenv("ADMIN_PASSWORD"), PASSWORD_BCRYPT);')
 fi
-ADMIN_PASSWORD_HASH_ESCAPED=$(printf '%s' "$ADMIN_PASSWORD_HASH" | sed 's/%/%%/g')
 
-# Generate parameters.yml from environment variables each startup
-cat > "${APP_DIR}/app/config/parameters.yml" <<EOF
-# Auto-generated from environment variables at container start.
-parameters:
-    database_host: '${DATABASE_HOST}'
-    database_port: ${DATABASE_PORT}
-    database_name: '${DATABASE_NAME}'
-    database_user: '${DATABASE_USER}'
-    database_password: '${DATABASE_PASSWORD}'
+# MAILER_DSN, or one built from the legacy MAILER_TRANSPORT/HOST/USER/PASSWORD
+# variables (Swiftmailer era).
+if [ -z "${MAILER_DSN:-}" ]; then
+    MAILER_DSN=$(php -r '
+        $host = (string)getenv("MAILER_HOST");
+        $transport = (string)getenv("MAILER_TRANSPORT") ?: "smtp";
+        if ($host === "" || $transport === "null") { echo "null://null"; exit; }
+        $user = (string)getenv("MAILER_USER");
+        $auth = $user === "" ? "" : rawurlencode($user) . ":" . rawurlencode((string)getenv("MAILER_PASSWORD")) . "@";
+        echo "smtp://" . $auth . $host . (strpos($host, ":") === false ? ":25" : "");
+    ')
+fi
 
-    mailer_transport: '${MAILER_TRANSPORT}'
-    mailer_host: '${MAILER_HOST}'
-    mailer_user: ${MAILER_USER_YAML}
-    mailer_password: ${MAILER_PASSWORD_YAML}
+export APP_ENV APP_SECRET ADMIN_USER ADMIN_PASSWORD_HASH MAILER_DSN \
+    DATABASE_HOST DATABASE_PORT DATABASE_NAME DATABASE_USER DATABASE_PASSWORD DATABASE_SERVER_VERSION
 
-    secret: '${APP_SECRET}'
-
-    admin_user: '${ADMIN_USER}'
-    admin_password_hash: '${ADMIN_PASSWORD_HASH_ESCAPED}'
-EOF
+# Freeze the configuration into .env.local.php: Apache/mod_php does not expose
+# the container environment to $_SERVER, and this also skips parsing .env on
+# every request.
+php -r '
+    $vars = ["APP_ENV", "APP_SECRET", "ADMIN_USER", "ADMIN_PASSWORD_HASH", "MAILER_DSN",
+        "DATABASE_HOST", "DATABASE_PORT", "DATABASE_NAME", "DATABASE_USER", "DATABASE_PASSWORD", "DATABASE_SERVER_VERSION"];
+    $env = ["APP_DEBUG" => getenv("APP_ENV") === "prod" ? "0" : "1"];
+    foreach ($vars as $v) { $env[$v] = (string)getenv($v); }
+    file_put_contents($argv[1], "<?php\n\n// Auto-generated from environment variables at container start.\nreturn " . var_export($env, true) . ";\n");
+' "${APP_DIR}/.env.local.php"
 
 # Wait for the database (max ~60s)
 echo "[entrypoint] Waiting for MySQL at ${DATABASE_HOST}:${DATABASE_PORT}..."
 i=0
-until php -r "new PDO('mysql:host=${DATABASE_HOST};port=${DATABASE_PORT}', '${DATABASE_USER}', '${DATABASE_PASSWORD}');" >/dev/null 2>&1; do
+until php -r 'new PDO("mysql:host=" . getenv("DATABASE_HOST") . ";port=" . getenv("DATABASE_PORT"), getenv("DATABASE_USER"), getenv("DATABASE_PASSWORD"));' >/dev/null 2>&1; do
     i=$((i+1))
     if [ "$i" -ge 30 ]; then
         echo "[entrypoint] WARN: database not reachable after $i attempts, continuing anyway"
@@ -71,29 +64,22 @@ until php -r "new PDO('mysql:host=${DATABASE_HOST};port=${DATABASE_PORT}', '${DA
     sleep 2
 done
 
-# Make sure cache/log dirs are writable
-mkdir -p "${APP_DIR}/app/cache" "${APP_DIR}/app/logs"
-chown -R www-data:www-data "${APP_DIR}/app/cache" "${APP_DIR}/app/logs"
+mkdir -p "${APP_DIR}/var/cache" "${APP_DIR}/var/log" "${APP_DIR}/var/data"
 
-# Warmup cache and install bundle assets
-php "${APP_DIR}/bin/console" cache:clear  --env="${SYMFONY_ENV}" --no-debug || true
-php "${APP_DIR}/bin/console" cache:warmup --env="${SYMFONY_ENV}" --no-debug || true
-php "${APP_DIR}/bin/console" assets:install "${APP_DIR}/web" --symlink --relative --env="${SYMFONY_ENV}" || true
+# Rebuild the cache for the current configuration
+php "${APP_DIR}/bin/console" cache:clear --no-debug || true
 
 # Create schema on first boot / keep it in sync
 if [ "${RUN_MIGRATIONS}" = "true" ]; then
-    php "${APP_DIR}/bin/console" doctrine:database:create --if-not-exists --env="${SYMFONY_ENV}" || true
-    php "${APP_DIR}/bin/console" doctrine:schema:update --force --env="${SYMFONY_ENV}" || true
+    php "${APP_DIR}/bin/console" doctrine:database:create --if-not-exists || true
+    php "${APP_DIR}/bin/console" doctrine:schema:update --force || true
 fi
 
-chown -R www-data:www-data "${APP_DIR}/app/cache" "${APP_DIR}/app/logs"
+chown -R www-data:www-data "${APP_DIR}/var"
 
-# Warn loudly if the operator left the defaults in place
+# Warn loudly if the operator left the default secret in place
 if [ "${APP_SECRET}" = "ChangeMeInProductionPlease" ]; then
     echo "[entrypoint] WARNING: APP_SECRET is using the default value - set a strong random secret!"
-fi
-if [ "${ADMIN_PASSWORD}" = "admin" ]; then
-    echo "[entrypoint] WARNING: ADMIN_PASSWORD is set to 'admin' - change it before exposing the app!"
 fi
 
 exec "$@"

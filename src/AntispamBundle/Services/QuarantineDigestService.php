@@ -2,7 +2,9 @@
 
 namespace AntispamBundle\Services;
 
-use Poznet\ConfigBundle\Service\ConfigService;
+use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Mime\Address;
+use Symfony\Component\Mime\Email;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Twig\Environment;
 
@@ -29,7 +31,7 @@ class QuarantineDigestService
         QuarantineService $quarantine,
         DigestTokenService $tokens,
         Environment $twig,
-        \Swift_Mailer $mailer,
+        MailerInterface $mailer,
         ConfigService $config,
         UrlGeneratorInterface $router
     ) {
@@ -91,7 +93,7 @@ class QuarantineDigestService
             $errors[] = 'Brak lub nieprawidłowy adres nadawcy.';
         }
         if ($this->tokens->usesDefaultSecret()) {
-            $errors[] = 'APP_SECRET ma wartość domyślną, więc linki w raporcie dałoby się podrobić. Ustaw losowy APP_SECRET (secret w parameters.yml).';
+            $errors[] = 'APP_SECRET ma wartość domyślną, więc linki w raporcie dałoby się podrobić. Ustaw losowy APP_SECRET (zmienna środowiskowa).';
         }
         return $errors;
     }
@@ -150,7 +152,7 @@ class QuarantineDigestService
     }
 
     /**
-     * Send one digest. Returns the number of accepted recipients (0 or 1).
+     * Send one digest. Returns the number of accepted recipients (1).
      */
     public function send(array $digest)
     {
@@ -158,15 +160,19 @@ class QuarantineDigestService
         if (!filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
             throw new \RuntimeException(sprintf('Mailbox %s has no valid digest recipient', $digest['mailbox']['key']));
         }
-        $message = (new \Swift_Message(sprintf('Kwarantanna: %d %s do przejrzenia', $digest['total'], self::pluralMessages($digest['total']))))
-            ->setFrom([$this->getFromEmail() => $this->getFromName()])
-            ->setTo($recipient)
-            ->setBody($this->renderHtml($digest), 'text/html')
-            ->addPart($this->renderText($digest), 'text/plain');
+        $message = (new Email())
+            ->subject(sprintf('Kwarantanna: %d %s do przejrzenia', $digest['total'], self::pluralMessages($digest['total'])))
+            ->from(new Address($this->getFromEmail(), $this->getFromName()))
+            ->to($recipient)
+            ->html($this->renderHtml($digest))
+            ->text($this->renderText($digest));
         // Lets mail filters / rules recognise the digest itself.
         $message->getHeaders()->addTextHeader('X-Antispam-Digest', '1');
 
-        return $this->mailer->send($message);
+        // Throws on a transport failure; sendAll() reports it as an error.
+        $this->mailer->send($message);
+
+        return 1;
     }
 
     /**

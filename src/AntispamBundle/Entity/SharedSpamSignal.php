@@ -2,6 +2,7 @@
 
 namespace AntispamBundle\Entity;
 
+use AntispamBundle\Repository\SharedSpamSignalRepository;
 use Doctrine\ORM\Mapping as ORM;
 
 /**
@@ -20,15 +21,12 @@ use Doctrine\ORM\Mapping as ORM;
  * from a remote hub ("remote"). `reports` accumulates how many times a signal
  * has been seen so a scoring listener can require corroboration before trusting
  * it.
- *
- * @ORM\Table(name="antispam_shared_spam_signal", uniqueConstraints={
- *   @ORM\UniqueConstraint(name="uniq_type_hash", columns={"type", "hash"})
- * }, indexes={
- *   @ORM\Index(name="idx_updated_at", columns={"updated_at"}),
- *   @ORM\Index(name="idx_origin", columns={"origin"})
- * })
- * @ORM\Entity(repositoryClass="AntispamBundle\Repository\SharedSpamSignalRepository")
  */
+#[ORM\Entity(repositoryClass: SharedSpamSignalRepository::class)]
+#[ORM\Table(name: 'antispam_shared_spam_signal')]
+#[ORM\UniqueConstraint(name: 'uniq_type_hash', columns: ['type', 'hash'])]
+#[ORM\Index(name: 'idx_updated_at', columns: ['updated_at'])]
+#[ORM\Index(name: 'idx_origin', columns: ['origin'])]
 class SharedSpamSignal
 {
     const TYPE_SENDER = 'sender';
@@ -37,45 +35,29 @@ class SharedSpamSignal
     const ORIGIN_LOCAL = 'local';
     const ORIGIN_REMOTE = 'remote';
 
-    /**
-     * @ORM\Column(name="id", type="integer")
-     * @ORM\Id
-     * @ORM\GeneratedValue(strategy="AUTO")
-     */
+    #[ORM\Column(name: 'id', type: 'integer')]
+    #[ORM\Id]
+    #[ORM\GeneratedValue(strategy: 'AUTO')]
     private $id;
 
-    /**
-     * @ORM\Column(name="type", type="string", length=16)
-     */
+    #[ORM\Column(name: 'type', type: 'string', length: 16)]
     private $type;
 
-    /**
-     * Lower-case hex SHA-256 (64 chars).
-     *
-     * @ORM\Column(name="hash", type="string", length=64)
-     */
+    /** Lower-case hex SHA-256 (64 chars). */
+    #[ORM\Column(name: 'hash', type: 'string', length: 64)]
     private $hash;
 
-    /**
-     * @ORM\Column(name="origin", type="string", length=16)
-     */
+    #[ORM\Column(name: 'origin', type: 'string', length: 16)]
     private $origin = self::ORIGIN_LOCAL;
 
-    /**
-     * How many observations this signal has accumulated (local + remote).
-     *
-     * @ORM\Column(name="reports", type="integer")
-     */
+    /** How many observations this signal has accumulated (local + remote). */
+    #[ORM\Column(name: 'reports', type: 'integer')]
     private $reports = 1;
 
-    /**
-     * @ORM\Column(name="created_at", type="datetime")
-     */
+    #[ORM\Column(name: 'created_at', type: 'datetime')]
     private $createdAt;
 
-    /**
-     * @ORM\Column(name="updated_at", type="datetime")
-     */
+    #[ORM\Column(name: 'updated_at', type: 'datetime')]
     private $updatedAt;
 
     public function __construct()

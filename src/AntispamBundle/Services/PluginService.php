@@ -7,12 +7,12 @@ use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Entity\EmailWhitelist;
 use AntispamBundle\Entity\SharedSpamSignal;
 use Doctrine\ORM\EntityManagerInterface;
-use Poznet\ConfigBundle\Service\ConfigService;
 use Psr\Cache\CacheItemPoolInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 /**
- * Server side of the Thunderbird plugin: plugin settings (plugin.* keys in
- * ConfigBundle), stateless login tokens, per-IP rate limiting and the
+ * Server side of the Thunderbird plugin: plugin settings (plugin.* keys in the
+ * config table), stateless login tokens, per-IP rate limiting and the
  * "learning" part — turning spam / not-spam reports from users into shared
  * feed fingerprints and per-account e-mail rules.
  *
@@ -39,7 +39,7 @@ class PluginService
     private $feed;
     private $secret;
 
-    public function __construct(EntityManagerInterface $em, CacheItemPoolInterface $cache, SpamSignalService $feed, $secret, ConfigService $config = null)
+    public function __construct(EntityManagerInterface $em, CacheItemPoolInterface $cache, SpamSignalService $feed, #[Autowire('%kernel.secret%')] string $secret, ?ConfigService $config = null)
     {
         $this->em = $em;
         $this->config = $config;
@@ -188,7 +188,7 @@ class PluginService
      *
      * @return array{verdict:string, sender:string, signals:int, rules:string[]}
      */
-    public function learn($raw, $verdict, Account $account = null)
+    public function learn($raw, $verdict, ?Account $account = null)
     {
         $msg = new RawMessageParser($raw);
         $sender = $msg->getFromAddress();

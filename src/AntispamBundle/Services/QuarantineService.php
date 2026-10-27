@@ -2,11 +2,10 @@
 
 namespace AntispamBundle\Services;
 
+use AntispamBundle\Entity\SpamScoreLog;
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\EmailWhitelist;
 use Doctrine\ORM\EntityManagerInterface;
-use Poznet\ConfigBundle\Service\ConfigService;
-use Psr\Container\ContainerInterface;
 
 /**
  * One API over both quarantine back-ends:
@@ -26,14 +25,24 @@ class QuarantineService
     private $em;
     private $config;
     private $ssh;
-    private $imap;
+    private $connection;
+    private $inbox;
+    private $messages;
 
-    public function __construct(EntityManagerInterface $em, ConfigService $config, SshService $ssh, ContainerInterface $imap)
-    {
+    public function __construct(
+        EntityManagerInterface $em,
+        ConfigService $config,
+        SshService $ssh,
+        ConnectionService $connection,
+        InboxService $inbox,
+        MessageService $messages
+    ) {
         $this->em = $em;
         $this->config = $config;
         $this->ssh = $ssh;
-        $this->imap = $imap;
+        $this->connection = $connection;
+        $this->inbox = $inbox;
+        $this->messages = $messages;
     }
 
     /**
@@ -49,7 +58,7 @@ class QuarantineService
             $recipient = trim((string)$this->config->get('digest.imap_recipient')) ?: $email;
             $out[] = ['key' => self::IMAP_KEY, 'label' => 'IMAP: ' . ($email ?: $this->config->get('login')), 'account_email' => $email, 'recipient' => $recipient];
         }
-        foreach ($this->em->getRepository('AntispamBundle:Account')->findBy(['connectionType' => Account::CONNECTION_SSH]) as $account) {
+        foreach ($this->em->getRepository(Account::class)->findBy(['connectionType' => Account::CONNECTION_SSH]) as $account) {
             if (!$account->getAgentDeployed()) {
                 continue;
             }
@@ -117,11 +126,11 @@ class QuarantineService
 
         if ($key === self::IMAP_KEY) {
             try {
-                $connection = $this->imap->get('antispam.connection')->getConnection();
-                $msg = $connection->getMailbox($this->imap->get('antispam.inbox')->getQuarantineFolderName())->getMessage((int)$id);
+                $connection = $this->connection->getConnection();
+                $msg = $connection->getMailbox($this->inbox->getQuarantineFolderName())->getMessage((int)$id);
                 $sender = $msg->getFrom() ? strtolower((string)$msg->getFrom()->getAddress()) : '';
                 // Released mail must not be quarantined again on the next scan.
-                $this->imap->get('antispam.message')->setAsChecked($msg);
+                $this->messages->setAsChecked($msg);
                 $msg->move($connection->getMailbox('INBOX'));
                 $connection->expunge();
             } catch (\Throwable $e) {
@@ -158,8 +167,8 @@ class QuarantineService
         }
         if ($key === self::IMAP_KEY) {
             try {
-                $connection = $this->imap->get('antispam.connection')->getConnection();
-                $msg = $connection->getMailbox($this->imap->get('antispam.inbox')->getQuarantineFolderName())->getMessage((int)$id);
+                $connection = $this->connection->getConnection();
+                $msg = $connection->getMailbox($this->inbox->getQuarantineFolderName())->getMessage((int)$id);
                 $sender = $msg->getFrom() ? strtolower((string)$msg->getFrom()->getAddress()) : '';
                 $msg->delete();
                 $connection->expunge();
@@ -182,7 +191,7 @@ class QuarantineService
      */
     public function whitelistSender($accountEmail, $sender)
     {
-        $repo = $this->em->getRepository('AntispamBundle:EmailWhitelist');
+        $repo = $this->em->getRepository(EmailWhitelist::class);
         if ($repo->findOneBy(['email' => $accountEmail, 'whitelistemail' => $sender])) {
             return false;
         }
@@ -197,7 +206,7 @@ class QuarantineService
 
     private function listImap(?\DateTimeInterface $since = null, $limit = 200)
     {
-        $inbox = $this->imap->get('antispam.inbox');
+        $inbox = $this->inbox;
         $items = [];
         foreach ($inbox->getInbox($inbox->getQuarantineFolderName()) as $msg) {
             try {
@@ -231,7 +240,7 @@ class QuarantineService
      */
     private function attachImapScores(array $items)
     {
-        $repo = $this->em->getRepository('AntispamBundle:SpamScoreLog');
+        $repo = $this->em->getRepository(SpamScoreLog::class);
         foreach ($items as &$item) {
             $log = $repo->findOneBy(
                 ['sender' => $item['from'], 'subject' => mb_substr($item['subject'], 0, 500, 'UTF-8'), 'decision' => 'quarantine'],
@@ -262,7 +271,7 @@ class QuarantineService
         if (!preg_match('/^ssh-(\d+)$/', (string)$key, $m)) {
             throw new \InvalidArgumentException('Unknown mailbox: ' . $key);
         }
-        $account = $this->em->getRepository('AntispamBundle:Account')->find((int)$m[1]);
+        $account = $this->em->getRepository(Account::class)->find((int)$m[1]);
         if (!$account || !$account->isSsh()) {
             throw new \InvalidArgumentException('Unknown mailbox: ' . $key);
         }

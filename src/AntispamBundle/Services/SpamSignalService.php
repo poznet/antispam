@@ -3,13 +3,12 @@
 namespace AntispamBundle\Services;
 
 use AntispamBundle\Entity\SharedSpamSignal;
-use Ddeboer\Imap\Message;
+use Ddeboer\Imap\MessageInterface;
 use Doctrine\ORM\EntityManagerInterface;
-use Poznet\ConfigBundle\Service\ConfigService;
 
 /**
  * Builds and stores the privacy-preserving fingerprints used by the shared
- * spam feed, and exposes the feed configuration (feed.* keys in ConfigBundle).
+ * spam feed, and exposes the feed configuration (feed.* keys in the config table).
  *
  * Two signals are produced per message:
  *   - sender: SHA-256 of the normalized From address
@@ -33,7 +32,7 @@ class SpamSignalService
     private $em;
     private $config;
 
-    public function __construct(EntityManagerInterface $em, ConfigService $config = null)
+    public function __construct(EntityManagerInterface $em, ?ConfigService $config = null)
     {
         $this->em = $em;
         $this->config = $config;
@@ -104,7 +103,7 @@ class SpamSignalService
      *
      * @return array<int, array{type:string, hash:string}>
      */
-    public function signalsForMessage(Message $message)
+    public function signalsForMessage(MessageInterface $message)
     {
         $sender = null;
         try {
@@ -264,7 +263,7 @@ class SpamSignalService
      *
      * @return array<int, array{type:string, reports:int}>
      */
-    public function matchMessage(Message $message)
+    public function matchMessage(MessageInterface $message)
     {
         return $this->matchSignals($this->signalsForMessage($message));
     }

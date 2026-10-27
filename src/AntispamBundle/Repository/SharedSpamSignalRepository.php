@@ -67,7 +67,7 @@ class SharedSpamSignalRepository extends EntityRepository
         return $this->createQueryBuilder('s')
             ->andWhere('s.origin = :origin')->setParameter('origin', SharedSpamSignal::ORIGIN_LOCAL)
             ->andWhere('s.id > :afterId')->setParameter('afterId', (int)$afterId)
-            ->orderBy('s.id', 'ASC')
+            ->orderBy('s.id', \SortDirection::Ascending)
             ->setMaxResults((int)$limit)
             ->getQuery()->getResult();
     }
@@ -76,11 +76,11 @@ class SharedSpamSignalRepository extends EntityRepository
      * Signals updated after $since, for serving an incremental pull. Ordered by
      * updatedAt so clients can checkpoint on the response's "now" timestamp.
      */
-    public function findUpdatedSince(\DateTime $since = null, $limit = 5000)
+    public function findUpdatedSince(?\DateTime $since = null, $limit = 5000)
     {
         $qb = $this->createQueryBuilder('s')
-            ->orderBy('s.updatedAt', 'ASC')
-            ->addOrderBy('s.id', 'ASC')
+            ->orderBy('s.updatedAt', \SortDirection::Ascending)
+            ->addOrderBy('s.id', \SortDirection::Ascending)
             ->setMaxResults((int)$limit);
         if ($since) {
             $qb->andWhere('s.updatedAt > :since')->setParameter('since', $since);

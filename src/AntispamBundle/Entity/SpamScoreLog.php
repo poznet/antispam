@@ -2,18 +2,17 @@
 
 namespace AntispamBundle\Entity;
 
+use AntispamBundle\Repository\SpamScoreLogRepository;
 use Doctrine\ORM\Mapping as ORM;
 
 /**
  * Per-message scoring log: what contributed to the final score and what the
  * engine decided (ham / quarantine / spam).
- *
- * @ORM\Table(name="antispam_spam_score_log", indexes={
- *   @ORM\Index(name="idx_account_email", columns={"account_email"}),
- *   @ORM\Index(name="idx_scored_at", columns={"scored_at"})
- * })
- * @ORM\Entity(repositoryClass="AntispamBundle\Repository\SpamScoreLogRepository")
  */
+#[ORM\Entity(repositoryClass: SpamScoreLogRepository::class)]
+#[ORM\Table(name: 'antispam_spam_score_log')]
+#[ORM\Index(name: 'idx_account_email', columns: ['account_email'])]
+#[ORM\Index(name: 'idx_scored_at', columns: ['scored_at'])]
 class SpamScoreLog
 {
     const DECISION_HAM = 'ham';
@@ -21,48 +20,31 @@ class SpamScoreLog
     const DECISION_SPAM = 'spam';
     const DECISION_WHITELISTED = 'whitelisted';
 
-    /**
-     * @ORM\Column(name="id", type="integer")
-     * @ORM\Id
-     * @ORM\GeneratedValue(strategy="AUTO")
-     */
+    #[ORM\Column(name: 'id', type: 'integer')]
+    #[ORM\Id]
+    #[ORM\GeneratedValue(strategy: 'AUTO')]
     private $id;
 
-    /**
-     * @ORM\Column(name="account_email", type="string", length=255, nullable=true)
-     */
+    #[ORM\Column(name: 'account_email', type: 'string', length: 255, nullable: true)]
     private $accountEmail;
 
-    /**
-     * @ORM\Column(name="sender", type="string", length=255, nullable=true)
-     */
+    #[ORM\Column(name: 'sender', type: 'string', length: 255, nullable: true)]
     private $sender;
 
-    /**
-     * @ORM\Column(name="subject", type="string", length=512, nullable=true)
-     */
+    #[ORM\Column(name: 'subject', type: 'string', length: 512, nullable: true)]
     private $subject;
 
-    /**
-     * @ORM\Column(name="score", type="integer")
-     */
+    #[ORM\Column(name: 'score', type: 'integer')]
     private $score = 0;
 
-    /**
-     * @ORM\Column(name="decision", type="string", length=16)
-     */
+    #[ORM\Column(name: 'decision', type: 'string', length: 16)]
     private $decision = self::DECISION_HAM;
 
-    /**
-     * JSON array of {rule: string, score: int} entries.
-     *
-     * @ORM\Column(name="reasons", type="text", nullable=true)
-     */
+    /** JSON array of {rule: string, score: int} entries. */
+    #[ORM\Column(name: 'reasons', type: 'text', nullable: true)]
     private $reasons;
 
-    /**
-     * @ORM\Column(name="scored_at", type="datetime")
-     */
+    #[ORM\Column(name: 'scored_at', type: 'datetime')]
     private $scoredAt;
 
     public function __construct()

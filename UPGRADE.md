@@ -1,292 +1,104 @@
-# Upgrade do Symfony 4.4 LTS
+# Upgrade: Symfony 4.4 → Symfony 7.4 LTS (PHP 8.2)
 
-## Przegląd zmian
+Aplikacja działa teraz na **Symfony 7.4 LTS** (poprawki błędów do 11/2028,
+bezpieczeństwa do 11/2029) i wymaga **PHP 8.2 lub 8.3** (PHP 8.4 nie ma już
+`ext-imap` w rdzeniu).
 
-Aplikacja Antispam została zaktualizowana z **Symfony 2.8** do **Symfony 4.4 LTS**.
+## Zależności
 
-### Wymagania systemowe
+| Było | Jest |
+| --- | --- |
+| `symfony/symfony` 4.4 (cały framework) | pojedyncze komponenty `symfony/*` 7.4 |
+| `doctrine/orm` 2.x, adnotacje | `doctrine/orm` 3.x + `doctrine/dbal` 4.x, atrybuty PHP 8 |
+| `symfony/swiftmailer-bundle` (porzucony) | `symfony/mailer` |
+| `sensio/framework-extra-bundle` (porzucony) | atrybuty `#[Route]` / `#[Template]` z Symfony |
+| `poznet/configbundle` (dev-master, Symfony 2) | `AntispamBundle\Services\ConfigService` + encja `Config` w aplikacji (ta sama tabela `config`, ten sam format danych) |
+| `incenteev/composer-parameter-handler`, `parameters.yml` | zmienne środowiskowe (`.env`, `.env.local`) |
+| `symfony/maker-bundle`, `bower.json`, `.travis.yml`, `app/check.php`, `SymfonyRequirements.php` | usunięte |
+| `symfony/phpunit-bridge` | `phpunit/phpunit` 11 |
+| `ddeboer/imap` ^1.0 | `ddeboer/imap` ^1.19 (ta sama gałąź 1.x) |
 
-#### Przed aktualizacją (Symfony 2.8)
-- PHP >= 5.3.9
-- MySQL 5.x
+## Struktura katalogów
 
-#### Po aktualizacji (Symfony 4.4)
-- **PHP >= 7.1.3** (zalecane: PHP 7.2, 7.3 lub 7.4)
-- MySQL 5.7+ / MariaDB 10.2+
-- ext-iconv
+| Było | Jest |
+| --- | --- |
+| `app/AppKernel.php`, `app/autoload.php` | `src/Kernel.php` (MicroKernel) |
+| `app/config/*.yml` | `config/packages/*.yaml`, `config/routes.yaml`, `config/services.yaml` |
+| `src/AntispamBundle/Resources/config/services*.yml` | `config/services.yaml` (autowiring, jawne priorytety listenerów) |
+| `app/console` | `bin/console` |
+| `web/` (`app.php`, `app_dev.php`) | `public/` (`index.php`) |
+| `app/cache`, `app/logs` | `var/cache`, `var/log` |
+| `app/Data/checked` | `var/data/checked` |
 
-## Główne zmiany
+## Konfiguracja (`parameters.yml` → zmienne środowiskowe)
 
-### 1. Zaktualizowane zależności
+| `parameters.yml` | Zmienna |
+| --- | --- |
+| `secret` | `APP_SECRET` |
+| `database_host` / `_port` / `_name` / `_user` / `_password` | `DATABASE_HOST` / `_PORT` / `_NAME` / `_USER` / `_PASSWORD` |
+| — | `DATABASE_SERVER_VERSION` (np. `10.6.0-MariaDB`, `8.0.36`) |
+| `mailer_transport` / `_host` / `_user` / `_password` | `MAILER_DSN`, np. `smtp://user:pass@smtp.example.com:587` |
+| `admin_user` / `admin_password_hash` | `ADMIN_USER` / `ADMIN_PASSWORD_HASH` |
+| `SYMFONY_ENV` | `APP_ENV` |
 
-#### Framework
-- `symfony/symfony`: `2.8.*` → `4.4.*`
-- `doctrine/orm`: `^2.4.8` → `^2.6`
-- `doctrine/doctrine-bundle`: `~1.4` → `^1.12|^2.0`
+Domyślne wartości są w `.env` (w repozytorium); lokalne nadpisania w
+`.env.local` (poza repozytorium). Hash hasła admina:
+`php bin/console security:hash-password`.
 
-#### Bundle
-- `symfony/swiftmailer-bundle`: `~2.3` → `^3.4`
-- `symfony/monolog-bundle`: `~2.4` → `^3.5`
-- `sensio/framework-extra-bundle`: `^3.0.2` → `^5.5`
-- `ddeboer/imap`: `^0.5.2` → `^1.0` (breaking changes - sprawdź dokumentację)
+W Dockerze nic nie trzeba zmieniać ręcznie: entrypoint nadal przyjmuje
+`ADMIN_PASSWORD`, honoruje stare `SYMFONY_ENV` i składa `MAILER_DSN` ze starych
+`MAILER_HOST` / `MAILER_USER` / `MAILER_PASSWORD`, jeśli `MAILER_DSN` nie jest
+ustawione.
 
-#### Usunięte bundle
-- ❌ `symfony/assetic-bundle` - nie jest już wspierane w Symfony 4.x
-- ❌ `sensio/distribution-bundle` - zastąpione przez Symfony Flex
-- ❌ `sensio/generator-bundle` - zastąpione przez `symfony/maker-bundle`
-
-#### Nowe bundle
-- ✅ `symfony/asset` - zarządzanie assetami
-- ✅ `symfony/dotenv` - zarządzanie zmiennymi środowiskowymi
-- ✅ `symfony/maker-bundle` - generator kodu (dev)
-
-### 2. Zmiany w kodzie
-
-#### Komendy CLI
-
-**Przed (Symfony 2.8):**
-```php
-use Symfony\Bundle\FrameworkBundle\Command\ContainerAwareCommand;
-
-class AntispamGoCommand extends ContainerAwareCommand
-{
-    protected function execute(InputInterface $input, OutputInterface $output)
-    {
-        $service = $this->getContainer()->get('service_name');
-        // ...
-    }
-}
-```
-
-**Po (Symfony 4.4):**
-```php
-use Symfony\Component\Console\Command\Command;
-
-class AntispamGoCommand extends Command
-{
-    protected static $defaultName = 'antispam:go';
-
-    private $service;
-
-    public function __construct(ServiceInterface $service)
-    {
-        $this->service = $service;
-        parent::__construct();
-    }
-
-    protected function execute(InputInterface $input, OutputInterface $output): int
-    {
-        // ...
-        return Command::SUCCESS; // lub Command::FAILURE
-    }
-}
-```
-
-**Kluczowe zmiany:**
-- Dependency Injection zamiast Service Locator
-- Metoda `execute()` zwraca `int` (0 = sukces, >0 = błąd)
-- Statyczna właściwość `$defaultName` do definiowania nazwy komendy
-- Używanie `Command::SUCCESS` i `Command::FAILURE`
-
-#### Event Dispatcher
-
-**Przed:**
-```php
-$dispatcher->dispatch('event.name', $event);
-```
-
-**Po:**
-```php
-$dispatcher->dispatch($event, 'event.name');
-```
-
-Kolejność argumentów została odwrócona w Symfony 4.4.
-
-#### AppKernel.php
-
-- Używanie składni array `[]` zamiast `array()`
-- Usunięto AsseticBundle, SensioDistributionBundle, SensioGeneratorBundle
-- Dodano MakerBundle (dev)
-
-### 3. Zmiany w konfiguracji
-
-#### config.yml
-
-**Usunięto:**
-```yaml
-framework:
-    templating:
-        engines: ['twig']
-
-assetic:
-    debug: '%kernel.debug%'
-    use_controller: '%kernel.debug%'
-    filters:
-        cssrewrite: ~
-```
-
-**Dodano:**
-```yaml
-framework:
-    router:
-        utf8: true
-    session:
-        cookie_secure: auto
-        cookie_samesite: lax
-    php_errors:
-        log: true
-```
-
-#### services.yml
-
-Dodano konfigurację dla komend z dependency injection:
-```yaml
-services:
-    _defaults:
-        autowire: false
-        autoconfigure: false
-        public: false
-
-    AntispamBundle\Command\AntispamGoCommand:
-        arguments:
-            - "@antispam.inbox"
-            - "@event_dispatcher"
-            - "@configuration"
-        tags: ['console.command']
-```
-
-### 4. Zmiany w Travis CI
-
-**Przed:**
-```yaml
-php:
-  - '5.5'
-
-before_script:
-  - php app/console doctrine:database:create --env=test
-```
-
-**Po:**
-```yaml
-php:
-  - '7.2'
-  - '7.3'
-  - '7.4'
-
-before_script:
-  - php bin/console doctrine:database:create --env=test
-```
-
-- Zmiana `app/console` → `bin/console`
-- Testy na PHP 7.2, 7.3, 7.4
-
-## Instrukcje aktualizacji
-
-### 1. Wymagania przed aktualizacją
+## Kroki aktualizacji (bez Dockera)
 
 ```bash
-# Sprawdź wersję PHP
+# 1. PHP 8.2/8.3 z rozszerzeniami imap, pdo_mysql, intl, zip, curl
 php -v
 
-# Powinno być >= 7.1.3, zalecane 7.2+
-```
+# 2. Przenieś ustawienia z app/config/parameters.yml do .env.local (tabela wyżej)
 
-### 2. Aktualizacja zależności
+# 3. Zależności (czyści cache i publikuje assety do public/bundles)
+composer install --no-dev --optimize-autoloader
 
-```bash
-# Usuń vendor i cache
-rm -rf vendor/ app/cache/* app/logs/*
-
-# Zainstaluj nowe zależności
-composer install
-
-# Może być konieczne:
-composer update
-```
-
-### 3. Aktualizacja bazy danych
-
-```bash
-# Sprawdź zmiany w schemacie
+# 4. Schemat bazy - powinno być "Nothing to update"
 php bin/console doctrine:schema:update --dump-sql
-
-# Wykonaj aktualizację (jeśli potrzebna)
 php bin/console doctrine:schema:update --force
+
+# 5. Web serwer: document root -> public/
+# 6. Cron: ścieżki bin/console bez zmian (php bin/console antispam:...)
 ```
 
-### 4. Czyszczenie cache
+Opcjonalnie przenieś znaczniki sprawdzonych wiadomości IMAP, żeby nie były
+skanowane ponownie: `mv app/Data/checked var/data/checked`.
 
-```bash
-php bin/console cache:clear --env=prod
-php bin/console cache:clear --env=dev
-```
+## Docker / Coolify
 
-### 5. Sprawdzenie aplikacji
+- Obraz: `php:8.2-apache-bookworm`, document root `public/`.
+- Wolumeny: `app_cache` zastąpiony przez `app_data` (`var/data`), `app_logs`
+  wskazuje na `var/log`. Stare wolumeny można usunąć po wdrożeniu.
 
-```bash
-# Sprawdź konfigurację
-php bin/console antispam:check
+## Zmiany w kodzie
 
-# Uruchom testy
-./bin/phpunit -c app
-```
+- Kontrolery dziedziczą po `AbstractController`, serwisy są wstrzykiwane w
+  konstruktorze (zamiast `$this->get('...')`); stare identyfikatory serwisów
+  (`antispam.inbox`, `configuration`, …) zastąpiły nazwy klas.
+- Komendy używają `#[AsCommand]`.
+- `MessageEvent` ma jawne `addReasons()` / `getReasons()` (PHP 8.2 nie pozwala
+  już na dynamiczne właściwości).
+- `ConnectionService` łączy się z IMAP dopiero przy pierwszym użyciu.
+- Eksport reguł dla agenta jest w jednym miejscu: `AgentRulesExporter`.
 
-## Znane problemy i rozwiązania
+## Naprawione przy okazji błędy
 
-### 1. ddeboer/imap ^1.0
-
-Biblioteka `ddeboer/imap` została zaktualizowana z `^0.5.2` do `^1.0`. To **breaking change**.
-
-**Możliwe problemy:**
-- Zmienione API metod IMAP
-- Inne nazwy klas/metod
-
-**Rozwiązanie:**
-Sprawdź [dokumentację ddeboer/imap](https://github.com/ddeboer/imap) i dostosuj kod jeśli występują błędy.
-
-### 2. Brak AsseticBundle
-
-AsseticBundle nie jest już wspierane w Symfony 4.x.
-
-**Rozwiązania:**
-1. Używaj Webpack Encore (zalecane dla większych projektów)
-2. Zarządzaj assetami ręcznie przez `public/` directory
-3. Używaj CDN dla bibliotek JS/CSS
-
-### 3. Przestarzałe wywołania funkcji
-
-Jeśli widzisz błędy typu:
-```
-The "templating" service is deprecated
-```
-
-Zamień na Twig:
-```php
-// Przed
-$this->render('template.html.twig')
-
-// Po
-return $this->render('template.html.twig')
-```
-
-## Kompatybilność wsteczna
-
-Większość kodu pozostaje kompatybilna, ale należy zwrócić uwagę na:
-
-1. **Dependency Injection** - nie używaj `$this->getContainer()` w komendach
-2. **Event Dispatcher** - odwrócona kolejność argumentów
-3. **Zwracane wartości** - komendy muszą zwracać `int`
-4. **Assety** - zarządzanie bez AsseticBundle
-
-## Dodatkowe zasoby
-
-- [Symfony 2.8 → 3.0 Upgrade Guide](https://github.com/symfony/symfony/blob/3.4/UPGRADE-3.0.md)
-- [Symfony 3.4 → 4.0 Upgrade Guide](https://github.com/symfony/symfony/blob/4.4/UPGRADE-4.0.md)
-- [Symfony 4.4 Documentation](https://symfony.com/doc/4.4/index.html)
-
-## Wsparcie
-
-W razie problemów:
-1. Sprawdź logi: `app/logs/dev.log` lub `app/logs/prod.log`
-2. Uruchom diagnostykę: `php bin/console debug:container`
-3. Sprawdź routingi: `php bin/console debug:router`
+- „Zeruj liczniki” nic nie robiło (listenery nie były zarejestrowane) - teraz
+  zeruje liczniki wszystkich czterech list.
+- Wiadomości przeniesione do SPAM / kwarantanny / z powrotem do INBOX zostawały
+  w folderze źródłowym z flagą `\Deleted` (brak `expunge`) i były przetwarzane
+  ponownie przy każdym `antispam:go`.
+- Strony Spambox / Kwarantanna kończyły się błędem 500 przy niepustym folderze
+  (nadawca jako obiekt `EmailAddress`).
+- Każda wiadomość IMAP dostawała +2 pkt `missing_message_id` (zły klucz
+  nagłówka).
+- `antispam:check` przy błędnym haśle IMAP kończył się wyjątkiem zamiast
+  komunikatem.

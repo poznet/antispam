@@ -1,0 +1,75 @@
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    AntispamBundle\:
+        resource: '../src/AntispamBundle/'
+        exclude:
+            - '../src/AntispamBundle/AntispamBundle.php'
+            - '../src/AntispamBundle/{Entity,Event,Resources,Tests}/'
+            - '../src/AntispamBundle/EventListener/Message/AttachmentExtractorTrait.php'
+            - '../src/AntispamBundle/Services/{DomainHelper,PatternMatcher,RawMessageParser}.php'
+
+    # Config check (`antispam:check`)
+    AntispamBundle\EventListener\CheckConfig\CheckEmailData:
+        tags:
+            - { name: kernel.event_listener, event: antispam.check.config, method: checkEmail }
+            - { name: kernel.event_listener, event: antispam.check.config, method: checkLogin }
+            - { name: kernel.event_listener, event: antispam.check.config, method: checkPass }
+            - { name: kernel.event_listener, event: antispam.check.config, method: checkImap }
+            - { name: kernel.event_listener, event: antispam.check.config, method: tryToConnect, priority: -10 }
+
+    # Message pipeline (`antispam:go`, IMAP account scan).
+    # Priorities: higher = runs first. Whitelist short-circuits; scoring steps
+    # accumulate; final decision runs at the tail.
+    AntispamBundle\EventListener\Message\CheckIfIsAlreadyChecked:
+        tags: [{ name: kernel.event_listener, event: antispam.check.message, method: check, priority: 100000 }]
+
+    AntispamBundle\EventListener\Message\CheckWhitelist:
+        tags: [{ name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99999 }]
+
+    AntispamBundle\EventListener\Message\CheckEmailWhitelist:
+        tags: [{ name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99998 }]
+
+    AntispamBundle\EventListener\Message\CheckBlacklist:
+        tags: [{ name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99997 }]
+
+    AntispamBundle\EventListener\Message\CheckEmailBlacklist:
+        tags: [{ name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99996 }]
+
+    AntispamBundle\EventListener\Message\CheckHeaders:
+        tags: [{ name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99990 }]
+
+    AntispamBundle\EventListener\Message\CheckImpersonation:
+        tags: [{ name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99988 }]
+
+    AntispamBundle\EventListener\Message\CheckDnsbl:
+        tags: [{ name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99980 }]
+
+    AntispamBundle\EventListener\Message\CheckUrls:
+        tags: [{ name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99979 }]
+
+    AntispamBundle\EventListener\Message\CheckSharedFeed:
+        tags: [{ name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99978 }]
+
+    AntispamBundle\EventListener\Message\CheckAttachmentPolicy:
+        tags: [{ name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99976 }]
+
+    AntispamBundle\EventListener\Message\CheckAttachments:
+        tags: [{ name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99975 }]
+
+    AntispamBundle\EventListener\Message\CheckAttachmentsVirusTotal:
+        tags: [{ name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99973 }]
+
+    AntispamBundle\EventListener\Message\ApplyScoreDecision:
+        tags: [{ name: kernel.event_listener, event: antispam.check.message, method: decide, priority: 99970 }]
+
+    AntispamBundle\EventListener\Message\RecordSpamSignals:
+        tags: [{ name: kernel.event_listener, event: antispam.check.message, method: record, priority: 99965 }]
+
+    AntispamBundle\EventListener\Message\MoveToSpam:
+        tags: [{ name: kernel.event_listener, event: antispam.check.message, method: move, priority: 99960 }]
+
+    AntispamBundle\EventListener\Message\SetAsChecked:
+        tags: [{ name: kernel.event_listener, event: antispam.check.message, method: set, priority: -99999 }]

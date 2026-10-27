@@ -17,7 +17,7 @@ Antispam is a Symfony 4.4 web application for filtering spam from email accounts
 ## Connection Modes
 
 ### IMAP Mode
-- Connects to mail server via IMAP protocol (port 143)
+- Connects to mail server via IMAP protocol (port 993 / SSL by default, configurable)
 - Uses `ddeboer/imap` library
 - Fetches messages, checks headers, moves spam to SPAM folder
 - All processing happens on the Symfony server

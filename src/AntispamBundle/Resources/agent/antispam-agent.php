@@ -48,8 +48,26 @@ for ($i = 2; $i < count($argv); $i++) {
         $options[$arg] = true;
     }
 }
-$maildirPath = $options['maildir'] ?? $defaultMaildir;
-$dbPath = $options['db'] ?? $defaultDb;
+$maildirPath = agentPath($options['maildir'] ?? $defaultMaildir, 'maildir');
+$dbPath = agentPath($options['db'] ?? $defaultDb, 'db');
+
+/**
+ * Validates a --maildir / --db path: no empty value, NUL byte or ".."
+ * segment. A leading "~/" (not expanded by the shell after "--x=") is
+ * resolved against $HOME.
+ */
+function agentPath($path, $label)
+{
+    $path = (string)$path;
+    if ($path === '~' || strncmp($path, '~/', 2) === 0) {
+        $path = getenv('HOME') . substr($path, 1);
+    }
+    if ($path === '' || strpos($path, "\0") !== false || in_array('..', preg_split('#[/\\\\]+#', $path), true)) {
+        fwrite(STDERR, "Invalid --{$label} path\n");
+        exit(2);
+    }
+    return $path;
+}
 
 switch ($command) {
     case 'test':

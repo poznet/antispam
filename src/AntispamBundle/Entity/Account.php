@@ -32,7 +32,7 @@ class Account
     private $imapHost;
 
     #[ORM\Column(name: 'imap_port', type: 'integer', nullable: true)]
-    private $imapPort = 143;
+    private $imapPort = 993;
 
     #[ORM\Column(name: 'imap_login', type: 'string', length: 255, nullable: true)]
     private $imapLogin;
@@ -41,7 +41,7 @@ class Account
     private $imapPassword;
 
     #[ORM\Column(name: 'imap_flags', type: 'string', length: 255, nullable: true)]
-    private $imapFlags = '/novalidate-cert/notls';
+    private $imapFlags = '/imap/ssl';
 
     // SSH fields
 

@@ -60,7 +60,7 @@ class CheckEmailData
         if ($event->getStatus() !== true) {
             return;
         }
-        $server = new Server((string)$this->config->get('imap'), '143', '/novalidate-cert/notls');
+        $server = new Server((string)$this->config->get('imap'), (string)($this->config->get('imap_port') ?: '993'), (string)($this->config->get('imap_flags') ?: '/imap/ssl'));
         try {
             $server->authenticate((string)$this->config->get('login'), (string)$this->config->get('password'));
         } catch (AbstractException $e) {

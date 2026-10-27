@@ -35,10 +35,14 @@ The repository ships a production-ready Docker setup:
 | `MAILER_DSN` | Symfony Mailer DSN, e.g. `smtp://user:pass@smtp.example.com:587` | _(empty = mail disabled)_ |
 | `MAILER_HOST` / `MAILER_USER` / `MAILER_PASSWORD` | Legacy (Swiftmailer) settings, used to build `MAILER_DSN` (`smtp://…:25`) when it is empty | _(empty)_ |
 | `RUN_MIGRATIONS` | Run `doctrine:schema:update --force` at boot | `true` |
+| `SSH_KEYS_DIR` | Directory with the SSH private keys of SSH+Maildir accounts | `var/data/ssh-keys` |
+| `ALLOW_INSECURE_DEFAULTS` | `1` lets the container start with default/empty secrets (local testing only) | `0` |
 | `SYMFONY_TRUSTED_PROXIES` | Comma-separated IPs / CIDRs whose `X-Forwarded-*` headers are trusted (Coolify's Traefik), so Symfony sees `https://` | private ranges |
 
-The defaults marked above are **insecure** and only exist to let the stack
-boot for local testing. Override them in production.
+The container **refuses to start** while `APP_SECRET`, `ADMIN_PASSWORD` (or
+`ADMIN_PASSWORD_HASH`) or `DATABASE_PASSWORD` is empty or left at the default
+above. Set them in Coolify (or `.env`); `ALLOW_INSECURE_DEFAULTS=1` skips the
+check for local testing only.
 
 ## Deploying on Coolify
 
@@ -149,5 +153,9 @@ Before exposing the instance publicly, make sure:
       `docker-compose.prod.yml` (the scheduler sends it) or schedule
       `antispam:digest:send` in cron.
 
-Note that IMAP passwords stored in the `account` table are currently kept in
-plain text. Treat access to the database (and its backups) as sensitive.
+IMAP passwords in the `account` table are encrypted with a key derived from
+`APP_SECRET` (rows saved before this change stay readable as plain text until
+they are saved again). Changing `APP_SECRET` makes them unreadable: enter them
+again. The legacy single-account settings (*Ustawienia → Email*) are still
+stored in plain text. Treat access to the database (and its backups) as
+sensitive.

@@ -4,6 +4,7 @@ namespace AntispamBundle\Controller;
 
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Services\AgentRulesExporter;
+use AntispamBundle\Services\CryptoService;
 use AntispamBundle\Services\SshService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
@@ -23,7 +24,19 @@ class AccountController extends AbstractController
         private SshService $ssh,
         private AgentRulesExporter $rulesExporter,
         private EventDispatcherInterface $dispatcher,
+        private CryptoService $crypto,
     ) {
+    }
+
+    /**
+     * Actions that change state or reach out to the mailbox server are POST
+     * only and need the per-account CSRF token rendered in the account list.
+     */
+    private function checkActionToken(Request $request, string $tokenId)
+    {
+        if (!$request->isMethod('POST') || !$this->isCsrfTokenValid($tokenId, (string)$request->request->get('_token'))) {
+            throw $this->createAccessDeniedException('Nieprawidłowy token CSRF');
+        }
     }
 
     #[Route('/index', name: 'antispam_account_index')]
@@ -39,7 +52,8 @@ class AccountController extends AbstractController
     public function addAction(Request $request)
     {
         if ($request->getMethod() === 'POST') {
-                $account = $this->fillAccountFromRequest(new Account(), $request);
+            $this->checkActionToken($request, 'account_form');
+            $account = $this->fillAccountFromRequest(new Account(), $request);
             $this->em->persist($account);
             $this->em->flush();
             return $this->redirectToRoute('antispam_account_index');
@@ -57,6 +71,7 @@ class AccountController extends AbstractController
         }
 
         if ($request->getMethod() === 'POST') {
+            $this->checkActionToken($request, 'account_form');
             $account = $this->fillAccountFromRequest($account, $request);
             $this->em->flush();
             return $this->redirectToRoute('antispam_account_index');
@@ -65,9 +80,10 @@ class AccountController extends AbstractController
         return ['account' => $account];
     }
 
-    #[Route('/del/{id}', name: 'antispam_account_del')]
-    public function delAction($id)
+    #[Route('/del/{id}', name: 'antispam_account_del', methods: ['POST'])]
+    public function delAction($id, Request $request)
     {
+        $this->checkActionToken($request, 'account_action_' . $id);
         $account = $this->em->getRepository(Account::class)->find($id);
         if ($account) {
             $this->em->remove($account);
@@ -76,10 +92,11 @@ class AccountController extends AbstractController
         return $this->redirectToRoute('antispam_account_index');
     }
 
-    #[Route('/test/{id}', name: 'antispam_account_test')]
+    #[Route('/test/{id}', name: 'antispam_account_test', methods: ['POST'])]
     #[Template('@Antispam/Account/test.html.twig')]
-    public function testAction($id)
+    public function testAction($id, Request $request)
     {
+        $this->checkActionToken($request, 'account_action_' . $id);
         $account = $this->em->getRepository(Account::class)->find($id);
         $result = ['success' => false, 'messages' => []];
 
@@ -98,7 +115,7 @@ class AccountController extends AbstractController
                     $account->getImapPort(),
                     $account->getImapFlags()
                 );
-                $connection = $server->authenticate($account->getImapLogin(), $account->getImapPassword());
+                $connection = $server->authenticate($account->getImapLogin(), (string)$this->crypto->decrypt($account->getImapPassword()));
                 $result['success'] = true;
                 $result['messages'][] = 'Połączenie IMAP działa';
                 $mailboxes = $connection->getMailboxes();
@@ -112,10 +129,11 @@ class AccountController extends AbstractController
         return ['account' => $account, 'result' => $result];
     }
 
-    #[Route('/deploy/{id}', name: 'antispam_account_deploy')]
+    #[Route('/deploy/{id}', name: 'antispam_account_deploy', methods: ['POST'])]
     #[Template('@Antispam/Account/deploy.html.twig')]
-    public function deployAction($id)
+    public function deployAction($id, Request $request)
     {
+        $this->checkActionToken($request, 'account_action_' . $id);
         $account = $this->em->getRepository(Account::class)->find($id);
         $result = ['success' => false, 'messages' => []];
 
@@ -139,10 +157,11 @@ class AccountController extends AbstractController
         return ['account' => $account, 'result' => $result];
     }
 
-    #[Route('/sync/{id}', name: 'antispam_account_sync')]
+    #[Route('/sync/{id}', name: 'antispam_account_sync', methods: ['POST'])]
     #[Template('@Antispam/Account/sync.html.twig')]
-    public function syncAction($id)
+    public function syncAction($id, Request $request)
     {
+        $this->checkActionToken($request, 'account_action_' . $id);
         $account = $this->em->getRepository(Account::class)->find($id);
         $result = ['success' => false, 'messages' => []];
 
@@ -165,10 +184,11 @@ class AccountController extends AbstractController
         return ['account' => $account, 'result' => $result];
     }
 
-    #[Route('/scan/{id}', name: 'antispam_account_scan')]
+    #[Route('/scan/{id}', name: 'antispam_account_scan', methods: ['POST'])]
     #[Template('@Antispam/Account/scan.html.twig')]
-    public function scanAction($id)
+    public function scanAction($id, Request $request)
     {
+        $this->checkActionToken($request, 'account_action_' . $id);
         $account = $this->em->getRepository(Account::class)->find($id);
         $result = ['success' => false, 'messages' => []];
 
@@ -218,10 +238,13 @@ class AccountController extends AbstractController
 
         // IMAP fields
         $account->setImapHost($data['imap_host'] ?? null);
-        $account->setImapPort((int)($data['imap_port'] ?? 143));
+        $account->setImapPort((int)($data['imap_port'] ?? 993));
         $account->setImapLogin($data['imap_login'] ?? null);
-        $account->setImapPassword($data['imap_password'] ?? null);
-        $account->setImapFlags($data['imap_flags'] ?? '/novalidate-cert/notls');
+        // Stored encrypted; an empty field on edit keeps the current password.
+        if (($data['imap_password'] ?? '') !== '') {
+            $account->setImapPassword($this->crypto->encrypt($data['imap_password']));
+        }
+        $account->setImapFlags($data['imap_flags'] ?? '/imap/ssl');
 
         // SSH fields
         $account->setSshHost($data['ssh_host'] ?? null);
@@ -241,10 +264,11 @@ class AccountController extends AbstractController
         return $account;
     }
 
-    #[Route('/health/{id}', name: 'antispam_account_health')]
+    #[Route('/health/{id}', name: 'antispam_account_health', methods: ['POST'])]
     #[Template('@Antispam/Account/health.html.twig')]
-    public function healthAction($id)
+    public function healthAction($id, Request $request)
     {
+        $this->checkActionToken($request, 'account_action_' . $id);
         $account = $this->em->getRepository(Account::class)->find($id);
         $result = ['success' => false, 'messages' => []];
         if (!$account || !$account->isSsh()) {
@@ -268,7 +292,7 @@ class AccountController extends AbstractController
             $account->getImapPort(),
             $account->getImapFlags()
         );
-        $connection = $server->authenticate($account->getImapLogin(), $account->getImapPassword());
+        $connection = $server->authenticate($account->getImapLogin(), (string)$this->crypto->decrypt($account->getImapPassword()));
         $inbox = $connection->getMailbox('INBOX');
         $messages = $inbox->getMessages();
 

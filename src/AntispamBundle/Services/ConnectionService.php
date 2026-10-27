@@ -26,7 +26,7 @@ class ConnectionService
     public function getConnection()
     {
         if ($this->connection === null) {
-            $server = new Server((string)$this->config->get('imap'), '143', '/novalidate-cert/notls');
+            $server = new Server((string)$this->config->get('imap'), (string)($this->config->get('imap_port') ?: '993'), (string)($this->config->get('imap_flags') ?: '/imap/ssl'));
             $this->connection = $server->authenticate((string)$this->config->get('login'), (string)$this->config->get('password'));
         }
 

@@ -47,7 +47,7 @@ class ConfigurationController extends AbstractController
     {
         if ($request->isMethod('POST')) {
             $post = $request->request->all('config');
-            foreach (['email', 'password', 'login', 'imap'] as $key) {
+            foreach (['email', 'password', 'login', 'imap', 'imap_port', 'imap_flags'] as $key) {
                 $this->config->set($key, $post[$key] ?? '');
             }
             $this->config->set('delete', array_key_exists('delete', $post));
@@ -57,6 +57,8 @@ class ConfigurationController extends AbstractController
             'password' => $this->config->get('password'),
             'login' => $this->config->get('login'),
             'imap' => $this->config->get('imap'),
+            'imap_port' => $this->config->get('imap_port') ?: '993',
+            'imap_flags' => $this->config->get('imap_flags') ?: '/imap/ssl',
             'delete' => $this->config->get('delete'),
         ];
         return ['config' => $config];

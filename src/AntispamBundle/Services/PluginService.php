@@ -38,9 +38,11 @@ class PluginService
     private $cache;
     private $feed;
     private $secret;
+    private $crypto;
 
-    public function __construct(EntityManagerInterface $em, CacheItemPoolInterface $cache, SpamSignalService $feed, #[Autowire('%kernel.secret%')] string $secret, ?ConfigService $config = null)
+    public function __construct(EntityManagerInterface $em, CacheItemPoolInterface $cache, SpamSignalService $feed, #[Autowire('%kernel.secret%')] string $secret, ?ConfigService $config = null, ?CryptoService $crypto = null)
     {
+        $this->crypto = $crypto;
         $this->em = $em;
         $this->config = $config;
         $this->cache = $cache;
@@ -108,9 +110,15 @@ class PluginService
         if ($hash && password_verify((string)$password, $hash)) {
             return $account;
         }
-        if ($account->isImap() && (string)$account->getImapPassword() !== ''
-            && hash_equals((string)$account->getImapPassword(), (string)$password)) {
-            return $account;
+        if ($account->isImap() && (string)$account->getImapPassword() !== '') {
+            try {
+                $imapPassword = $this->crypto ? $this->crypto->decrypt($account->getImapPassword()) : $account->getImapPassword();
+            } catch (\RuntimeException $e) {
+                return null;
+            }
+            if (hash_equals((string)$imapPassword, (string)$password)) {
+                return $account;
+            }
         }
         return null;
     }

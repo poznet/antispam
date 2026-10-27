@@ -1,3 +1,9 @@
+parameters:
+    # Every SSH account's private key must live in this directory (a relative
+    # ssh_key_path is resolved against it). Override with SSH_KEYS_DIR.
+    antispam.default_ssh_keys_dir: '%kernel.project_dir%/var/data/ssh-keys'
+    antispam.ssh_keys_dir: '%env(default:antispam.default_ssh_keys_dir:SSH_KEYS_DIR)%'
+
 services:
     _defaults:
         autowire: true

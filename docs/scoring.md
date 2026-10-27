@@ -30,6 +30,23 @@ Defaults: `quarantine_threshold = 5`, `spam_threshold = 10`. Configure under
 | Infected attachment (ClamAV) | `CheckAttachments` | clamav_score (def. 15) + forced spam |
 | Flagged attachment (VirusTotal) | `CheckAttachmentsVirusTotal` | vt_score (def. 15) + forced spam |
 | Shared feed match (sender/body) | `CheckSharedFeed`     | feed.score (def. 6)  |
+| VIP display-name spoofing | `CheckImpersonation` | 8 |
+| Lookalike sender domain | `CheckImpersonation` | 6 |
+| Own-domain spoof (SPF/DMARC fail) | `CheckImpersonation` | 6 |
+| Address in display name | `CheckImpersonation` | 3 |
+| Link text / target mismatch, IP link, punycode link | `CheckUrls` | 3 each |
+| URL shortener | `CheckUrls` | 2 |
+| Link domain on URI block list | `CheckUrls` | zone score (def. 6) |
+| Link flagged by Google Safe Browsing (opt-in) | `CheckUrls` | 10 |
+| Blocked attachment type (also inside ZIP) | `CheckAttachmentPolicy` | 15 |
+| Disguised executable | `CheckAttachmentPolicy` | 10 |
+| Double extension / bidi filename | `CheckAttachmentPolicy` | 8 |
+| Office macro / active PDF | `CheckAttachmentPolicy` | 6 |
+| Password-protected archive / document | `CheckAttachmentPolicy` | 5 |
+
+The impersonation, link and attachment-policy rules are described in
+[protection.md](protection.md). Quarantined messages can be released by their
+owners from the [quarantine digest](quarantine-digest.md).
 
 Whitelists bypass all scoring (`stopPropagation()` on match).
 
@@ -140,7 +157,8 @@ php antispam-agent.php scan \
     --db=/path/to/rules.sqlite \
     --spam-threshold=10 \
     --quarantine-threshold=5 \
-    [--no-dnsbl] [--no-headers]
+    [--no-dnsbl] [--no-headers] [--no-impersonation] [--no-urls] \
+    [--no-attachment-policy] [--no-clamav] [--no-virustotal]
 
 php antispam-agent.php health --maildir=~/Maildir --db=/path/to/rules.sqlite
 ```

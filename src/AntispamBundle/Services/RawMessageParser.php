@@ -56,6 +56,14 @@ class RawMessageParser
         return self::extractEmail($this->getHeader('from'));
     }
 
+    /** Display name of the From header, MIME-decoded ('' when missing). */
+    public function getFromName()
+    {
+        $from = $this->getHeader('from');
+        $p = strpos($from, '<');
+        return $p === false ? '' : trim(substr($from, 0, $p), " \t\"'");
+    }
+
     /** Domain part of the From address ('' when missing). */
     public function getFromHost()
     {
@@ -97,6 +105,58 @@ class RawMessageParser
             return html_entity_decode(strip_tags(preg_replace('#<(script|style)\b.*?</\1>#is', '', $html)), ENT_QUOTES, 'UTF-8');
         }
         return '';
+    }
+
+    /**
+     * First text/plain and text/html bodies plus every attachment, for the
+     * link and attachment-policy analyzers.
+     *
+     * @return array{text:string, html:string, attachments:array<int, array{filename:string, data:string}>}
+     */
+    public function getParts()
+    {
+        $out = ['text' => '', 'html' => '', 'attachments' => []];
+        $this->collect($this->headers, $this->body, 0, $out);
+        return $out;
+    }
+
+    private function collect(array $headers, $body, $depth, array &$out)
+    {
+        if ($depth > self::MAX_DEPTH) {
+            return;
+        }
+        $contentType = $headers['content-type'][0] ?? 'text/plain';
+        $type = strtolower(trim(explode(';', $contentType)[0]));
+
+        if (strpos($type, 'multipart/') === 0) {
+            $boundary = self::param($contentType, 'boundary');
+            if ($boundary === '') {
+                return;
+            }
+            $parts = preg_split('/\r?\n--' . preg_quote($boundary, '/') . '(?:--)?[ \t]*(?:\r?\n|$)/', "\n" . $body);
+            array_shift($parts); // preamble
+            foreach ($parts as $part) {
+                list($ph, $pb) = self::split($part);
+                $this->collect(self::parseHeaders($ph), $pb, $depth + 1, $out);
+            }
+            return;
+        }
+
+        $disposition = $headers['content-disposition'][0] ?? '';
+        $filename = self::param($disposition, 'filename') ?: self::param($disposition, 'filename*') ?: self::param($contentType, 'name');
+        $decoded = self::decodeTransfer($body, $headers['content-transfer-encoding'][0] ?? '');
+
+        $isText = $type === 'text/plain' || $type === 'text/html';
+        if (stripos($disposition, 'attachment') === 0 || $filename !== '' || !$isText) {
+            if ($decoded !== '' && strpos($type, 'multipart/') !== 0) {
+                $out['attachments'][] = ['filename' => self::decodeWords($filename), 'data' => $decoded];
+            }
+            return;
+        }
+        $key = $type === 'text/html' ? 'html' : 'text';
+        if ($out[$key] === '') {
+            $out[$key] = self::toUtf8($decoded, self::param($contentType, 'charset'));
+        }
     }
 
     private function walk(array $headers, $body, $depth, &$plain, &$html)

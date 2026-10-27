@@ -49,6 +49,49 @@ services:
         arguments: ["@doctrine.orm.default_entity_manager", "@configuration"]
         public: true
 
+    # Impersonation / link / attachment-policy analyzers (pure logic, mirrored in the agent)
+    antispam.impersonation_analyzer:
+        class: AntispamBundle\Services\ImpersonationAnalyzer
+        public: true
+
+    antispam.url_analyzer:
+        class: AntispamBundle\Services\UrlAnalyzer
+        public: true
+
+    antispam.attachment_policy_analyzer:
+        class: AntispamBundle\Services\AttachmentPolicyAnalyzer
+        public: true
+
+    # Quarantine digest: signed one-click links + unified IMAP / SSH quarantine access
+    antispam.digest_token:
+        class: AntispamBundle\Services\DigestTokenService
+        arguments: ["%kernel.secret%"]
+        public: true
+
+    antispam.quarantine:
+        class: AntispamBundle\Services\QuarantineService
+        arguments:
+            - "@doctrine.orm.default_entity_manager"
+            - "@configuration"
+            - "@antispam.ssh"
+            # IMAP services connect on construction - resolve them lazily
+            - !service_locator
+                antispam.connection: "@antispam.connection"
+                antispam.inbox: "@antispam.inbox"
+                antispam.message: "@antispam.message"
+        public: true
+
+    antispam.digest:
+        class: AntispamBundle\Services\QuarantineDigestService
+        arguments:
+            - "@antispam.quarantine"
+            - "@antispam.digest_token"
+            - "@twig"
+            - "@mailer"
+            - "@configuration"
+            - "@router"
+        public: true
+
     # Shared spam feed (centralized spam DB) — sender/body fingerprints
     antispam.spam_signal:
         class: AntispamBundle\Services\SpamSignalService
@@ -64,6 +107,9 @@ services:
             - "@antispam.dnsbl"
             - "@antispam.scoring"
             - "@antispam.spam_signal"
+            - "@antispam.impersonation_analyzer"
+            - "@antispam.url_analyzer"
+            - "@antispam.attachment_policy_analyzer"
         public: true
 
     antispam.plugin:
@@ -118,6 +164,11 @@ services:
         arguments:
             - "@doctrine.orm.default_entity_manager"
             - "@antispam.ssh"
+        tags: ['console.command']
+
+    AntispamBundle\Command\DigestSendCommand:
+        arguments:
+            - "@antispam.digest"
         tags: ['console.command']
 
     AntispamBundle\Command\FeedSyncCommand:
@@ -176,17 +227,35 @@ services:
         tags:
             - { name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99990  }
 
+    antispam.checkemail.listener.impersonation:
+        class: AntispamBundle\EventListener\Message\CheckImpersonation
+        arguments: ["@antispam.impersonation_analyzer","@antispam.scoring"]
+        tags:
+            - { name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99988  }
+
     antispam.checkemail.listener.dnsbl:
         class: AntispamBundle\EventListener\Message\CheckDnsbl
         arguments: ["@antispam.dnsbl","@antispam.scoring"]
         tags:
             - { name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99980  }
 
+    antispam.checkemail.listener.urls:
+        class: AntispamBundle\EventListener\Message\CheckUrls
+        arguments: ["@antispam.url_analyzer","@antispam.scoring"]
+        tags:
+            - { name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99979  }
+
     antispam.checkemail.listener.shared_feed:
         class: AntispamBundle\EventListener\Message\CheckSharedFeed
         arguments: ["@antispam.spam_signal","@antispam.scoring"]
         tags:
             - { name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99978  }
+
+    antispam.checkemail.listener.attachment_policy:
+        class: AntispamBundle\EventListener\Message\CheckAttachmentPolicy
+        arguments: ["@antispam.attachment_policy_analyzer","@antispam.scoring"]
+        tags:
+            - { name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99976  }
 
     antispam.checkemail.listener.attachments:
         class: AntispamBundle\EventListener\Message\CheckAttachments

@@ -308,7 +308,7 @@ class AccountController extends Controller
             ];
         }
 
-        $rules['settings'] = $this->get('antispam.scoring')->exportAgentSettings();
+        $rules['settings'] = $this->get('antispam.scoring')->exportAgentSettings($email);
 
         return $rules;
     }

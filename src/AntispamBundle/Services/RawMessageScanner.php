@@ -8,8 +8,8 @@ use Doctrine\ORM\EntityManagerInterface;
 /**
  * Scores a raw RFC 822 message (as submitted by the Thunderbird plugin) with
  * the same rules as the IMAP event pipeline: domain/e-mail whitelists and
- * blacklists of the account, header heuristics, DNSBL and the shared spam
- * feed. The result is logged to SpamScoreLog like any other scan, but the
+ * blacklists of the account, header heuristics, impersonation, DNSBL, link
+ * protection, the shared spam feed and the attachment policy. The result is logged to SpamScoreLog like any other scan, but the
  * message itself is never moved here — the plugin acts on the decision
  * inside the user's mail client.
  */
@@ -20,19 +20,28 @@ class RawMessageScanner
     private $dnsbl;
     private $scoring;
     private $feed;
+    private $impersonation;
+    private $urls;
+    private $attachments;
 
     public function __construct(
         EntityManagerInterface $em,
         HeaderAnalyzer $headers,
         DnsblService $dnsbl,
         ScoringService $scoring,
-        SpamSignalService $feed
+        SpamSignalService $feed,
+        ImpersonationAnalyzer $impersonation,
+        UrlAnalyzer $urls,
+        AttachmentPolicyAnalyzer $attachments
     ) {
         $this->em = $em;
         $this->headers = $headers;
         $this->dnsbl = $dnsbl;
         $this->scoring = $scoring;
         $this->feed = $feed;
+        $this->impersonation = $impersonation;
+        $this->urls = $urls;
+        $this->attachments = $attachments;
     }
 
     /**
@@ -85,11 +94,45 @@ class RawMessageScanner
                 } catch (\Throwable $e) {}
             }
 
+            if ($this->scoring->isImpersonationEnabled()) {
+                try {
+                    $result = $this->impersonation->analyze(
+                        ['from_name' => $msg->getFromName(), 'from_email' => $sender, 'auth_results' => implode("\n", $msg->getHeaders('authentication-results'))],
+                        $this->scoring->getProtectedDomains($accountEmail),
+                        ImpersonationAnalyzer::parseVips($this->scoring->getVipList()),
+                        $this->scoring->getImpersonationScores()
+                    );
+                    $score += $result['score'];
+                    $reasons = array_merge($reasons, $result['reasons']);
+                } catch (\Throwable $e) {}
+            }
+
             if ($this->scoring->isDnsblEnabled() && ($ip = $msg->getConnectingIp())) {
                 try {
                     $dnsblReasons = [];
                     $score += $this->dnsbl->scoreForIp($ip, $dnsblReasons);
                     $reasons = array_merge($reasons, $dnsblReasons);
+                } catch (\Throwable $e) {}
+            }
+
+            $parts = null;
+            if ($this->scoring->isUrlCheckEnabled()) {
+                try {
+                    $parts = $msg->getParts();
+                    $result = $this->urls->analyze($parts['html'], $parts['text'], $this->scoring->getUrlConfig());
+                    $score += $result['score'];
+                    $reasons = array_merge($reasons, $result['reasons']);
+                } catch (\Throwable $e) {}
+            }
+
+            if ($this->scoring->isAttachmentPolicyEnabled()) {
+                try {
+                    $parts = $parts ?: $msg->getParts();
+                    if ($parts['attachments']) {
+                        $result = $this->attachments->analyze($parts['attachments'], $this->scoring->getAttachmentPolicyConfig());
+                        $score += $result['score'];
+                        $reasons = array_merge($reasons, $result['reasons']);
+                    }
                 } catch (\Throwable $e) {}
             }
 

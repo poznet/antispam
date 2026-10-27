@@ -118,6 +118,39 @@ class SshService
         return json_decode($output, true) ?: ['success' => false, 'error' => $output];
     }
 
+    /**
+     * @param int|null $since only messages delivered after this unix timestamp
+     */
+    public function quarantineList(Account $account, $since = null, $limit = 200)
+    {
+        $remotePath = $account->getAgentPath() . '/antispam-agent.php';
+        $maildirPath = $account->getMaildirPath();
+        $args = "--maildir={$maildirPath} --limit=" . (int)$limit;
+        if ($since) {
+            $args .= ' --since=' . (int)$since;
+        }
+        $output = $this->exec($account, "php {$remotePath} quarantine-list {$args} 2>&1");
+        return json_decode($output, true) ?: ['success' => false, 'error' => $output];
+    }
+
+    /**
+     * @param string $action release | delete
+     */
+    public function quarantineAction(Account $account, $action, $id, $whitelist = false)
+    {
+        if (!in_array($action, ['release', 'delete'], true)) {
+            throw new \InvalidArgumentException('Unknown quarantine action: ' . $action);
+        }
+        $remotePath = $account->getAgentPath() . '/antispam-agent.php';
+        $maildirPath = $account->getMaildirPath();
+        $args = "--maildir={$maildirPath} --id=" . escapeshellarg((string)$id);
+        if ($whitelist && $action === 'release') {
+            $args .= ' --whitelist';
+        }
+        $output = $this->exec($account, "php {$remotePath} quarantine-{$action} {$args} 2>&1");
+        return json_decode($output, true) ?: ['success' => false, 'error' => $output];
+    }
+
     public function runHealth(Account $account)
     {
         $remotePath = $account->getAgentPath() . '/antispam-agent.php';

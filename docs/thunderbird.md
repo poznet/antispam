@@ -23,7 +23,7 @@ themselves).
 
 The on-arrival check complements, not replaces, the cron scan: it uses the same
 rules (domain/e-mail white- and blacklists of the account, header heuristics,
-DNSBL, shared feed) and thresholds, and is logged to `antispam_spam_score_log`
+impersonation / BEC, DNSBL, link protection, shared feed, attachment policy) and thresholds, and is logged to `antispam_spam_score_log`
 with the reason `source:thunderbird_plugin`. The message is never touched on the
 server — the plugin acts on the decision locally. Attachment scanning
 (ClamAV / VirusTotal) is not applied to plugin checks; the plugin uploads only

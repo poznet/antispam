@@ -125,6 +125,159 @@
     </div>
 
     <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-user"></span> Ochrona przed podszywaniem się (BEC)</div>
+        <div class="panel-body">
+            <p class="text-muted">Wykrywa oszustwa „na prezesa” i domeny łudząco podobne: nazwisko chronionej osoby na obcym adresie, <code>firrna.pl</code> / <code>f1rma.pl</code> / <code>firma-pl.com</code> udające <code>firma.pl</code> oraz fałszowanie własnej domeny.</p>
+            <div class="checkbox"><label>
+                <input type="checkbox" name="config[impersonation_enabled]" {% if config.impersonation_enabled %}checked{% endif %}>
+                <strong>Włącz ochronę przed podszywaniem się</strong>
+            </label></div>
+            <div class="checkbox"><label>
+                <input type="checkbox" name="config[protect_own_domain]" {% if config.protect_own_domain %}checked{% endif %}>
+                Automatycznie chroń własną domenę każdego konta (darmowe poczty jak gmail.com / wp.pl są pomijane)
+            </label></div>
+            <div class="row" style="margin-top:10px;">
+                <div class="col-sm-6">
+                    <label>Chronione domeny</label>
+                    <textarea name="config[protected_domains]" class="form-control" rows="5" placeholder="firma.pl&#10;firma.com">{{ config.protected_domains }}</textarea>
+                    <small class="text-muted">Jedna na linię. Poczta z domen łudząco do nich podobnych dostaje punkty.</small>
+                </div>
+                <div class="col-sm-6">
+                    <label>Chronione osoby (VIP)</label>
+                    <textarea name="config[vips]" class="form-control" rows="5" placeholder="Jan Kowalski &lt;jan.kowalski@firma.pl&gt;&#10;Anna Nowak">{{ config.vips }}</textarea>
+                    <small class="text-muted">Jedna na linię: <code>Imię Nazwisko &lt;adres&gt;</code>. Bez adresu prawidłowy jest każdy adres w chronionej domenie. Wymagane pełne imię i nazwisko (min. dwa słowa).</small>
+                </div>
+            </div>
+            <div class="row" style="margin-top:10px;">
+                <div class="col-sm-3">
+                    <label>Podszycie pod VIP</label>
+                    <input type="number" name="config[impersonation_vip_score]" class="form-control" value="{{ config.impersonation_scores.vip }}" min="0" max="200">
+                </div>
+                <div class="col-sm-3">
+                    <label>Podobna domena</label>
+                    <input type="number" name="config[impersonation_lookalike_score]" class="form-control" value="{{ config.impersonation_scores.lookalike }}" min="0" max="200">
+                </div>
+                <div class="col-sm-3">
+                    <label>Adres w nazwie nadawcy</label>
+                    <input type="number" name="config[impersonation_embedded_score]" class="form-control" value="{{ config.impersonation_scores.embedded }}" min="0" max="200">
+                </div>
+                <div class="col-sm-3">
+                    <label>Fałszywa własna domena</label>
+                    <input type="number" name="config[impersonation_internal_score]" class="form-control" value="{{ config.impersonation_scores.internal }}" min="0" max="200">
+                    <small class="text-muted">From = chroniona domena, ale SPF/DMARC nie przeszły.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-link"></span> Ochrona przed złośliwymi linkami</div>
+        <div class="panel-body">
+            <p class="text-muted">Analizuje linki w treści. Każda reguła liczy się raz na wiadomość. Błędy DNS / API nigdy nie dodają punktów.</p>
+            <div class="checkbox"><label>
+                <input type="checkbox" name="config[url_enabled]" {% if config.url_enabled %}checked{% endif %}>
+                <strong>Włącz analizę linków</strong>
+            </label></div>
+            <div class="row" style="margin-top:10px;">
+                <div class="col-sm-3">
+                    <label>Tekst ≠ cel linku</label>
+                    <input type="number" name="config[url_mismatch_score]" class="form-control" value="{{ config.url.mismatch_score }}" min="0" max="200">
+                    <small class="text-muted">Pokazuje <code>bank.pl</code>, prowadzi gdzie indziej.</small>
+                </div>
+                <div class="col-sm-3">
+                    <label>Link do adresu IP</label>
+                    <input type="number" name="config[url_ip_score]" class="form-control" value="{{ config.url.ip_score }}" min="0" max="200">
+                </div>
+                <div class="col-sm-3">
+                    <label>Skracacz linków</label>
+                    <input type="number" name="config[url_shortener_score]" class="form-control" value="{{ config.url.shortener_score }}" min="0" max="200">
+                </div>
+                <div class="col-sm-3">
+                    <label>Domena IDN (punycode)</label>
+                    <input type="number" name="config[url_punycode_score]" class="form-control" value="{{ config.url.punycode_score }}" min="0" max="200">
+                </div>
+            </div>
+            <hr>
+            <div class="checkbox"><label>
+                <input type="checkbox" name="config[url_dbl_enabled]" {% if config.url.dbl_enabled %}checked{% endif %}>
+                Sprawdzaj domeny z linków na listach URI (DBL)
+            </label></div>
+            <div class="row">
+                <div class="col-sm-8">
+                    <label>Strefy list URI</label>
+                    <textarea name="config[url_dbl_zones]" class="form-control" rows="3" placeholder="dbl.spamhaus.org 6">{{ config.url_dbl_zones }}</textarea>
+                    <small class="text-muted"><code>strefa punkty</code>, jedna na linię. Spamhaus i URIBL odrzucają zapytania z publicznych resolverów (8.8.8.8 itp.) — użyj lokalnego resolvera.</small>
+                </div>
+                <div class="col-sm-4">
+                    <label>Maks. domen na wiadomość</label>
+                    <input type="number" name="config[url_max_domains]" class="form-control" value="{{ config.url.max_domains }}" min="1" max="100">
+                </div>
+            </div>
+            <hr>
+            <div class="checkbox"><label>
+                <input type="checkbox" name="config[url_gsb_enabled]" {% if config.url.gsb_enabled %}checked{% endif %}>
+                Sprawdzaj linki w Google Safe Browsing (phishing / malware)
+            </label></div>
+            <div class="row">
+                <div class="col-sm-8">
+                    <label>Klucz API Safe Browsing</label>
+                    <input type="password" name="config[url_gsb_api_key]" class="form-control" value="{{ config.url.gsb_api_key }}" autocomplete="off" placeholder="Klucz Google Cloud z włączonym Safe Browsing API">
+                    <small class="text-muted">Pełne adresy URL są wysyłane do Google.</small>
+                </div>
+                <div class="col-sm-4">
+                    <label>Punkty za trafienie</label>
+                    <input type="number" name="config[url_gsb_score]" class="form-control" value="{{ config.url.gsb_score }}" min="0" max="200">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-ban-circle"></span> Polityka załączników</div>
+        <div class="panel-body">
+            <p class="text-muted">Reguły typów plików bez ClamAV ani klucza API — działają też na hostingu współdzielonym przez agenta Maildir.</p>
+            <div class="checkbox"><label>
+                <input type="checkbox" name="config[attachment_policy_enabled]" {% if config.attachment_policy_enabled %}checked{% endif %}>
+                <strong>Włącz politykę załączników</strong>
+            </label></div>
+            <div class="row" style="margin-top:10px;">
+                <div class="col-sm-12">
+                    <label>Zablokowane rozszerzenia</label>
+                    <textarea name="config[blocked_extensions]" class="form-control" rows="2">{{ config.blocked_extensions }}</textarea>
+                    <small class="text-muted">Oddzielone przecinkami. Dotyczy też plików wewnątrz archiwów ZIP.</small>
+                </div>
+            </div>
+            <div class="row" style="margin-top:10px;">
+                <div class="col-sm-4">
+                    <label>Zablokowany typ</label>
+                    <input type="number" name="config[attachment_blocked_score]" class="form-control" value="{{ config.attachment.blocked_score }}" min="0" max="200">
+                </div>
+                <div class="col-sm-4">
+                    <label>Podwójne rozszerzenie / ukryte znaki</label>
+                    <input type="number" name="config[attachment_double_ext_score]" class="form-control" value="{{ config.attachment.double_ext_score }}" min="0" max="200">
+                    <small class="text-muted"><code>faktura.pdf.exe</code></small>
+                </div>
+                <div class="col-sm-4">
+                    <label>Program udający dokument</label>
+                    <input type="number" name="config[attachment_mismatch_score]" class="form-control" value="{{ config.attachment.mismatch_score }}" min="0" max="200">
+                    <small class="text-muted">Plik wykonywalny pod nazwą dokumentu.</small>
+                </div>
+            </div>
+            <div class="row" style="margin-top:10px;">
+                <div class="col-sm-4">
+                    <label>Makra / aktywny PDF</label>
+                    <input type="number" name="config[attachment_macro_score]" class="form-control" value="{{ config.attachment.macro_score }}" min="0" max="200">
+                </div>
+                <div class="col-sm-4">
+                    <label>Plik chroniony hasłem</label>
+                    <input type="number" name="config[attachment_encrypted_score]" class="form-control" value="{{ config.attachment.encrypted_score }}" min="0" max="200">
+                    <small class="text-muted">Zaszyfrowany ZIP lub dokument Office — nieczytelny dla skanerów.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel panel-default">
         <div class="panel-heading"><span class="glyphicon glyphicon-cog"></span> Postępowanie ze spamem</div>
         <div class="panel-body">
             <div class="row" style="padding: 15px 0;">

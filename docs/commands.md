@@ -40,6 +40,21 @@ Scans all configured accounts. Suitable for cron.
 php bin/console antispam:agent:scan-all
 ```
 
+## Quarantine Digest Commands
+
+### antispam:digest:send
+Sends the [quarantine digest](quarantine-digest.md): one e-mail per mailbox with
+messages quarantined since the previous digest, with signed one-click
+deliver / always-accept / delete links. Mailboxes with nothing new are skipped.
+Suitable for cron. Exits non-zero when any digest failed.
+```bash
+php bin/console antispam:digest:send
+php bin/console antispam:digest:send --dry-run            # build and count, don't send
+php bin/console antispam:digest:send --mailbox=ssh-3      # one mailbox ("imap" or "ssh-<accountId>")
+php bin/console antispam:digest:send --since="-3 days"    # ignore the last-sent marker
+php bin/console antispam:digest:send --force              # send even if disabled in settings
+```
+
 ## Shared Feed Commands
 
 ### antispam:feed:sync

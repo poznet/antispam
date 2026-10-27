@@ -44,8 +44,11 @@ ham/quarantine/spam.
 | 99997    | CheckBlacklist         | Domain blacklist → add score          |
 | 99996    | CheckEmailBlacklist    | Email blacklist → add score           |
 | 99990    | CheckHeaders           | SPF/DKIM/DMARC + heuristics           |
+| 99988    | CheckImpersonation     | VIP spoofing, lookalike domains, BEC  |
 | 99980    | CheckDnsbl             | DNSBL lookup against configured zones |
+| 99979    | CheckUrls              | Link heuristics, URI DBL, Safe Browsing |
 | 99978    | CheckSharedFeed        | Match sender/body against shared feed |
+| 99976    | CheckAttachmentPolicy  | Blocked types, double ext., macros    |
 | 99970    | ApplyScoreDecision     | ham/quarantine/spam decision + log    |
 | 99965    | RecordSpamSignals      | Record fingerprints of detected spam  |
 | 99960    | MoveToSpam             | Physically move spam to SPAM folder   |
@@ -55,7 +58,16 @@ ham/quarantine/spam.
 (99973) run between DNSBL and the decision when enabled.)
 
 See `scoring.md` for scoring thresholds, pattern types and DNSBL configuration,
-and `feed.md` for the shared spam feed.
+`protection.md` for impersonation / link / attachment-policy rules, and `feed.md`
+for the shared spam feed.
+
+## Quarantine digest
+
+`antispam:digest:send` (cron) e-mails each mailbox owner the newly quarantined
+messages with signed one-click links to `/q/{token}` (public, POST-to-act). Both
+quarantine back-ends sit behind `QuarantineService`: the IMAP `QUARANTINE` folder
+and the agent's `quarantine-list` / `quarantine-release` / `quarantine-delete`
+commands. See `quarantine-digest.md`.
 
 ## Database
 
@@ -73,5 +85,8 @@ Additional tables:
 - `antispam_shared_spam_signal` — shared spam feed fingerprints: `type`
   (sender/body), SHA-256 `hash`, `origin` (local/remote) and `reports` count.
   See `feed.md`.
+- `antispam_list_setting` — long list-shaped settings (protected domains, VIPs,
+  URI block list zones, blocked extensions) that don't fit ConfigBundle's
+  255-character values. See `protection.md`.
 
 Account table: `antispam_account` - stores connection settings (IMAP or SSH) per email account.

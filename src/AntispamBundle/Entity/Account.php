@@ -116,6 +116,14 @@ class Account
      */
     private $lastScanResult;
 
+    /**
+     * bcrypt hash of the password used to log in from the Thunderbird plugin
+     * (optional; IMAP accounts can also log in with their IMAP password).
+     *
+     * @ORM\Column(name="plugin_password_hash", type="string", length=255, nullable=true)
+     */
+    private $pluginPasswordHash;
+
     public function getId() { return $this->id; }
 
     public function getName() { return $this->name; }
@@ -174,6 +182,16 @@ class Account
 
     public function getLastScanResult() { return $this->lastScanResult; }
     public function setLastScanResult($lastScanResult) { $this->lastScanResult = $lastScanResult; return $this; }
+
+    public function getPluginPasswordHash() { return $this->pluginPasswordHash; }
+    public function setPluginPasswordHash($hash) { $this->pluginPasswordHash = $hash; return $this; }
+
+    /** Set (or with null/'' clear) the Thunderbird plugin password. */
+    public function setPluginPassword($plain)
+    {
+        $this->pluginPasswordHash = ((string)$plain === '') ? null : password_hash((string)$plain, PASSWORD_BCRYPT);
+        return $this;
+    }
 
     public function getLastScanResultDecoded()
     {

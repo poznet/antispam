@@ -248,6 +248,13 @@ class AccountController extends Controller
         $account->setMaildirPath($data['maildir_path'] ?? '~/Maildir');
         $account->setAgentPath($data['agent_path'] ?? '~/antispam-agent');
 
+        // Thunderbird plugin password: empty field keeps the current one.
+        if (!empty($data['plugin_password_clear'])) {
+            $account->setPluginPassword(null);
+        } elseif (($data['plugin_password'] ?? '') !== '') {
+            $account->setPluginPassword($data['plugin_password']);
+        }
+
         return $account;
     }
 

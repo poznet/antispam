@@ -136,6 +136,16 @@
             font-size: 13.5px;
         }
         .alert svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }
+        .plugin-dl {
+            margin-top: 22px; padding: 14px 16px;
+            display: flex; align-items: center; gap: 12px;
+            background: rgba(99, 102, 241, .08); border: 1px solid rgba(129, 140, 248, .25); border-radius: 12px;
+            color: #a5b0c9; font-size: 13px; line-height: 1.45; text-decoration: none;
+            transition: border-color .15s, background .15s;
+        }
+        .plugin-dl:hover { border-color: #818cf8; background: rgba(99, 102, 241, .14); }
+        .plugin-dl svg { width: 22px; height: 22px; flex: none; color: #a5b4fc; }
+        .plugin-dl strong { display: block; color: #fff; font-size: 13.5px; }
         .secure {
             margin-top: 26px; display: flex; align-items: center; justify-content: center; gap: 8px;
             font-size: 12px; color: #64748b;
@@ -227,6 +237,14 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                 </button>
             </form>
+
+            <a class="plugin-dl" href="{{ path('antispam_plugin_download') }}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+                <span>
+                    <strong>Pobierz wtyczkę do Thunderbirda (.xpi)</strong>
+                    Oznaczaj spam prosto z poczty — antyspam uczy się na zgłoszeniach i może sprawdzać nowe wiadomości.
+                </span>
+            </a>
 
             <div class="secure">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>

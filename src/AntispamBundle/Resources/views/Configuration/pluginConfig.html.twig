@@ -1,0 +1,68 @@
+{% extends 'AntispamBundle::main.html.twig' %}
+{% block title %}Wtyczka Thunderbird{% endblock %}
+{% block page_title %}Wtyczka Thunderbird{% endblock %}
+
+{% block body %}
+    <p class="text-muted">
+        Wtyczka do Thunderbirda pozwala właścicielom skrzynek pracować z antyspamem z poziomu klienta poczty.
+        Bez logowania każdy użytkownik wtyczki może oznaczać wiadomości jako spam — odciski nadawcy i treści
+        trafiają do wspólnej bazy spamu, więc antyspam się uczy. Użytkownik zalogowany adresem skrzynki i hasłem
+        wtyczki (lub hasłem IMAP) może dodatkowo mieć sprawdzaną każdą nową wiadomość, a jego zgłoszenia
+        spam / nie-spam tworzą reguły czarnej / białej listy e-mail dla jego konta.
+    </p>
+
+    <p>
+        <a href="{{ path('antispam_plugin_download') }}" class="btn btn-success">
+            <span class="glyphicon glyphicon-download-alt"></span> Pobierz antispam-thunderbird.xpi
+        </a>
+        <span class="text-muted">&nbsp;Link jest też na stronie logowania. W Thunderbirdzie: Dodatki i motywy → ⚙ → Zainstaluj dodatek z pliku…</span>
+    </p>
+
+    <form method="post">
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-envelope"></span> Funkcje</div>
+        <div class="panel-body">
+            <div class="checkbox"><label>
+                <input type="checkbox" name="config[enabled]" {% if config.enabled %}checked{% endif %}>
+                <strong>Włącz API wtyczki i pobieranie</strong>
+            </label></div>
+            <div class="checkbox"><label>
+                <input type="checkbox" name="config[anonymous_reports]" {% if config.anonymous_reports %}checked{% endif %}>
+                <strong>Przyjmuj zgłoszenia spamu od niezalogowanych</strong> — zapisywane są tylko odciski; zgłoszenia „nie spam” zawsze wymagają logowania.
+            </label></div>
+            <div class="checkbox"><label>
+                <input type="checkbox" name="config[check_enabled]" {% if config.check_enabled %}checked{% endif %}>
+                <strong>Sprawdzaj nową pocztę</strong> zalogowanych użytkowników (wtyczka przekazuje wiadomość do antyspamu i działa według decyzji).
+            </label></div>
+            <div class="checkbox"><label>
+                <input type="checkbox" name="config[learn_rules]" {% if config.learn_rules %}checked{% endif %}>
+                <strong>Ucz reguł ze zgłoszeń zalogowanych</strong> — spam dodaje nadawcę do czarnej listy e-mail konta, nie-spam przenosi go na białą listę.
+            </label></div>
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-cog"></span> Limity</div>
+        <div class="panel-body">
+            <div class="row">
+                <div class="col-sm-4">
+                    <label>Ważność logowania (dni)</label>
+                    <input type="number" name="config[token_ttl_days]" class="form-control" value="{{ config.token_ttl_days }}" min="1" max="3650">
+                </div>
+                <div class="col-sm-4">
+                    <label>Zgłoszeń na godzinę</label>
+                    <input type="number" name="config[report_rate_limit]" class="form-control" value="{{ config.report_rate_limit }}" min="1" max="100000">
+                    <small class="text-muted">Na adres IP (niezalogowani) lub na konto (zalogowani).</small>
+                </div>
+                <div class="col-sm-4">
+                    <label>Publiczny adres</label>
+                    <input type="text" name="config[public_url]" class="form-control" value="{{ config.public_url }}" placeholder="https://antispam.example.com">
+                    <small class="text-muted">Wpisywany do pobieranej wtyczki. Puste = adres z bieżącego żądania (ustaw za proxy TLS).</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-floppy-disk"></span> Zapisz</button>
+    </form>
+{% endblock %}

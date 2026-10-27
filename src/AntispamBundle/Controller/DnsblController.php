@@ -47,11 +47,11 @@ class DnsblController extends Controller
         $ttl = (int)$request->get('ttl', 3600);
 
         if (!$name || !$zone) {
-            $this->addFlash('danger', 'Name and zone are required');
+            $this->addFlash('danger', 'Nazwa i strefa są wymagane');
             return $this->redirectToRoute('antispam_dnsbl_index');
         }
         if ($em->getRepository('AntispamBundle:DnsblProvider')->findOneBy(['zone' => strtolower($zone)])) {
-            $this->addFlash('warning', 'Zone already configured');
+            $this->addFlash('warning', 'Ta strefa jest już skonfigurowana');
             return $this->redirectToRoute('antispam_dnsbl_index');
         }
 
@@ -59,7 +59,7 @@ class DnsblController extends Controller
         $p->setName($name)->setZone($zone)->setScore($score)->setCacheTtl($ttl)->setEnabled(true);
         $em->persist($p);
         $em->flush();
-        $this->addFlash('success', 'DNSBL provider added');
+        $this->addFlash('success', 'Dodano dostawcę DNSBL');
         return $this->redirectToRoute('antispam_dnsbl_index');
     }
 
@@ -70,20 +70,20 @@ class DnsblController extends Controller
     {
         $idx = (int)$idx;
         if (!isset(self::$presets[$idx])) {
-            $this->addFlash('danger', 'Preset not found');
+            $this->addFlash('danger', 'Nie znaleziono presetu');
             return $this->redirectToRoute('antispam_dnsbl_index');
         }
         $preset = self::$presets[$idx];
         $em = $this->getDoctrine()->getManager();
         if ($em->getRepository('AntispamBundle:DnsblProvider')->findOneBy(['zone' => $preset['zone']])) {
-            $this->addFlash('warning', 'Zone already configured');
+            $this->addFlash('warning', 'Ta strefa jest już skonfigurowana');
             return $this->redirectToRoute('antispam_dnsbl_index');
         }
         $p = new DnsblProvider();
         $p->setName($preset['name'])->setZone($preset['zone'])->setScore($preset['score'])->setEnabled(true);
         $em->persist($p);
         $em->flush();
-        $this->addFlash('success', 'Preset added: ' . $preset['name']);
+        $this->addFlash('success', 'Dodano preset: ' . $preset['name']);
         return $this->redirectToRoute('antispam_dnsbl_index');
     }
 
@@ -111,7 +111,7 @@ class DnsblController extends Controller
         if ($p) {
             $em->remove($p);
             $em->flush();
-            $this->addFlash('success', 'Provider removed');
+            $this->addFlash('success', 'Usunięto dostawcę');
         }
         return $this->redirectToRoute('antispam_dnsbl_index');
     }

@@ -1,101 +1,205 @@
 {% extends 'AntispamBundle::main.html.twig' %}
 
-{% block page_title %}Dashboard{% endblock %}
-{% block title %}Dashboard{% endblock %}
+{% block page_title %}Pulpit{% endblock %}
+{% block title %}Pulpit{% endblock %}
 
 {% block body %}
-    <div class="row">
-        <div class="col-sm-3">
-            <div class="panel panel-stat panel-default">
-                <div class="panel-body text-center">
-                    <span class="glyphicon glyphicon-cloud" style="font-size:24px; color:#5bc0de;"></span>
-                    <div class="stat-value">{{ accounts|default(0) }}</div>
-                    <div class="stat-label">Accounts</div>
-                </div>
-            </div>
+    {% set ham = stats30.ham|default(0) %}
+    {% set quarantine = stats30.quarantine|default(0) %}
+    {% set spam = stats30.spam|default(0) %}
+    {% set whitelisted = stats30.whitelisted|default(0) %}
+    {% set total30 = ham + quarantine + spam + whitelisted %}
+    {% set blocked = spam + quarantine %}
+    {% set blockRate = total30 > 0 ? (blocked / total30 * 100)|round(1) : 0 %}
+
+    <section class="pp-hero">
+        <div class="pp-hero-text">
+            <h2>Witaj{% if app.user %}, {{ app.user.username }}{% endif %}</h2>
+            <p>Pancerna ochrona działa. W ciągu ostatnich 30 dni przeanalizowano <strong>{{ total30 }}</strong> wiadomości, z czego <strong>{{ blocked }}</strong> zatrzymano jako spam lub kwarantannę.</p>
         </div>
-        <div class="col-sm-3">
-            <div class="panel panel-stat panel-default">
-                <div class="panel-body text-center">
-                    <span class="glyphicon glyphicon-ok-circle" style="font-size:24px; color:#5cb85c;"></span>
-                    <div class="stat-value">{{ whitelistCount|default(0) }}</div>
-                    <div class="stat-label">Whitelist Rules</div>
-                </div>
-            </div>
+        <div class="pp-shield-rate">
+            <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+            <div><b>{{ blockRate }}%</b><span>wiadomości zablokowanych</span></div>
         </div>
-        <div class="col-sm-3">
-            <div class="panel panel-stat panel-default">
-                <div class="panel-body text-center">
-                    <span class="glyphicon glyphicon-ban-circle" style="font-size:24px; color:#d9534f;"></span>
-                    <div class="stat-value">{{ blacklistCount|default(0) }}</div>
-                    <div class="stat-label">Blacklist Rules</div>
-                </div>
-            </div>
+        <div class="pp-hero-actions">
+            <a href="{{ path('antispam_account_index') }}" class="btn btn-white"><span class="glyphicon glyphicon-play"></span> Uruchom skan</a>
+            <a href="{{ path('antispam_spambox_scorelog') }}" class="btn btn-glass"><span class="glyphicon glyphicon-list-alt"></span> Dziennik ocen</a>
         </div>
-        <div class="col-sm-3">
-            <div class="panel panel-stat panel-default">
-                <div class="panel-body text-center">
-                    <span class="glyphicon glyphicon-globe" style="font-size:24px; color:#f0ad4e;"></span>
-                    <div class="stat-value">{{ dnsblCount|default(0) }}</div>
-                    <div class="stat-label">DNSBL Providers</div>
-                </div>
-            </div>
-        </div>
+    </section>
+
+    <div class="pp-grid pp-grid-4">
+        <a class="pp-kpi" href="{{ path('antispam_account_index') }}" style="--kpi-c:#6366f1">
+            <div class="pp-kpi-head"><span class="pp-kpi-label">Konta pocztowe</span><span class="pp-kpi-icon"><span class="glyphicon glyphicon-cloud"></span></span></div>
+            <div class="pp-kpi-value">{{ accounts|default(0) }}</div>
+            <div class="pp-kpi-foot">IMAP &amp; SSH+Maildir</div>
+        </a>
+        <a class="pp-kpi" href="{{ path('antispam_whitelist_index') }}" style="--kpi-c:#10b981">
+            <div class="pp-kpi-head"><span class="pp-kpi-label">Reguły whitelist</span><span class="pp-kpi-icon"><span class="glyphicon glyphicon-ok-circle"></span></span></div>
+            <div class="pp-kpi-value">{{ whitelistCount|default(0) }}</div>
+            <div class="pp-kpi-foot">Domeny + adresy e-mail</div>
+        </a>
+        <a class="pp-kpi" href="{{ path('antispam_blacklist_index') }}" style="--kpi-c:#ef4444">
+            <div class="pp-kpi-head"><span class="pp-kpi-label">Reguły blacklist</span><span class="pp-kpi-icon"><span class="glyphicon glyphicon-ban-circle"></span></span></div>
+            <div class="pp-kpi-value">{{ blacklistCount|default(0) }}</div>
+            <div class="pp-kpi-foot">Domeny + adresy e-mail</div>
+        </a>
+        <a class="pp-kpi" href="{{ path('antispam_dnsbl_index') }}" style="--kpi-c:#f59e0b">
+            <div class="pp-kpi-head"><span class="pp-kpi-label">Aktywne DNSBL</span><span class="pp-kpi-icon"><span class="glyphicon glyphicon-globe"></span></span></div>
+            <div class="pp-kpi-value">{{ dnsblCount|default(0) }}</div>
+            <div class="pp-kpi-foot">Listy reputacji IP</div>
+        </a>
     </div>
 
-    <div class="row">
-        <div class="col-sm-3">
-            <div class="panel panel-default"><div class="panel-body text-center">
-                <div class="stat-value text-success">{{ stats30.ham|default(0) }}</div>
-                <div class="stat-label">Ham (30d)</div>
-            </div></div>
-        </div>
-        <div class="col-sm-3">
-            <div class="panel panel-default"><div class="panel-body text-center">
-                <div class="stat-value text-warning">{{ stats30.quarantine|default(0) }}</div>
-                <div class="stat-label">Quarantine (30d)</div>
-            </div></div>
-        </div>
-        <div class="col-sm-3">
-            <div class="panel panel-default"><div class="panel-body text-center">
-                <div class="stat-value text-danger">{{ stats30.spam|default(0) }}</div>
-                <div class="stat-label">Spam (30d)</div>
-            </div></div>
-        </div>
-        <div class="col-sm-3">
-            <div class="panel panel-default"><div class="panel-body text-center">
-                <div class="stat-value text-info">{{ stats30.whitelisted|default(0) }}</div>
-                <div class="stat-label">Whitelisted (30d)</div>
-            </div></div>
-        </div>
+    <div class="pp-grid pp-grid-4">
+        {% for k in [
+            {label: 'Ham (30 dni)',        value: ham,         color: '#10b981', icon: 'ok'},
+            {label: 'Kwarantanna (30 dni)', value: quarantine, color: '#f59e0b', icon: 'warning-sign'},
+            {label: 'Spam (30 dni)',       value: spam,        color: '#ef4444', icon: 'fire'},
+            {label: 'Whitelista (30 dni)', value: whitelisted, color: '#0ea5e9', icon: 'star'}
+        ] %}
+            {% set pct = total30 > 0 ? (k.value / total30 * 100)|round : 0 %}
+            <div class="pp-kpi" style="--kpi-c:{{ k.color }}">
+                <div class="pp-kpi-head"><span class="pp-kpi-label">{{ k.label }}</span><span class="pp-kpi-icon"><span class="glyphicon glyphicon-{{ k.icon }}"></span></span></div>
+                <div class="pp-kpi-value">{{ k.value }}</div>
+                <div class="pp-kpi-foot"><span class="pp-kpi-bar"><i style="width:{{ pct }}%"></i></span>{{ pct }}%</div>
+            </div>
+        {% endfor %}
     </div>
 
-    {% if dailyChart|length > 0 %}
-    <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-stats"></span> Activity (14 days)</div>
-        <div class="panel-body">
-            <table class="table table-condensed" style="margin-bottom:0;">
-                <thead><tr><th>Day</th><th>Ham</th><th>Quarantine</th><th>Spam</th><th>Graph</th></tr></thead>
-                <tbody>
-                {% set maxv = 1 %}
-                {% for d in dailyChart %}
-                    {% set total = d.ham + d.quarantine + d.spam %}
-                    {% if total > maxv %}{% set maxv = total %}{% endif %}
-                {% endfor %}
-                {% for d in dailyChart %}
-                    {% set total = d.ham + d.quarantine + d.spam %}
-                    <tr>
-                        <td>{{ d.day }}</td>
-                        <td>{{ d.ham }}</td>
-                        <td>{{ d.quarantine }}</td>
-                        <td>{{ d.spam }}</td>
-                        <td style="width:50%;">
-                            <div style="background:#ddd; height:12px; width:100%; position:relative;">
-                                {% set hamW = (d.ham / maxv * 100)|round %}
-                                {% set qW   = (d.quarantine / maxv * 100)|round %}
-                                {% set sW   = (d.spam / maxv * 100)|round %}
-                                <div style="background:#5cb85c; height:12px; width:{{ hamW }}%; display:inline-block;"></div><div style="background:#f0ad4e; height:12px; width:{{ qW }}%; display:inline-block;"></div><div style="background:#d9534f; height:12px; width:{{ sW }}%; display:inline-block;"></div>
+    <div class="pp-grid pp-grid-main">
+        <div class="panel panel-default">
+            <div class="panel-heading pp-flex">
+                <span><span class="glyphicon glyphicon-stats"></span> Aktywność — ostatnie 14 dni</span>
+                <span class="pp-legend">
+                    <span><i class="c-ham"></i>Ham</span>
+                    <span><i class="c-quarantine"></i>Kwarantanna</span>
+                    <span><i class="c-spam"></i>Spam</span>
+                    <span><i class="c-white"></i>Whitelista</span>
+                </span>
+            </div>
+            <div class="panel-body">
+                {% if dailyChart|length > 0 %}
+                    {% set maxv = 1 %}
+                    {% for d in dailyChart %}
+                        {% set t = d.ham + d.quarantine + d.spam + d.whitelisted|default(0) %}
+                        {% if t > maxv %}{% set maxv = t %}{% endif %}
+                    {% endfor %}
+                    <div class="pp-chart" role="img" aria-label="Dzienne decyzje dla wiadomości">
+                        {% for d in dailyChart %}
+                            {% set w = d.whitelisted|default(0) %}
+                            {% set t = d.ham + d.quarantine + d.spam + w %}
+                            <div class="pp-chart-col">
+                                <div class="pp-chart-tip">
+                                    <strong>{{ d.day|date('d.m.Y') }}</strong><br>
+                                    Ham: {{ d.ham }} · Kwar.: {{ d.quarantine }}<br>
+                                    Spam: {{ d.spam }} · Whitelista: {{ w }}
+                                </div>
+                                <div class="pp-chart-area"><div class="pp-chart-stack" style="height:{{ max(3, (t / maxv * 100)|round) }}%">
+                                    {% if t > 0 %}
+                                        <i class="c-ham" style="height:{{ d.ham / t * 100 }}%"></i>
+                                        <i class="c-white" style="height:{{ w / t * 100 }}%"></i>
+                                        <i class="c-quarantine" style="height:{{ d.quarantine / t * 100 }}%"></i>
+                                        <i class="c-spam" style="height:{{ d.spam / t * 100 }}%"></i>
+                                    {% endif %}
+                                </div></div>
+                                <span class="pp-chart-day">{{ d.day|date('d.m') }}</span>
                             </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="pp-chart-empty">
+                        <div class="text-center">
+                            <span class="glyphicon glyphicon-stats" style="font-size:26px;opacity:.4"></span><br>
+                            Brak danych — włącz logowanie wyników w <a href="{{ path('antispam_spam_config') }}">ustawieniach filtra</a> i uruchom skan.
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="panel panel-default">
+            <div class="panel-heading"><span class="glyphicon glyphicon-adjust"></span> Rozkład decyzji (30 dni)</div>
+            <div class="panel-body">
+                {% set denom = total30 > 0 ? total30 : 1 %}
+                {% set a1 = ham / denom * 360 %}
+                {% set a2 = a1 + whitelisted / denom * 360 %}
+                {% set a3 = a2 + quarantine / denom * 360 %}
+                <div class="pp-donut-wrap">
+                    <div class="pp-donut" style="background:{% if total30 > 0 %}conic-gradient(var(--success) 0 {{ a1 }}deg, var(--info) {{ a1 }}deg {{ a2 }}deg, var(--warning) {{ a2 }}deg {{ a3 }}deg, var(--danger) {{ a3 }}deg 360deg){% else %}var(--surface-3){% endif %};">
+                        <div class="pp-donut-center"><b>{{ total30 }}</b><span>wiadomości</span></div>
+                    </div>
+                    <ul class="pp-breakdown">
+                        <li><i class="c-ham"></i>Ham<b>{{ ham }}</b><em>{{ (ham / denom * 100)|round(1) }}%</em></li>
+                        <li><i class="c-white"></i>Whitelista<b>{{ whitelisted }}</b><em>{{ (whitelisted / denom * 100)|round(1) }}%</em></li>
+                        <li><i class="c-quarantine"></i>Kwarantanna<b>{{ quarantine }}</b><em>{{ (quarantine / denom * 100)|round(1) }}%</em></li>
+                        <li><i class="c-spam"></i>Spam<b>{{ spam }}</b><em>{{ (spam / denom * 100)|round(1) }}%</em></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="pp-grid pp-grid-2">
+        {% for box in [
+            {title: 'Top trafienia — blacklist domen', icon: 'fire', rows: topBlacklist, field: 'host'},
+            {title: 'Top trafienia — blacklist e-mail', icon: 'envelope', rows: topEmailBlacklist, field: 'blacklistemail'}
+        ] %}
+            <div class="panel panel-default">
+                <div class="panel-heading"><span class="glyphicon glyphicon-{{ box.icon }}"></span> {{ box.title }}</div>
+                {% if box.rows|length > 0 %}
+                    {% set top = (box.rows|first).counter %}
+                    <ul class="pp-rank">
+                        {% for r in box.rows %}
+                            <li>
+                                <span class="pp-rank-n">{{ loop.index }}</span>
+                                <div>
+                                    <div class="pp-rank-host pp-mono">{{ attribute(r, box.field) }} <span class="label label-default">{{ r.patternType }}</span></div>
+                                    <div class="pp-rank-bar"><i style="width:{{ top > 0 ? (r.counter / top * 100)|round : 0 }}%"></i></div>
+                                </div>
+                                <span class="pp-rank-count">{{ r.counter }}</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <div class="pp-empty-mini"><span class="glyphicon glyphicon-ok-sign"></span>Brak trafień</div>
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+
+    {% if recentScans is defined and recentScans|length > 0 %}
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-time"></span> Ostatnie skany</div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr><th>Konto</th><th>Tryb</th><th>Ostatni skan</th><th class="text-right">Wiadomości</th><th class="text-right">Spam</th></tr>
+                </thead>
+                <tbody>
+                {% for account in recentScans %}
+                    {% set scan = account.lastScanResultDecoded %}
+                    <tr>
+                        <td>
+                            <div class="pp-acct">
+                                <span class="pp-acct-ic">{{ account.name|first }}</span>
+                                <div><b>{{ account.name }}</b><small>{{ account.email }}</small></div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if account.connectionType == 'ssh' %}
+                                <span class="label label-info">SSH+Maildir</span>
+                            {% else %}
+                                <span class="label label-primary">IMAP</span>
+                            {% endif %}
+                        </td>
+                        <td class="pp-mono">{{ account.lastScanAt ? account.lastScanAt|date('Y-m-d H:i') : '—' }}</td>
+                        <td class="text-right"><strong>{{ scan ? scan.total|default(0) : '—' }}</strong></td>
+                        <td class="text-right">
+                            {% if scan and scan.moved_to_spam|default(0) > 0 %}
+                                <span class="label label-danger">{{ scan.moved_to_spam }}</span>
+                            {% else %}
+                                <span class="text-muted">{{ scan ? 0 : '—' }}</span>
+                            {% endif %}
                         </td>
                     </tr>
                 {% endfor %}
@@ -105,91 +209,22 @@
     </div>
     {% endif %}
 
-    <div class="row">
-        <div class="col-sm-6">
-            <div class="panel panel-default">
-                <div class="panel-heading"><span class="glyphicon glyphicon-fire"></span> Top Domain Blacklist Hits</div>
-                {% if topBlacklist|length > 0 %}
-                    <table class="table table-striped" style="margin-bottom:0;">
-                    {% for r in topBlacklist %}
-                        <tr><td>{{ r.host }}</td><td><span class="label label-default">{{ r.patternType }}</span></td><td class="text-right"><span class="badge">{{ r.counter }}</span></td></tr>
-                    {% endfor %}
-                    </table>
-                {% else %}
-                    <div class="panel-body text-muted">No hits yet</div>
-                {% endif %}
+    <div class="pp-grid pp-grid-main">
+        <div class="panel panel-default">
+            <div class="panel-heading"><span class="glyphicon glyphicon-flash"></span> Szybkie akcje</div>
+            <div class="pp-actions">
+                <a class="pp-action" href="{{ path('antispam_account_add') }}"><span class="glyphicon glyphicon-plus"></span><span>Dodaj konto<small>IMAP lub SSH+Maildir</small></span></a>
+                <a class="pp-action" href="{{ path('antispam_dnsbl_index') }}"><span class="glyphicon glyphicon-globe"></span><span>Dostawcy DNSBL<small>Reputacja adresów IP</small></span></a>
+                <a class="pp-action" href="{{ path('antispam_spambox_quarantine') }}"><span class="glyphicon glyphicon-warning-sign"></span><span>Kwarantanna<small>Przejrzyj wątpliwe wiadomości</small></span></a>
+                <a class="pp-action" href="{{ path('antispam_bulk_index') }}"><span class="glyphicon glyphicon-transfer"></span><span>Import / Export<small>Masowe reguły list</small></span></a>
             </div>
         </div>
-        <div class="col-sm-6">
-            <div class="panel panel-default">
-                <div class="panel-heading"><span class="glyphicon glyphicon-envelope"></span> Top Email Blacklist Hits</div>
-                {% if topEmailBlacklist|length > 0 %}
-                    <table class="table table-striped" style="margin-bottom:0;">
-                    {% for r in topEmailBlacklist %}
-                        <tr><td>{{ r.blacklistemail }}</td><td><span class="label label-default">{{ r.patternType }}</span></td><td class="text-right"><span class="badge">{{ r.counter }}</span></td></tr>
-                    {% endfor %}
-                    </table>
-                {% else %}
-                    <div class="panel-body text-muted">No hits yet</div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-
-    {% if recentScans is defined and recentScans|length > 0 %}
-    <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-time"></span> Recent Scans</div>
-        <table class="table table-striped">
-            <thead>
-                <tr><th>Account</th><th>Type</th><th>Last Scan</th><th>Total</th><th>Spam</th></tr>
-            </thead>
-            <tbody>
-            {% for account in recentScans %}
-                <tr>
-                    <td>{{ account.name }}</td>
-                    <td><span class="label label-{{ account.connectionType == 'ssh' ? 'info' : 'default' }}">{{ account.connectionType|upper }}</span></td>
-                    <td>{{ account.lastScanAt ? account.lastScanAt|date('Y-m-d H:i') : 'Never' }}</td>
-                    {% set scan = account.lastScanResultDecoded %}
-                    <td>{{ scan ? scan.total|default(0) : '--' }}</td>
-                    <td>{{ scan ? scan.moved_to_spam|default(0) : '--' }}</td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% endif %}
-
-    <div class="row">
-        <div class="col-sm-6">
-            <div class="panel panel-default">
-                <div class="panel-heading"><span class="glyphicon glyphicon-flash"></span> Quick Actions</div>
-                <div class="panel-body">
-                    <a href="{{ path('antispam_account_index') }}" class="btn btn-primary btn-block" style="margin-bottom:8px;">
-                        <span class="glyphicon glyphicon-plus"></span> Manage Accounts
-                    </a>
-                    <a href="{{ path('antispam_dnsbl_index') }}" class="btn btn-warning btn-block" style="margin-bottom:8px;">
-                        <span class="glyphicon glyphicon-globe"></span> DNSBL Providers
-                    </a>
-                    <a href="{{ path('antispam_spambox_scorelog') }}" class="btn btn-info btn-block" style="margin-bottom:8px;">
-                        <span class="glyphicon glyphicon-list-alt"></span> Score Log
-                    </a>
-                    <a href="{{ path('antispam_bulk_index') }}" class="btn btn-default btn-block">
-                        <span class="glyphicon glyphicon-transfer"></span> Bulk Import / Export
-                    </a>
-                </div>
-            </div>
-        </div>
-        <div class="col-sm-6">
-            <div class="panel panel-default">
-                <div class="panel-heading"><span class="glyphicon glyphicon-info-sign"></span> About</div>
-                <div class="panel-body">
-                    <p><strong>Pancernapanda antispam</strong> filters unwanted emails using a scoring pipeline (blacklists, whitelists, DNSBL, header analysis).</p>
-                    <p><strong>Connection modes:</strong></p>
-                    <ul>
-                        <li><strong>IMAP</strong> &mdash; IMAP protocol over the network</li>
-                        <li><strong>SSH+Maildir</strong> &mdash; agent runs on the hosting server</li>
-                    </ul>
-                </div>
+        <div class="panel panel-default">
+            <div class="panel-heading"><span class="glyphicon glyphicon-info-sign"></span> Jak to działa</div>
+            <div class="pp-mode">
+                <div class="pp-mode-item"><span class="glyphicon glyphicon-random"></span><div><strong>Scoring pipeline</strong><span>Blacklisty, whitelisty, DNSBL i analiza nagłówków sumują punkty dla każdej wiadomości.</span></div></div>
+                <div class="pp-mode-item"><span class="glyphicon glyphicon-cloud"></span><div><strong>IMAP</strong><span>Połączenie protokołem IMAP przez sieć.</span></div></div>
+                <div class="pp-mode-item"><span class="glyphicon glyphicon-console"></span><div><strong>SSH + Maildir</strong><span>Agent działa bezpośrednio na serwerze hostingowym.</span></div></div>
             </div>
         </div>
     </div>

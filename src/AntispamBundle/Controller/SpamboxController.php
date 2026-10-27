@@ -42,7 +42,7 @@ class SpamboxController extends Controller
             $this->get('antispam.inbox')->getQuarantineFolderName(),
         ];
         if (!in_array($folder, $allowed, true)) {
-            $this->addFlash('danger', 'Invalid folder');
+            $this->addFlash('danger', 'Nieprawidłowy folder');
             return $this->redirectToRoute('antispam_spambox_index');
         }
 
@@ -51,9 +51,9 @@ class SpamboxController extends Controller
             $msg = $this->get('antispam.inbox')->getMessage((int)$id);
             $inboxMailbox = $this->get('antispam.connection')->getConnection()->getMailbox('INBOX');
             $msg->move($inboxMailbox);
-            $this->addFlash('success', 'Message restored to INBOX');
+            $this->addFlash('success', 'Wiadomość przywrócona do INBOX');
         } catch (\Throwable $e) {
-            $this->addFlash('danger', 'Restore failed: ' . $e->getMessage());
+            $this->addFlash('danger', 'Przywracanie nie powiodło się: ' . $e->getMessage());
         }
 
         return $this->redirectToRoute($folder === 'QUARANTINE'

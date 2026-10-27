@@ -29,6 +29,7 @@
 | GET/POST | `/config/feed/` | Shared spam feed settings |
 | GET/POST | `/config/digest/` | Quarantine digest settings, mailbox list, "send now" |
 | GET | `/config/digest/preview/{key}` | Render the digest a mailbox would get (last 7 days) |
+| GET/POST | `/config/plugin/` | Thunderbird plugin settings |
 | GET | `/config/uncheck-all/` | Reset all checked messages |
 | GET | `/config/reset/countes/` | Reset all rule counters |
 
@@ -54,6 +55,19 @@ examples: **[feed-api.md](feed-api.md)** (concepts: [feed.md](feed.md)).
 
 No login. The signed, expiring token is the credential. Invalid or expired tokens
 get `410`, a failed action `409`. See [quarantine-digest.md](quarantine-digest.md).
+
+## Thunderbird Plugin API (`/api/plugin`)
+
+Used by the Thunderbird plugin. Bearer-token auth (token from `/api/plugin/login`),
+exempt from form login. Full reference: **[thunderbird.md](thunderbird.md)**.
+
+| Method | URL | Description |
+|--------|-----|-------------|
+| GET | `/api/plugin/status` | Feature flags + token validity |
+| POST | `/api/plugin/login` | Mailbox e-mail + plugin/IMAP password → token |
+| POST | `/api/plugin/report` | User verdict (`spam` anonymous or logged in, `ham` logged in) |
+| POST | `/api/plugin/check` | Score a raw message (logged in) |
+| GET | `/plugin/download` | Download the `.xpi` (public) |
 
 ## Whitelists
 

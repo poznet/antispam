@@ -38,7 +38,7 @@ class DigestSendCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         if (!$this->digest->isEnabled() && !$input->getOption('force') && !$input->getOption('dry-run')) {
-            $output->writeln('<comment>Quarantine digest is disabled (Settings → Quarantine Digest). Use --force to send anyway.</comment>');
+            $output->writeln('<comment>Quarantine digest is disabled (Ustawienia → Raport kwarantanny). Use --force to send anyway.</comment>');
             return 0;
         }
         $errors = $this->digest->configurationErrors();

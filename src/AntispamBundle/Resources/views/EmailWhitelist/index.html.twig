@@ -1,17 +1,17 @@
 {% extends 'AntispamBundle::main.html.twig' %}
-{% block title %}E-mail Whitelist{% endblock %}
-{% block page_title %}E-mail Whitelist{% endblock %}
+{% block title %}Whitelista e-mail{% endblock %}
+{% block page_title %}Whitelista adresów e-mail{% endblock %}
 
 {% block body %}
     <div class="add-form">
         <form method="post" action="{{ path('antispam_emailwhitelist_add') }}" class="form-inline">
-            <input type="text" class="form-control" name="email" placeholder="friend@example.com or *@trusted.example" required style="min-width:280px;">
+            <input type="text" class="form-control" name="email" placeholder="znajomy@example.com lub *@zaufana.example" required style="min-width:280px;">
             <select name="pattern_type" class="form-control">
-                <option value="exact">Exact</option>
+                <option value="exact">Dokładny</option>
                 <option value="wildcard">Wildcard</option>
                 <option value="regex">Regex</option>
             </select>
-            <button type="submit" class="btn btn-success"><span class="glyphicon glyphicon-plus"></span> Add</button>
+            <button type="submit" class="btn btn-success"><span class="glyphicon glyphicon-plus"></span> Dodaj</button>
         </form>
     </div>
 
@@ -19,10 +19,10 @@
     <ul class="list-group">
         {% for l in list %}
         <li class="list-group-item">
-            <a href="{{ path('antispam_emailwhitelist_del',{'id':l.id}) }}" class="btn btn-danger btn-xs list-actions" onclick="return confirm('Remove this email from whitelist?')">
-                <span class="glyphicon glyphicon-remove"></span> Delete
+            <a href="{{ path('antispam_emailwhitelist_del',{'id':l.id}) }}" class="btn btn-danger btn-xs list-actions" onclick="return confirm('Usunąć ten adres z whitelisty?')">
+                <span class="glyphicon glyphicon-remove"></span> Usuń
             </a>
-            <span class="badge badge-counter">{{ l.counter }} hits</span>
+            <span class="badge badge-counter">{{ l.counter }} trafień</span>
             <span class="label label-default">{{ l.patternType }}</span>
             <span class="glyphicon glyphicon-envelope"></span> {{ l.whitelistemail }}
         </li>
@@ -31,8 +31,8 @@
     {% else %}
     <div class="empty-state">
         <span class="glyphicon glyphicon-ok-circle"></span>
-        <p>No emails in whitelist yet</p>
-        <p class="text-muted">Supports exact, wildcard and regex patterns</p>
+        <p>Whitelista adresów e-mail jest pusta</p>
+        <p class="text-muted">Obsługuje wzorce dokładne, wildcard i regex</p>
     </div>
     {% endif %}
 {% endblock %}

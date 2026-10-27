@@ -1,6 +1,6 @@
 {% extends 'AntispamBundle::main.html.twig' %}
-{% block title %}Spambox{% endblock %}
-{% block page_title %}Spambox{% endblock %}
+{% block title %}Folder spamu{% endblock %}
+{% block page_title %}Folder spamu{% endblock %}
 
 {% block body %}
     {% if messages|length > 0 %}
@@ -13,7 +13,7 @@
                     <strong style="font-size:12px;">{{ msg.from }}</strong>
                     <p style="font-size:11px; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ msg.subject[:60] }}</p>
                     <a href="{{ path('antispam_spambox_restore', {folder: 'SPAM', id: msg.id}) }}" class="btn btn-xs btn-success" style="margin-top:5px;">
-                        <span class="glyphicon glyphicon-arrow-up"></span> Restore to Inbox
+                        <span class="glyphicon glyphicon-arrow-up"></span> Przywróć do skrzynki
                     </a>
                 </div>
             {% endfor %}
@@ -30,8 +30,8 @@
     {% else %}
     <div class="empty-state">
         <span class="glyphicon glyphicon-inbox"></span>
-        <p>Spambox is empty</p>
-        <p class="text-muted">No spam messages found</p>
+        <p>Folder spamu jest pusty</p>
+        <p class="text-muted">Nie znaleziono wiadomości ze spamem</p>
     </div>
     {% endif %}
 {% endblock %}

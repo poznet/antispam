@@ -106,7 +106,7 @@ class ConfigurationController extends Controller
             }
             $scoring->setListSetting(ScoringService::LIST_BLOCKED_EXTENSIONS, implode(', ', AttachmentPolicyAnalyzer::parseExtensions($post['blocked_extensions'] ?? '')));
 
-            $this->addFlash('success', 'Settings saved');
+            $this->addFlash('success', 'Ustawienia zapisane');
         }
 
         $config = [
@@ -161,7 +161,7 @@ class ConfigurationController extends Controller
 
         if ($request->isMethod('POST')) {
             if (!$this->isCsrfTokenValid('digest_config', $request->request->get('_token'))) {
-                $this->addFlash('danger', 'Invalid form token, please try again.');
+                $this->addFlash('danger', 'Nieprawidłowy token formularza, spróbuj ponownie.');
                 return $this->redirectToRoute('antispam_digest_config');
             }
             $post = $request->get('config', []);
@@ -180,11 +180,11 @@ class ConfigurationController extends Controller
                 } else {
                     foreach ($digest->sendAll() as $row) {
                         $type = $row['status'] === 'error' || $row['status'] === 'rejected' ? 'danger' : 'info';
-                        $this->addFlash($type, sprintf('%s → %s: %d message(s), %s%s', $row['key'], $row['recipient'], $row['count'], $row['status'], $row['error'] ? ' (' . $row['error'] . ')' : ''));
+                        $this->addFlash($type, sprintf('%s → %s: wiadomości: %d, status: %s%s', $row['key'], $row['recipient'], $row['count'], $row['status'], $row['error'] ? ' (' . $row['error'] . ')' : ''));
                     }
                 }
             } else {
-                $this->addFlash('success', 'Digest settings saved');
+                $this->addFlash('success', 'Ustawienia raportu kwarantanny zapisane');
             }
             return $this->redirectToRoute('antispam_digest_config');
         }
@@ -193,7 +193,7 @@ class ConfigurationController extends Controller
         try {
             $mailboxes = $this->get('antispam.quarantine')->getMailboxes();
         } catch (\Throwable $e) {
-            $this->addFlash('danger', 'Could not list mailboxes: ' . $e->getMessage());
+            $this->addFlash('danger', 'Nie udało się pobrać listy skrzynek: ' . $e->getMessage());
         }
         foreach ($mailboxes as &$m) {
             $m['last_sent'] = $digest->getLastSent($m['key']);
@@ -225,12 +225,12 @@ class ConfigurationController extends Controller
         $digest = $this->get('antispam.digest');
         $mailbox = $this->get('antispam.quarantine')->getMailbox($key);
         if (!$mailbox) {
-            throw $this->createNotFoundException('Unknown mailbox');
+            throw $this->createNotFoundException('Nieznana skrzynka');
         }
         try {
             $html = $digest->renderHtml($digest->build($mailbox, new \DateTimeImmutable('-7 days')));
         } catch (\Throwable $e) {
-            $this->addFlash('danger', 'Preview failed: ' . $e->getMessage());
+            $this->addFlash('danger', 'Podgląd nie powiódł się: ' . $e->getMessage());
             return $this->redirectToRoute('antispam_digest_config');
         }
         return new Response($html);
@@ -255,7 +255,7 @@ class ConfigurationController extends Controller
             $c->set('feed.server_key', trim($post['server_key'] ?? ''));
             $c->set('feed.remote_url', rtrim(trim($post['remote_url'] ?? ''), '/'));
             $c->set('feed.remote_key', trim($post['remote_key'] ?? ''));
-            $this->addFlash('success', 'Shared feed settings saved');
+            $this->addFlash('success', 'Ustawienia wspólnej bazy spamu zapisane');
             return $this->redirectToRoute('antispam_feed_config');
         }
 
@@ -273,6 +273,43 @@ class ConfigurationController extends Controller
             ->getRepository('AntispamBundle:SharedSpamSignal')->countByOrigin();
 
         return ['config' => $config, 'stats' => $stats];
+    }
+
+    /**
+     * Thunderbird plugin settings: download link, anonymous reporting,
+     * on-arrival checks for logged-in users and rule learning.
+     *
+     * @Template
+     * @Route("/plugin/", name="antispam_plugin_config")
+     */
+    public function pluginConfigAction(Request $request)
+    {
+        $c = $this->get('configuration');
+        if ($request->getMethod() == 'POST') {
+            $post = $request->get('config', []);
+            // Stored as '1'/'0' so an unchecked box is not mistaken for "unset" (default on).
+            foreach (['enabled', 'anonymous_reports', 'check_enabled', 'learn_rules'] as $flag) {
+                $c->set('plugin.' . $flag, array_key_exists($flag, $post) ? '1' : '0');
+            }
+            $c->set('plugin.token_ttl_days', max(1, (int)($post['token_ttl_days'] ?? 90)));
+            $c->set('plugin.report_rate_limit', max(1, (int)($post['report_rate_limit'] ?? 120)));
+            $c->set('plugin.public_url', rtrim(trim($post['public_url'] ?? ''), '/'));
+            $this->addFlash('success', 'Ustawienia wtyczki Thunderbird zapisane');
+            return $this->redirectToRoute('antispam_plugin_config');
+        }
+
+        $plugin = $this->get('antispam.plugin');
+        $config = [
+            'enabled' => $plugin->isEnabled(),
+            'anonymous_reports' => $plugin->isAnonymousReportEnabled(),
+            'check_enabled' => $plugin->isCheckEnabled(),
+            'learn_rules' => $plugin->isLearnRulesEnabled(),
+            'token_ttl_days' => $plugin->getTokenTtlDays(),
+            'report_rate_limit' => $plugin->getReportRateLimit(),
+            'public_url' => $plugin->getPublicUrl(),
+        ];
+
+        return ['config' => $config];
     }
 
     /**
@@ -294,9 +331,9 @@ class ConfigurationController extends Controller
         $timeout = $c->get('scoring.clamav_timeout') ?: ScoringService::DEFAULT_CLAMAV_TIMEOUT;
 
         if ($this->get('antispam.clamav')->ping($dsn, $timeout)) {
-            $this->addFlash('success', sprintf('ClamAV daemon reachable at %s', $dsn));
+            $this->addFlash('success', sprintf('Demon ClamAV odpowiada pod adresem %s', $dsn));
         } else {
-            $this->addFlash('danger', sprintf('Could not reach ClamAV daemon at %s — check that clamd is running and the address is correct.', $dsn));
+            $this->addFlash('danger', sprintf('Brak połączenia z demonem ClamAV pod adresem %s — sprawdź, czy clamd działa i czy adres jest poprawny.', $dsn));
         }
 
         return $this->redirectToRoute('antispam_spam_config');
@@ -312,11 +349,11 @@ class ConfigurationController extends Controller
         $timeout = $c->get('scoring.vt_timeout') ?: ScoringService::DEFAULT_VT_TIMEOUT;
 
         if ($apiKey === '') {
-            $this->addFlash('danger', 'No VirusTotal API key configured.');
+            $this->addFlash('danger', 'Nie skonfigurowano klucza API VirusTotal.');
         } elseif ($this->get('antispam.virustotal')->ping($apiKey, $timeout)) {
-            $this->addFlash('success', 'VirusTotal API key is valid and reachable.');
+            $this->addFlash('success', 'Klucz API VirusTotal jest poprawny, usługa odpowiada.');
         } else {
-            $this->addFlash('danger', 'Could not reach VirusTotal or the API key was rejected.');
+            $this->addFlash('danger', 'Brak połączenia z VirusTotal lub klucz API został odrzucony.');
         }
 
         return $this->redirectToRoute('antispam_spam_config');

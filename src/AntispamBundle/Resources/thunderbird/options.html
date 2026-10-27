@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <header>
+    <img src="icons/icon.svg" alt="" width="36" height="36">
+    <div>
+      <h1>Pancernapanda Antyspam</h1>
+      <p id="serverState" class="muted">Łączenie z serwerem…</p>
+    </div>
+  </header>
+
+  <section>
+    <h2>Konto</h2>
+    <div id="loggedOut">
+      <p class="muted">Bez logowania możesz zgłaszać spam — antyspam uczy się na Twoich zgłoszeniach.
+        Zaloguj się adresem skrzynki i hasłem wtyczki (lub hasłem IMAP), aby antyspam sprawdzał nową pocztę
+        i tworzył reguły dla Twojej skrzynki.</p>
+      <form id="loginForm">
+        <label>E-mail <input type="email" id="email" required autocomplete="username"></label>
+        <label>Hasło <input type="password" id="password" required autocomplete="current-password"></label>
+        <button type="submit">Zaloguj</button>
+      </form>
+    </div>
+    <div id="loggedIn" hidden>
+      <p>Zalogowano jako <strong id="who"></strong></p>
+      <button type="button" id="logout" class="secondary">Wyloguj</button>
+    </div>
+    <p id="loginMsg" class="msg" hidden></p>
+  </section>
+
+  <section>
+    <h2>Działanie</h2>
+    <label class="check"><input type="checkbox" id="reportOnJunk"> Zgłaszaj do antyspamu, gdy oznaczę wiadomość jako śmieci / nie-śmieci</label>
+    <label class="check"><input type="checkbox" id="moveOnReport"> Po zgłoszeniu przenoś wiadomość do folderu Śmieci</label>
+    <label class="check"><input type="checkbox" id="autoCheck"> Sprawdzaj nową pocztę w antyspamie <span class="muted">(wymaga zalogowania)</span></label>
+    <label>Gdy antyspam uzna wiadomość za SPAM
+      <select id="spamAction">
+        <option value="move">oznacz jako śmieci i przenieś do Śmieci</option>
+        <option value="mark">tylko oznacz jako śmieci</option>
+        <option value="none">nic nie rób</option>
+      </select>
+    </label>
+    <label>Gdy wiadomość jest podejrzana (kwarantanna)
+      <select id="quarantineAction">
+        <option value="none">nic nie rób</option>
+        <option value="mark">oznacz jako śmieci</option>
+        <option value="move">oznacz jako śmieci i przenieś do Śmieci</option>
+      </select>
+    </label>
+    <label class="check"><input type="checkbox" id="notify"> Pokazuj powiadomienia</label>
+  </section>
+
+  <section>
+    <h2>Serwer</h2>
+    <label>Adres antyspamu <input type="url" id="server" placeholder="https://antispam.example.com"></label>
+    <p class="muted">Ustawiony automatycznie przy pobraniu wtyczki. Zmieniaj tylko, jeśli antyspam działa pod innym adresem.</p>
+  </section>
+
+  <button type="button" id="save">Zapisz ustawienia</button>
+  <span id="saveMsg" class="msg" hidden></span>
+
+  <script src="options.js"></script>
+</body>
+</html>

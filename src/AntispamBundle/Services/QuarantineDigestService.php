@@ -85,13 +85,13 @@ class QuarantineDigestService
     {
         $errors = [];
         if (!preg_match('~^https?://[^/\s]+~i', $this->getBaseUrl())) {
-            $errors[] = 'Public base URL is not set (e.g. https://antispam.example.com).';
+            $errors[] = 'Nie ustawiono publicznego adresu aplikacji (np. https://antispam.example.com).';
         }
         if (!filter_var($this->getFromEmail(), FILTER_VALIDATE_EMAIL)) {
-            $errors[] = 'Sender address is not set or invalid.';
+            $errors[] = 'Brak lub nieprawidłowy adres nadawcy.';
         }
         if ($this->tokens->usesDefaultSecret()) {
-            $errors[] = 'APP_SECRET still has its default value, so digest links could be forged. Set a random APP_SECRET (secret in parameters.yml).';
+            $errors[] = 'APP_SECRET ma wartość domyślną, więc linki w raporcie dałoby się podrobić. Ustaw losowy APP_SECRET (secret w parameters.yml).';
         }
         return $errors;
     }

@@ -26,6 +26,7 @@ Symfony-based application for cleaning spam from email accounts via IMAP or SSH+
 - **Link protection**: text/target mismatch, IP and shortened links, punycode, URI block lists, Google Safe Browsing
 - **Attachment policy**: blocked file types (also inside ZIP), double extensions, disguised executables, macros, encrypted archives
 - **Quarantine digest**: periodic e-mail to mailbox owners with signed one-click deliver / always-accept / delete links
+- **Thunderbird plugin** — report spam from the mail client (no login needed) and, when logged in, have new mail checked by antispam on arrival ([docs/thunderbird.md](docs/thunderbird.md))
 
 ## Installation
 

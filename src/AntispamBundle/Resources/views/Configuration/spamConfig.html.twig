@@ -1,122 +1,122 @@
 {% extends 'AntispamBundle::main.html.twig' %}
-{% block title %}Spam Filter Settings{% endblock %}
-{% block page_title %}Spam Filter Settings{% endblock %}
+{% block title %}Ustawienia filtra{% endblock %}
+{% block page_title %}Ustawienia filtra antyspamowego{% endblock %}
 
 {% block body %}
     <form method="post">
     <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-stats"></span> Spam Scoring</div>
+        <div class="panel-heading"><span class="glyphicon glyphicon-stats"></span> Ocena punktowa spamu</div>
         <div class="panel-body">
             <div class="checkbox"><label>
                 <input type="checkbox" name="config[scoring_enabled]" {% if config.scoring_enabled %}checked{% endif %}>
-                <strong>Enable scoring pipeline</strong> — combine blacklist / header / DNSBL signals before deciding.
+                <strong>Włącz scoring pipeline</strong> — łącz sygnały z blacklist, nagłówków i DNSBL przed podjęciem decyzji.
             </label></div>
             <div class="checkbox"><label>
                 <input type="checkbox" name="config[header_check_enabled]" {% if config.header_check_enabled %}checked{% endif %}>
-                Run header heuristics (SPF / DKIM / DMARC, suspicious subject, missing Message-ID, ...)
+                Analizuj nagłówki heurystycznie (SPF / DKIM / DMARC, podejrzany temat, brak Message-ID, ...)
             </label></div>
             <div class="checkbox"><label>
                 <input type="checkbox" name="config[dnsbl_enabled]" {% if config.dnsbl_enabled %}checked{% endif %}>
-                Check sender IP against configured DNSBL providers
+                Sprawdzaj IP nadawcy u skonfigurowanych dostawców DNSBL
             </label></div>
             <div class="checkbox"><label>
                 <input type="checkbox" name="config[clamav_enabled]" {% if config.clamav_enabled %}checked{% endif %}>
-                Scan attachments for malware with ClamAV (a virus hit marks the message as spam)
+                Skanuj załączniki programem ClamAV (wykrycie wirusa oznacza wiadomość jako spam)
             </label></div>
             <div class="checkbox"><label>
                 <input type="checkbox" name="config[log_enabled]" {% if config.log_enabled %}checked{% endif %}>
-                Persist per-message score log (recommended)
+                Zapisuj dziennik ocen dla każdej wiadomości (zalecane)
             </label></div>
 
             <div class="row" style="margin-top:10px;">
                 <div class="col-sm-6">
-                    <label>Quarantine threshold</label>
+                    <label>Próg kwarantanny</label>
                     <input type="number" name="config[quarantine_threshold]" class="form-control" value="{{ config.quarantine_threshold }}" min="0" max="100">
-                    <small class="text-muted">Score ≥ this value → move to QUARANTINE folder.</small>
+                    <small class="text-muted">Wynik ≥ tej wartości → przeniesienie do folderu QUARANTINE.</small>
                 </div>
                 <div class="col-sm-6">
-                    <label>Spam threshold</label>
+                    <label>Próg spamu</label>
                     <input type="number" name="config[spam_threshold]" class="form-control" value="{{ config.spam_threshold }}" min="1" max="200">
-                    <small class="text-muted">Score ≥ this value → treat as spam.</small>
+                    <small class="text-muted">Wynik ≥ tej wartości → traktuj jako spam.</small>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-paperclip"></span> Attachment Scanning (ClamAV)</div>
+        <div class="panel-heading"><span class="glyphicon glyphicon-paperclip"></span> Skanowanie załączników (ClamAV)</div>
         <div class="panel-body">
-            <p class="text-muted">Requires a running ClamAV daemon (clamd) reachable from this application. Enable scanning in the Spam Scoring panel above.</p>
+            <p class="text-muted">Wymaga działającego demona ClamAV (clamd) dostępnego z tej aplikacji. Włącz skanowanie w sekcji oceny punktowej powyżej.</p>
             <div class="row">
                 <div class="col-sm-8">
-                    <label>clamd address</label>
+                    <label>Adres clamd</label>
                     <input type="text" name="config[clamav_dsn]" class="form-control" value="{{ config.clamav_dsn }}" placeholder="tcp://127.0.0.1:3310">
-                    <small class="text-muted">TCP (<code>tcp://host:port</code> or <code>host:port</code>) or unix socket (<code>unix:///var/run/clamav/clamd.ctl</code>).</small>
+                    <small class="text-muted">TCP (<code>tcp://host:port</code> lub <code>host:port</code>) albo gniazdo unix (<code>unix:///var/run/clamav/clamd.ctl</code>).</small>
                 </div>
                 <div class="col-sm-4">
-                    <label>Virus score</label>
+                    <label>Punkty za wirusa</label>
                     <input type="number" name="config[clamav_score]" class="form-control" value="{{ config.clamav_score }}" min="1" max="200">
-                    <small class="text-muted">Added on a malware hit (message is also flagged spam).</small>
+                    <small class="text-muted">Dodawane po wykryciu malware (wiadomość jest też oznaczana jako spam).</small>
                 </div>
             </div>
             <div class="row" style="margin-top:10px;">
                 <div class="col-sm-4">
-                    <label>Max attachment size (MiB)</label>
+                    <label>Maks. rozmiar załącznika (MiB)</label>
                     <input type="number" name="config[clamav_max_size_mib]" class="form-control" value="{{ config.clamav_max_size_mib }}" min="1" max="500">
-                    <small class="text-muted">Larger attachments are skipped (must stay under clamd StreamMaxLength).</small>
+                    <small class="text-muted">Większe załączniki są pomijane (musi być poniżej StreamMaxLength w clamd).</small>
                 </div>
                 <div class="col-sm-4">
-                    <label>Timeout (seconds)</label>
+                    <label>Timeout (sekundy)</label>
                     <input type="number" name="config[clamav_timeout]" class="form-control" value="{{ config.clamav_timeout }}" min="1" max="300">
-                    <small class="text-muted">Connect / read timeout per scan.</small>
+                    <small class="text-muted">Limit czasu połączenia / odczytu na skan.</small>
                 </div>
                 <div class="col-sm-4">
-                    <label>Connectivity</label>
+                    <label>Łączność</label>
                     <div>
                         <a href="{{ path('antispam_clamav_test') }}" class="btn btn-default">
-                            <span class="glyphicon glyphicon-link"></span> Test connection
+                            <span class="glyphicon glyphicon-link"></span> Testuj połączenie
                         </a>
                     </div>
-                    <small class="text-muted">Pings clamd at the saved address.</small>
+                    <small class="text-muted">Sprawdza clamd pod zapisanym adresem.</small>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-globe"></span> Attachment Reputation (VirusTotal)</div>
+        <div class="panel-heading"><span class="glyphicon glyphicon-globe"></span> Reputacja załączników (VirusTotal)</div>
         <div class="panel-body">
-            <p class="text-muted">Looks up each attachment's SHA-256 hash on VirusTotal. Only the hash is sent — never the file contents. Requires a VirusTotal API key (the free key is rate-limited to ~4 requests/minute).</p>
+            <p class="text-muted">Sprawdza hash SHA-256 każdego załącznika w VirusTotal. Wysyłany jest tylko hash — nigdy zawartość pliku. Wymaga klucza API VirusTotal (darmowy klucz ma limit ok. 4 zapytań/minutę).</p>
             <div class="checkbox"><label>
                 <input type="checkbox" name="config[vt_enabled]" {% if config.vt_enabled %}checked{% endif %}>
-                <strong>Enable VirusTotal attachment lookup</strong>
+                <strong>Włącz sprawdzanie załączników w VirusTotal</strong>
             </label></div>
             <div class="row" style="margin-top:10px;">
                 <div class="col-sm-12">
-                    <label>API key</label>
-                    <input type="password" name="config[vt_api_key]" class="form-control" value="{{ config.vt_api_key }}" autocomplete="off" placeholder="VirusTotal API key">
+                    <label>Klucz API</label>
+                    <input type="password" name="config[vt_api_key]" class="form-control" value="{{ config.vt_api_key }}" autocomplete="off" placeholder="Klucz API VirusTotal">
                 </div>
             </div>
             <div class="row" style="margin-top:10px;">
                 <div class="col-sm-4">
-                    <label>Detection threshold</label>
+                    <label>Próg wykryć</label>
                     <input type="number" name="config[vt_threshold]" class="form-control" value="{{ config.vt_threshold }}" min="1" max="90">
-                    <small class="text-muted">Min. engines flagging the file as malicious before acting.</small>
+                    <small class="text-muted">Min. liczba silników uznających plik za złośliwy, zanim zostanie podjęta akcja.</small>
                 </div>
                 <div class="col-sm-4">
-                    <label>Hit score</label>
+                    <label>Punkty za trafienie</label>
                     <input type="number" name="config[vt_score]" class="form-control" value="{{ config.vt_score }}" min="1" max="200">
-                    <small class="text-muted">Added on a hit (message is also flagged spam).</small>
+                    <small class="text-muted">Dodawane przy trafieniu (wiadomość jest też oznaczana jako spam).</small>
                 </div>
                 <div class="col-sm-2">
                     <label>Timeout (s)</label>
                     <input type="number" name="config[vt_timeout]" class="form-control" value="{{ config.vt_timeout }}" min="1" max="120">
                 </div>
                 <div class="col-sm-2">
-                    <label>Verify</label>
+                    <label>Weryfikacja</label>
                     <div>
                         <a href="{{ path('antispam_virustotal_test') }}" class="btn btn-default">
-                            <span class="glyphicon glyphicon-link"></span> Test
+                            <span class="glyphicon glyphicon-link"></span> Testuj
                         </a>
                     </div>
                 </div>
@@ -125,107 +125,107 @@
     </div>
 
     <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-user"></span> Impersonation Protection (BEC)</div>
+        <div class="panel-heading"><span class="glyphicon glyphicon-user"></span> Ochrona przed podszywaniem się (BEC)</div>
         <div class="panel-body">
-            <p class="text-muted">Catches CEO fraud and lookalike domains: a protected person's name on a foreign address, <code>firrna.pl</code> / <code>f1rma.pl</code> / <code>firma-pl.com</code> posing as <code>firma.pl</code>, and spoofing of your own domain.</p>
+            <p class="text-muted">Wykrywa oszustwa „na prezesa” i domeny łudząco podobne: nazwisko chronionej osoby na obcym adresie, <code>firrna.pl</code> / <code>f1rma.pl</code> / <code>firma-pl.com</code> udające <code>firma.pl</code> oraz fałszowanie własnej domeny.</p>
             <div class="checkbox"><label>
                 <input type="checkbox" name="config[impersonation_enabled]" {% if config.impersonation_enabled %}checked{% endif %}>
-                <strong>Enable impersonation protection</strong>
+                <strong>Włącz ochronę przed podszywaniem się</strong>
             </label></div>
             <div class="checkbox"><label>
                 <input type="checkbox" name="config[protect_own_domain]" {% if config.protect_own_domain %}checked{% endif %}>
-                Automatically protect each account's own domain (free-mail domains like gmail.com / wp.pl are skipped)
+                Automatycznie chroń własną domenę każdego konta (darmowe poczty jak gmail.com / wp.pl są pomijane)
             </label></div>
             <div class="row" style="margin-top:10px;">
                 <div class="col-sm-6">
-                    <label>Protected domains</label>
+                    <label>Chronione domeny</label>
                     <textarea name="config[protected_domains]" class="form-control" rows="5" placeholder="firma.pl&#10;firma.com">{{ config.protected_domains }}</textarea>
-                    <small class="text-muted">One per line. Mail from lookalikes of these domains is scored.</small>
+                    <small class="text-muted">Jedna na linię. Poczta z domen łudząco do nich podobnych dostaje punkty.</small>
                 </div>
                 <div class="col-sm-6">
-                    <label>Protected people (VIPs)</label>
+                    <label>Chronione osoby (VIP)</label>
                     <textarea name="config[vips]" class="form-control" rows="5" placeholder="Jan Kowalski &lt;jan.kowalski@firma.pl&gt;&#10;Anna Nowak">{{ config.vips }}</textarea>
-                    <small class="text-muted">One per line: <code>Name &lt;address&gt;</code>. Without an address, any address on a protected domain is legitimate. Full name required (two words or more).</small>
+                    <small class="text-muted">Jedna na linię: <code>Imię Nazwisko &lt;adres&gt;</code>. Bez adresu prawidłowy jest każdy adres w chronionej domenie. Wymagane pełne imię i nazwisko (min. dwa słowa).</small>
                 </div>
             </div>
             <div class="row" style="margin-top:10px;">
                 <div class="col-sm-3">
-                    <label>VIP spoof score</label>
+                    <label>Podszycie pod VIP</label>
                     <input type="number" name="config[impersonation_vip_score]" class="form-control" value="{{ config.impersonation_scores.vip }}" min="0" max="200">
                 </div>
                 <div class="col-sm-3">
-                    <label>Lookalike domain score</label>
+                    <label>Podobna domena</label>
                     <input type="number" name="config[impersonation_lookalike_score]" class="form-control" value="{{ config.impersonation_scores.lookalike }}" min="0" max="200">
                 </div>
                 <div class="col-sm-3">
-                    <label>Address in display name</label>
+                    <label>Adres w nazwie nadawcy</label>
                     <input type="number" name="config[impersonation_embedded_score]" class="form-control" value="{{ config.impersonation_scores.embedded }}" min="0" max="200">
                 </div>
                 <div class="col-sm-3">
-                    <label>Own-domain spoof score</label>
+                    <label>Fałszywa własna domena</label>
                     <input type="number" name="config[impersonation_internal_score]" class="form-control" value="{{ config.impersonation_scores.internal }}" min="0" max="200">
-                    <small class="text-muted">From = protected domain but SPF/DMARC failed.</small>
+                    <small class="text-muted">From = chroniona domena, ale SPF/DMARC nie przeszły.</small>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-link"></span> Link Protection</div>
+        <div class="panel-heading"><span class="glyphicon glyphicon-link"></span> Ochrona przed złośliwymi linkami</div>
         <div class="panel-body">
-            <p class="text-muted">Inspects links in the message body. Each rule counts once per message. DNS / API failures never add points.</p>
+            <p class="text-muted">Analizuje linki w treści. Każda reguła liczy się raz na wiadomość. Błędy DNS / API nigdy nie dodają punktów.</p>
             <div class="checkbox"><label>
                 <input type="checkbox" name="config[url_enabled]" {% if config.url_enabled %}checked{% endif %}>
-                <strong>Enable link analysis</strong>
+                <strong>Włącz analizę linków</strong>
             </label></div>
             <div class="row" style="margin-top:10px;">
                 <div class="col-sm-3">
-                    <label>Text/target mismatch</label>
+                    <label>Tekst ≠ cel linku</label>
                     <input type="number" name="config[url_mismatch_score]" class="form-control" value="{{ config.url.mismatch_score }}" min="0" max="200">
-                    <small class="text-muted">Shows <code>bank.pl</code>, links elsewhere.</small>
+                    <small class="text-muted">Pokazuje <code>bank.pl</code>, prowadzi gdzie indziej.</small>
                 </div>
                 <div class="col-sm-3">
-                    <label>Link to IP address</label>
+                    <label>Link do adresu IP</label>
                     <input type="number" name="config[url_ip_score]" class="form-control" value="{{ config.url.ip_score }}" min="0" max="200">
                 </div>
                 <div class="col-sm-3">
-                    <label>URL shortener</label>
+                    <label>Skracacz linków</label>
                     <input type="number" name="config[url_shortener_score]" class="form-control" value="{{ config.url.shortener_score }}" min="0" max="200">
                 </div>
                 <div class="col-sm-3">
-                    <label>Punycode (IDN) host</label>
+                    <label>Domena IDN (punycode)</label>
                     <input type="number" name="config[url_punycode_score]" class="form-control" value="{{ config.url.punycode_score }}" min="0" max="200">
                 </div>
             </div>
             <hr>
             <div class="checkbox"><label>
                 <input type="checkbox" name="config[url_dbl_enabled]" {% if config.url.dbl_enabled %}checked{% endif %}>
-                Check link domains against URI block lists
+                Sprawdzaj domeny z linków na listach URI (DBL)
             </label></div>
             <div class="row">
                 <div class="col-sm-8">
-                    <label>URI block list zones</label>
+                    <label>Strefy list URI</label>
                     <textarea name="config[url_dbl_zones]" class="form-control" rows="3" placeholder="dbl.spamhaus.org 6">{{ config.url_dbl_zones }}</textarea>
-                    <small class="text-muted"><code>zone score</code>, one per line. Spamhaus and URIBL refuse queries from big public resolvers (8.8.8.8 etc.) — use a local resolver.</small>
+                    <small class="text-muted"><code>strefa punkty</code>, jedna na linię. Spamhaus i URIBL odrzucają zapytania z publicznych resolverów (8.8.8.8 itp.) — użyj lokalnego resolvera.</small>
                 </div>
                 <div class="col-sm-4">
-                    <label>Max domains per message</label>
+                    <label>Maks. domen na wiadomość</label>
                     <input type="number" name="config[url_max_domains]" class="form-control" value="{{ config.url.max_domains }}" min="1" max="100">
                 </div>
             </div>
             <hr>
             <div class="checkbox"><label>
                 <input type="checkbox" name="config[url_gsb_enabled]" {% if config.url.gsb_enabled %}checked{% endif %}>
-                Check links with Google Safe Browsing (phishing / malware)
+                Sprawdzaj linki w Google Safe Browsing (phishing / malware)
             </label></div>
             <div class="row">
                 <div class="col-sm-8">
-                    <label>Safe Browsing API key</label>
-                    <input type="password" name="config[url_gsb_api_key]" class="form-control" value="{{ config.url.gsb_api_key }}" autocomplete="off" placeholder="Google Cloud API key with Safe Browsing API enabled">
-                    <small class="text-muted">Full URLs are sent to Google.</small>
+                    <label>Klucz API Safe Browsing</label>
+                    <input type="password" name="config[url_gsb_api_key]" class="form-control" value="{{ config.url.gsb_api_key }}" autocomplete="off" placeholder="Klucz Google Cloud z włączonym Safe Browsing API">
+                    <small class="text-muted">Pełne adresy URL są wysyłane do Google.</small>
                 </div>
                 <div class="col-sm-4">
-                    <label>Hit score</label>
+                    <label>Punkty za trafienie</label>
                     <input type="number" name="config[url_gsb_score]" class="form-control" value="{{ config.url.gsb_score }}" min="0" max="200">
                 </div>
             </div>
@@ -233,57 +233,57 @@
     </div>
 
     <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-ban-circle"></span> Attachment Policy</div>
+        <div class="panel-heading"><span class="glyphicon glyphicon-ban-circle"></span> Polityka załączników</div>
         <div class="panel-body">
-            <p class="text-muted">File-type rules that need no ClamAV or API key, so they also run on shared hosting through the Maildir agent.</p>
+            <p class="text-muted">Reguły typów plików bez ClamAV ani klucza API — działają też na hostingu współdzielonym przez agenta Maildir.</p>
             <div class="checkbox"><label>
                 <input type="checkbox" name="config[attachment_policy_enabled]" {% if config.attachment_policy_enabled %}checked{% endif %}>
-                <strong>Enable attachment policy</strong>
+                <strong>Włącz politykę załączników</strong>
             </label></div>
             <div class="row" style="margin-top:10px;">
                 <div class="col-sm-12">
-                    <label>Blocked extensions</label>
+                    <label>Zablokowane rozszerzenia</label>
                     <textarea name="config[blocked_extensions]" class="form-control" rows="2">{{ config.blocked_extensions }}</textarea>
-                    <small class="text-muted">Comma separated. Also applied to files inside ZIP archives.</small>
+                    <small class="text-muted">Oddzielone przecinkami. Dotyczy też plików wewnątrz archiwów ZIP.</small>
                 </div>
             </div>
             <div class="row" style="margin-top:10px;">
                 <div class="col-sm-4">
-                    <label>Blocked type score</label>
+                    <label>Zablokowany typ</label>
                     <input type="number" name="config[attachment_blocked_score]" class="form-control" value="{{ config.attachment.blocked_score }}" min="0" max="200">
                 </div>
                 <div class="col-sm-4">
-                    <label>Double extension / hidden chars</label>
+                    <label>Podwójne rozszerzenie / ukryte znaki</label>
                     <input type="number" name="config[attachment_double_ext_score]" class="form-control" value="{{ config.attachment.double_ext_score }}" min="0" max="200">
                     <small class="text-muted"><code>faktura.pdf.exe</code></small>
                 </div>
                 <div class="col-sm-4">
-                    <label>Disguised executable</label>
+                    <label>Program udający dokument</label>
                     <input type="number" name="config[attachment_mismatch_score]" class="form-control" value="{{ config.attachment.mismatch_score }}" min="0" max="200">
-                    <small class="text-muted">Program content under a document name.</small>
+                    <small class="text-muted">Plik wykonywalny pod nazwą dokumentu.</small>
                 </div>
             </div>
             <div class="row" style="margin-top:10px;">
                 <div class="col-sm-4">
-                    <label>Macros / active PDF</label>
+                    <label>Makra / aktywny PDF</label>
                     <input type="number" name="config[attachment_macro_score]" class="form-control" value="{{ config.attachment.macro_score }}" min="0" max="200">
                 </div>
                 <div class="col-sm-4">
-                    <label>Password-protected file</label>
+                    <label>Plik chroniony hasłem</label>
                     <input type="number" name="config[attachment_encrypted_score]" class="form-control" value="{{ config.attachment.encrypted_score }}" min="0" max="200">
-                    <small class="text-muted">Encrypted ZIP or Office file — opaque to every scanner.</small>
+                    <small class="text-muted">Zaszyfrowany ZIP lub dokument Office — nieczytelny dla skanerów.</small>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-cog"></span> Spam Handling</div>
+        <div class="panel-heading"><span class="glyphicon glyphicon-cog"></span> Postępowanie ze spamem</div>
         <div class="panel-body">
             <div class="row" style="padding: 15px 0;">
                 <div class="col-xs-9">
-                    <strong>Delete spam messages permanently</strong>
-                    <p class="text-muted" style="margin:0;">When disabled, spam messages are moved to the SPAM folder instead of being deleted</p>
+                    <strong>Usuwaj spam na stałe</strong>
+                    <p class="text-muted" style="margin:0;">Gdy wyłączone, spam jest przenoszony do folderu SPAM zamiast usuwania</p>
                 </div>
                 <div class="col-xs-3 text-right">
                     <input type="checkbox" name="config[delete]" {% if config.delete==true %}checked{% endif %}>
@@ -292,17 +292,17 @@
         </div>
     </div>
 
-    <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-floppy-disk"></span> Save</button>
+    <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-floppy-disk"></span> Zapisz</button>
     </form>
 
     <div class="panel panel-default" style="margin-top:20px;">
-        <div class="panel-heading"><span class="glyphicon glyphicon-wrench"></span> Maintenance</div>
+        <div class="panel-heading"><span class="glyphicon glyphicon-wrench"></span> Konserwacja</div>
         <div class="panel-body">
-            <a href="{{ path('antispam_spam_unchekall') }}" class="btn btn-warning" onclick="return confirm('Reset all checked flags? This will re-process all messages on next scan.')">
-                <span class="glyphicon glyphicon-refresh"></span> Reset All Checked Flags
+            <a href="{{ path('antispam_spam_unchekall') }}" class="btn btn-warning" onclick="return confirm('Zresetować wszystkie flagi sprawdzenia? Wszystkie wiadomości zostaną ponownie przetworzone przy następnym skanie.')">
+                <span class="glyphicon glyphicon-refresh"></span> Resetuj flagi sprawdzenia
             </a>
-            <a href="{{ path('antispam_spam_resetcounters') }}" class="btn btn-warning" onclick="return confirm('Reset all rule counters to zero?')">
-                <span class="glyphicon glyphicon-stats"></span> Reset All Counters
+            <a href="{{ path('antispam_spam_resetcounters') }}" class="btn btn-warning" onclick="return confirm('Wyzerować liczniki wszystkich reguł?')">
+                <span class="glyphicon glyphicon-stats"></span> Zeruj liczniki
             </a>
         </div>
     </div>

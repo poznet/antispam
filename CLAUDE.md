@@ -7,6 +7,7 @@ Symfony 4.4 application for email spam filtering via IMAP or SSH+Maildir agent. 
 - `app/` - Symfony app config (config.yml, routing.yml, parameters.yml)
 - `web/` - public web root
 - `src/AntispamBundle/Resources/agent/` - standalone Maildir agent PHP script
+- `src/AntispamBundle/Resources/thunderbird/` - Thunderbird plugin (MailExtension), served as .xpi by `/plugin/download`
 
 ## Key concepts
 - Two connection modes per account: IMAP (remote protocol) or SSH+Maildir (direct filesystem)
@@ -26,8 +27,10 @@ See `docs/` directory for detailed documentation:
 - `docs/quarantine-digest.md` - end-user quarantine digest e-mail, signed `/q/` links, `antispam:digest:send`
 - `docs/feed.md` - shared spam feed (centralized spam DB): fingerprints, API, sync
 - `docs/feed-api.md` - shared spam feed HTTP API reference (endpoints, auth, examples)
+- `docs/thunderbird.md` - Thunderbird plugin: spam reports, on-arrival checks, login, `/api/plugin`
 
 ## Tech stack
 - PHP >= 7.1.3, Symfony 4.4, Doctrine ORM, MySQL
 - ddeboer/imap (IMAP mode), phpseclib/phpseclib (SSH mode)
-- Bootstrap 3 frontend, Twig templates
+- Bootstrap 3 frontend (bundled in `Resources/public/vendor`) + custom theme `Resources/public/css/panel.css` (light/dark), Twig templates
+- UI language: Polish (`locale: pl`)

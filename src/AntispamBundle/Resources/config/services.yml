@@ -98,6 +98,30 @@ services:
         arguments: ["@doctrine.orm.default_entity_manager", "@configuration"]
         public: true
 
+    # Thunderbird plugin — raw-message scanning, login tokens, user feedback
+    antispam.raw_scanner:
+        class: AntispamBundle\Services\RawMessageScanner
+        arguments:
+            - "@doctrine.orm.default_entity_manager"
+            - "@antispam.header_analyzer"
+            - "@antispam.dnsbl"
+            - "@antispam.scoring"
+            - "@antispam.spam_signal"
+            - "@antispam.impersonation_analyzer"
+            - "@antispam.url_analyzer"
+            - "@antispam.attachment_policy_analyzer"
+        public: true
+
+    antispam.plugin:
+        class: AntispamBundle\Services\PluginService
+        arguments:
+            - "@doctrine.orm.default_entity_manager"
+            - "@cache.app"
+            - "@antispam.spam_signal"
+            - "%kernel.secret%"
+            - "@configuration"
+        public: true
+
     # Commands
     AntispamBundle\Command\AntispamGoCommand:
         arguments:

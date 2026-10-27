@@ -1,4 +1,0 @@
-antispam:
-    resource: "@AntispamBundle/Controller/"
-    type:     annotation
-    prefix:   /

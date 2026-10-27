@@ -40,7 +40,7 @@ class CheckDnsbl
         $score = $this->dnsbl->scoreForIp($ip, $reasons);
         if ($score > 0) {
             $event->setSpamscore($event->getSpamscore() + $score);
-            CheckHeaders::addReasons($event, $reasons);
+            $event->addReasons($reasons);
         }
     }
 

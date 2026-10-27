@@ -4,18 +4,19 @@
 
 The repository ships a production-ready Docker setup:
 
-- `Dockerfile` - PHP 7.4 + Apache image with the IMAP / iconv / pdo_mysql /
-  intl / zip / opcache extensions required by the app. Document root is
-  pointed at `web/` and composer dependencies are installed without dev
-  packages.
+- `Dockerfile` - PHP 8.2 + Apache image with the IMAP / pdo_mysql / intl /
+  zip / opcache extensions required by the app. Document root is pointed at
+  `public/` and composer dependencies are installed without dev packages.
 - `docker-compose.yml` - two services, `app` and `db` (MariaDB 10.6), linked
   through a private network with healthchecks and named volumes for the
-  database data, the Symfony cache and the log directory.
-- `docker/entrypoint.sh` - renders `app/config/parameters.yml` from environment
-  variables at every container start, waits for MySQL, warms Symfony cache,
-  installs bundle assets and runs `doctrine:schema:update --force`. It also
-  hashes `ADMIN_PASSWORD` (bcrypt) so the operator never handles password
-  hashes directly.
+  database data, the application data (`var/data`) and the log directory.
+- `docker/entrypoint.sh` - freezes the environment variables into
+  `.env.local.php` at every container start (Apache does not pass the container
+  environment to PHP), waits for MySQL, rebuilds the Symfony cache and runs
+  `doctrine:schema:update --force`. It also hashes `ADMIN_PASSWORD` (bcrypt) so
+  the operator never handles password hashes directly, and builds
+  `MAILER_DSN` from the legacy `MAILER_HOST` / `MAILER_USER` /
+  `MAILER_PASSWORD` variables when it is not set.
 - `.env.example` - all supported variables with safe-to-commit defaults.
 
 ### Required environment variables
@@ -30,10 +31,9 @@ The repository ships a production-ready Docker setup:
 | `DATABASE_USER` | MySQL user | `antispam` |
 | `DATABASE_PASSWORD` | MySQL user password | `antispam` |
 | `DATABASE_ROOT_PASSWORD` | MariaDB root password | `rootpassword` |
-| `MAILER_TRANSPORT` | Swiftmailer transport | `smtp` |
-| `MAILER_HOST` | Swiftmailer host | `127.0.0.1` |
-| `MAILER_USER` | Swiftmailer user | _(empty)_ |
-| `MAILER_PASSWORD` | Swiftmailer password | _(empty)_ |
+| `DATABASE_SERVER_VERSION` | Database server version for Doctrine (`8.0.36` for MySQL) | `10.6.0-MariaDB` |
+| `MAILER_DSN` | Symfony Mailer DSN, e.g. `smtp://user:pass@smtp.example.com:587` | _(empty = mail disabled)_ |
+| `MAILER_HOST` / `MAILER_USER` / `MAILER_PASSWORD` | Legacy (Swiftmailer) settings, used to build `MAILER_DSN` (`smtp://…:25`) when it is empty | _(empty)_ |
 | `RUN_MIGRATIONS` | Run `doctrine:schema:update --force` at boot | `true` |
 
 The defaults marked above are **insecure** and only exist to let the stack
@@ -70,8 +70,9 @@ boot for local testing. Override them in production.
    - Log in with the credentials you set in step 2.
 
 5. **Persistence.** Coolify creates three named volumes automatically:
-   `db_data` (MariaDB), `app_cache` (Symfony prod cache) and `app_logs`
-   (Symfony logs). They survive redeploys and container restarts.
+   `db_data` (MariaDB), `app_data` (`var/data` - markers of already checked
+   IMAP messages) and `app_logs` (Symfony logs). They survive redeploys and
+   container restarts.
 
 ### Updating
 
@@ -85,7 +86,7 @@ that behaviour (for example because you manage schema via
 
 Change `ADMIN_PASSWORD` in Coolify's env variables screen and redeploy (or
 restart the `app` service). The entrypoint re-hashes the password and
-regenerates `parameters.yml` on startup, so the new credentials are picked
+regenerates `.env.local.php` on startup, so the new credentials are picked
 up on the next request.
 
 ## Running with plain docker-compose
@@ -117,7 +118,7 @@ Before exposing the instance publicly, make sure:
 - [ ] If you use the [quarantine digest](quarantine-digest.md), `/q/` must be
       reachable by mailbox owners. It is the only anonymous route besides
       `/login` and `/api/feed`. Schedule `antispam:digest:send` in cron and
-      set `MAILER_*`.
+      set `MAILER_DSN`.
 
 Note that IMAP passwords stored in the `account` table are currently kept in
 plain text. Treat access to the database (and its backups) as sensitive.

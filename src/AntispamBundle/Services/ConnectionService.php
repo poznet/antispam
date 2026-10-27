@@ -1,44 +1,35 @@
 <?php
-/**
- * Created by PhpStorm.
- * User: joseph
- * Date: 17.06.16
- * Time: 23:03
- */
 
 namespace AntispamBundle\Services;
 
+use Ddeboer\Imap\ConnectionInterface;
 use Ddeboer\Imap\Server;
-use Poznet\ConfigBundle\Service\ConfigService;
 
+/**
+ * IMAP connection for the mailbox configured on the "E-mail" settings page.
+ * Connects on first use, so services depending on it can be built even when
+ * IMAP is not configured or the server is down.
+ */
 class ConnectionService
 {
-    private  $config;
-    private  $connection;
+    private $config;
+    private $connection;
 
     public function __construct(ConfigService $config)
     {
-        $this->config=$config;
-        $server = new Server(
-            $this->config->get('imap'),
-            143,
-            '/novalidate-cert/notls'
-        );
-        $this->connection = $server->authenticate($this->config->get('login'), $this->config->get('password'));
-
+        $this->config = $config;
     }
 
     /**
-     * @return Server
+     * @return ConnectionInterface
      */
     public function getConnection()
     {
+        if ($this->connection === null) {
+            $server = new Server((string)$this->config->get('imap'), '143', '/novalidate-cert/notls');
+            $this->connection = $server->authenticate((string)$this->config->get('login'), (string)$this->config->get('password'));
+        }
+
         return $this->connection;
     }
-
-
-
-
-
-   
 }

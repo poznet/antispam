@@ -3,6 +3,7 @@
 namespace AntispamBundle\Tests\Services;
 
 use AntispamBundle\Services\ImpersonationAnalyzer;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 class ImpersonationAnalyzerTest extends TestCase
@@ -50,9 +51,7 @@ class ImpersonationAnalyzerTest extends TestCase
         $this->assertSame([], ImpersonationAnalyzer::parseVips("Anna\n# comment\n"));
     }
 
-    /**
-     * @dataProvider lookalikes
-     */
+    #[DataProvider('lookalikes')]
     public function testLookalikeDomains($sender, $why)
     {
         $r = $this->analyze('Biuro', 'biuro@' . $sender);
@@ -60,7 +59,7 @@ class ImpersonationAnalyzerTest extends TestCase
         $this->assertSame($why, $r['reasons'][0]['match']);
     }
 
-    public function lookalikes()
+    public static function lookalikes()
     {
         return [
             ['firrna.pl', 'homoglyph'],

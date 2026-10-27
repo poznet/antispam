@@ -65,7 +65,7 @@ Scanning is **disabled by default** because it depends on a reachable `clamd`
 instance. Configure it under **Settings → Spam Filter Settings → Attachment
 Scanning**:
 
-| Config key (`ConfigBundle`)   | Default                 | Meaning                                   |
+| Config key (`config` table)   | Default                 | Meaning                                   |
 |-------------------------------|-------------------------|-------------------------------------------|
 | `scoring.clamav_enabled`      | `false`                 | Master switch for attachment scanning     |
 | `scoring.clamav_dsn`          | `tcp://127.0.0.1:3310`  | clamd endpoint (see DSN forms below)      |
@@ -99,7 +99,7 @@ A file VirusTotal has never seen (HTTP 404) is simply treated as "no opinion".
 Scanning is **disabled by default** and requires an API key. Configure it under
 **Settings → Spam Filter Settings → Attachment Reputation**:
 
-| Config key (`ConfigBundle`) | Default | Meaning                                            |
+| Config key (`config` table) | Default | Meaning                                            |
 |-----------------------------|---------|----------------------------------------------------|
 | `scoring.vt_enabled`        | `false` | Master switch for VirusTotal lookups               |
 | `scoring.vt_api_key`        | `''`    | VirusTotal API key (required)                      |

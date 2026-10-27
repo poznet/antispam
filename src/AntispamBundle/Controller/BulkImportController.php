@@ -6,19 +6,24 @@ use AntispamBundle\Entity\Blacklist;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Entity\EmailWhitelist;
 use AntispamBundle\Entity\Whitelist;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
-use Symfony\Bundle\FrameworkBundle\Controller\Controller;
+use AntispamBundle\Services\ConfigService;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bridge\Twig\Attribute\Template;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Routing\Attribute\Route;
 
-/**
- * Bulk import/export for all four rule lists.
- *
- * @Route("/bulk")
- */
-class BulkImportController extends Controller
+/** Bulk import/export for all four rule lists. */
+#[Route('/bulk')]
+class BulkImportController extends AbstractController
 {
+    public function __construct(
+        private EntityManagerInterface $em,
+        private ConfigService $config,
+    ) {
+    }
+
     const TYPES = [
         'blacklist'       => ['entity' => Blacklist::class,      'field' => 'host',           'label' => 'Blacklista domen'],
         'whitelist'       => ['entity' => Whitelist::class,      'field' => 'host',           'label' => 'Whitelista domen'],
@@ -26,18 +31,14 @@ class BulkImportController extends Controller
         'email_whitelist' => ['entity' => EmailWhitelist::class, 'field' => 'whitelistemail', 'label' => 'Whitelista adresów e-mail'],
     ];
 
-    /**
-     * @Template()
-     * @Route("/", name="antispam_bulk_index")
-     */
+    #[Route('/', name: 'antispam_bulk_index')]
+    #[Template('@Antispam/BulkImport/index.html.twig')]
     public function indexAction()
     {
         return ['types' => self::TYPES];
     }
 
-    /**
-     * @Route("/import/{type}", name="antispam_bulk_import", methods={"POST"})
-     */
+    #[Route('/import/{type}', name: 'antispam_bulk_import', methods: ['POST'])]
     public function importAction(Request $request, $type)
     {
         if (!isset(self::TYPES[$type])) {
@@ -45,10 +46,10 @@ class BulkImportController extends Controller
             return $this->redirectToRoute('antispam_bulk_index');
         }
 
-        $raw = (string)$request->get('entries', '');
-        $patternType = $request->get('pattern_type', 'exact');
-        $score = (int)$request->get('score', 10);
-        $email = $this->get('configuration')->get('email');
+        $raw = (string)$request->request->get('entries', '');
+        $patternType = $request->request->get('pattern_type', 'exact');
+        $score = (int)$request->request->get('score', 10);
+        $email = $this->config->get('email');
 
         $entries = array_values(array_filter(array_map(function ($line) {
             $line = trim(preg_replace('/[,;]/', "\n", $line));
@@ -56,14 +57,13 @@ class BulkImportController extends Controller
         }, preg_split('/\r?\n/', $raw))));
 
         $conf = self::TYPES[$type];
-        $em = $this->getDoctrine()->getManager();
         $added = 0;
         $skipped = 0;
 
         foreach ($entries as $value) {
             if (!$value) { continue; }
             $setter = 'set' . ucfirst($conf['field']);
-            $existing = $em->getRepository($conf['entity'])->findOneBy([
+            $existing = $this->em->getRepository($conf['entity'])->findOneBy([
                 $conf['field'] => $value,
                 'email' => $email,
             ]);
@@ -79,26 +79,23 @@ class BulkImportController extends Controller
             if (method_exists($e, 'setScore') && in_array($type, ['blacklist', 'email_blacklist'], true)) {
                 $e->setScore(max(1, $score));
             }
-            $em->persist($e);
+            $this->em->persist($e);
             $added++;
         }
-        $em->flush();
+        $this->em->flush();
 
         $this->addFlash('success', sprintf('Zaimportowano wpisy: %d (pominięte duplikaty: %d)', $added, $skipped));
         return $this->redirectToRoute('antispam_bulk_index');
     }
 
-    /**
-     * @Route("/export/{type}", name="antispam_bulk_export")
-     */
+    #[Route('/export/{type}', name: 'antispam_bulk_export')]
     public function exportAction($type)
     {
         if (!isset(self::TYPES[$type])) {
             throw $this->createNotFoundException();
         }
         $conf = self::TYPES[$type];
-        $em = $this->getDoctrine()->getManager();
-        $items = $em->getRepository($conf['entity'])->findAll();
+        $items = $this->em->getRepository($conf['entity'])->findAll();
 
         $getter = 'get' . ucfirst($conf['field']);
         $lines = ['# ' . $conf['label'] . ' - eksport ' . date('c')];

@@ -2,126 +2,86 @@
 
 namespace AntispamBundle\Entity;
 
+use AntispamBundle\Repository\AccountRepository;
 use Doctrine\ORM\Mapping as ORM;
 
-/**
- * @ORM\Table(name="antispam_account")
- * @ORM\Entity(repositoryClass="AntispamBundle\Repository\AccountRepository")
- */
+#[ORM\Entity(repositoryClass: AccountRepository::class)]
+#[ORM\Table(name: 'antispam_account')]
 class Account
 {
     const CONNECTION_IMAP = 'imap';
     const CONNECTION_SSH = 'ssh';
 
-    /**
-     * @ORM\Column(name="id", type="integer")
-     * @ORM\Id
-     * @ORM\GeneratedValue(strategy="AUTO")
-     */
+    #[ORM\Column(name: 'id', type: 'integer')]
+    #[ORM\Id]
+    #[ORM\GeneratedValue(strategy: 'AUTO')]
     private $id;
 
-    /**
-     * @ORM\Column(name="name", type="string", length=255)
-     */
+    #[ORM\Column(name: 'name', type: 'string', length: 255)]
     private $name;
 
-    /**
-     * @ORM\Column(name="email", type="string", length=255)
-     */
+    #[ORM\Column(name: 'email', type: 'string', length: 255)]
     private $email;
 
-    /**
-     * @ORM\Column(name="connection_type", type="string", length=10)
-     */
+    #[ORM\Column(name: 'connection_type', type: 'string', length: 10)]
     private $connectionType = self::CONNECTION_IMAP;
 
     // IMAP fields
 
-    /**
-     * @ORM\Column(name="imap_host", type="string", length=255, nullable=true)
-     */
+    #[ORM\Column(name: 'imap_host', type: 'string', length: 255, nullable: true)]
     private $imapHost;
 
-    /**
-     * @ORM\Column(name="imap_port", type="integer", nullable=true)
-     */
+    #[ORM\Column(name: 'imap_port', type: 'integer', nullable: true)]
     private $imapPort = 143;
 
-    /**
-     * @ORM\Column(name="imap_login", type="string", length=255, nullable=true)
-     */
+    #[ORM\Column(name: 'imap_login', type: 'string', length: 255, nullable: true)]
     private $imapLogin;
 
-    /**
-     * @ORM\Column(name="imap_password", type="string", length=255, nullable=true)
-     */
+    #[ORM\Column(name: 'imap_password', type: 'string', length: 255, nullable: true)]
     private $imapPassword;
 
-    /**
-     * @ORM\Column(name="imap_flags", type="string", length=255, nullable=true)
-     */
+    #[ORM\Column(name: 'imap_flags', type: 'string', length: 255, nullable: true)]
     private $imapFlags = '/novalidate-cert/notls';
 
     // SSH fields
 
-    /**
-     * @ORM\Column(name="ssh_host", type="string", length=255, nullable=true)
-     */
+    #[ORM\Column(name: 'ssh_host', type: 'string', length: 255, nullable: true)]
     private $sshHost;
 
-    /**
-     * @ORM\Column(name="ssh_port", type="integer", nullable=true)
-     */
+    #[ORM\Column(name: 'ssh_port', type: 'integer', nullable: true)]
     private $sshPort = 22;
 
-    /**
-     * @ORM\Column(name="ssh_user", type="string", length=255, nullable=true)
-     */
+    #[ORM\Column(name: 'ssh_user', type: 'string', length: 255, nullable: true)]
     private $sshUser;
 
-    /**
-     * @ORM\Column(name="ssh_key_path", type="string", length=500, nullable=true)
-     */
+    #[ORM\Column(name: 'ssh_key_path', type: 'string', length: 500, nullable: true)]
     private $sshKeyPath;
 
-    /**
-     * @ORM\Column(name="maildir_path", type="string", length=500, nullable=true)
-     */
+    #[ORM\Column(name: 'maildir_path', type: 'string', length: 500, nullable: true)]
     private $maildirPath = '~/Maildir';
 
-    /**
-     * @ORM\Column(name="agent_path", type="string", length=500, nullable=true)
-     */
+    #[ORM\Column(name: 'agent_path', type: 'string', length: 500, nullable: true)]
     private $agentPath = '~/antispam-agent';
 
     // Common fields
 
-    /**
-     * @ORM\Column(name="delete_spam", type="boolean")
-     */
+    #[ORM\Column(name: 'delete_spam', type: 'boolean')]
     private $deleteSpam = false;
 
-    /**
-     * @ORM\Column(name="agent_deployed", type="boolean")
-     */
+    #[ORM\Column(name: 'agent_deployed', type: 'boolean')]
     private $agentDeployed = false;
 
-    /**
-     * @ORM\Column(name="last_scan_at", type="datetime", nullable=true)
-     */
+    #[ORM\Column(name: 'last_scan_at', type: 'datetime', nullable: true)]
     private $lastScanAt;
 
-    /**
-     * @ORM\Column(name="last_scan_result", type="text", nullable=true)
-     */
+    #[ORM\Column(name: 'last_scan_result', type: 'text', nullable: true)]
     private $lastScanResult;
 
     /**
      * bcrypt hash of the password used to log in from the Thunderbird plugin
      * (optional; IMAP accounts can also log in with their IMAP password).
-     *
-     * @ORM\Column(name="plugin_password_hash", type="string", length=255, nullable=true)
      */
+    #[ORM\Column(name: 'plugin_password_hash', type: 'string', length: 255, nullable: true)]
     private $pluginPasswordHash;
 
     public function getId() { return $this->id; }

@@ -2,43 +2,32 @@
 
 namespace AntispamBundle\Entity;
 
+use AntispamBundle\Repository\EmailWhitelistRepository;
 use Doctrine\ORM\Mapping as ORM;
 
-/**
- * @ORM\Table(name="antispam_email_whitelist")
- * @ORM\Entity(repositoryClass="AntispamBundle\Repository\EmailWhitelistRepository")
- */
+#[ORM\Entity(repositoryClass: EmailWhitelistRepository::class)]
+#[ORM\Table(name: 'antispam_email_whitelist')]
 class EmailWhitelist
 {
     const PATTERN_EXACT = 'exact';
     const PATTERN_WILDCARD = 'wildcard';
     const PATTERN_REGEX = 'regex';
 
-    /**
-     * @ORM\Column(name="id", type="integer")
-     * @ORM\Id
-     * @ORM\GeneratedValue(strategy="AUTO")
-     */
+    #[ORM\Column(name: 'id', type: 'integer')]
+    #[ORM\Id]
+    #[ORM\GeneratedValue(strategy: 'AUTO')]
     private $id;
 
-    /**
-     * @ORM\Column(name="email", type="string", length=255)
-     */
+    #[ORM\Column(name: 'email', type: 'string', length: 255)]
     private $email;
 
-    /**
-     * @ORM\Column(name="whitelistemail", type="string", length=255)
-     */
+    #[ORM\Column(name: 'whitelistemail', type: 'string', length: 255)]
     private $whitelistemail;
 
-    /**
-     * @ORM\Column(name="pattern_type", type="string", length=16)
-     */
+    #[ORM\Column(name: 'pattern_type', type: 'string', length: 16)]
     private $patternType = self::PATTERN_EXACT;
 
-    /**
-     * @ORM\Column(name="counter", type="integer")
-     */
+    #[ORM\Column(name: 'counter', type: 'integer')]
     private $counter = 0;
 
     public function getId() { return $this->id; }

@@ -61,7 +61,7 @@ class CheckImpersonation
         );
         if ($result['score'] > 0) {
             $event->setSpamscore($event->getSpamscore() + $result['score']);
-            CheckHeaders::addReasons($event, $result['reasons']);
+            $event->addReasons($result['reasons']);
         }
     }
 }

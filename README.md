@@ -3,14 +3,12 @@ Pancernapanda antispam
 
 Symfony-based application for cleaning spam from email accounts via IMAP or SSH+Maildir. Part of the Pancernapanda security toolkit.
 
-[![Build Status](https://travis-ci.org/poznet/antispam.svg?branch=master)](https://travis-ci.org/poznet/antispam)   [![SensioLabsInsight](https://insight.sensiolabs.com/projects/6fb908c6-493c-4754-b04d-c04953c537d7/mini.png)](https://insight.sensiolabs.com/projects/6fb908c6-493c-4754-b04d-c04953c537d7)
-
 ## Requirements
 
-- **PHP >= 7.1.3** (recommended: 7.2, 7.3, or 7.4)
-- **Symfony 4.4 LTS**
-- **MySQL 5.7+** or MariaDB 10.2+
-- **ext-iconv**
+- **PHP 8.2 or 8.3** (`ext-imap` is not bundled with PHP 8.4+)
+- **Symfony 7.4 LTS**, Doctrine ORM 3
+- **MySQL 5.7+** or MariaDB 10.4+
+- PHP extensions: `imap`, `pdo_mysql`, `iconv`, `ctype`, `curl`, `intl`, `zip`
 - IMAP enabled email account
 
 ## Features
@@ -35,17 +33,24 @@ Symfony-based application for cleaning spam from email accounts via IMAP or SSH+
 git clone https://github.com/poznet/antispam.git
 cd antispam
 
-# Install dependencies
-composer install
+# Configure: override the defaults from .env in .env.local (not committed)
+cat > .env.local <<'ENV'
+APP_SECRET=<random string, e.g. openssl rand -hex 32>
+DATABASE_HOST=127.0.0.1
+DATABASE_PASSWORD=<password>
+ADMIN_PASSWORD_HASH='<output of: php bin/console security:hash-password>'
+MAILER_DSN=smtp://user:pass@smtp.example.com:587
+ENV
 
-# Configure database and email settings
-cp app/config/parameters.yml.dist app/config/parameters.yml
-# Edit app/config/parameters.yml with your settings
+# Install dependencies (also clears the cache and publishes bundle assets)
+composer install
 
 # Create database
 php bin/console doctrine:database:create
 php bin/console doctrine:schema:create
 ```
+
+Point the web server's document root at `public/`.
 
 ### Docker / Coolify
 
@@ -66,11 +71,17 @@ php bin/console antispam:go
 ```
 
 ### Web interface
-Access the web interface at `http://localhost/app_dev.php` to manage whitelists and blacklists.
+Point a web server at `public/` (or run `php -S 127.0.0.1:8000 -t public public/index.php`
+for local development) and log in with `ADMIN_USER` / the password behind `ADMIN_PASSWORD_HASH`.
+
+### Tests
+```bash
+vendor/bin/phpunit
+```
 
 ## Upgrade
 
-If upgrading from Symfony 2.8, see [UPGRADE.md](UPGRADE.md) for detailed instructions.
+Upgrading an existing Symfony 4.4 installation: see [UPGRADE.md](UPGRADE.md).
 
 ## Status
 

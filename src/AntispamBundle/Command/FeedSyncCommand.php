@@ -5,6 +5,7 @@ namespace AntispamBundle\Command;
 use AntispamBundle\Entity\SharedSpamSignal;
 use AntispamBundle\Services\SpamSignalService;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -20,10 +21,9 @@ use Symfony\Component\Console\Output\OutputInterface;
  *
  *     php bin/console antispam:feed:sync
  */
+#[AsCommand(name: 'antispam:feed:sync', description: 'Push/pull spam fingerprints to/from the configured shared feed hub')]
 class FeedSyncCommand extends Command
 {
-    protected static $defaultName = 'antispam:feed:sync';
-
     private $em;
     private $feed;
 
@@ -34,15 +34,14 @@ class FeedSyncCommand extends Command
         $this->feed = $feed;
     }
 
-    protected function configure()
+    protected function configure(): void
     {
-        $this->setDescription('Push/pull spam fingerprints to/from the configured shared feed hub')
-            ->addOption('push-only', null, InputOption::VALUE_NONE, 'Only push local signals')
+        $this->addOption('push-only', null, InputOption::VALUE_NONE, 'Only push local signals')
             ->addOption('pull-only', null, InputOption::VALUE_NONE, 'Only pull remote signals')
             ->addOption('batch', null, InputOption::VALUE_REQUIRED, 'Push batch size', 1000);
     }
 
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         if (!$this->feed->isEnabled()) {
             $output->writeln('<comment>Shared feed is disabled (feed.enabled). Nothing to do.</comment>');

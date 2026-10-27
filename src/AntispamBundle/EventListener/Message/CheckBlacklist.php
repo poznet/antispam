@@ -2,11 +2,11 @@
 
 namespace AntispamBundle\EventListener\Message;
 
+use AntispamBundle\Entity\Blacklist;
 use AntispamBundle\Event\MessageEvent;
 use AntispamBundle\Services\MessageService;
 use AntispamBundle\Services\PatternMatcher;
 use AntispamBundle\Services\ScoringService;
-use Ddeboer\Imap\Exception\Exception;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -22,7 +22,7 @@ class CheckBlacklist
     /** @var array<string, array> rules cached per account email for the lifetime of this listener */
     private $rulesCache = [];
 
-    public function __construct(EntityManagerInterface $em, MessageService $ms, ScoringService $scoring = null)
+    public function __construct(EntityManagerInterface $em, MessageService $ms, ?ScoringService $scoring = null)
     {
         $this->em = $em;
         $this->ms = $ms;
@@ -35,8 +35,6 @@ class CheckBlacklist
 
         try {
             $host = strtolower((string)$msg->getHeaders()->get('sender')[0]->host);
-        } catch (Exception $e) {
-            return;
         } catch (\Throwable $e) {
             return;
         }
@@ -44,7 +42,7 @@ class CheckBlacklist
 
         $cacheKey = (string)$event->getEmail();
         if (!isset($this->rulesCache[$cacheKey])) {
-            $this->rulesCache[$cacheKey] = $this->em->getRepository('AntispamBundle:Blacklist')
+            $this->rulesCache[$cacheKey] = $this->em->getRepository(Blacklist::class)
                 ->findBy(['email' => $event->getEmail()]);
         }
         $rules = $this->rulesCache[$cacheKey];
@@ -59,7 +57,7 @@ class CheckBlacklist
 
         if ($this->scoring && $this->scoring->isScoringEnabled()) {
             $event->setSpamscore($event->getSpamscore() + $match->getScore());
-            CheckHeaders::addReasons($event, [[
+            $event->addReasons([[
                 'rule' => 'blacklist:' . $match->getHost() . ' (' . $match->getPatternType() . ')',
                 'score' => $match->getScore(),
             ]]);

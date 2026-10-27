@@ -48,7 +48,7 @@ class CheckAttachmentPolicy
         $result = $this->analyzer->analyze($attachments, $this->scoring->getAttachmentPolicyConfig());
         if ($result['score'] > 0) {
             $event->setSpamscore($event->getSpamscore() + $result['score']);
-            CheckHeaders::addReasons($event, $result['reasons']);
+            $event->addReasons($result['reasons']);
         }
     }
 }

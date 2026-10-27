@@ -49,7 +49,7 @@ class CheckUrls
         $result = $this->analyzer->analyze($html, $text, $this->scoring->getUrlConfig());
         if ($result['score'] > 0) {
             $event->setSpamscore($event->getSpamscore() + $result['score']);
-            CheckHeaders::addReasons($event, $result['reasons']);
+            $event->addReasons($result['reasons']);
         }
     }
 }

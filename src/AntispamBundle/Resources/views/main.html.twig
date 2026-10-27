@@ -109,11 +109,11 @@
         {% if app.user %}
             <div class="pp-user dropdown">
                 <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
-                    <span class="pp-avatar">{{ app.user.username|first }}</span>
-                    <span class="pp-user-name">{{ app.user.username }}</span>
+                    <span class="pp-avatar">{{ app.user.userIdentifier|first }}</span>
+                    <span class="pp-user-name">{{ app.user.userIdentifier }}</span>
                 </a>
                 <ul class="dropdown-menu dropdown-menu-right">
-                    <li class="dropdown-header">Zalogowano jako {{ app.user.username }}</li>
+                    <li class="dropdown-header">Zalogowano jako {{ app.user.userIdentifier }}</li>
                     <li><a href="{{ path('antispam_spam_config') }}"><span class="glyphicon glyphicon-cog"></span> Ustawienia</a></li>
                     <li role="separator" class="divider"></li>
                     <li><a href="{{ path('logout') }}"><span class="glyphicon glyphicon-log-out"></span> Wyloguj</a></li>
@@ -123,7 +123,7 @@
     </header>
 
     <main class="pp-content">
-        {% for type, messages in app.session.flashbag.all() %}
+        {% for type, messages in app.flashes() %}
             {% for message in messages %}
                 <div class="alert alert-{{ type }} alert-dismissible" role="alert">
                     <button type="button" class="close" data-dismiss="alert" aria-label="Zamknij"><span aria-hidden="true">&times;</span></button>

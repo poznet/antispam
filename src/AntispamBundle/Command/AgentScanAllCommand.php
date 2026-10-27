@@ -5,14 +5,14 @@ namespace AntispamBundle\Command;
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Services\SshService;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
+#[AsCommand(name: 'antispam:agent:scan-all', description: 'Run spam scan on all configured accounts')]
 class AgentScanAllCommand extends Command
 {
-    protected static $defaultName = 'antispam:agent:scan-all';
-
     private $em;
     private $ssh;
 
@@ -23,14 +23,10 @@ class AgentScanAllCommand extends Command
         $this->ssh = $ssh;
     }
 
-    protected function configure()
-    {
-        $this->setDescription('Run spam scan on all configured accounts');
-    }
 
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $accounts = $this->em->getRepository('AntispamBundle:Account')->findAll();
+        $accounts = $this->em->getRepository(Account::class)->findAll();
 
         if (empty($accounts)) {
             $output->writeln('<comment>No accounts configured</comment>');

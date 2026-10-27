@@ -65,7 +65,7 @@ class CheckAttachmentsVirusTotal
             if ($result['malicious'] >= $threshold) {
                 $event->setSpamscore($event->getSpamscore() + $score);
                 $event->setSpam(true);
-                CheckHeaders::addReasons($event, [[
+                $event->addReasons([[
                     'rule' => 'virustotal:' . $result['malicious'] . '/' . $result['total'],
                     'score' => $score,
                     'filename' => $this->filenameOf($attachment),

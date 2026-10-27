@@ -1,168 +1,122 @@
 <?php
-/**
- * Created by PhpStorm.
- * User: joseph
- * Date: 17.06.16
- * Time: 23:37
- */
 
 namespace AntispamBundle\Event;
 
+use Ddeboer\Imap\MessageInterface;
+use Symfony\Contracts\EventDispatcher\Event;
 
-use Ddeboer\Imap\Message;
-use Symfony\Component\EventDispatcher\Event;
-
+/**
+ * One IMAP message travelling through the `antispam.check.message` listener
+ * pipeline; listeners record their verdicts and scores on it.
+ */
 class MessageEvent extends Event
 {
-
     private $message;
     private $email;
-    private $delete;
-    private $whitelist;
-    private $blacklist;
-    private $spamscore;
-    private $spam;
-    private $checkedbefore;
+    private $delete = false;
+    private $whitelist = false;
+    private $blacklist = false;
+    private $spamscore = 0;
+    private $spam = false;
+    private $checkedbefore = false;
+    /** @var array<int, array> scoring reasons collected by the pipeline listeners */
+    private $reasons = [];
 
-
-    public function __construct(Message $message,$email=null)
+    public function __construct(MessageInterface $message, $email = null)
     {
         $this->message = $message;
-        $this->email=$email;
-        $this->delete=false;
-        $this->spamscore=0;
-        $this->spam=false;
-        $this->whitelist=false;
-        $this->blacklist=false;
-        $this->checkedbefore=false;
+        $this->email = $email;
     }
 
-    /**
-     * @return mixed
-     */
+    /** @return MessageInterface */
     public function getMessage()
     {
         return $this->message;
     }
 
-    /**
-     * @param mixed $message
-     */
-    public function setMessage(Message $message)
+    public function setMessage(MessageInterface $message)
     {
         $this->message = $message;
     }
 
-    /**
-    * @return null
-    */
+    /** Address of the account being scanned (rules are scoped per account). */
     public function getEmail()
     {
         return $this->email;
-    }/**
-     * @param null $email
-     */
+    }
+
     public function setEmail($email)
     {
         $this->email = $email;
     }
 
-    /**
-     * @return boolean
-     */
     public function isDelete()
     {
         return $this->delete;
     }
 
-    /**
-     * @param boolean $delete
-     */
     public function setDelete($delete)
     {
         $this->delete = $delete;
     }
 
-    /**
-     * @return boolean
-     */
     public function isWhitelist()
     {
         return $this->whitelist;
     }
 
-    /**
-     * @param boolean $whitelist
-     */
     public function setWhitelist($whitelist)
     {
         $this->whitelist = $whitelist;
     }
 
-    /**
-     * @return boolean
-     */
     public function isBlacklist()
     {
         return $this->blacklist;
     }
 
-    /**
-     * @param boolean $blacklist
-     */
     public function setBlacklist($blacklist)
     {
         $this->blacklist = $blacklist;
     }
 
-    /**
-     * @return int
-     */
     public function getSpamscore()
     {
         return $this->spamscore;
     }
 
-    /**
-     * @param int $spamscore
-     */
     public function setSpamscore($spamscore)
     {
         $this->spamscore = $spamscore;
     }
 
-    /**
-     * @return boolean
-     */
     public function isCheckedbefore()
     {
         return $this->checkedbefore;
     }
 
-    /**
-     * @param boolean $checkedbefore
-     */
     public function setCheckedbefore($checkedbefore)
     {
         $this->checkedbefore = $checkedbefore;
     }
 
-    /**
-     * @return boolean
-     */
     public function isSpam()
     {
         return $this->spam;
     }
 
-    /**
-     * @param boolean $spam
-     */
     public function setSpam($spam)
     {
         $this->spam = $spam;
     }
 
+    public function getReasons()
+    {
+        return $this->reasons;
+    }
 
-
+    public function addReasons(array $reasons)
+    {
+        $this->reasons = array_merge($this->reasons, $reasons);
+    }
 }

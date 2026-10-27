@@ -49,6 +49,6 @@ class CheckSharedFeed
                 'score' => $score,
             ];
         }
-        CheckHeaders::addReasons($event, $reasons);
+        $event->addReasons($reasons);
     }
 }

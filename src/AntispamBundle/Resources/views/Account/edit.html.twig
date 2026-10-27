@@ -35,25 +35,22 @@
             <div class="panel-body">
                 <div class="form-group">
                     <label>Host IMAP</label>
-                    <input type="text" class="form-control" name="account[imap_host]" value="{{ account.imapHost }}">
+                    <input type="text" class="form-control" id="imapHost" name="account[imap_host]" value="{{ account.imapHost }}">
                 </div>
                 <div class="form-group">
                     <label>Port IMAP</label>
-                    <input type="number" class="form-control" name="account[imap_port]" value="{{ account.imapPort }}">
+                    <input type="number" class="form-control" id="imapPort" name="account[imap_port]" value="{{ account.imapPort }}">
                 </div>
                 <div class="form-group">
                     <label>Login</label>
-                    <input type="text" class="form-control" name="account[imap_login]" value="{{ account.imapLogin }}">
+                    <input type="text" class="form-control" id="imapLogin" name="account[imap_login]" value="{{ account.imapLogin }}">
                 </div>
                 <div class="form-group">
                     <label>Hasło</label>
-                    <input type="password" class="form-control" name="account[imap_password]" value="" placeholder="(bez zmian)" autocomplete="new-password">
+                    <input type="password" class="form-control" id="imapPassword" name="account[imap_password]" value="" placeholder="(bez zmian)" autocomplete="new-password">
                     <p class="help-block">Zostaw puste, żeby zachować obecne hasło.</p>
                 </div>
-                <div class="form-group">
-                    <label>Flagi IMAP</label>
-                    <input type="text" class="form-control" name="account[imap_flags]" value="{{ account.imapFlags }}">
-                </div>
+                {% include '@Antispam/Account/_imap_security.html.twig' with {account_id: account.id} %}
             </div>
         </div>
 
@@ -113,4 +110,8 @@
         document.getElementById('sshFields').style.display = type === 'ssh' ? 'block' : 'none';
     }
     </script>
+{% endblock %}
+
+{% block javascripts %}
+    <script src="{{ asset('bundles/antispam/js/imap-security.js') }}"></script>
 {% endblock %}

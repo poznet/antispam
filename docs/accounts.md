@@ -14,7 +14,34 @@ Traditional mode using IMAP protocol to connect to mail server.
 - **IMAP Port** - default 993
 - **Login** - IMAP username
 - **Password** - IMAP password, stored encrypted (libsodium, key derived from `APP_SECRET`). Leave it empty when editing to keep the current one. After changing `APP_SECRET` the passwords have to be entered again.
-- **IMAP Flags** - connection flags (default: `/imap/ssl`; the old unencrypted setup is port 143 with `/novalidate-cert/notls`)
+- **IMAP Flags** - c-client connection flags (default: `/imap/ssl`; the old unencrypted setup is port 143 with `/novalidate-cert/notls`)
+
+### SSL/TLS options in the form
+
+The account add/edit form and the legacy global config (`/config/email/`) build the flags from clickable
+options (`AntispamBundle\Services\ImapFlags`, shared template `Account/_imap_security.html.twig`):
+
+| Encryption | Flag | Default port |
+|---|---|---|
+| SSL/TLS (implicit, recommended) | `/ssl` | 993 |
+| STARTTLS (required) | `/tls` | 143 |
+| STARTTLS if available (opportunistic) | none | 143 |
+| No encryption | `/notls` | 143 |
+
+- **Certificate**: verify (default) or accept any certificate (`/novalidate-cert`) for self-signed
+  certificates or a shared-hosting certificate issued for another name (e.g. `s1.hosting.pl` instead of `mail.domena.pl`).
+- **Advanced**: `/secure` (no clear-text password auth), `/norsh`, `/debug`, or **custom flags** typed by
+  hand (e.g. `/imap/ssl/readonly`). Stored flags the form cannot express open in custom mode, so nothing is lost.
+- Switching encryption swaps the port between 993 and 143 if it still holds a default value; the full
+  mailbox string (`{host:port/flags}`) is previewed live.
+
+**Check connection and certificate** (`POST /account/imap-check`, CSRF `imap_check`, works before saving):
+DNS, TCP, TLS handshake (implicit or STARTTLS), TLS version and cipher, the server certificate (CN, SANs,
+issuer, validity, days left, hostname match, trusted chain, self-signed, SHA-256 fingerprint), server
+capabilities (`STARTTLS`, `LOGINDISABLED`...) and, with a login given, a real c-client login with the chosen
+flags (on edit an empty password uses the stored one). **Detect settings** tries 993 + SSL/TLS and
+143 + STARTTLS and applies the working combination, keeping certificate verification on when the
+certificate is trusted.
 
 ## SSH+Maildir Mode
 

@@ -912,3 +912,43 @@ a.pp-kpi:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); bord
 /* Page toolbar (top-of-page actions) */
 .pp-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
 .pp-toolbar .pp-spacer { flex: 1; }
+
+/* Account form: clickable SSL/TLS option cards (Account/_imap_security.html.twig) */
+.pp-choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 767px) { .pp-choice-grid { grid-template-columns: 1fr; } }
+.pp-choice-grid.is-disabled, .is-disabled > .pp-choice-grid { opacity: .45; pointer-events: none; }
+.pp-choice {
+    display: flex; align-items: flex-start; gap: 0; margin: 0;
+    padding: 12px 14px;
+    border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface); cursor: pointer; font-weight: 400;
+    transition: border-color .15s, background .15s, box-shadow .15s;
+}
+.pp-choice:hover { border-color: var(--border-2); background: var(--surface-2); }
+.pp-choice.is-active { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-soft); }
+.pp-choice input[type="radio"] { margin-top: 2px !important; }
+.pp-choice-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pp-choice-title { font-weight: 600; color: var(--text); font-size: 14px; }
+.pp-choice-title .label { margin-left: 4px; vertical-align: 1px; }
+.pp-choice-desc { color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+.pp-choice-meta { color: var(--muted); font-size: 12px; }
+.pp-imap-advanced { margin: 4px 0 14px; }
+.pp-imap-advanced-toggle { display: inline-block; margin-bottom: 8px; font-weight: 600; }
+.pp-imap-advanced-toggle::after { content: ' \25B4'; }
+.pp-imap-advanced-toggle.collapsed::after { content: ' \25BE'; }
+.pp-imap-preview { padding: 10px 12px; margin-bottom: 12px; background: var(--surface-2); border: 1px dashed var(--border-2); border-radius: var(--radius-sm); word-break: break-all; }
+.pp-imap-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pp-imap-actions .help-block { margin: 0; flex-basis: 100%; }
+.pp-imap-actions .btn.is-loading .glyphicon { animation: pp-spin 1s linear infinite; }
+@keyframes pp-spin { to { transform: rotate(360deg); } }
+.pp-imap-result { margin-top: 14px; }
+.pp-imap-result:empty { display: none; }
+.pp-imap-steps { list-style: none; padding: 0; margin: 0 0 12px; }
+.pp-imap-steps li { display: flex; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.pp-imap-steps li:last-child { border-bottom: 0; }
+.pp-imap-steps .glyphicon { margin-top: 2px; flex: none; }
+.pp-imap-steps .text-muted { word-break: break-word; }
+.pp-imap-cert th { width: 170px; color: var(--muted); font-weight: 600; }
+.pp-imap-cert td { word-break: break-all; }
+.pp-imap-result .label { display: inline-block; margin: 0 2px 4px 0; }
+.form-horizontal .pp-imap-security .form-group { margin-left: 0; margin-right: 0; }

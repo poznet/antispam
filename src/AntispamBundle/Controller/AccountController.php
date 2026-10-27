@@ -5,11 +5,14 @@ namespace AntispamBundle\Controller;
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Services\AgentRulesExporter;
 use AntispamBundle\Services\CryptoService;
+use AntispamBundle\Services\ImapFlags;
+use AntispamBundle\Services\ImapTlsProbe;
 use AntispamBundle\Services\SshService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
@@ -25,6 +28,7 @@ class AccountController extends AbstractController
         private AgentRulesExporter $rulesExporter,
         private EventDispatcherInterface $dispatcher,
         private CryptoService $crypto,
+        private ImapTlsProbe $tlsProbe,
     ) {
     }
 
@@ -58,7 +62,7 @@ class AccountController extends AbstractController
             $this->em->flush();
             return $this->redirectToRoute('antispam_account_index');
         }
-        return [];
+        return ['imap_tls' => ImapFlags::defaultOptions(), 'imap_flags' => ImapFlags::DEFAULT_FLAGS];
     }
 
     #[Route('/edit/{id}', name: 'antispam_account_edit')]
@@ -77,7 +81,50 @@ class AccountController extends AbstractController
             return $this->redirectToRoute('antispam_account_index');
         }
 
-        return ['account' => $account];
+        return [
+            'account' => $account,
+            'imap_tls' => ImapFlags::parse($account->getImapFlags()),
+            'imap_flags' => $account->getImapFlags() ?: ImapFlags::DEFAULT_FLAGS,
+        ];
+    }
+
+    /**
+     * Connection / certificate check run from the account form before saving.
+     * `mode=detect` tries 993+SSL/TLS and 143+STARTTLS and suggests settings.
+     * With a login the real c-client connection is tried as well; on edit an
+     * empty password falls back to the stored one.
+     */
+    #[Route('/imap-check', name: 'antispam_account_imap_check', methods: ['POST'])]
+    public function imapCheckAction(Request $request)
+    {
+        $this->checkActionToken($request, 'imap_check');
+        $data = $request->request->all('account');
+        $host = (string)($data['imap_host'] ?? '');
+
+        if ($request->request->get('mode') === 'detect') {
+            return new JsonResponse($this->tlsProbe->detect($host));
+        }
+
+        $flags = ImapFlags::fromFormData($data);
+        $options = ImapFlags::parse($flags);
+        $password = (string)($data['imap_password'] ?? '');
+        if ($password === '' && !empty($data['id'])) {
+            $account = $this->em->getRepository(Account::class)->find((int)$data['id']);
+            $password = $account ? (string)$this->crypto->decrypt($account->getImapPassword()) : '';
+        }
+
+        $result = $this->tlsProbe->probe(
+            $host,
+            (int)($data['imap_port'] ?? 0),
+            $options['encryption'],
+            $options['validate_cert'],
+            $data['imap_login'] ?? null,
+            $password,
+            $flags,
+        );
+        $result['flags'] = $flags;
+
+        return new JsonResponse($result);
     }
 
     #[Route('/del/{id}', name: 'antispam_account_del', methods: ['POST'])]
@@ -244,7 +291,7 @@ class AccountController extends AbstractController
         if (($data['imap_password'] ?? '') !== '') {
             $account->setImapPassword($this->crypto->encrypt($data['imap_password']));
         }
-        $account->setImapFlags($data['imap_flags'] ?? '/imap/ssl');
+        $account->setImapFlags(ImapFlags::fromFormData($data));
 
         // SSH fields
         $account->setSshHost($data['ssh_host'] ?? null);

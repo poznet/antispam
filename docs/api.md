@@ -17,6 +17,7 @@
 | GET | `/account/index` | List all accounts |
 | GET/POST | `/account/add` | Add new account form (POST needs CSRF token `account_form`) |
 | GET/POST | `/account/edit/{id}` | Edit account (POST needs CSRF token `account_form`) |
+| POST | `/account/imap-check` | IMAP connection / TLS certificate check from the account form, JSON; `mode=detect` suggests SSL/TLS or STARTTLS (CSRF token `account_form`) |
 | POST | `/account/del/{id}` | Delete account (CSRF token `account_action_{id}`) |
 | POST | `/account/test/{id}` | Test connection (IMAP or SSH) (CSRF token `account_action_{id}`) |
 | POST | `/account/deploy/{id}` | Deploy agent to hosting (SSH only) (CSRF token `account_action_{id}`) |

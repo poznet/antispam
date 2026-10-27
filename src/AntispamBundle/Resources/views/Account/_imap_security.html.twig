@@ -1,0 +1,91 @@
+{#
+    SSL/TLS options of the IMAP account form (add + edit).
+    Expects: imap_tls (ImapFlags::parse() options), imap_flags (stored string).
+    Works with the #imapHost / #imapPort / #imapLogin / #imapPassword inputs of the parent form.
+#}
+{% set enc = imap_tls.encryption %}
+<div class="pp-imap-security" id="imapSecurity" data-check-url="{{ path('antispam_account_imap_check') }}">
+    <div class="form-group">
+        <label>Szyfrowanie połączenia</label>
+        <div class="pp-choice-grid" role="radiogroup">
+            {% for opt in [
+                {value: 'ssl', title: 'SSL/TLS', badge: 'zalecane', badgeClass: 'success', port: 993, flag: '/ssl',
+                 desc: 'Szyfrowanie od pierwszego bajtu (IMAPS). Standard na większości hostingów.'},
+                {value: 'starttls', title: 'STARTTLS', badge: 'wymuszony', badgeClass: 'info', port: 143, flag: '/tls',
+                 desc: 'Połączenie na zwykłym porcie podnoszone do TLS. Bez STARTTLS – brak połączenia.'},
+                {value: 'auto', title: 'STARTTLS, jeśli dostępny', badge: 'oportunistyczny', badgeClass: 'warning', port: 143, flag: '(brak flagi)',
+                 desc: 'Szyfruje, gdy serwer oferuje STARTTLS; w przeciwnym razie łączy się bez szyfrowania.'},
+                {value: 'none', title: 'Bez szyfrowania', badge: 'niebezpieczne', badgeClass: 'danger', port: 143, flag: '/notls',
+                 desc: 'Login i hasło jawnym tekstem. Tylko w sieci lokalnej lub do testów.'}
+            ] %}
+                <label class="pp-choice{% if enc == opt.value %} is-active{% endif %}">
+                    <input type="radio" name="account[imap_tls][encryption]" value="{{ opt.value }}" data-port="{{ opt.port }}" {% if enc == opt.value %}checked{% endif %}>
+                    <span class="pp-choice-body">
+                        <span class="pp-choice-title">{{ opt.title }} <span class="label label-{{ opt.badgeClass }}">{{ opt.badge }}</span></span>
+                        <span class="pp-choice-desc">{{ opt.desc }}</span>
+                        <span class="pp-choice-meta">port {{ opt.port }} &middot; <code>{{ opt.flag }}</code></span>
+                    </span>
+                </label>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="form-group" id="imapCertGroup">
+        <label>Certyfikat serwera</label>
+        <div class="pp-choice-grid pp-choice-grid-2" role="radiogroup">
+            <label class="pp-choice{% if imap_tls.validate_cert %} is-active{% endif %}">
+                <input type="radio" name="account[imap_tls][validate_cert]" value="1" {% if imap_tls.validate_cert %}checked{% endif %}>
+                <span class="pp-choice-body">
+                    <span class="pp-choice-title"><span class="glyphicon glyphicon-lock"></span> Weryfikuj certyfikat <span class="label label-success">zalecane</span></span>
+                    <span class="pp-choice-desc">Certyfikat musi być ważny, wystawiony przez zaufane CA i pasować do nazwy hosta. Chroni przed podsłuchem (MITM).</span>
+                </span>
+            </label>
+            <label class="pp-choice{% if not imap_tls.validate_cert %} is-active{% endif %}">
+                <input type="radio" name="account[imap_tls][validate_cert]" value="0" {% if not imap_tls.validate_cert %}checked{% endif %}>
+                <span class="pp-choice-body">
+                    <span class="pp-choice-title"><span class="glyphicon glyphicon-warning-sign"></span> Akceptuj każdy certyfikat</span>
+                    <span class="pp-choice-desc">Samopodpisany, wygasły lub na inną nazwę (np. certyfikat serwera <code>s1.hosting.pl</code> zamiast <code>mail.domena.pl</code>). Połączenie nadal szyfrowane. <code>/novalidate-cert</code></span>
+                </span>
+            </label>
+        </div>
+    </div>
+
+    <div class="pp-imap-advanced">
+        <a href="#imapAdvanced" data-toggle="collapse" class="pp-imap-advanced-toggle{% if not (imap_tls.secure or imap_tls.norsh or imap_tls.debug or imap_tls.custom) %} collapsed{% endif %}">
+            <span class="glyphicon glyphicon-cog"></span> Opcje zaawansowane
+        </a>
+        <div id="imapAdvanced" class="collapse{% if imap_tls.secure or imap_tls.norsh or imap_tls.debug or imap_tls.custom %} in{% endif %}">
+            <div class="checkbox"><label>
+                <input type="checkbox" name="account[imap_tls][secure]" value="1" data-flag="/secure" {% if imap_tls.secure %}checked{% endif %}>
+                <span><strong>Bezpieczne uwierzytelnianie</strong> <code>/secure</code><br><span class="text-muted">Nie wysyłaj hasła jawnym tekstem – tylko mechanizmy typu CRAM-MD5. Nie każdy serwer je obsługuje.</span></span>
+            </label></div>
+            <div class="checkbox"><label>
+                <input type="checkbox" name="account[imap_tls][norsh]" value="1" data-flag="/norsh" {% if imap_tls.norsh %}checked{% endif %}>
+                <span><strong>Bez prób rsh</strong> <code>/norsh</code><br><span class="text-muted">Pomija próbę preautoryzacji przez rsh/ssh – przyspiesza łączenie przy połączeniach nieszyfrowanych.</span></span>
+            </label></div>
+            <div class="checkbox"><label>
+                <input type="checkbox" name="account[imap_tls][debug]" value="1" data-flag="/debug" {% if imap_tls.debug %}checked{% endif %}>
+                <span><strong>Tryb debugowania</strong> <code>/debug</code><br><span class="text-muted">Zapisuje przebieg protokołu IMAP w logach PHP. Tylko do diagnostyki.</span></span>
+            </label></div>
+            <div class="checkbox"><label>
+                <input type="checkbox" name="account[imap_flags_custom]" value="1" id="imapFlagsCustom" {% if imap_tls.custom %}checked{% endif %}>
+                <span><strong>Własne flagi</strong><br><span class="text-muted">Wpisz flagi c-client ręcznie (np. <code>/imap/ssl/readonly</code>, <code>/authuser=admin</code>). Zastępuje opcje powyżej.</span></span>
+            </label></div>
+            <div class="form-group" id="imapFlagsCustomGroup"{% if not imap_tls.custom %} style="display:none;"{% endif %}>
+                <input type="text" class="form-control" name="account[imap_flags]" id="imapFlags" value="{{ imap_flags }}" spellcheck="false">
+            </div>
+        </div>
+    </div>
+
+    <div class="pp-imap-preview">
+        <span class="text-muted">Ciąg połączenia:</span>
+        <code id="imapMailboxPreview"></code>
+    </div>
+
+    <div class="pp-imap-actions">
+        <button type="button" class="btn btn-default" id="imapCheckBtn"><span class="glyphicon glyphicon-transfer"></span> Sprawdź połączenie i certyfikat</button>
+        <button type="button" class="btn btn-default" id="imapDetectBtn"><span class="glyphicon glyphicon-search"></span> Wykryj ustawienia automatycznie</button>
+        <span class="help-block">Test działa bez zapisywania konta. Z podanym loginem sprawdzane jest też logowanie.</span>
+    </div>
+    <div id="imapCheckResult" class="pp-imap-result" aria-live="polite"></div>
+</div>

@@ -35,24 +35,21 @@
             <div class="panel-body">
                 <div class="form-group">
                     <label>Host IMAP</label>
-                    <input type="text" class="form-control" name="account[imap_host]" placeholder="mail.example.com">
+                    <input type="text" class="form-control" id="imapHost" name="account[imap_host]" placeholder="mail.example.com">
                 </div>
                 <div class="form-group">
                     <label>Port IMAP</label>
-                    <input type="number" class="form-control" name="account[imap_port]" value="993">
+                    <input type="number" class="form-control" id="imapPort" name="account[imap_port]" value="993">
                 </div>
                 <div class="form-group">
                     <label>Login</label>
-                    <input type="text" class="form-control" name="account[imap_login]">
+                    <input type="text" class="form-control" id="imapLogin" name="account[imap_login]">
                 </div>
                 <div class="form-group">
                     <label>Hasło</label>
-                    <input type="password" class="form-control" name="account[imap_password]">
+                    <input type="password" class="form-control" id="imapPassword" name="account[imap_password]">
                 </div>
-                <div class="form-group">
-                    <label>Flagi IMAP</label>
-                    <input type="text" class="form-control" name="account[imap_flags]" value="/imap/ssl">
-                </div>
+                {% include '@Antispam/Account/_imap_security.html.twig' %}
             </div>
         </div>
 
@@ -108,4 +105,8 @@
         document.getElementById('sshFields').style.display = type === 'ssh' ? 'block' : 'none';
     }
     </script>
+{% endblock %}
+
+{% block javascripts %}
+    <script src="{{ asset('bundles/antispam/js/imap-security.js') }}"></script>
 {% endblock %}

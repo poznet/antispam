@@ -1,4 +1,4 @@
-Pancernapanda antispam
+Antispam Pancernapanda
 ======================
 
 Symfony-based application for cleaning spam from email accounts via IMAP or SSH+Maildir. Part of the Pancernapanda security toolkit.

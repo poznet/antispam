@@ -1,41 +1,42 @@
 /* ===========================================================
-   Pancernapanda antispam - modern admin panel theme
+   Antispam Pancernapanda - admin panel theme (Pancerna Panda brand)
    Layered on top of Bootstrap 3: restyles its components
    (panels, tables, forms, buttons, labels, alerts...) so every
    view gets the new look without template changes.
    =========================================================== */
 
 :root {
-    --bg:          #f4f6fb;
-    --bg-grad:     radial-gradient(1200px 600px at 100% -10%, rgba(99, 102, 241, .10), transparent 60%),
-                   radial-gradient(900px 500px at -10% 110%, rgba(14, 165, 233, .08), transparent 60%);
+    --bg:          #f4f7fc;
+    --bg-grad:     radial-gradient(1200px 600px at 100% -10%, rgba(31, 215, 253, .12), transparent 60%),
+                   radial-gradient(900px 500px at -10% 110%, rgba(0, 91, 186, .07), transparent 60%);
     --surface:     #ffffff;
     --surface-2:   #f8fafc;
     --surface-3:   #eef2f7;
     --border:      #e3e8f0;
     --border-2:    #d4dbe6;
-    --text:        #0f172a;
-    --text-2:      #334155;
-    --muted:       #64748b;
-    --accent:      #4f46e5;
-    --accent-2:    #0ea5e9;
-    --accent-soft: rgba(79, 70, 229, .10);
-    --grad:        linear-gradient(135deg, #4f46e5 0%, #2563eb 50%, #0ea5e9 100%);
+    --text:        #060735;
+    --text-2:      #2c3157;
+    --muted:       #636a8a;
+    --accent:      #005bba;
+    --accent-2:    #00adef;
+    --accent-soft: rgba(0, 91, 186, .10);
+    --grad:        linear-gradient(135deg, #1fd7fd 0%, #00adef 50%, #005bba 100%);
+    --btn-grad:    linear-gradient(135deg, #0a72d6 0%, #005bba 100%);
     --success:     #10b981;
     --success-soft:rgba(16, 185, 129, .12);
     --warning:     #f59e0b;
     --warning-soft:rgba(245, 158, 11, .14);
     --danger:      #ef4444;
     --danger-soft: rgba(239, 68, 68, .12);
-    --info:        #0ea5e9;
-    --info-soft:   rgba(14, 165, 233, .12);
+    --info:        #00adef;
+    --info-soft:   rgba(0, 173, 239, .12);
     --neutral-soft:rgba(100, 116, 139, .12);
-    --sidebar-bg:  #0b1020;
-    --sidebar-text:#a5b0c9;
+    --sidebar-bg:  #060735;
+    --sidebar-text:#a9b3d6;
     --sidebar-hi:  #ffffff;
-    --shadow-sm:   0 1px 2px rgba(15, 23, 42, .05);
-    --shadow:      0 1px 3px rgba(15, 23, 42, .06), 0 8px 24px -12px rgba(15, 23, 42, .12);
-    --shadow-lg:   0 20px 50px -20px rgba(15, 23, 42, .35);
+    --shadow-sm:   0 1px 2px rgba(6, 7, 53, .05);
+    --shadow:      0 1px 3px rgba(6, 7, 53, .06), 0 8px 24px -12px rgba(6, 7, 53, .12);
+    --shadow-lg:   0 20px 50px -20px rgba(6, 7, 53, .35);
     --radius:      14px;
     --radius-sm:   10px;
     --sidebar-w:   264px;
@@ -43,20 +44,20 @@
 }
 
 [data-theme="dark"] {
-    --bg:          #070b16;
-    --bg-grad:     radial-gradient(1200px 600px at 100% -10%, rgba(99, 102, 241, .18), transparent 60%),
-                   radial-gradient(900px 500px at -10% 110%, rgba(14, 165, 233, .10), transparent 60%);
-    --surface:     #0f1526;
-    --surface-2:   #131a2e;
-    --surface-3:   #1a2238;
-    --border:      #1f2940;
-    --border-2:    #2a3550;
-    --text:        #e6ebf5;
-    --text-2:      #c3cbdc;
-    --muted:       #8391ad;
-    --accent:      #818cf8;
-    --accent-soft: rgba(129, 140, 248, .14);
-    --sidebar-bg:  #060914;
+    --bg:          #04052a;
+    --bg-grad:     radial-gradient(1200px 600px at 100% -10%, rgba(0, 173, 239, .16), transparent 60%),
+                   radial-gradient(900px 500px at -10% 110%, rgba(0, 91, 186, .14), transparent 60%);
+    --surface:     #0b0d40;
+    --surface-2:   #10134a;
+    --surface-3:   #161a56;
+    --border:      #1d2163;
+    --border-2:    #2a2f78;
+    --text:        #e8ecfa;
+    --text-2:      #c4cbe6;
+    --muted:       #8b93bd;
+    --accent:      #1fd7fd;
+    --accent-soft: rgba(31, 215, 253, .12);
+    --sidebar-bg:  #030420;
     --shadow-sm:   0 1px 2px rgba(0, 0, 0, .4);
     --shadow:      0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px -14px rgba(0, 0, 0, .7);
     --shadow-lg:   0 24px 60px -20px rgba(0, 0, 0, .8);
@@ -66,8 +67,7 @@
 /* ---------- Base ---------- */
 html { font-size: 14px; }
 body.pp-app {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    font-feature-settings: 'cv11', 'ss01';
+    font-family: 'Open Sans', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     -webkit-font-smoothing: antialiased;
     background: var(--bg-grad), var(--bg);
     background-attachment: fixed;
@@ -77,7 +77,11 @@ body.pp-app {
 }
 a { color: var(--accent); transition: color .15s; }
 a:hover, a:focus { color: var(--accent); opacity: .85; text-decoration: none; }
-h1, h2, h3, h4, h5 { color: var(--text); font-weight: 650; letter-spacing: -.02em; }
+h1, h2, h3, h4, h5,
+.pp-topbar h1, .panel-title, .pp-hero h2, .pp-brand-name strong {
+    font-family: 'Montserrat', 'Roboto', sans-serif;
+}
+h1, h2, h3, h4, h5 { color: var(--text); font-weight: 700; letter-spacing: -.01em; }
 hr { border-top-color: var(--border); }
 code {
     background: var(--accent-soft); color: var(--accent);
@@ -105,8 +109,8 @@ small, .small { color: var(--muted); }
     position: fixed; inset: 0 auto 0 0; z-index: 1040;
     width: var(--sidebar-w);
     background:
-        radial-gradient(400px 300px at 0 0, rgba(79, 70, 229, .35), transparent 70%),
-        radial-gradient(300px 300px at 100% 100%, rgba(14, 165, 233, .18), transparent 70%),
+        radial-gradient(400px 300px at 0 0, rgba(0, 91, 186, .45), transparent 70%),
+        radial-gradient(300px 300px at 100% 100%, rgba(31, 215, 253, .14), transparent 70%),
         var(--sidebar-bg);
     color: var(--sidebar-text);
     display: flex; flex-direction: column;
@@ -122,16 +126,14 @@ small, .small { color: var(--muted); }
 .pp-brand-logo {
     width: 40px; height: 40px; flex: none;
     display: grid; place-items: center;
-    border-radius: 12px;
-    background: var(--grad);
-    box-shadow: 0 8px 24px -6px rgba(79, 70, 229, .7), inset 0 1px 0 rgba(255, 255, 255, .25);
+    filter: drop-shadow(0 6px 14px rgba(31, 215, 253, .35));
 }
-.pp-brand-logo svg { width: 28px; height: 28px; }
+.pp-brand-logo img { width: 40px; height: 40px; display: block; }
 .pp-brand-name { display: flex; flex-direction: column; line-height: 1.15; }
-.pp-brand-name strong { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+.pp-brand-name strong { font-size: 15px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .pp-brand-name span {
     font-size: 10.5px; text-transform: uppercase; letter-spacing: .18em;
-    color: #8ea0ff; font-weight: 600;
+    color: #1fd7fd; font-weight: 600;
 }
 
 .pp-nav { flex: 1; overflow-y: auto; padding: 6px 14px 20px; }
@@ -139,7 +141,7 @@ small, .small { color: var(--muted); }
     margin: 16px 10px 6px;
     font-size: 10.5px; font-weight: 600;
     text-transform: uppercase; letter-spacing: .14em;
-    color: #5b6684;
+    color: #6670a3;
 }
 .pp-nav a {
     position: relative;
@@ -153,23 +155,23 @@ small, .small { color: var(--muted); }
 .pp-nav a .glyphicon { width: 18px; text-align: center; font-size: 13px; opacity: .85; top: 0; }
 .pp-nav a:hover { background: rgba(255, 255, 255, .05); color: var(--sidebar-hi); opacity: 1; }
 .pp-nav a.active {
-    background: linear-gradient(90deg, rgba(99, 102, 241, .28), rgba(99, 102, 241, .06));
+    background: linear-gradient(90deg, rgba(0, 173, 239, .26), rgba(0, 173, 239, .05));
     color: var(--sidebar-hi);
-    box-shadow: inset 0 0 0 1px rgba(129, 140, 248, .22);
+    box-shadow: inset 0 0 0 1px rgba(31, 215, 253, .22);
 }
 .pp-nav a.active::before {
     content: ''; position: absolute; left: -14px; top: 8px; bottom: 8px;
     width: 3px; border-radius: 0 3px 3px 0;
-    background: linear-gradient(#818cf8, #38bdf8);
+    background: linear-gradient(#1fd7fd, #00adef);
 }
-.pp-nav a.active .glyphicon { color: #a5b4fc; opacity: 1; }
+.pp-nav a.active .glyphicon { color: #1fd7fd; opacity: 1; }
 
 .pp-sidebar-foot {
     margin: 12px; padding: 14px;
     border-radius: 12px;
     background: rgba(255, 255, 255, .04);
     border: 1px solid rgba(255, 255, 255, .06);
-    font-size: 12px; color: #7f8bab;
+    font-size: 12px; color: #8790bd;
 }
 .pp-sidebar-foot strong { color: #e2e8f0; display: block; font-size: 12.5px; margin-bottom: 2px; }
 .pp-status-dot {
@@ -234,7 +236,7 @@ small, .small { color: var(--muted); }
 .pp-avatar {
     width: 30px; height: 30px; border-radius: 50%;
     display: grid; place-items: center;
-    background: var(--grad); color: #fff;
+    background: var(--btn-grad); color: #fff;
     font-weight: 700; font-size: 13px; text-transform: uppercase;
 }
 .pp-user-name { font-weight: 600; font-size: 13px; }
@@ -249,7 +251,7 @@ small, .small { color: var(--muted); }
 
 .pp-backdrop {
     display: none; position: fixed; inset: 0; z-index: 1035;
-    background: rgba(2, 6, 23, .55);
+    background: rgba(3, 4, 32, .55);
     -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
 }
 
@@ -399,12 +401,12 @@ small, .small { color: var(--muted); }
     background: var(--surface-2); color: var(--text); border-color: var(--border-2);
 }
 .btn-primary {
-    background: var(--grad); color: #fff; border-color: transparent;
-    box-shadow: 0 6px 18px -8px rgba(79, 70, 229, .8), inset 0 1px 0 rgba(255, 255, 255, .18);
+    background: var(--btn-grad); color: #fff; border-color: transparent;
+    box-shadow: 0 6px 18px -8px rgba(0, 91, 186, .8), inset 0 1px 0 rgba(255, 255, 255, .18);
 }
 .btn-primary:hover, .btn-primary:focus, .btn-primary:active, .btn-primary.active,
 .btn-primary:active:hover, .btn-primary:active:focus, .open > .dropdown-toggle.btn-primary {
-    background: var(--grad); color: #fff; border-color: transparent; filter: brightness(1.08);
+    background: var(--btn-grad); color: #fff; border-color: transparent; filter: brightness(1.1);
 }
 .btn-success { background: var(--success); color: #fff; border-color: transparent; box-shadow: 0 6px 16px -8px rgba(16, 185, 129, .8); }
 .btn-success:hover, .btn-success:focus, .btn-success:active, .btn-success:active:hover { background: #0ea371; color: #fff; border-color: transparent; }
@@ -696,10 +698,10 @@ a.list-group-item { color: var(--text-2); }
     margin-bottom: 22px;
     color: #fff;
     background:
-        radial-gradient(500px 220px at 85% 0%, rgba(56, 189, 248, .55), transparent 70%),
-        radial-gradient(400px 260px at 0% 100%, rgba(167, 139, 250, .45), transparent 70%),
-        linear-gradient(135deg, #312e81 0%, #4338ca 45%, #1d4ed8 100%);
-    box-shadow: 0 24px 48px -24px rgba(67, 56, 202, .7);
+        radial-gradient(500px 220px at 85% 0%, rgba(31, 215, 253, .45), transparent 70%),
+        radial-gradient(400px 260px at 0% 100%, rgba(0, 173, 239, .35), transparent 70%),
+        linear-gradient(135deg, #060735 0%, #0a2a7a 45%, #005bba 100%);
+    box-shadow: 0 24px 48px -24px rgba(0, 91, 186, .7);
     display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
 }
 .pp-hero::after {
@@ -722,8 +724,8 @@ a.list-group-item { color: var(--text-2); }
     box-shadow: none;
 }
 .pp-hero .btn-glass:hover { background: rgba(255, 255, 255, .22); color: #fff; }
-.pp-hero .btn-white { background: #fff; color: #3730a3; border-color: #fff; }
-.pp-hero .btn-white:hover { color: #312e81; background: #eef2ff; }
+.pp-hero .btn-white { background: #fff; color: #005bba; border-color: #fff; }
+.pp-hero .btn-white:hover { color: #060735; background: #e6f9ff; }
 .pp-shield-rate {
     position: relative; z-index: 1;
     display: flex; align-items: center; gap: 14px;

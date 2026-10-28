@@ -37,7 +37,7 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   "Wymagaj 2FA dla administratorów"; `antispam:2fa:secret`.
 - Agent 3.1: `spam-list` / `spam-release` (redeploy SSH accounts: Konta → Wdróż).
 - Audit actions `spam.release`, `spam.whitelist`, `auth.2fa_*`.
-- New nullable 2FA columns on `antispam_user` (migration `VERSION_2FA`).
+- New nullable 2FA columns on `antispam_user` (migration `Version20261028135851`).
 
 ### Changed
 - Database schema is versioned with Doctrine Migrations (`migrations/`, baseline =

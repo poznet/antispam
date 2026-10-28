@@ -84,10 +84,25 @@ TTL (at least 24 h). Retention comes from the config key
 is no panel field yet - set it with `--days` per run or in the `config` table.
 Audit log rows (`antispam_audit_log`) older than `audit.retention_days` (default
 365, `0` = forever; not affected by `--days`) are deleted too, see [audit.md](audit.md).
+The Bayes classifier's old fingerprints, rare stale tokens and rows of deleted
+mailboxes go as well (own retention, skipped with `--dry-run`, see [bayes.md](bayes.md#storage-and-housekeeping)).
 ```bash
 php bin/console antispam:purge
 php bin/console antispam:purge --days=90     # override the retention for this run
 php bin/console antispam:purge --dry-run     # only count
+```
+
+## Bayes Classifier
+
+### antispam:bayes:train
+Bootstraps the local Bayes classifier from IMAP folders: the newest `--limit`
+(default 500, max 5000) messages of `--folder` (default `SPAM`) are learned as
+spam, those of `--ham-folder` as ham. Read-only (flags unchanged, nothing
+moved); works while the classifier is switched off. IMAP accounts and the
+legacy mailbox only. See [bayes.md](bayes.md#bootstrap).
+```bash
+php bin/console antispam:bayes:train --account=jan@firma.pl --folder=SPAM --ham-folder=INBOX --limit=500
+php bin/console antispam:bayes:train --legacy --folder=SPAM --ham-folder=INBOX
 ```
 
 ## Quarantine Digest Commands

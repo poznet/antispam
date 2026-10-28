@@ -32,6 +32,7 @@ class SpamFolderService
         private ConnectionService $legacyConnection,
         private InboxService $inbox,
         private MessageService $messages,
+        private ?Bayes\BayesService $bayes = null,
     ) {
     }
 
@@ -98,6 +99,8 @@ class SpamFolderService
                 }
                 $msg = $folder->getMessage((int)$id);
                 $sender = $msg->getFrom() ? strtolower((string)$msg->getFrom()->getAddress()) : '';
+                // Released from SPAM = "not spam" for the Bayes classifier (read before the move).
+                $this->bayes?->learnImap($msg, 'ham', $mailbox['account_email'] ?: null, 'spam_release');
                 $this->messages->setAsChecked($msg, $mailbox['account_email'] ?: null);
                 $msg->move($connection->getMailbox('INBOX'));
                 $connection->expunge();

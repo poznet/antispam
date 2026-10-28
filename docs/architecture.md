@@ -90,6 +90,7 @@ ham/quarantine/spam.
 | 99979    | CheckUrls              | Link heuristics, URI DBL, Safe Browsing |
 | 99978    | CheckSharedFeed        | Match sender/body against shared feed |
 | 99976    | CheckAttachmentPolicy  | Blocked types, double ext., macros    |
+| 99972    | CheckBayes             | Local learned classifier (opt-in, `bayes.md`) |
 | 99970    | ApplyScoreDecision     | ham/quarantine/spam decision + log    |
 | 99965    | RecordSpamSignals      | Record fingerprints of detected spam  |
 | 99960    | MoveToSpam             | Move spam to SPAM (or delete it)      |
@@ -152,6 +153,8 @@ Additional tables:
 - `antispam_list_setting` — long list-shaped settings (protected domains, VIPs,
   URI block list zones, blocked extensions) that don't fit the config table's
   255-character values. See `protection.md`.
+- `antispam_bayes_token`, `antispam_bayes_message` — hashed token counts and
+  learned-message fingerprints of the optional Bayes classifier. See `bayes.md`.
 - `antispam_cron_run` — runs of periodic commands started through
   `antispam:cron:run` (command, start/end, exit code, output), kept 14 days.
   See `spam-handling.md`.

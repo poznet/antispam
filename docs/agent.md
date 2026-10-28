@@ -7,7 +7,7 @@ server, operating on Maildir folders without IMAP. It keeps its rules,
 settings and state in a local SQLite database. The panel talks to it over SSH
 (`AntispamBundle\Services\SshService`); see [accounts.md](accounts.md).
 
-Current version: **3.1** (`AGENT_VERSION` at the top of the script; also
+Current version: **3.2** (`AGENT_VERSION` at the top of the script; also
 returned as `agent_version` in every JSON answer). The panel compares it with
 the bundled version and asks for a re-deploy (Konta → Wdróż) when the remote
 agent is older or does not know a command.
@@ -103,7 +103,7 @@ Scans `new/` and `cur/`, moves spam to `.SPAM/` and suspicious mail to
 
 Flags: `--spam-threshold=N`, `--quarantine-threshold=N`, `--no-dnsbl`,
 `--no-headers`, `--no-impersonation`, `--no-urls`, `--no-cert`,
-`--no-attachment-policy`, `--no-clamav`, `--no-virustotal`. A `--no-*` flag
+`--no-attachment-policy`, `--no-clamav`, `--no-virustotal`, `--no-bayes` (3.2+). A `--no-*` flag
 forces the check off even when it is enabled in the synced settings.
 
 Thresholds and switches, in order of precedence: CLI flag → synced setting
@@ -321,6 +321,7 @@ CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE cert_domains (domain TEXT PRIMARY KEY);   -- CERT Polska list, fetched by the agent itself
 CREATE TABLE cert_meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE agent_meta (key TEXT PRIMARY KEY, value TEXT);   -- e.g. last_prune_ts
+CREATE TABLE bayes_tokens (hash TEXT PRIMARY KEY, prob REAL);   -- 3.2+: Bayes token probabilities synced from the panel
 ```
 
 Columns added over time (`pattern_type`, `score`, `score_log.file`,
@@ -355,6 +356,9 @@ is missing falls back to the same default the web app uses:
   `attachment_mismatch_score`, `attachment_macro_score`,
   `attachment_encrypted_score`
 - housekeeping: `agent_retention_days` (default 180)
+- Bayes classifier (3.2+): `bayes_enabled` (off unless the panel has a trained table),
+  `bayes_spam_score`, `bayes_likely_score`, `bayes_ham_score`, `bayes_trained_spam`,
+  `bayes_trained_ham` (informational)
 
 Impersonation, link and attachment-policy checks are **on** by default.
 
@@ -412,6 +416,12 @@ after Wdróż, and before a retroactive blacklist pass):
 
 `pattern_type` defaults to `exact`, `score` to 10 (blacklists) / 5 (DNSBL).
 Booleans are stored as `1` / `0`.
+
+Since 3.2 the payload may carry `"bayes_tokens": [["<16 hex>", 0.987654], ...]`
+(the local Bayes classifier's strongest tokens, at most `bayes.agent_max_tokens`;
+see [bayes.md](bayes.md#maildir-agent-ssh)). A present list replaces the
+`bayes_tokens` table (empty = cleared); malformed rows are skipped. Older agents
+ignore the section.
 
 ## Compatibility notes (upgrading to 3.0)
 

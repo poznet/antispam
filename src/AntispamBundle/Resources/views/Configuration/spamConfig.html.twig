@@ -293,6 +293,67 @@
         </div>
     </div>
 
+    {% if bayes %}
+    <div class="panel panel-default" id="bayes">
+        <div class="panel-heading"><span class="glyphicon glyphicon-education"></span> Klasyfikator uczący się (Bayes)</div>
+        <div class="panel-body">
+            <p class="text-muted">Lokalny filtr bayesowski uczy się na decyzjach użytkowników (zgłoszenia z wtyczki „spam / nie spam”, zgłoszenia phishingu, przywrócenie z kwarantanny lub folderu SPAM) i wyłapuje spam z czystymi nagłówkami, którego nie ma na żadnej liście. Dane zostają na tym serwerze; zapisywane są tylko skróty (hash) słów, nie ich treść. Zobacz <code>docs/bayes.md</code>.</p>
+            <div class="checkbox"><label>
+                <input type="checkbox" name="config[bayes_enabled]" {% if bayes.enabled %}checked{% endif %}>
+                <strong>Włącz klasyfikator Bayesa</strong> (nauka i ocena; punkty dopiero po zebraniu minimalnej liczby przykładów)
+            </label></div>
+            <div class="checkbox"><label>
+                <input type="checkbox" name="config[bayes_per_mailbox]" {% if bayes.per_mailbox %}checked{% endif %}>
+                Ucz się także osobno dla każdej skrzynki (skrzynka z wystarczającą liczbą przykładów jest oceniana własną bazą, pozostałe wspólną)
+            </label></div>
+            <div class="row" style="margin-top:10px;">
+                <div class="col-sm-3">
+                    <label>Min. wiadomości spam</label>
+                    <input type="number" name="config[bayes_min_spam]" class="form-control" value="{{ bayes.min_spam }}" min="1" max="100000">
+                </div>
+                <div class="col-sm-3">
+                    <label>Min. wiadomości nie-spam</label>
+                    <input type="number" name="config[bayes_min_ham]" class="form-control" value="{{ bayes.min_ham }}" min="1" max="100000">
+                </div>
+                <div class="col-sm-6">
+                    <label>Maks. tokenów wysyłanych do agentów SSH</label>
+                    <input type="number" name="config[bayes_agent_max_tokens]" class="form-control" value="{{ bayes.agent_max_tokens }}" min="0" max="50000">
+                    <small class="text-muted">0 = agenci nie oceniają Bayesem.</small>
+                </div>
+            </div>
+            <div class="row" style="margin-top:10px;">
+                <div class="col-sm-4">
+                    <label>Punkty: prawdopodobieństwo ≥ 0,99</label>
+                    <input type="number" name="config[bayes_spam_score]" class="form-control" value="{{ bayes.spam_score }}" min="0" max="200">
+                </div>
+                <div class="col-sm-4">
+                    <label>Punkty: prawdopodobieństwo ≥ 0,90</label>
+                    <input type="number" name="config[bayes_likely_score]" class="form-control" value="{{ bayes.likely_score }}" min="0" max="200">
+                </div>
+                <div class="col-sm-4">
+                    <label>Odejmij: prawdopodobieństwo ≤ 0,01</label>
+                    <input type="number" name="config[bayes_ham_score]" class="form-control" value="{{ bayes.ham_score }}" min="0" max="200">
+                    <small class="text-muted">Nigdy dla nadawcy z blacklisty.</small>
+                </div>
+            </div>
+            {% if bayes.stats %}
+                <p style="margin-top:12px;">
+                    Nauczone wiadomości (baza wspólna): <strong>{{ bayes.stats.spam }}</strong> spam, <strong>{{ bayes.stats.ham }}</strong> nie-spam;
+                    tokenów: <strong>{{ bayes.stats.tokens }}</strong>{% if bayes.stats.scopes %} (wszystkie skrzynki: {{ bayes.stats.tokens_all }}, skrzynek z własną bazą: {{ bayes.stats.scopes }}){% endif %}.
+                    {% if bayes.stats.ready %}
+                        <span class="label label-success">ocenia</span>
+                    {% else %}
+                        <span class="label label-default">za mało przykładów (min. {{ bayes.stats.min_spam }} / {{ bayes.stats.min_ham }})</span>
+                    {% endif %}
+                </p>
+            {% else %}
+                <p class="text-warning" style="margin-top:12px;">Tabele klasyfikatora nie istnieją jeszcze - uruchom <code>php bin/console antispam:db:upgrade</code>.</p>
+            {% endif %}
+            <small class="text-muted">Wstępna nauka z folderów IMAP: <code>php bin/console antispam:bayes:train --account=adres@skrzynki --folder=SPAM --ham-folder=INBOX --limit=500</code></small>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="panel panel-default">
         <div class="panel-heading"><span class="glyphicon glyphicon-cog"></span> Postępowanie ze spamem</div>
         <div class="panel-body">
@@ -322,6 +383,12 @@
                     data-confirm="Wyzerować liczniki wszystkich reguł?">
                 <span class="glyphicon glyphicon-stats"></span> Zeruj liczniki
             </button>
+            {% if bayes %}
+            <button type="submit" form="spam-maintenance" formaction="{{ path('antispam_bayes_reset') }}" class="btn btn-danger"
+                    data-confirm="Wyczyścić bazę klasyfikatora Bayesa? Wszystkie nauczone wiadomości i tokeny (wszystkich skrzynek) zostaną usunięte.">
+                <span class="glyphicon glyphicon-trash"></span> Wyczyść bazę Bayesa
+            </button>
+            {% endif %}
         </div>
     </div>
 {% endblock %}

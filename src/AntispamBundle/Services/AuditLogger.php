@@ -83,6 +83,8 @@ class AuditLogger
         'dnsbl.toggle' => 'DNSBL: włączenie / wyłączenie',
         'dnsbl.delete' => 'DNSBL: usunięcie',
         'cert.sync' => 'Lista CERT: synchronizacja',
+        'bayes.trained' => 'Bayes: nauka (ręczna / konsola)',
+        'bayes.reset' => 'Bayes: wyczyszczenie bazy',
     ];
 
     public function __construct(

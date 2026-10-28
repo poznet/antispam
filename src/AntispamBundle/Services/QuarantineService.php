@@ -55,6 +55,7 @@ class QuarantineService
         MessageService $messages,
         ImapScanService $imapScan,
         private ?MailboxSettingsResolver $mailboxSettings = null,
+        private ?Bayes\BayesService $bayes = null,
     ) {
         $this->imapScan = $imapScan;
         $this->em = $em;
@@ -189,6 +190,8 @@ class QuarantineService
                 }
                 $msg = $folder->getMessage((int)$id);
                 $sender = $msg->getFrom() ? strtolower((string)$msg->getFrom()->getAddress()) : '';
+                // A released message is a "not spam" verdict for the Bayes classifier (read before the move).
+                $this->bayes?->learnImap($msg, 'ham', $mailbox['account_email'] ?: null, 'quarantine');
                 // Released mail must not be quarantined again on the next scan.
                 $this->messages->setAsChecked($msg, $mailbox['account_email'] ?: null);
                 $msg->move($connection->getMailbox('INBOX'));

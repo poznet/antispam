@@ -34,6 +34,8 @@ Page: **Przegląd → Dziennik audytu** (`/audit`, ROLE_ADMIN only).
 | `user.password_change` | own password (`/my/password`) | user |
 | `dnsbl.add`, `dnsbl.toggle`, `dnsbl.delete` | `/dnsbl/*` | provider id, zone; name, score, enabled |
 | `cert.sync` | manual "Pobierz teraz" on `/cert/` | result message; `ok` |
+| `bayes.trained` | `antispam:bayes:train` | folders, mailbox; learned / skipped / failed per verdict |
+| `bayes.reset` | "Wyczyść bazę Bayesa" on Filtr spamu | deleted rows |
 
 Not recorded: read-only pages, connection tests, scans, cron jobs (they have the
 cron log), the plugin `/check` endpoint and the score pipeline itself (score log).

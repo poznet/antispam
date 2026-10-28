@@ -49,7 +49,7 @@ class PluginService
     private $secret;
     private $crypto;
 
-    public function __construct(EntityManagerInterface $em, CacheItemPoolInterface $cache, SpamSignalService $feed, #[Autowire('%kernel.secret%')] string $secret, ?ConfigService $config = null, ?CryptoService $crypto = null)
+    public function __construct(EntityManagerInterface $em, CacheItemPoolInterface $cache, SpamSignalService $feed, #[Autowire('%kernel.secret%')] string $secret, ?ConfigService $config = null, ?CryptoService $crypto = null, private ?Bayes\BayesService $bayes = null)
     {
         $this->crypto = $crypto;
         $this->em = $em;
@@ -222,7 +222,7 @@ class PluginService
      *
      * @return array{verdict:string, sender:string, signals:int, rules:string[]}
      */
-    public function learn($raw, $verdict, ?Account $account = null, $clientIp = null)
+    public function learn($raw, $verdict, ?Account $account = null, $clientIp = null, $source = 'plugin')
     {
         $msg = new RawMessageParser($raw);
         $sender = $msg->getFromAddress();
@@ -260,6 +260,13 @@ class PluginService
                     $result['rules'][] = 'email_whitelist_added:' . $sender;
                 }
             }
+        }
+
+        // Local Bayes classifier: only verdicts of a logged-in mailbox (an
+        // anonymous report could be used to poison the token counts).
+        if ($account && $this->bayes) {
+            $bayes = $this->bayes->learnRaw((string)$raw, $verdict === self::VERDICT_SPAM ? 'spam' : 'ham', $account->getEmail(), (string)$source);
+            $result['bayes'] = !empty($bayes['learned']);
         }
 
         $log = new PluginReport();

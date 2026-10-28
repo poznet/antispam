@@ -34,6 +34,7 @@ See `docs/` directory for detailed documentation:
 - `docs/users.md` - users and roles (ROLE_ADMIN / ROLE_USER), mailbox ownership, legacy ADMIN_PASSWORD admin, `/my` area
 - `docs/audit.md` - audit log ("Dziennik audytu", `/audit`): what is recorded, `AuditLogger` / `AuditTrait`, CSV export, `audit.retention_days`
 - `docs/quarantine-digest.md` - end-user quarantine digest e-mail, signed `/q/` links, `antispam:digest:send`
+- `docs/bayes.md` - optional local learned classifier (naive Bayes): tokenizer, hashed token storage, training sources, `antispam:bayes:train`, agent token sync
 - `docs/feed.md` - shared spam feed (centralized spam DB): fingerprints, API, sync
 - `docs/feed-api.md` - shared spam feed HTTP API reference (endpoints, auth, examples)
 - `docs/phishing.md` - phishing reports from the plugins: full message storage, `/phishing` analysis page, blocking, .eml export, forwarding to CERT Polska (cert@cert.pl) / SOC

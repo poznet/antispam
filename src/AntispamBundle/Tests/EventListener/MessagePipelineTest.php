@@ -172,7 +172,7 @@ class MessagePipelineTest extends KernelTestCase
         $this->assertSame([
             'CheckIfIsAlreadyChecked', 'CheckWhitelist', 'CheckEmailWhitelist', 'CheckBlacklist', 'CheckEmailBlacklist',
             'CheckHeaders', 'CheckImpersonation', 'CheckDnsbl', 'CheckUrls', 'CheckSharedFeed', 'CheckCertHole',
-            'CheckAttachmentPolicy', 'CheckAttachments', 'CheckAttachmentsVirusTotal', 'ApplyScoreDecision',
+            'CheckAttachmentPolicy', 'CheckAttachments', 'CheckAttachmentsVirusTotal', 'CheckBayes', 'ApplyScoreDecision',
             'RecordSpamSignals', 'MoveToSpam', 'SetAsChecked',
         ], $names);
     }

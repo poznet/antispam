@@ -246,7 +246,7 @@ class PluginApiController extends AbstractController
             // The admin has to review / delete older reports of this mailbox first.
             return new JsonResponse(['error' => 'phishing report quota exceeded'], 507);
         }
-        $result = $this->plugin->learn($raw, PluginService::VERDICT_SPAM, $account, $this->clientIp($request));
+        $result = $this->plugin->learn($raw, PluginService::VERDICT_SPAM, $account, $this->clientIp($request), 'phishing');
         $result['authenticated'] = true;
         $result['phishing_id'] = $stored['id'];
         $this->audit('plugin.phishing', targetType: 'phishing', targetId: $stored['id'], label: (string)($result['sender'] ?? ''), mailbox: $account->getEmail(), details: ['duplicate' => (bool)$stored['duplicate'], 'client' => is_scalar($data['client'] ?? null) ? mb_substr((string)$data['client'], 0, 20) : ''],

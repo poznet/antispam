@@ -9,6 +9,7 @@ use AntispamBundle\Entity\SharedSpamSignal;
 use AntispamBundle\Entity\Whitelist;
 use AntispamBundle\Services\AttachmentPolicyAnalyzer;
 use AntispamBundle\Services\AuditLogger;
+use AntispamBundle\Services\Bayes\BayesService;
 use AntispamBundle\Services\ClamavService;
 use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\CryptoService;
@@ -51,6 +52,7 @@ class ConfigurationController extends AbstractController
         private ClamavService $clamav,
         private VirusTotalService $virusTotal,
         private CryptoService $crypto,
+        private ?BayesService $bayes = null,
     ) {
     }
 
@@ -158,6 +160,16 @@ class ConfigurationController extends AbstractController
             }
             $this->scoring->setListSetting(ScoringService::LIST_BLOCKED_EXTENSIONS, implode(', ', AttachmentPolicyAnalyzer::parseExtensions($post['blocked_extensions'] ?? '')));
 
+            // Local Bayes classifier (docs/bayes.md)
+            $c->set('bayes.enabled', array_key_exists('bayes_enabled', $post));
+            $c->set('bayes.per_mailbox', array_key_exists('bayes_per_mailbox', $post));
+            $c->set('bayes.min_spam', min(100000, max(1, (int)($post['bayes_min_spam'] ?? BayesService::DEFAULT_MIN_SPAM))));
+            $c->set('bayes.min_ham', min(100000, max(1, (int)($post['bayes_min_ham'] ?? BayesService::DEFAULT_MIN_HAM))));
+            $c->set('bayes.spam_score', min(200, max(0, (int)($post['bayes_spam_score'] ?? BayesService::DEFAULT_SPAM_SCORE))));
+            $c->set('bayes.likely_score', min(200, max(0, (int)($post['bayes_likely_score'] ?? BayesService::DEFAULT_LIKELY_SCORE))));
+            $c->set('bayes.ham_score', min(200, max(0, (int)($post['bayes_ham_score'] ?? BayesService::DEFAULT_HAM_SCORE))));
+            $c->set('bayes.agent_max_tokens', min(BayesService::MAX_AGENT_TOKENS, max(0, (int)($post['bayes_agent_max_tokens'] ?? BayesService::DEFAULT_AGENT_MAX_TOKENS))));
+
             $this->audit('settings.save', targetType: 'settings', targetId: 'spam', label: 'Filtr spamu', details: AuditLogger::formFields($post, ['vt_api_key', 'url_gsb_api_key']));
             $this->addFlash('success', 'Ustawienia zapisane');
             return $this->redirectToRoute('antispam_spam_config');
@@ -199,7 +211,22 @@ class ConfigurationController extends AbstractController
             'attachment' => $this->scoring->getAttachmentPolicyConfig(),
             'blocked_extensions' => $this->scoring->getBlockedExtensionsText(),
         ];
-        return ['config' => $config];
+        $bayes = null;
+        if ($this->bayes) {
+            $bayes = [
+                'enabled' => $this->bayes->isEnabled(),
+                'per_mailbox' => $this->bayes->isPerMailbox(),
+                'min_spam' => $this->bayes->getMinSpam(),
+                'min_ham' => $this->bayes->getMinHam(),
+                'agent_max_tokens' => $this->bayes->getAgentMaxTokens(),
+            ] + $this->bayes->getWeights();
+            try {
+                $bayes['stats'] = $this->bayes->stats();
+            } catch (\Throwable $e) {
+                $bayes['stats'] = null; // table not created yet (migration pending)
+            }
+        }
+        return ['config' => $config, 'bayes' => $bayes];
     }
 
     /**
@@ -436,6 +463,22 @@ class ConfigurationController extends AbstractController
             $this->addFlash('danger', 'Brak połączenia z VirusTotal lub klucz API został odrzucony.');
         }
 
+        return $this->redirectToRoute('antispam_spam_config');
+    }
+
+    /** "Wyczyść bazę" of the Bayes classifier: every learned token and message, all mailboxes. */
+    #[Route('/spam/bayes-reset/', name: 'antispam_bayes_reset', methods: ['POST'])]
+    public function bayesResetAction(Request $request)
+    {
+        if (!$this->checkMaintenanceToken($request)) {
+            return $this->redirectToRoute('antispam_spam_config');
+        }
+        if (!$this->bayes) {
+            throw $this->createNotFoundException();
+        }
+        $n = $this->bayes->reset();
+        $this->audit('bayes.reset', targetType: 'bayes', label: sprintf('%d wierszy', $n));
+        $this->addFlash('success', 'Baza klasyfikatora Bayesa została wyczyszczona.');
         return $this->redirectToRoute('antispam_spam_config');
     }
 

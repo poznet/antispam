@@ -56,6 +56,7 @@ class DoctorService
         #[Autowire('%kernel.project_dir%')] private string $projectDir,
         #[Autowire('%antispam.ssh_keys_dir%')] private string $sshKeysDir,
         private DatabaseUpgrader $upgrader,
+        private ?\AntispamBundle\Services\Bayes\BayesService $bayes = null,
     ) {
     }
 
@@ -85,6 +86,7 @@ class DoctorService
             'orphan_rules' => [fn() => $this->checkOrphanRules(), true],
             'feed' => [fn() => $this->checkFeed(), true],
             'clamav' => [fn() => $this->checkClamav(), true],
+            'bayes' => [fn() => $this->checkBayes(), true],
         ] as $id => [$check, $needsDb]) {
             if ($needsDb && !$dbUp) {
                 $checks[] = DoctorCheck::skip($id, 'Skipped - the database is not reachable.');
@@ -448,6 +450,22 @@ class DoctorService
         }
 
         return DoctorCheck::ok('feed', 'Shared feed keys are set' . ($remoteUrl !== '' ? ' (hub ' . $remoteUrl . ')' : '') . '.');
+    }
+
+    /** Bayes classifier: stats only (docs/bayes.md). */
+    private function checkBayes(): DoctorCheck
+    {
+        if (!$this->bayes || !$this->bayes->isEnabled()) {
+            return DoctorCheck::skip('bayes', 'Bayes classifier is disabled.');
+        }
+        $s = $this->bayes->stats();
+        $msg = sprintf('Bayes classifier: %d spam / %d ham messages learned, %d tokens (global)', $s['spam'], $s['ham'], $s['tokens']);
+        if (!$s['ready']) {
+            return DoctorCheck::warn('bayes', $msg . sprintf(' - not scoring until %d spam and %d ham are learned.', $s['min_spam'], $s['min_ham']),
+                'Train it: php bin/console antispam:bayes:train --account=<mailbox> --folder=SPAM --ham-folder=INBOX, or let users report spam / not spam.');
+        }
+
+        return DoctorCheck::ok('bayes', $msg . '.');
     }
 
     private function checkClamav(): DoctorCheck

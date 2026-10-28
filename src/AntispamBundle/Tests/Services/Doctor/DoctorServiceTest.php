@@ -65,6 +65,7 @@ class DoctorServiceTest extends TestCase
             '/project',
             '/nonexistent-keys',
             $this->createMock(DatabaseUpgrader::class),
+            $o['bayes'] ?? null,
         ) extends DoctorService {
             public array $stub = [];
 
@@ -295,5 +296,21 @@ class DoctorServiceTest extends TestCase
         $json = json_decode($tester->getDisplay(), true);
         $this->assertFalse($json['ok']);
         $this->assertSame(1, $json['counts']['fail']);
+    }
+
+    public function testBayesStats()
+    {
+        $this->assertSame(DoctorCheck::SKIP, $this->checks()['bayes']->status);
+        $bayes = new \AntispamBundle\Services\Bayes\BayesService(new \AntispamBundle\Services\Bayes\BayesStore($this->em->getConnection()), $this->config, $this->em);
+        $this->assertSame(DoctorCheck::SKIP, $this->checks(['bayes' => $bayes])['bayes']->status, 'disabled');
+        $this->config->set('bayes.enabled', true);
+        $this->assertSame(DoctorCheck::WARN, $this->checks(['bayes' => $bayes])['bayes']->status, 'untrained');
+        $this->config->set('bayes.min_spam', 1);
+        $this->config->set('bayes.min_ham', 1);
+        $bayes->learnRaw("From: a@spam.ru\r\nSubject: Wygrana nagroda\r\n\r\nOdbierz nagrode teraz\r\n", 'spam');
+        $bayes->learnRaw("From: b@firma.pl\r\nSubject: Raport kwartalny\r\n\r\nW zalaczniku raport\r\n", 'ham');
+        $check = $this->checks(['bayes' => $bayes])['bayes'];
+        $this->assertSame(DoctorCheck::OK, $check->status);
+        $this->assertStringContainsString('1 spam / 1 ham', $check->message);
     }
 }

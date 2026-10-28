@@ -58,6 +58,10 @@ One JSON document (UTF-8, pretty printed), optionally inside a ZIP as
 | `accounts` | Connection settings. `ssh_host_key` is the pinned public fingerprint (kept so the TOFU pin survives a move), not a secret. Per-mailbox settings (`spam_threshold`, `quarantine_threshold`, `scoring_enabled`, `digest_enabled`, `digest_recipient`, `digest_hour`; `null` = inherit, see [accounts.md](accounts.md#per-mailbox-settings-ustawienia-skrzynki)): imported only when the key is in the file, so an older backup keeps the current values; an invalid value (hour 31, quarantine >= spam...) is dropped with a warning. |
 | `users` | Username, role, assigned mailboxes by e-mail. The legacy `ADMIN_USER` administrator lives in the environment and is never exported. |
 
+Not in the backup: the Bayes classifier tables (`antispam_bayes_token`, `antispam_bayes_message`) -
+derived, possibly large data; its `bayes.*` settings travel in `config`. Retrain or `mysqldump` the
+two tables when moving servers ([bayes.md](bayes.md#storage-and-housekeeping)).
+
 ### Secrets
 
 Without `--include-secrets` (and in the panel's default download) these stay on the server:

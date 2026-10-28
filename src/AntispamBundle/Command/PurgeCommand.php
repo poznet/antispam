@@ -23,6 +23,10 @@ use Symfony\Component\Console\Output\OutputInterface;
  *   - antispam_dnsbl_cache: entries no provider would still use (older than
  *     the longest provider cache TTL, at least one day)
  *   - antispam_audit_log: rows older than `audit.retention_days` (default 365)
+ *   - antispam_bayes_message / antispam_bayes_token: learned-message
+ *     fingerprints older than `bayes.message_retention_days` (365), tokens
+ *     seen once and untouched for `bayes.token_retention_days` (180), rows of
+ *     deleted mailboxes
  *
  * Run daily, e.g. through the cron log wrapper (the Docker scheduler does):
  *
@@ -37,7 +41,7 @@ class PurgeCommand extends Command
     /** DNSBL cache rows are kept at least this long, whatever the provider TTLs. */
     const MIN_DNSBL_AGE = 86400;
 
-    public function __construct(private EntityManagerInterface $em, private ConfigService $config)
+    public function __construct(private EntityManagerInterface $em, private ConfigService $config, private ?\AntispamBundle\Services\Bayes\BayesService $bayes = null)
     {
         parent::__construct();
     }
@@ -84,6 +88,19 @@ class PurgeCommand extends Command
         // --- Audit log (antispam_audit_log): own retention, not affected by --days.
         $this->purgeAuditLog($dryRun, $output);
         // --- end audit log
+
+        // --- Bayes classifier (docs/bayes.md): own retention, not affected by --days.
+        if ($this->bayes && !$dryRun) {
+            try {
+                $r = $this->bayes->purge();
+                $output->writeln(sprintf('Bayes: deleted %d learned-message fingerprint(s), %d rare stale token(s), %d row(s) of deleted mailboxes.', $r['messages'], $r['tokens'], $r['orphans']));
+            } catch (\Throwable $e) {
+                $output->writeln('<comment>Bayes: purge failed (' . $e->getMessage() . ')</comment>');
+            }
+        } elseif ($this->bayes) {
+            $output->writeln('Bayes: skipped in --dry-run.');
+        }
+        // --- end Bayes
 
         return Command::SUCCESS;
     }

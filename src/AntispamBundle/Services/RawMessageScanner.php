@@ -41,6 +41,7 @@ class RawMessageScanner
         AttachmentPolicyAnalyzer $attachments,
         CertHoleService $cert,
         private ?MailboxSettingsResolver $mailboxSettings = null,
+        private ?Bayes\BayesService $bayes = null,
     ) {
         $this->em = $em;
         $this->headers = $headers;
@@ -183,6 +184,16 @@ class RawMessageScanner
                         $reasons[] = ['rule' => 'shared_feed:' . $hit['type'] . ' (reports=' . $hit['reports'] . ')', 'score' => $matchScore];
                     }
                 } catch (\Throwable $e) {}
+            }
+
+            // Local learned classifier (docs/bayes.md), like CheckBayes.
+            if ($this->bayes && $this->bayes->isEnabled()) {
+                $blacklisted = (bool)array_filter($reasons, fn($r) => preg_match('/^(email_)?blacklist:/', (string)($r['rule'] ?? '')));
+                $result = $this->bayes->scoreFields(Bayes\BayesTokenizer::fieldsFromRaw((string)$raw), $accountEmail, $blacklisted);
+                if ($result['reason'] !== null) {
+                    $score += $result['score'];
+                    $reasons[] = $result['reason'];
+                }
             }
         }
 

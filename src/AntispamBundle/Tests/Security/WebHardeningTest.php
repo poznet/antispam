@@ -64,6 +64,7 @@ class WebHardeningTest extends WebTestCase
             ['/config/reset/countes/'],
             ['/config/spam/clamav-test/'],
             ['/config/spam/virustotal-test/'],
+            ['/config/spam/bayes-reset/'],
             ['/spambox/restore/SPAM/1'],
         ];
     }
@@ -106,6 +107,7 @@ class WebHardeningTest extends WebTestCase
             'reset counters' => ['/config/reset/countes/', '/config/spam/'],
             'clamav test' => ['/config/spam/clamav-test/', '/config/spam/'],
             'virustotal test' => ['/config/spam/virustotal-test/', '/config/spam/'],
+            'bayes reset' => ['/config/spam/bayes-reset/', '/config/spam/'],
             'dnsbl add' => ['/dnsbl/add', '/dnsbl/'],
             'dnsbl preset' => ['/dnsbl/add-preset/0', '/dnsbl/'],
             'dnsbl toggle' => ['/dnsbl/toggle/1', '/dnsbl/'],

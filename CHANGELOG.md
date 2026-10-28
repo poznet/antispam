@@ -19,6 +19,13 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 ## [Unreleased]
 
 ### Added
+- Optional local learned classifier (naive Bayes, Robinson / chi-square,
+  off by default; Ustawienia → Filtr spamu): learns from plugin spam / not-spam
+  and phishing reports, quarantine and SPAM releases and
+  `antispam:bayes:train`; scores in the IMAP pipeline (`CheckBayes`), the
+  plugin check and the SSH agent 3.2 (token table synced with the rules).
+  Hashed tokens only. New tables `antispam_bayes_token`,
+  `antispam_bayes_message` (migration pending). See `docs/bayes.md`.
 - Per-mailbox settings (**Konta → Edytuj → Ustawienia skrzynki**, empty =
   inherit the global value): spam / quarantine threshold, scoring on/off,
   quarantine digest on/off, digest recipient and send hour. Honoured by the

@@ -56,6 +56,7 @@ and synced settings). The legacy mailbox always uses the global values. See
 | Double extension / bidi filename | `CheckAttachmentPolicy` | 8 |
 | Office macro / active PDF | `CheckAttachmentPolicy` | 6 |
 | Password-protected archive / document | `CheckAttachmentPolicy` | 5 |
+| Local Bayes classifier, `bayes:<p>` (off by default; only once trained) | `CheckBayes` | p ≥ 0.99: +5, p ≥ 0.90: +3, p ≤ 0.01: −2 (not for blacklisted senders); see [bayes.md](bayes.md) |
 
 ### Header checks (`HeaderAnalyzer`)
 

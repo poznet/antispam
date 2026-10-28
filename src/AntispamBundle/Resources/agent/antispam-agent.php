@@ -14,7 +14,8 @@
  *   7. Link protection (URL heuristics, URI block lists, Safe Browsing)
  *   8. Attachment policy (blocked types, double extensions, macros, encrypted archives)
  *   9. Attachment scanning (ClamAV malware + VirusTotal reputation)
- *  10. Threshold decision -> move to .SPAM or .QUARANTINE
+ *  10. Local Bayes classifier (token probabilities synced from the panel)
+ *  11. Threshold decision -> move to .SPAM or .QUARANTINE
  *
  * `apply-blacklist` re-checks recent INBOX mail (already scanned or not)
  * against the blacklists only, so a newly added rule also clears messages
@@ -34,7 +35,7 @@
  * PHP warnings never reach STDOUT; they are collected into "warnings".
  */
 
-const AGENT_VERSION = '3.1';
+const AGENT_VERSION = '3.2';
 const CERT_DEFAULT_URL = 'https://hole.cert.pl/domains/v2/domains.txt';
 const CERT_MAX_BYTES = 52428800;
 const CERT_MIN_ROWS = 100;
@@ -43,6 +44,15 @@ const CERT_RETRY_SECONDS = 3600;
 const AGENT_DEFAULT_SPAM_THRESHOLD = 10;
 const AGENT_DEFAULT_QUARANTINE_THRESHOLD = 5;
 const AGENT_COMMIT_EVERY = 50;
+// Bayes classifier, = BayesTokenizer / BayesMath constants (AgentParityTest)
+const BAYES_MAX_TOKENS = 1000;
+const BAYES_MAX_WORD = 20;
+const BAYES_MIN_WORD = 3;
+const BAYES_MAX_BODY_BYTES = 102400;
+const BAYES_UNKNOWN_STRENGTH = 0.45;
+const BAYES_UNKNOWN_PROB = 0.5;
+const BAYES_MIN_STRENGTH = 0.1;
+const BAYES_MAX_DISCRIMINATORS = 150;
 
 // Test suites include this file to check it against the web application's
 // analyzers; top-level functions stay defined after this early return.
@@ -136,7 +146,7 @@ try {
             echo "  php antispam-agent.php test [--maildir=path]\n";
             echo "  php antispam-agent.php version\n";
             echo "  php antispam-agent.php import-rules [--account=ID] [--db=path] < rules.json\n";
-            echo "  php antispam-agent.php scan [--maildir=path] [--account=ID] [--db=path] [--spam-threshold=N] [--quarantine-threshold=N] [--no-dnsbl] [--no-headers] [--no-impersonation] [--no-urls] [--no-cert] [--no-attachment-policy] [--no-clamav] [--no-virustotal]\n";
+            echo "  php antispam-agent.php scan [--maildir=path] [--account=ID] [--db=path] [--spam-threshold=N] [--quarantine-threshold=N] [--no-dnsbl] [--no-headers] [--no-impersonation] [--no-urls] [--no-cert] [--no-attachment-policy] [--no-clamav] [--no-virustotal] [--no-bayes]\n";
             echo "  php antispam-agent.php apply-blacklist [--maildir=path] [--account=ID] [--db=path] [--spam-threshold=N] [--days=30] [--limit=5000]\n";
             echo "  php antispam-agent.php health [--maildir=path] [--account=ID] [--db=path]\n";
             echo "  php antispam-agent.php quarantine-list [--maildir=path] [--account=ID] [--db=path] [--since=unix-ts] [--limit=N]\n";
@@ -383,7 +393,7 @@ function importRules($dbPath, $input)
     if (!is_array($data) || !$data) {
         return ['success' => false, 'error' => 'Invalid JSON input (' . json_last_error_msg() . ', ' . strlen((string)$input) . ' bytes)'];
     }
-    foreach (['whitelist', 'email_whitelist', 'blacklist', 'email_blacklist', 'dnsbl', 'settings'] as $section) {
+    foreach (['whitelist', 'email_whitelist', 'blacklist', 'email_blacklist', 'dnsbl', 'settings', 'bayes_tokens'] as $section) {
         if (isset($data[$section]) && !is_array($data[$section])) {
             return ['success' => false, 'error' => 'Invalid JSON input: "' . $section . '" must be a list'];
         }
@@ -425,6 +435,24 @@ function importRulesInto($db, array $data)
         'blacklist' => 0, 'email_blacklist' => 0,
         'dnsbl_providers' => 0, 'settings' => 0,
     ];
+
+    // Bayes token probabilities (agent 3.2+); the panel always sends the full
+    // set, an empty list clears it. Rows that are not [16 hex, 0 < p < 1] are skipped.
+    if (isset($data['bayes_tokens']) && is_array($data['bayes_tokens'])) {
+        $db->exec('DELETE FROM bayes_tokens');
+        $counts['bayes_tokens'] = 0;
+        $stmt = $db->prepare('INSERT OR REPLACE INTO bayes_tokens (hash, prob) VALUES (:h, :p)');
+        foreach ($data['bayes_tokens'] as $row) {
+            if (!is_array($row) || !isset($row[0], $row[1]) || !is_string($row[0]) || !preg_match('/^[0-9a-f]{16}$/', $row[0])
+                || !is_numeric($row[1]) || (float)$row[1] <= 0.0 || (float)$row[1] >= 1.0) {
+                continue;
+            }
+            $stmt->bindValue(':h', $row[0]);
+            $stmt->bindValue(':p', (float)$row[1], SQLITE3_FLOAT);
+            $stmt->execute();
+            $counts['bayes_tokens']++;
+        }
+    }
 
     if (!empty($data['whitelist'])) {
         $stmt = $db->prepare('INSERT INTO whitelist (email, host, pattern_type) VALUES (:email, :host, :pt)');
@@ -531,6 +559,7 @@ function scanConfig(array $settings, array $options)
         'policy' => $on('no-attachment-policy', 'attachment_policy_enabled', true),
         'clamav' => $on('no-clamav', 'clamav_enabled', false),
         'vt' => $on('no-virustotal', 'vt_enabled', false) && trim((string)($settings['vt_api_key'] ?? '')) !== '',
+        'bayes' => $on('no-bayes', 'bayes_enabled', false),
     ];
 }
 
@@ -580,6 +609,10 @@ function runScan($maildirPath, $dbPath, $options = [])
     $policyConfig = policyConfigFromSettings($settings);
     $headerConfig = headerConfigFromSettings($settings, $cfg['quarantine_threshold'], $cfg['spam_threshold']);
     $dblCache = [];
+    $bayesTokens = $cfg['bayes'] ? bayesLoadTokens($db) : [];
+    if (!$bayesTokens) {
+        $cfg['bayes'] = false;
+    }
 
     $stats = [
         'success' => true,
@@ -654,6 +687,8 @@ function runScan($maildirPath, $dbPath, $options = [])
                     'policy' => $policyConfig,
                     'header' => $headerConfig,
                     'cert_score' => $certScore,
+                    'bayes' => $bayesTokens,
+                    'bayes_weights' => bayesWeightsFromSettings($settings),
                 ], $dblCache);
             } catch (\Throwable $e) {
                 $stats['errors'][] = $file . ': ' . $e->getMessage();
@@ -768,6 +803,7 @@ function scoreMessage($filePath, $headers, array $cfg, array $lists, array $dnsb
         $reasons[] = ['rule' => 'email_blacklist:' . $hit['pattern'] . ' (' . $hit['pattern_type'] . ')', 'score' => (int)$hit['score']];
         $forceSpam = $forceSpam || !$cfg['scoring'];
     }
+    $blacklisted = (bool)$reasons;
 
     $add = function (array $r) use (&$score, &$reasons) {
         $score += $r['score'];
@@ -798,7 +834,7 @@ function scoreMessage($filePath, $headers, array $cfg, array $lists, array $dnsb
 
     // Body + attachments are parsed once, only when a step needs them.
     $parts = ['attachments' => [], 'html' => '', 'text' => ''];
-    if ($cfg['urls'] || $cfg['cert'] || $cfg['policy'] || $cfg['clamav'] || $cfg['vt']) {
+    if ($cfg['urls'] || $cfg['cert'] || $cfg['policy'] || $cfg['clamav'] || $cfg['vt'] || !empty($cfg['bayes'])) {
         $parts = parseMessageParts($filePath);
     }
 
@@ -832,6 +868,16 @@ function scoreMessage($filePath, $headers, array $cfg, array $lists, array $dnsb
             $reasons[] = $hit['reason'];
             $forceSpam = true;
             $out['attachments_flagged'] = true;
+        }
+    }
+
+    // Local Bayes classifier (like CheckBayes): token probabilities synced from the panel.
+    if (!empty($cfg['bayes']) && !empty($ctx['bayes'])) {
+        $p = bayesProbability(bayesTokenize(bayesFieldsFromHeaders($headers, $parts)), $ctx['bayes']);
+        $br = bayesScoreFor($p, $ctx['bayes_weights'], $blacklisted);
+        if ($br['reason'] !== null) {
+            $score += $br['score'];
+            $reasons[] = $br['reason'];
         }
     }
 
@@ -2951,6 +2997,232 @@ function certLinkHosts($html, $text)
     return array_keys($hosts);
 }
 
+/* ---------------------------------------------------------------------- */
+/* Bayes classifier (agent 3.2) - copy of Services\Bayes\BayesTokenizer   */
+/* and BayesMath; AgentParityTest keeps them equal. The agent does not    */
+/* learn: the panel syncs token probabilities (hash => f(w)).             */
+/* ---------------------------------------------------------------------- */
+
+function bayesUtf8($s)
+{
+    $s = (string)$s;
+    return preg_match('//u', $s) ? $s : (string)mb_convert_encoding($s, 'UTF-8', 'UTF-8');
+}
+
+function bayesWords($text)
+{
+    $out = [];
+    $text = mb_strtolower(bayesUtf8($text), 'UTF-8');
+    $words = preg_split('/[^\p{L}\p{N}\'$€\-]+/u', $text, -1, PREG_SPLIT_NO_EMPTY);
+    foreach ($words ?: [] as $w) {
+        $w = trim($w, "'-");
+        $len = mb_strlen($w, 'UTF-8');
+        if ($len < BAYES_MIN_WORD || preg_match('/^[\d$€\'\-]+$/u', $w)) {
+            continue;
+        }
+        if ($len > BAYES_MAX_WORD) {
+            $w = 'skip:' . mb_substr($w, 0, 1, 'UTF-8') . ':' . (intdiv($len, 10) * 10);
+        }
+        $out[] = $w;
+    }
+    return $out;
+}
+
+function bayesDomain($address)
+{
+    $address = (string)$address;
+    $p = strrpos($address, '@');
+    return $p === false ? '' : strtolower(trim(substr($address, $p + 1), " \t<>."));
+}
+
+/** Same tokens as BayesTokenizer::tokenize(). */
+function bayesTokenize(array $f)
+{
+    $tokens = [];
+    $add = function ($t) use (&$tokens) {
+        if (count($tokens) < BAYES_MAX_TOKENS) {
+            $tokens[(string)$t] = true;
+        }
+    };
+
+    foreach (bayesWords((string)($f['subject'] ?? '')) as $w) {
+        $add('subject:' . $w);
+    }
+    $from = bayesDomain((string)($f['from'] ?? ''));
+    $add('from:' . ($from !== '' ? $from : 'none'));
+    $reply = bayesDomain((string)($f['reply_to'] ?? ''));
+    if ($reply !== '') {
+        $add('replyto:' . $reply);
+        if ($reply !== $from) {
+            $add('replyto:differs');
+        }
+    }
+    if (preg_match('/@([^@>\s]+)>?\s*$/', (string)($f['message_id'] ?? ''), $m)) {
+        $add('msgid:' . strtolower($m[1]));
+    } else {
+        $add('msgid:none');
+    }
+    $mailer = trim(mb_strtolower(bayesUtf8((string)($f['x_mailer'] ?? '')), 'UTF-8'));
+    $add('xmailer:' . ($mailer !== '' ? mb_substr(preg_replace('/\d+/', '#', $mailer), 0, 40, 'UTF-8') : 'none'));
+    $parts = explode(';', (string)($f['content_type'] ?? ''));
+    $ctype = strtolower(trim($parts[0]));
+    if ($ctype !== '') {
+        $add('ctype:' . substr($ctype, 0, 40));
+    }
+
+    $text = substr((string)($f['text'] ?? ''), 0, BAYES_MAX_BODY_BYTES);
+    $html = substr((string)($f['html'] ?? ''), 0, BAYES_MAX_BODY_BYTES);
+    if (preg_match_all('#https?://([a-z0-9.\-]+)#i', $text . ' ' . $html, $mm)) {
+        foreach ($mm[1] as $host) {
+            $host = trim(strtolower($host), '.-');
+            if ($host === '') {
+                continue;
+            }
+            $add('url:' . $host);
+            $labels = explode('.', $host);
+            if (count($labels) > 2) {
+                $add('url:' . implode('.', array_slice($labels, -2)));
+            }
+        }
+    }
+    if (trim($text) === '' && $html !== '') {
+        $text = html_entity_decode(strip_tags((string)preg_replace('#<(script|style)\b.*?</\1>#is', ' ', $html)), ENT_QUOTES, 'UTF-8');
+    }
+    $text = (string)preg_replace('#(?:https?://|www\.)\S+#i', ' ', $text);
+    foreach (bayesWords($text) as $w) {
+        $add($w);
+    }
+    return array_keys($tokens);
+}
+
+function bayesHash($token)
+{
+    return substr(sha1((string)$token), 0, 16);
+}
+
+/** Tokenizer input from an (unfolded) header block and parseMessageParts(). */
+function bayesFieldsFromHeaders($headers, array $parts)
+{
+    $from = parseFromHeader(grabHeader($headers, 'From'));
+    return [
+        'subject' => decodeHeaderValue(grabHeader($headers, 'Subject')),
+        'from' => $from['email'],
+        'reply_to' => extractEmail(grabHeader($headers, 'Reply-To')),
+        'message_id' => grabHeader($headers, 'Message-ID'),
+        'x_mailer' => grabHeader($headers, 'X-Mailer'),
+        'content_type' => grabHeader($headers, 'Content-Type'),
+        'text' => (string)($parts['text'] ?? ''),
+        'html' => (string)($parts['html'] ?? ''),
+    ];
+}
+
+function bayesTokenProb($spam, $ham, $nspam, $nham)
+{
+    $spamRatio = $spam / max(1, $nspam);
+    $hamRatio = $ham / max(1, $nham);
+    $p = ($spamRatio + $hamRatio) > 0 ? $spamRatio / ($spamRatio + $hamRatio) : BAYES_UNKNOWN_PROB;
+    $n = $spam + $ham;
+    return (BAYES_UNKNOWN_STRENGTH * BAYES_UNKNOWN_PROB + $n * $p) / (BAYES_UNKNOWN_STRENGTH + $n);
+}
+
+function bayesChi2Q($x2, $v)
+{
+    $m = $x2 / 2.0;
+    $sum = $term = exp(-$m);
+    for ($i = 1; $i < intdiv((int)$v, 2); $i++) {
+        $term *= $m / $i;
+        $sum += $term;
+    }
+    return min($sum, 1.0);
+}
+
+/** @param array $probs hash => f(w) */
+function bayesCombine(array $probs)
+{
+    $clues = [];
+    foreach ($probs as $key => $f) {
+        $strength = abs($f - 0.5);
+        if ($strength >= BAYES_MIN_STRENGTH) {
+            $clues[] = [$strength, (string)$key, (float)$f];
+        }
+    }
+    if (!$clues) {
+        return 0.5;
+    }
+    usort($clues, function ($a, $b) {
+        return $b[0] <=> $a[0] ?: strcmp($a[1], $b[1]);
+    });
+    $clues = array_slice($clues, 0, BAYES_MAX_DISCRIMINATORS);
+    $s = 0.0;
+    $h = 0.0;
+    foreach ($clues as $c) {
+        $s += log(1.0 - $c[2]);
+        $h += log($c[2]);
+    }
+    $n = count($clues);
+    $s = 1.0 - bayesChi2Q(-2.0 * $s, 2 * $n);
+    $h = 1.0 - bayesChi2Q(-2.0 * $h, 2 * $n);
+    return ($s - $h + 1.0) / 2.0;
+}
+
+/** Spam probability of a token list with the synced table (hash => prob). */
+function bayesProbability(array $tokens, array $table)
+{
+    $probs = [];
+    foreach ($tokens as $t) {
+        $h = bayesHash($t);
+        if (isset($table[$h])) {
+            $probs[$h] = $table[$h];
+        }
+    }
+    return bayesCombine($probs);
+}
+
+function bayesLabel($p)
+{
+    $v = $p >= 0.5 ? floor($p * 100) / 100 : ceil($p * 100) / 100;
+    return number_format($v, 2, '.', '');
+}
+
+function bayesScoreFor($p, array $weights, $blacklisted = false)
+{
+    $score = 0;
+    if ($p >= 0.99) {
+        $score = (int)$weights['spam_score'];
+    } elseif ($p >= 0.90) {
+        $score = (int)$weights['likely_score'];
+    } elseif ($p <= 0.01 && !$blacklisted) {
+        $score = -(int)$weights['ham_score'];
+    }
+    if ($score === 0) {
+        return ['score' => 0, 'reason' => null];
+    }
+    return ['score' => $score, 'reason' => ['rule' => 'bayes:' . bayesLabel($p), 'score' => $score]];
+}
+
+function bayesWeightsFromSettings(array $settings)
+{
+    return [
+        'spam_score' => max(0, settingInt($settings, 'bayes_spam_score', 5)),
+        'likely_score' => max(0, settingInt($settings, 'bayes_likely_score', 3)),
+        'ham_score' => max(0, settingInt($settings, 'bayes_ham_score', 2)),
+    ];
+}
+
+/** @return array hash => prob */
+function bayesLoadTokens($db)
+{
+    $out = [];
+    $res = @$db->query('SELECT hash, prob FROM bayes_tokens');
+    if ($res) {
+        while ($row = $res->fetchArray(SQLITE3_NUM)) {
+            $out[(string)$row[0]] = (float)$row[1];
+        }
+    }
+    return $out;
+}
+
+
 function getDb($dbPath)
 {
     $isNew = !file_exists($dbPath);
@@ -2978,6 +3250,7 @@ function getDb($dbPath)
     $db->exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)');
     $db->exec('CREATE TABLE IF NOT EXISTS cert_domains (domain TEXT PRIMARY KEY)');
     $db->exec('CREATE TABLE IF NOT EXISTS cert_meta (key TEXT PRIMARY KEY, value TEXT)');
+    $db->exec('CREATE TABLE IF NOT EXISTS bayes_tokens (hash TEXT PRIMARY KEY, prob REAL)');
 
     // pattern_type column may not exist on old agent databases; ALTER if needed.
     if (!$isNew) {

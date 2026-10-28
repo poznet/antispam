@@ -34,6 +34,7 @@ class SpamboxController extends AbstractController
         private ConnectionService $connection,
         private QuarantineService $quarantine,
         private MessageService $messages,
+        private ?\AntispamBundle\Services\Bayes\BayesService $bayes = null,
     ) {
     }
 
@@ -214,6 +215,8 @@ class SpamboxController extends AbstractController
         try {
             $messages = $this->inbox->getInbox($folder);
             $msg = $this->inbox->getMessage((int)$id);
+            // Restored = "not spam" for the Bayes classifier (read before the move).
+            $this->bayes?->learnImap($msg, 'ham', null, 'restore');
             // Restored mail must not be filtered again on the next scan.
             $this->messages->setAsChecked($msg);
             $inboxMailbox = $this->connection->getConnection()->getMailbox('INBOX');

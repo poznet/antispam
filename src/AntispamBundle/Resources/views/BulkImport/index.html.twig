@@ -3,7 +3,7 @@
 {% block page_title %}Masowy import / eksport{% endblock %}
 
 {% block body %}
-    <p class="text-muted">Wklej jeden wpis na linię (domeny, adresy e-mail, wzorce wildcard lub regex). Linie zaczynające się od <code>#</code> są pomijane. <code>,</code> i <code>;</code> traktowane są jako separatory.</p>
+    <p class="text-muted">Wklej jeden wpis na linię (domeny, adresy e-mail, wzorce wildcard lub regex). Linie zaczynające się od <code>#</code> są pomijane. Dla wzorców dokładnych i wildcard <code>,</code> i <code>;</code> traktowane są jako separatory; wyrażenia regex są importowane bez zmian. Plik z eksportu (kolumny rozdzielone tabulatorem: wartość, typ wzorca, punkty, skrzynka) można zaimportować ponownie - typ i punkty z pliku mają pierwszeństwo, a skrzynkę wybierasz w formularzu.</p>
 
     {% for key, t in types %}
     <div class="panel panel-default">
@@ -15,11 +15,21 @@
         </div>
         <div class="panel-body">
             <form method="post" action="{{ path('antispam_bulk_import', {type: key}) }}">
-                <textarea name="entries" class="form-control" rows="6" placeholder="spam-domain.tld&#10;*.evil.example&#10;^.*@.*\.ru$"></textarea>
+                <input type="hidden" name="_token" value="{{ csrf_token('bulk_import') }}">
+                <label class="sr-only" for="entries-{{ key }}">Wpisy</label>
+                <textarea name="entries" id="entries-{{ key }}" class="form-control" rows="6" placeholder="spam-domain.tld&#10;*.evil.example&#10;^.*@.*\.ru$"></textarea>
                 <div class="row" style="margin-top:8px;">
-                    <div class="col-sm-4">
-                        <label>Typ wzorca</label>
-                        <select name="pattern_type" class="form-control">
+                    <div class="col-sm-3">
+                        <label for="owner-{{ key }}">Skrzynka</label>
+                        <select name="owner" id="owner-{{ key }}" class="form-control">
+                            {% for value, label in choices %}
+                                <option value="{{ value }}"{% if value == default_owner %} selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-sm-3">
+                        <label for="pattern-{{ key }}">Typ wzorca</label>
+                        <select name="pattern_type" id="pattern-{{ key }}" class="form-control">
                             <option value="exact">Dokładne dopasowanie</option>
                             <option value="wildcard">Wildcard (* ?)</option>
                             <option value="regex">Regex</option>
@@ -27,8 +37,8 @@
                     </div>
                     {% if 'blacklist' in key %}
                     <div class="col-sm-3">
-                        <label>Punkty za trafienie</label>
-                        <input type="number" name="score" class="form-control" value="10" min="1" max="50">
+                        <label for="score-{{ key }}">Punkty za trafienie</label>
+                        <input type="number" name="score" id="score-{{ key }}" class="form-control" value="10" min="1" max="50">
                     </div>
                     {% endif %}
                     <div class="col-sm-3" style="padding-top:25px;">

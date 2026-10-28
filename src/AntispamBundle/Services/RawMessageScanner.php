@@ -191,7 +191,7 @@ class RawMessageScanner
     /** First matching rule of the account (hit counter bumped), or null. */
     private function matchRule($entity, $accountEmail, $value, $getter)
     {
-        $rules = $this->em->getRepository($entity)->findBy(['email' => $accountEmail]);
+        $rules = $this->em->getRepository($entity)->findBy(['email' => RuleOwnership::scope($accountEmail)]);
         $match = PatternMatcher::findMatching($rules, $value, $getter);
         if ($match) {
             $match->setCounter($match->getCounter() + 1);

@@ -18,6 +18,7 @@ class EmailBlacklist
     #[ORM\GeneratedValue(strategy: 'AUTO')]
     private $id;
 
+    /** Owner mailbox address, or RuleOwnership::ALL ('*') for a rule applied to every mailbox. */
     #[ORM\Column(name: 'email', type: 'string', length: 255)]
     private $email;
 

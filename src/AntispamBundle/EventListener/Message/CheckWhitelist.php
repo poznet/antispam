@@ -35,7 +35,7 @@ class CheckWhitelist
         $cacheKey = (string)$event->getEmail();
         if (!isset($this->rulesCache[$cacheKey])) {
             $this->rulesCache[$cacheKey] = $this->em->getRepository(Whitelist::class)
-                ->findBy(['email' => $event->getEmail()]);
+                ->findBy(['email' => \AntispamBundle\Services\RuleOwnership::scope($event->getEmail())]);
         }
         $rules = $this->rulesCache[$cacheKey];
 

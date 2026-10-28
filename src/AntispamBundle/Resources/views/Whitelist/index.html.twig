@@ -1,4 +1,5 @@
 {% extends '@Antispam/main.html.twig' %}
+{% import '@Antispam/RuleOwner/macros.html.twig' as owner %}
 {% block title %}Whitelista domen{% endblock %}
 {% block page_title %}Whitelista domen{% endblock %}
 
@@ -12,9 +13,12 @@
                 <option value="wildcard">Wildcard</option>
                 <option value="regex">Regex</option>
             </select>
+            {{ owner.select(choices, default_owner, 'rule-owner') }}
             <button type="submit" class="btn btn-success"><span class="glyphicon glyphicon-plus"></span> Dodaj</button>
         </form>
     </div>
+
+    {{ owner.filter('antispam_whitelist_index', owners, owner_filter) }}
 
     {% if list|length > 0 %}
     <ul class="list-group">
@@ -27,6 +31,7 @@
             <span class="badge badge-counter">{{ l.counter }} trafień</span>
             <span class="label label-default">{{ l.patternType }}</span>
             <span class="glyphicon glyphicon-globe"></span> {{ l.host }}
+            {{ owner.label(l.email) }}
         </li>
         {% endfor %}
     </ul>

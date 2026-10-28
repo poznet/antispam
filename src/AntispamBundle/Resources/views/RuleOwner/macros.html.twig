@@ -1,0 +1,33 @@
+{# Owner (mailbox) of a white/blacklist rule - see RuleOwnership. '*' = all mailboxes. #}
+
+{% macro select(choices, default_owner, id) %}
+    <label class="sr-only" for="{{ id }}">Skrzynka</label>
+    <select name="owner" id="{{ id }}" class="form-control" title="Skrzynka, której dotyczy reguła">
+        {% for value, label in choices %}
+            <option value="{{ value }}"{% if value == default_owner %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+    </select>
+{% endmacro %}
+
+{% macro filter(route, owners, current) %}
+    <form method="get" action="{{ path(route) }}" class="form-inline rule-owner-filter" style="margin-bottom:12px;">
+        <label for="owner-filter">Skrzynka:</label>
+        <select name="owner" id="owner-filter" class="form-control input-sm">
+            <option value="">Wszystkie reguły</option>
+            {% for value, label in owners %}
+                <option value="{{ value }}"{% if current is not same as('') and value|lower == current|lower %} selected{% endif %}>{{ value == '*' ? 'Tylko reguły globalne (wszystkie skrzynki)' : label }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-filter"></span> Filtruj</button>
+    </form>
+{% endmacro %}
+
+{% macro label(owner) %}
+    {% if owner == '*' %}
+        <span class="label label-primary" title="Reguła dotyczy wszystkich skrzynek">Wszystkie skrzynki</span>
+    {% elseif owner is empty %}
+        <span class="label label-danger" title="Reguła bez skrzynki - nie działa nigdzie; usuń ją i dodaj ponownie">brak skrzynki</span>
+    {% else %}
+        <span class="label label-info" title="Reguła dotyczy tylko tej skrzynki">{{ owner }}</span>
+    {% endif %}
+{% endmacro %}

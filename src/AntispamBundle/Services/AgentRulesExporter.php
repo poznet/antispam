@@ -34,21 +34,21 @@ class AgentRulesExporter
             'dnsbl' => [],
         ];
 
-        foreach ($this->em->getRepository(Whitelist::class)->findBy(['email' => $email]) as $item) {
+        foreach ($this->em->getRepository(Whitelist::class)->findBy(['email' => RuleOwnership::scope($email)]) as $item) {
             $rules['whitelist'][] = [
                 'email' => $item->getEmail(),
                 'host' => $item->getHost(),
                 'pattern_type' => $item->getPatternType(),
             ];
         }
-        foreach ($this->em->getRepository(EmailWhitelist::class)->findBy(['email' => $email]) as $item) {
+        foreach ($this->em->getRepository(EmailWhitelist::class)->findBy(['email' => RuleOwnership::scope($email)]) as $item) {
             $rules['email_whitelist'][] = [
                 'email' => $item->getEmail(),
                 'whitelistemail' => $item->getWhitelistemail(),
                 'pattern_type' => $item->getPatternType(),
             ];
         }
-        foreach ($this->em->getRepository(Blacklist::class)->findBy(['email' => $email]) as $item) {
+        foreach ($this->em->getRepository(Blacklist::class)->findBy(['email' => RuleOwnership::scope($email)]) as $item) {
             $rules['blacklist'][] = [
                 'email' => $item->getEmail(),
                 'host' => $item->getHost(),
@@ -56,7 +56,7 @@ class AgentRulesExporter
                 'score' => $item->getScore(),
             ];
         }
-        foreach ($this->em->getRepository(EmailBlacklist::class)->findBy(['email' => $email]) as $item) {
+        foreach ($this->em->getRepository(EmailBlacklist::class)->findBy(['email' => RuleOwnership::scope($email)]) as $item) {
             $rules['email_blacklist'][] = [
                 'email' => $item->getEmail(),
                 'blacklistemail' => $item->getBlacklistemail(),

@@ -53,14 +53,14 @@ class RetroactiveSpamService
         }
 
         $owner = (string)$rule->getEmail();
-        foreach ($this->em->getRepository(Account::class)->findBy(['email' => $owner]) as $account) {
+        foreach ($this->em->getRepository(Account::class)->findBy(RuleOwnership::isGlobal($owner) ? [] : ['email' => $owner]) as $account) {
             try {
                 if ($account->isSsh()) {
                     $result['moved'] += $this->applySsh($account);
                 } else {
                     $connection = $this->imapScan->connect($account);
                     try {
-                        $result['moved'] += $this->applyImap($connection, $owner, $rule);
+                        $result['moved'] += $this->applyImap($connection, (string)$account->getEmail(), $rule);
                     } finally {
                         $connection->close();
                     }
@@ -70,9 +70,9 @@ class RetroactiveSpamService
             }
         }
 
-        if ($this->imapScan->isLegacyConfigured() && strcasecmp((string)$this->config->get('email'), $owner) === 0) {
+        if ($this->imapScan->isLegacyConfigured() && (RuleOwnership::isGlobal($owner) || strcasecmp((string)$this->config->get('email'), $owner) === 0)) {
             try {
-                $result['moved'] += $this->applyImap($this->legacyConnection->getConnection(), $owner, $rule);
+                $result['moved'] += $this->applyImap($this->legacyConnection->getConnection(), (string)$this->config->get('email'), $rule);
             } catch (\Throwable $e) {
                 $result['errors'][] = 'IMAP: ' . $e->getMessage();
             }
@@ -126,8 +126,8 @@ class RetroactiveSpamService
             ? new From($isDomain ? '@' . $pattern : $pattern)
             : new Since(new \DateTimeImmutable('-' . self::DAYS . ' days'));
 
-        $whitelist = $this->em->getRepository(Whitelist::class)->findBy(['email' => $owner]);
-        $emailWhitelist = $this->em->getRepository(EmailWhitelist::class)->findBy(['email' => $owner]);
+        $whitelist = $this->em->getRepository(Whitelist::class)->findBy(['email' => RuleOwnership::scope($owner)]);
+        $emailWhitelist = $this->em->getRepository(EmailWhitelist::class)->findBy(['email' => RuleOwnership::scope($owner)]);
         $spam = $this->inbox->getSpamFolder($connection);
 
         $moved = 0;

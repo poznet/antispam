@@ -3,8 +3,8 @@
 namespace AntispamBundle\Controller;
 
 use AntispamBundle\Entity\EmailBlacklist;
-use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\RetroactiveSpamService;
+use AntispamBundle\Services\RuleOwnership;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -16,17 +16,24 @@ class EmailBlacklistController extends AbstractController
 {
     public function __construct(
         private EntityManagerInterface $em,
-        private ConfigService $config,
+        private RuleOwnership $ownership,
         private RetroactiveSpamService $retroactive,
     ) {
     }
 
     #[Route('/index', name: 'antispam_emailblacklist_index')]
     #[Template('@Antispam/EmailBlacklist/index.html.twig')]
-    public function indexAction()
+    public function indexAction(Request $request)
     {
-        $list = $this->em->getRepository(EmailBlacklist::class)->findAll();
-        return ['list' => $list];
+        $all = $this->em->getRepository(EmailBlacklist::class)->findBy([], ['id' => 'ASC']);
+        $owner = (string)$request->query->get('owner', '');
+        return [
+            'list' => RuleOwnership::filterByOwner($all, $owner),
+            'owners' => $this->ownership->labelsFor($all),
+            'choices' => $this->ownership->choices(),
+            'default_owner' => $this->ownership->defaultOwner(),
+            'owner_filter' => $owner,
+        ];
     }
 
     #[Route('/add', name: 'antispam_emailblacklist_add', methods: ['POST'])]
@@ -42,21 +49,28 @@ class EmailBlacklistController extends AbstractController
         if (!$email) {
             return $this->redirectToRoute('antispam_emailblacklist_index');
         }
-        $existing = $this->em->getRepository(EmailBlacklist::class)->findOneBy(['blacklistemail' => $email]);
-        if (!$existing) {
-            $entry = new EmailBlacklist();
-            $entry->setEmail($this->config->get('email'));
-            $entry->setBlacklistemail($email);
-            $entry->setPatternType($patternType);
-            $entry->setScore(max(1, $score));
-            $this->em->persist($entry);
-            $this->em->flush();
+        $owner = $this->ownership->resolve($request->request->get('owner'));
+        if ($owner === null) {
+            $this->addFlash('danger', 'Nieznana skrzynka - wybierz skrzynkę z listy.');
+            return $this->redirectToRoute('antispam_emailblacklist_index');
+        }
+        if ($this->ownership->findDuplicate(EmailBlacklist::class, 'blacklistemail', $owner, $email)) {
+            $this->addFlash('info', 'Ta reguła już istnieje dla tej skrzynki (lub dla wszystkich skrzynek).');
+            return $this->redirectToRoute('antispam_emailblacklist_index');
+        }
 
-            // Mail from this sender that is already in INBOX goes to SPAM too.
-            $summary = RetroactiveSpamService::describe($this->retroactive->applyRule($entry));
-            if ($summary) {
-                $this->addFlash('info', $summary);
-            }
+        $entry = new EmailBlacklist();
+        $entry->setEmail($owner);
+        $entry->setBlacklistemail($email);
+        $entry->setPatternType($patternType);
+        $entry->setScore(max(1, $score));
+        $this->em->persist($entry);
+        $this->em->flush();
+
+        // Mail from this sender that is already in INBOX goes to SPAM too.
+        $summary = RetroactiveSpamService::describe($this->retroactive->applyRule($entry));
+        if ($summary) {
+            $this->addFlash('info', $summary);
         }
         return $this->redirectToRoute('antispam_emailblacklist_index');
     }

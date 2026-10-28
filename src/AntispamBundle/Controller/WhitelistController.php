@@ -3,7 +3,7 @@
 namespace AntispamBundle\Controller;
 
 use AntispamBundle\Entity\Whitelist;
-use AntispamBundle\Services\ConfigService;
+use AntispamBundle\Services\RuleOwnership;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -15,16 +15,23 @@ class WhitelistController extends AbstractController
 {
     public function __construct(
         private EntityManagerInterface $em,
-        private ConfigService $config,
+        private RuleOwnership $ownership,
     ) {
     }
 
     #[Route('/index', name: 'antispam_whitelist_index')]
     #[Template('@Antispam/Whitelist/index.html.twig')]
-    public function indexAction()
+    public function indexAction(Request $request)
     {
-        $list = $this->em->getRepository(Whitelist::class)->findAll();
-        return ['list' => $list];
+        $all = $this->em->getRepository(Whitelist::class)->findBy([], ['id' => 'ASC']);
+        $owner = (string)$request->query->get('owner', '');
+        return [
+            'list' => RuleOwnership::filterByOwner($all, $owner),
+            'owners' => $this->ownership->labelsFor($all),
+            'choices' => $this->ownership->choices(),
+            'default_owner' => $this->ownership->defaultOwner(),
+            'owner_filter' => $owner,
+        ];
     }
 
     #[Route('/add', name: 'antispam_whitelist_add', methods: ['POST'])]
@@ -39,15 +46,21 @@ class WhitelistController extends AbstractController
         if (!$host) {
             return $this->redirectToRoute('antispam_whitelist_index');
         }
-        $existing = $this->em->getRepository(Whitelist::class)->findOneBy(['host' => $host]);
-        if (!$existing) {
-            $entry = new Whitelist();
-            $entry->setEmail($this->config->get('email'));
-            $entry->setHost($host);
-            $entry->setPatternType($patternType);
-            $this->em->persist($entry);
-            $this->em->flush();
+        $owner = $this->ownership->resolve($request->request->get('owner'));
+        if ($owner === null) {
+            $this->addFlash('danger', 'Nieznana skrzynka - wybierz skrzynkę z listy.');
+            return $this->redirectToRoute('antispam_whitelist_index');
         }
+        if ($this->ownership->findDuplicate(Whitelist::class, 'host', $owner, $host)) {
+            $this->addFlash('info', 'Ta reguła już istnieje dla tej skrzynki (lub dla wszystkich skrzynek).');
+            return $this->redirectToRoute('antispam_whitelist_index');
+        }
+        $entry = new Whitelist();
+        $entry->setEmail($owner);
+        $entry->setHost($host);
+        $entry->setPatternType($patternType);
+        $this->em->persist($entry);
+        $this->em->flush();
         return $this->redirectToRoute('antispam_whitelist_index');
     }
 

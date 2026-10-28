@@ -41,7 +41,7 @@ class CheckEmailBlacklist
         $cacheKey = (string)$event->getEmail();
         if (!isset($this->rulesCache[$cacheKey])) {
             $this->rulesCache[$cacheKey] = $this->em->getRepository(EmailBlacklist::class)
-                ->findBy(['email' => $event->getEmail()]);
+                ->findBy(['email' => \AntispamBundle\Services\RuleOwnership::scope($event->getEmail())]);
         }
         $rules = $this->rulesCache[$cacheKey];
 

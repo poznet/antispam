@@ -31,10 +31,16 @@
 | Method | URL | Description |
 |--------|-----|-------------|
 | GET | `/spambox/index` | View first 20 spam messages |
-| GET | `/spambox/quarantine` | Quarantine of every mailbox (legacy IMAP `QUARANTINE` + each SSH account with a deployed agent) and the last 30 days of `quarantine` decisions from the score log (what the dashboard tile counts) |
-| POST | `/spambox/quarantine/action` | `mailbox` (`imap` / `ssh-<id>`), `id`, `action` (`release` / `whitelist` / `delete`); CSRF token `quarantine_action` |
+| GET | `/spambox/quarantine` | Quarantine of every mailbox (legacy IMAP `QUARANTINE`, each IMAP account, each SSH account with a deployed agent) and the last 30 days of `quarantine` decisions from the score log (what the dashboard tile counts) |
+| POST | `/spambox/quarantine/action` | `mailbox` (`imap` / `imap-<id>` / `ssh-<id>`), `id`, `action` (`release` / `whitelist` / `delete`); CSRF token `quarantine_action` |
 | GET | `/spambox/scorelog` | Score log ("Dziennik ocen"), 50 per page. Query filters: `decision` (`ham`/`quarantine`/`spam`/`whitelisted`), `account`, `q` (sender/subject substring), `from`/`to` (`Y-m-d`), `min_score`, `page`. The decision tiles link to the matching `decision` filter |
 | GET | `/spambox/plugin-reports` | Thunderbird plugin reports (anonymous + logged in), filters `?verdict=spam\|ham`, `?who=anonymous\|account` |
+
+## Cron log (`/cron`)
+
+| Method | URL | Description |
+|--------|-----|-------------|
+| GET | `/cron/logs` | Runs recorded by `antispam:cron:run` (last 200), filters `?command=…`, `?failed=1`. See [spam-handling.md](spam-handling.md) |
 
 ## Configuration (`/config`)
 
@@ -45,7 +51,7 @@
 | GET/POST | `/config/feed/` | Shared spam feed settings |
 | GET/POST | `/config/digest/` | Quarantine digest settings, mailbox list, "send now" |
 | GET | `/config/digest/preview/{key}` | Render the digest a mailbox would get (last 7 days) |
-| GET/POST | `/config/plugin/` | Thunderbird plugin settings |
+| GET/POST | `/config/plugin/` | Mail client plugin settings + downloads (Thunderbird, Outlook, Apple Mail) |
 | GET | `/config/uncheck-all/` | Reset all checked messages |
 | GET | `/config/reset/countes/` | Reset all rule counters |
 
@@ -72,10 +78,12 @@ examples: **[feed-api.md](feed-api.md)** (concepts: [feed.md](feed.md)).
 No login. The signed, expiring token is the credential. Invalid or expired tokens
 get `410`, a failed action `409`. See [quarantine-digest.md](quarantine-digest.md).
 
-## Thunderbird Plugin API (`/api/plugin`)
+## Mail Client Plugin API (`/api/plugin`)
 
-Used by the Thunderbird plugin. Bearer-token auth (token from `/api/plugin/login`),
-exempt from form login. Full reference: **[thunderbird.md](thunderbird.md)**.
+Used by the Thunderbird plugin, the Outlook add-in and the Apple Mail extension.
+Bearer-token auth (token from `/api/plugin/login`), exempt from form login.
+Full reference: **[thunderbird.md](thunderbird.md)**, clients:
+[outlook.md](outlook.md), [apple-mail.md](apple-mail.md).
 
 | Method | URL | Description |
 |--------|-----|-------------|
@@ -84,25 +92,28 @@ exempt from form login. Full reference: **[thunderbird.md](thunderbird.md)**.
 | POST | `/api/plugin/report` | User verdict (`spam` anonymous or logged in, `ham` logged in) |
 | POST | `/api/plugin/check` | Score a raw message (logged in) |
 | GET | `/plugin/download` | Download the `.xpi` (public) |
+| GET | `/plugin/outlook/manifest.xml` | Outlook add-in manifest (public; `409` when the server URL is not HTTPS) |
+| GET | `/plugin/outlook/{file}` | Outlook task pane files (`taskpane.html/js/css`, `commands.html`, `icons/icon-*.png`; public) |
+| GET | `/plugin/apple-mail/source.zip` | Apple Mail extension source with the server URL set (public) |
 
 ## Whitelists
 
 | Method | URL | Description |
 |--------|-----|-------------|
 | GET | `/whitelist/index` | Domain whitelist |
-| POST | `/whitelist/add` | Add domain to whitelist |
-| GET | `/whitelist/del/{id}` | Remove from whitelist |
+| POST | `/whitelist/add` | Add domain to whitelist (CSRF token `list_rules`) |
+| POST | `/whitelist/del/{id}` | Remove from whitelist (CSRF token `list_rules`) |
 | GET | `/emailwhitelist/index` | Email whitelist |
-| POST | `/emailwhitelist/add` | Add email to whitelist |
-| GET | `/emailwhitelist/del/{id}` | Remove from email whitelist |
+| POST | `/emailwhitelist/add` | Add email to whitelist (CSRF token `list_rules`) |
+| POST | `/emailwhitelist/del/{id}` | Remove from email whitelist (CSRF token `list_rules`) |
 
 ## Blacklists
 
 | Method | URL | Description |
 |--------|-----|-------------|
 | GET | `/domainblacklst/index` | Domain blacklist |
-| POST | `/domainblacklst/add` | Add domain to blacklist |
-| GET | `/domainblacklst/del/{id}` | Remove from blacklist |
+| POST | `/domainblacklst/add` | Add domain to blacklist (CSRF token `list_rules`); matching INBOX mail from the last 30 days is moved to SPAM ([spam-handling.md](spam-handling.md#retroactive-blacklist)) |
+| POST | `/domainblacklst/del/{id}` | Remove from blacklist (CSRF token `list_rules`) |
 | GET | `/emailblacklst/index` | Email blacklist |
-| POST | `/emailblacklst/add` | Add email to blacklist |
-| GET | `/emailblacklst/del/{id}` | Remove from email blacklist |
+| POST | `/emailblacklst/add` | Add email to blacklist (CSRF token `list_rules`); matching INBOX mail is moved to SPAM, as above |
+| POST | `/emailblacklst/del/{id}` | Remove from email blacklist (CSRF token `list_rules`) |

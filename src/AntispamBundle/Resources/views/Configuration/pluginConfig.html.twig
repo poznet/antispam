@@ -1,22 +1,65 @@
 {% extends '@Antispam/main.html.twig' %}
-{% block title %}Wtyczka Thunderbird{% endblock %}
-{% block page_title %}Wtyczka Thunderbird{% endblock %}
+{% block title %}Wtyczki pocztowe{% endblock %}
+{% block page_title %}Wtyczki pocztowe{% endblock %}
 
 {% block body %}
     <p class="text-muted">
-        Wtyczka do Thunderbirda pozwala właścicielom skrzynek pracować z antyspamem z poziomu klienta poczty.
+        Wtyczki do programów pocztowych pozwalają właścicielom skrzynek pracować z antyspamem z poziomu klienta poczty.
         Bez logowania każdy użytkownik wtyczki może oznaczać wiadomości jako spam — odciski nadawcy i treści
         trafiają do wspólnej bazy spamu, więc antyspam się uczy. Użytkownik zalogowany adresem skrzynki i hasłem
-        wtyczki (lub hasłem IMAP) może dodatkowo mieć sprawdzaną każdą nową wiadomość, a jego zgłoszenia
+        wtyczki (lub hasłem IMAP) może dodatkowo sprawdzać wiadomości, a jego zgłoszenia
         spam / nie-spam tworzą reguły czarnej / białej listy e-mail dla jego konta.
+        Wszystkie wtyczki korzystają z tych samych ustawień poniżej.
     </p>
 
-    <p>
-        <a href="{{ path('antispam_plugin_download') }}" class="btn btn-success">
-            <span class="glyphicon glyphicon-download-alt"></span> Pobierz antispam-thunderbird.xpi
-        </a>
-        <span class="text-muted">&nbsp;Link jest też na stronie głównej (sekcja Thunderbird). W Thunderbirdzie: Dodatki i motywy → ⚙ → Zainstaluj dodatek z pliku…</span>
-    </p>
+    <div class="row">
+        <div class="col-md-4">
+            <div class="panel panel-default">
+                <div class="panel-heading"><span class="glyphicon glyphicon-download-alt"></span> Thunderbird</div>
+                <div class="panel-body">
+                    <p><a href="{{ path('antispam_plugin_download') }}" class="btn btn-success">
+                        <span class="glyphicon glyphicon-download-alt"></span> Pobierz antispam-thunderbird.xpi
+                    </a></p>
+                    <p class="text-muted small">Thunderbird 115+: Dodatki i motywy → ⚙ → Zainstaluj dodatek z pliku…
+                        Zgłaszanie, „To nie spam”, sprawdzanie nowej poczty przy odbiorze. Link jest też na stronie głównej.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="panel panel-default">
+                <div class="panel-heading"><span class="glyphicon glyphicon-download-alt"></span> Outlook</div>
+                <div class="panel-body">
+                    {% if outlook_ok %}
+                        <p><a href="{{ path('antispam_plugin_outlook_manifest') }}" class="btn btn-success">
+                            <span class="glyphicon glyphicon-download-alt"></span> Pobierz antispam-outlook.xml
+                        </a></p>
+                    {% else %}
+                        <p class="text-danger"><span class="glyphicon glyphicon-warning-sign"></span>
+                            Dodatek Outlook wymaga HTTPS, a serwer jest widoczny jako <code>{{ base_url }}</code>.
+                            Ustaw „Publiczny adres” (https://…) poniżej.</p>
+                    {% endif %}
+                    <p class="text-muted small">Nowy i klasyczny Outlook (Microsoft 365), Outlook w przeglądarce i na Macu:
+                        Pobierz dodatki → Moje dodatki → Dodaj dodatek niestandardowy → Dodaj z pliku…
+                        Panel „Antyspam” przy wiadomości: zgłoś spam, „To nie spam”, sprawdź.
+                        Administrator Microsoft 365 może wdrożyć manifest centralnie (Integrated Apps).</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="panel panel-default">
+                <div class="panel-heading"><span class="glyphicon glyphicon-time"></span> Apple Mail <span class="label label-default">wkrótce</span></div>
+                <div class="panel-body">
+                    <p><a href="{{ path('antispam_plugin_applemail_source') }}" class="btn btn-default">
+                        <span class="glyphicon glyphicon-console"></span> Kod źródłowy (Xcode)
+                    </a></p>
+                    <p class="text-muted small">Apple Mail przyjmuje tylko rozszerzenia MailKit w podpisanej aplikacji.
+                        Gotowej aplikacji jeszcze nie ma — kod źródłowy (sprawdzanie poczty przy odbiorze, zgłoszenia
+                        przez przeciągnięcie wiadomości) trzeba zbudować w Xcode i podpisać kontem Apple Developer
+                        (instrukcja w README.md w archiwum).</p>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <form method="post">
     <div class="panel panel-default">
@@ -24,7 +67,7 @@
         <div class="panel-body">
             <div class="checkbox"><label>
                 <input type="checkbox" name="config[enabled]" {% if config.enabled %}checked{% endif %}>
-                <strong>Włącz API wtyczki i pobieranie</strong>
+                <strong>Włącz API wtyczek i pobieranie</strong>
             </label></div>
             <div class="checkbox"><label>
                 <input type="checkbox" name="config[anonymous_reports]" {% if config.anonymous_reports %}checked{% endif %}>
@@ -57,7 +100,7 @@
                 <div class="col-sm-4">
                     <label>Publiczny adres</label>
                     <input type="text" name="config[public_url]" class="form-control" value="{{ config.public_url }}" placeholder="https://antispam.example.com">
-                    <small class="text-muted">Wpisywany do pobieranej wtyczki. Puste = adres z bieżącego żądania (ustaw za proxy TLS).</small>
+                    <small class="text-muted">Wpisywany do pobieranych wtyczek. Puste = adres z bieżącego żądania (ustaw za proxy TLS; Outlook wymaga https://).</small>
                 </div>
             </div>
         </div>

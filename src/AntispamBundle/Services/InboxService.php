@@ -2,6 +2,8 @@
 
 namespace AntispamBundle\Services;
 
+use Ddeboer\Imap\ConnectionInterface;
+
 class InboxService
 {
     private $connection;
@@ -36,9 +38,12 @@ class InboxService
         $this->connection->getConnection()->expunge();
     }
 
-    public function getSpamFolder()
+    /**
+     * @param ConnectionInterface|null $connection mailbox to look in; null = the legacy mailbox
+     */
+    public function getSpamFolder(?ConnectionInterface $connection = null)
     {
-        return $this->getOrCreateFolder($this->spamboxname);
+        return $this->getOrCreateFolder($this->spamboxname, $connection);
     }
 
     public function getSpamFolderName()
@@ -50,9 +55,9 @@ class InboxService
      * Returns (creating if needed) the quarantine folder used for messages
      * whose score is suspicious but below the spam threshold.
      */
-    public function getQuarantineFolder()
+    public function getQuarantineFolder(?ConnectionInterface $connection = null)
     {
-        return $this->getOrCreateFolder($this->quarantineboxname);
+        return $this->getOrCreateFolder($this->quarantineboxname, $connection);
     }
 
     public function getQuarantineFolderName()
@@ -60,9 +65,9 @@ class InboxService
         return $this->quarantineboxname;
     }
 
-    private function getOrCreateFolder($name)
+    private function getOrCreateFolder($name, ?ConnectionInterface $connection = null)
     {
-        $connection = $this->connection->getConnection();
+        $connection = $connection ?? $this->connection->getConnection();
         if (!$connection->hasMailbox($name)) {
             $connection->createMailbox($name);
         }

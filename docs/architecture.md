@@ -2,7 +2,7 @@
 
 ## Overview
 
-Antispam is a Symfony 4.4 web application for filtering spam from email accounts. It supports two connection modes:
+Antispam is a Symfony 7.4 web application for filtering spam from email accounts. It supports two connection modes:
 
 ```
 [Symfony Web App]                    [Hosting Server]
@@ -20,6 +20,8 @@ Antispam is a Symfony 4.4 web application for filtering spam from email accounts
 - Connects to mail server via IMAP protocol (port 993 / SSL by default, configurable)
 - Uses `ddeboer/imap` library
 - Fetches messages, checks headers, moves spam to SPAM folder
+- `ImapScanService` runs the pipeline for IMAP accounts and the legacy mailbox
+  (Ustawienia → E-mail); `MessageEvent` carries the message's own connection
 - All processing happens on the Symfony server
 
 ### SSH+Maildir Mode
@@ -51,7 +53,7 @@ ham/quarantine/spam.
 | 99976    | CheckAttachmentPolicy  | Blocked types, double ext., macros    |
 | 99970    | ApplyScoreDecision     | ham/quarantine/spam decision + log    |
 | 99965    | RecordSpamSignals      | Record fingerprints of detected spam  |
-| 99960    | MoveToSpam             | Physically move spam to SPAM folder   |
+| 99960    | MoveToSpam             | Move spam to SPAM (or delete it)      |
 | -99999   | SetAsChecked           | Mark as processed                     |
 
 (Attachment listeners `CheckAttachments` (99975) and `CheckAttachmentsVirusTotal`
@@ -68,6 +70,13 @@ messages with signed one-click links to `/q/{token}` (public, POST-to-act). Both
 quarantine back-ends sit behind `QuarantineService`: the IMAP `QUARANTINE` folder
 and the agent's `quarantine-list` / `quarantine-release` / `quarantine-delete`
 commands. See `quarantine-digest.md`.
+
+## Spam handling, retroactive rules, cron log
+
+Where spam goes (move vs delete), what quarantine means, how a new blacklist
+rule clears mail already in INBOX (`RetroactiveSpamService`, agent
+`apply-blacklist`) and the cron log (`antispam:cron:run`, `/cron/logs`) are
+described in `spam-handling.md`.
 
 ## Database
 
@@ -88,5 +97,8 @@ Additional tables:
 - `antispam_list_setting` — long list-shaped settings (protected domains, VIPs,
   URI block list zones, blocked extensions) that don't fit the config table's
   255-character values. See `protection.md`.
+- `antispam_cron_run` — runs of periodic commands started through
+  `antispam:cron:run` (command, start/end, exit code, output), kept 14 days.
+  See `spam-handling.md`.
 
 Account table: `antispam_account` - stores connection settings (IMAP or SSH) per email account.

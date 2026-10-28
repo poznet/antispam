@@ -31,6 +31,14 @@ class QuarantineActionController extends AbstractController
     {
         // With a published default secret anyone could mint tokens.
         $data = $this->tokens->usesDefaultSecret() ? null : $this->tokens->verify($token);
+        // A link stays bound to the mailbox address it was sent for: if the
+        // account was re-pointed to another mailbox since, the link is dead.
+        if ($data && $data['account'] !== null) {
+            $mailbox = $this->quarantine->getMailbox($data['mailbox']);
+            if (!$mailbox || strcasecmp((string)$mailbox['account_email'], $data['account']) !== 0) {
+                $data = null;
+            }
+        }
         if (!$data) {
             return $this->page('invalid', null, null, Response::HTTP_GONE);
         }

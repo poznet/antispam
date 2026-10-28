@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Antispam Pancernapanda</title>
+    <link rel="stylesheet" href="taskpane.css">
+    <!-- Office.js must be loaded from Microsoft's CDN (cannot be bundled). -->
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <script src="taskpane.js" defer></script>
+</head>
+<body>
+<header class="as-head">
+    <img src="icons/icon-32.png" alt="" width="24" height="24">
+    <div>
+        <strong>Antyspam</strong>
+        <small id="as-server">łączenie…</small>
+    </div>
+</header>
+
+<main>
+    <section class="as-msg" id="as-msg">
+        <div class="as-label">Wiadomość</div>
+        <div id="as-msg-from" class="as-from">—</div>
+        <div id="as-msg-subject" class="as-subject"></div>
+    </section>
+
+    <section class="as-actions">
+        <button type="button" class="as-btn as-btn-spam" id="as-spam">Zgłoś spam</button>
+        <button type="button" class="as-btn" id="as-ham" title="Wymaga zalogowania">To nie spam</button>
+        <button type="button" class="as-btn" id="as-check" title="Wymaga zalogowania">Sprawdź w Antyspamie</button>
+    </section>
+
+    <section class="as-result" id="as-result" hidden></section>
+
+    <p class="as-hint" id="as-junk-hint" hidden>
+        Wtyczka nie przenosi wiadomości. Aby przenieść ją do folderu <em>Wiadomości-śmieci</em>,
+        użyj w Outlooku przycisku <em>Wiadomości-śmieci</em> / <em>Zgłoś</em>.
+    </p>
+
+    <section class="as-box" id="as-login-box">
+        <div class="as-label">Logowanie (opcjonalne)</div>
+        <p class="as-muted">Bez logowania możesz zgłaszać spam do wspólnej bazy. Po zalogowaniu adresem skrzynki
+            i hasłem wtyczki (lub IMAP) zgłoszenia tworzą reguły dla Twojej skrzynki, działa też „To nie spam” i sprawdzanie.</p>
+        <form id="as-login">
+            <input type="email" id="as-email" placeholder="Adres skrzynki" autocomplete="username" required>
+            <input type="password" id="as-password" placeholder="Hasło wtyczki lub IMAP" autocomplete="current-password" required>
+            <button type="submit" class="as-btn as-btn-primary">Zaloguj</button>
+        </form>
+    </section>
+
+    <section class="as-box" id="as-user-box" hidden>
+        <div class="as-label">Zalogowano</div>
+        <div id="as-user-email" class="as-from"></div>
+        <label class="as-check"><input type="checkbox" id="as-autocheck">
+            Sprawdzaj automatycznie otwierane wiadomości (gdy panel jest przypięty)</label>
+        <button type="button" class="as-link" id="as-logout">Wyloguj</button>
+    </section>
+</main>
+</body>
+</html>

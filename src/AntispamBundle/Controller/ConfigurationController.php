@@ -12,6 +12,7 @@ use AntispamBundle\Services\ClamavService;
 use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\ImapFlags;
 use AntispamBundle\Services\ImpersonationAnalyzer;
+use AntispamBundle\Services\MailClientPluginBuilder;
 use AntispamBundle\Services\MessageService;
 use AntispamBundle\Services\PluginService;
 use AntispamBundle\Services\QuarantineDigestService;
@@ -288,8 +289,9 @@ class ConfigurationController extends AbstractController
     }
 
     /**
-     * Thunderbird plugin settings: download link, anonymous reporting,
-     * on-arrival checks for logged-in users and rule learning.
+     * Mail client plugin settings (Thunderbird, Outlook, Apple Mail): download
+     * links, anonymous reporting, on-arrival checks for logged-in users and
+     * rule learning.
      */
     #[Route('/plugin/', name: 'antispam_plugin_config')]
     #[Template('@Antispam/Configuration/pluginConfig.html.twig')]
@@ -304,8 +306,17 @@ class ConfigurationController extends AbstractController
             }
             $c->set('plugin.token_ttl_days', max(1, (int)($post['token_ttl_days'] ?? 90)));
             $c->set('plugin.report_rate_limit', max(1, (int)($post['report_rate_limit'] ?? 120)));
-            $c->set('plugin.public_url', rtrim(trim($post['public_url'] ?? ''), '/'));
-            $this->addFlash('success', 'Ustawienia wtyczki Thunderbird zapisane');
+            // Baked into downloaded plugins (manifest XML, Swift source) - accept a plain http(s) base URL only.
+            $publicUrl = rtrim(trim($post['public_url'] ?? ''), '/');
+            $parts = $publicUrl !== '' ? parse_url($publicUrl) : null;
+            if ($publicUrl !== '' && (!$parts || !in_array($parts['scheme'] ?? '', ['http', 'https'], true) || empty($parts['host'])
+                || isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])
+                || preg_match('/[\x00-\x20"\\\\<>]/', $publicUrl))) {
+                $this->addFlash('danger', 'Nieprawidłowy publiczny adres URL - podaj np. https://antispam.example.pl');
+                return $this->redirectToRoute('antispam_plugin_config');
+            }
+            $c->set('plugin.public_url', $publicUrl);
+            $this->addFlash('success', 'Ustawienia wtyczek pocztowych zapisane');
             return $this->redirectToRoute('antispam_plugin_config');
         }
 
@@ -318,8 +329,13 @@ class ConfigurationController extends AbstractController
             'report_rate_limit' => $this->plugin->getReportRateLimit(),
             'public_url' => $this->plugin->getPublicUrl(),
         ];
+        $baseUrl = $this->plugin->getPublicUrl() ?: $request->getSchemeAndHttpHost() . $request->getBasePath();
 
-        return ['config' => $config];
+        return [
+            'config' => $config,
+            'base_url' => $baseUrl,
+            'outlook_ok' => MailClientPluginBuilder::isOutlookCompatible($baseUrl),
+        ];
     }
 
     #[Route('/uncheck-all/', name: 'antispam_spam_unchekall')]

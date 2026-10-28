@@ -20,6 +20,13 @@ class DigestTokenServiceTest extends TestCase
         $this->assertSame('Zażółć', $d['subject']);
     }
 
+    public function testCarriesAccountBinding()
+    {
+        $s = new DigestTokenService('secret');
+        $this->assertSame('jan@firma.pl', $s->verify($s->create('imap-5', '7', 'release', 3600, ['account' => 'Jan@Firma.pl']))['account']);
+        $this->assertNull($s->verify($s->create('imap-5', '7', 'release', 3600))['account']);
+    }
+
     public function testRejectsTamperedForeignAndExpired()
     {
         $s = new DigestTokenService('secret');

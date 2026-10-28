@@ -45,7 +45,7 @@ class ApplyScoreDecision
 
         if ($decision === \AntispamBundle\Entity\SpamScoreLog::DECISION_QUARANTINE && !$event->isSpam()) {
             try {
-                $quarantine = $this->inbox->getQuarantineFolder();
+                $quarantine = $this->inbox->getQuarantineFolder($event->getConnection());
                 $event->getMessage()->move($quarantine);
                 $event->setDelete(true);
                 $event->stopPropagation();

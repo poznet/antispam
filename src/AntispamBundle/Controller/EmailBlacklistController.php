@@ -4,6 +4,7 @@ namespace AntispamBundle\Controller;
 
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Services\ConfigService;
+use AntispamBundle\Services\RetroactiveSpamService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -16,6 +17,7 @@ class EmailBlacklistController extends AbstractController
     public function __construct(
         private EntityManagerInterface $em,
         private ConfigService $config,
+        private RetroactiveSpamService $retroactive,
     ) {
     }
 
@@ -27,9 +29,10 @@ class EmailBlacklistController extends AbstractController
         return ['list' => $list];
     }
 
-    #[Route('/add', name: 'antispam_emailblacklist_add')]
+    #[Route('/add', name: 'antispam_emailblacklist_add', methods: ['POST'])]
     public function addAction(Request $request)
     {
+        $this->checkToken($request);
         $email = trim((string)$request->request->get('email'));
         $patternType = $request->request->get('pattern_type', EmailBlacklist::PATTERN_EXACT);
         $score = (int)$request->request->get('score', 10);
@@ -48,18 +51,33 @@ class EmailBlacklistController extends AbstractController
             $entry->setScore(max(1, $score));
             $this->em->persist($entry);
             $this->em->flush();
+
+            // Mail from this sender that is already in INBOX goes to SPAM too.
+            $summary = RetroactiveSpamService::describe($this->retroactive->applyRule($entry));
+            if ($summary) {
+                $this->addFlash('info', $summary);
+            }
         }
         return $this->redirectToRoute('antispam_emailblacklist_index');
     }
 
-    #[Route('/del/{id}', name: 'antispam_emailblacklist_del')]
-    public function delAction($id)
+    #[Route('/del/{id}', name: 'antispam_emailblacklist_del', methods: ['POST'])]
+    public function delAction($id, Request $request)
     {
+        $this->checkToken($request);
         $entry = $this->em->getRepository(EmailBlacklist::class)->find($id);
         if ($entry) {
             $this->em->remove($entry);
             $this->em->flush();
         }
         return $this->redirectToRoute('antispam_emailblacklist_index');
+    }
+
+    /** Rule changes reshape filtering (and move mail retroactively) - POST + CSRF only. */
+    private function checkToken(Request $request)
+    {
+        if (!$this->isCsrfTokenValid('list_rules', (string)$request->request->get('_token'))) {
+            throw $this->createAccessDeniedException('Nieprawidłowy token CSRF');
+        }
     }
 }

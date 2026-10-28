@@ -2,8 +2,11 @@
 
 namespace AntispamBundle\Controller;
 
+use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Services\PluginService;
 use AntispamBundle\Services\RawMessageScanner;
+use AntispamBundle\Services\RetroactiveSpamService;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -28,8 +31,13 @@ class PluginApiController extends AbstractController
     public function __construct(
         private RawMessageScanner $rawScanner,
         private PluginService $plugin,
+        private RetroactiveSpamService $retroactive,
+        private EntityManagerInterface $em,
     ) {
     }
+
+    /** Retroactive passes (IMAP/SSH login each) per account and hour. */
+    const RETRO_RATE_LIMIT = 10;
 
     const PLUGIN_VERSION = '1.0.1';
 
@@ -142,6 +150,19 @@ class PluginApiController extends AbstractController
 
         $result = $this->plugin->learn($raw, $verdict, $account, $this->clientIp($request));
         $result['authenticated'] = $account !== null;
+
+        // A newly blacklisted sender: older mail from them leaves INBOX too.
+        // It logs in to the mailbox (IMAP/SSH), so it has its own, tighter limit;
+        // over the limit the rule still applies to new mail on the next scan.
+        if ($account && in_array('email_blacklist_added:' . $result['sender'], $result['rules'], true)
+            && $this->plugin->hit('retro', 'acc:' . $account->getId(), self::RETRO_RATE_LIMIT, 3600)) {
+            $rule = $this->em->getRepository(EmailBlacklist::class)->findOneBy([
+                'email' => $account->getEmail(), 'blacklistemail' => $result['sender'], 'patternType' => 'exact',
+            ]);
+            if ($rule) {
+                $result['moved_existing'] = $this->retroactive->applyRule($rule)['moved'];
+            }
+        }
         return new JsonResponse($result);
     }
 

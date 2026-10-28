@@ -27,9 +27,10 @@ class EmailWhitelistController extends AbstractController
         return ['list' => $list];
     }
 
-    #[Route('/add', name: 'antispam_emailwhitelist_add')]
+    #[Route('/add', name: 'antispam_emailwhitelist_add', methods: ['POST'])]
     public function addAction(Request $request)
     {
+        $this->checkToken($request);
         $email = trim((string)$request->request->get('email'));
         $patternType = $request->request->get('pattern_type', EmailWhitelist::PATTERN_EXACT);
         if (!in_array($patternType, [EmailWhitelist::PATTERN_EXACT, EmailWhitelist::PATTERN_WILDCARD, EmailWhitelist::PATTERN_REGEX], true)) {
@@ -50,14 +51,23 @@ class EmailWhitelistController extends AbstractController
         return $this->redirectToRoute('antispam_emailwhitelist_index');
     }
 
-    #[Route('/del/{id}', name: 'antispam_emailwhitelist_del')]
-    public function delAction($id)
+    #[Route('/del/{id}', name: 'antispam_emailwhitelist_del', methods: ['POST'])]
+    public function delAction($id, Request $request)
     {
+        $this->checkToken($request);
         $entry = $this->em->getRepository(EmailWhitelist::class)->find($id);
         if ($entry) {
             $this->em->remove($entry);
             $this->em->flush();
         }
         return $this->redirectToRoute('antispam_emailwhitelist_index');
+    }
+
+    /** Rule changes reshape filtering (and move mail retroactively) - POST + CSRF only. */
+    private function checkToken(Request $request)
+    {
+        if (!$this->isCsrfTokenValid('list_rules', (string)$request->request->get('_token'))) {
+            throw $this->createAccessDeniedException('Nieprawidłowy token CSRF');
+        }
     }
 }

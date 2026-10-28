@@ -143,6 +143,17 @@ class SshService
     }
 
     /**
+     * Retroactive pass: move recent INBOX mail matching the (already synced)
+     * blacklists to .SPAM. Needs an agent deployed with this command.
+     */
+    public function applyBlacklist(Account $account, $spamThreshold, $days = 30)
+    {
+        $args = $this->maildirArg($account) . ' --spam-threshold=' . (int)$spamThreshold . ' --days=' . (int)$days;
+        $output = $this->exec($account, $this->agentCommand($account) . ' apply-blacklist ' . $args . ' 2>&1');
+        return json_decode($output, true) ?: ['success' => false, 'error' => $output];
+    }
+
+    /**
      * @param int|null $since only messages delivered after this unix timestamp
      */
     public function quarantineList(Account $account, $since = null, $limit = 200)

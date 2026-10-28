@@ -6,6 +6,7 @@ use AntispamBundle\Entity\Account;
 use AntispamBundle\Services\AgentRulesExporter;
 use AntispamBundle\Services\CryptoService;
 use AntispamBundle\Services\ImapFlags;
+use AntispamBundle\Services\ImapScanService;
 use AntispamBundle\Services\ImapTlsProbe;
 use AntispamBundle\Services\SshService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -17,7 +18,6 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 #[Route('/account')]
 class AccountController extends AbstractController
@@ -26,7 +26,7 @@ class AccountController extends AbstractController
         private EntityManagerInterface $em,
         private SshService $ssh,
         private AgentRulesExporter $rulesExporter,
-        private EventDispatcherInterface $dispatcher,
+        private ImapScanService $imapScan,
         private CryptoService $crypto,
         private ImapTlsProbe $tlsProbe,
     ) {
@@ -249,7 +249,7 @@ class AccountController extends AbstractController
                 $sshService = $this->ssh;
                 $scanResult = $sshService->runScan($account);
             } else {
-                $scanResult = $this->runImapScan($account);
+                $scanResult = $this->imapScan->scanAccount($account);
             }
 
             $account->setLastScanAt(new \DateTime());
@@ -330,42 +330,5 @@ class AccountController extends AbstractController
             $result['messages'][] = 'Sprawdzenie stanu agenta nie powiodło się: ' . $e->getMessage();
         }
         return ['account' => $account, 'result' => $result];
-    }
-
-    private function runImapScan(Account $account)
-    {
-        $server = new \Ddeboer\Imap\Server(
-            $account->getImapHost(),
-            $account->getImapPort(),
-            $account->getImapFlags()
-        );
-        $connection = $server->authenticate($account->getImapLogin(), (string)$this->crypto->decrypt($account->getImapPassword()));
-        $inbox = $connection->getMailbox('INBOX');
-        $messages = $inbox->getMessages();
-
-        $stats = ['total' => 0, 'checked' => 0, 'whitelisted' => 0, 'blacklisted' => 0,
-                  'quarantined' => 0, 'moved_to_spam' => 0];
-
-        foreach ($messages as $msg) {
-            $stats['total']++;
-            try {
-                $event = new \AntispamBundle\Event\MessageEvent($msg, $account->getEmail());
-                $this->dispatcher->dispatch($event, 'antispam.check.message');
-
-                if ($event->isCheckedbefore()) { continue; }
-                $stats['checked']++;
-                if ($event->isWhitelist()) { $stats['whitelisted']++; }
-                if ($event->isSpam()) {
-                    $stats['blacklisted']++;
-                    if ($event->isDelete()) { $stats['moved_to_spam']++; }
-                }
-            } catch (\Exception $e) {
-                // Skip messages with encoding issues
-            }
-        }
-
-        $connection->expunge();
-        $connection->close();
-        return $stats;
     }
 }

@@ -54,6 +54,19 @@ BEC → DNSBL → link protection → attachment policy → ClamAV / VirusTotal 
 decision. See [protection.md](protection.md) for the impersonation, link and
 attachment-policy rules.
 
+### apply-blacklist
+```bash
+php antispam-agent.php apply-blacklist --spam-threshold=10 --days=30
+```
+Retroactive pass used after a new blacklist rule is synced: INBOX files
+(`new`, `cur`) modified in the last `--days` (default 30, at most `--limit`,
+default 5000) whose sender matches a domain / e-mail blacklist rule worth at
+least `--spam-threshold` points are moved to `.SPAM`. Only headers are read;
+whitelisted senders are skipped. Logged in `score_log` as `spam` with the
+reason `retroactive …`. Returns `{"success", "examined", "moved_to_spam",
+"truncated"}`. See [spam-handling.md](spam-handling.md).
+
+### scan output
 Output (JSON):
 ```json
 {

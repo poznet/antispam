@@ -30,6 +30,7 @@
     {section: 'Przegląd'},
     {label: 'Pulpit',               icon: 'dashboard',    path: 'antispam_index',                match: ['antispam_index']},
     {label: 'Konta',                icon: 'cloud',        path: 'antispam_account_index',        match: ['antispam_account_index', 'antispam_account_add', 'antispam_account_edit', 'antispam_account_test', 'antispam_account_scan', 'antispam_account_deploy', 'antispam_account_sync', 'antispam_account_health']},
+    {label: 'Logi crona',           icon: 'time',         path: 'antispam_cron_logs',            match: ['antispam_cron_logs']},
     {section: 'Skrzynki'},
     {label: 'Folder spamu',         icon: 'inbox',        path: 'antispam_spambox_index',        match: ['antispam_spambox_index']},
     {label: 'Kwarantanna',          icon: 'warning-sign', path: 'antispam_spambox_quarantine',   match: ['antispam_spambox_quarantine']},
@@ -47,7 +48,7 @@
     {label: 'Filtr spamu',          icon: 'tasks',        path: 'antispam_spam_config',          match: ['antispam_spam_config']},
     {label: 'Wspólna baza spamu',   icon: 'signal',       path: 'antispam_feed_config',          match: ['antispam_feed_config']},
     {label: 'Raport kwarantanny',   icon: 'envelope',     path: 'antispam_digest_config',        match: ['antispam_digest_config', 'antispam_digest_preview']},
-    {label: 'Wtyczka Thunderbird',  icon: 'download-alt', path: 'antispam_plugin_config',        match: ['antispam_plugin_config']},
+    {label: 'Wtyczki pocztowe',     icon: 'download-alt', path: 'antispam_plugin_config',        match: ['antispam_plugin_config']},
     {label: 'Konfiguracja (stara)', icon: 'cog',          path: 'antispam_account_config',       match: ['antispam_account_config']}
 ] %}
 {% set crumb = 'Przegląd' %}

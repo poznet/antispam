@@ -11,6 +11,7 @@ use Doctrine\ORM\EntityManagerInterface;
  * One API over both quarantine back-ends:
  *
  *   - "imap"        the legacy single IMAP mailbox (QUARANTINE folder)
+ *   - "imap-<id>"   an IMAP account (its QUARANTINE folder)
  *   - "ssh-<id>"    an SSH+Maildir account, handled through the agent
  *
  * Used by the quarantine digest and its one-click release / whitelist /
@@ -28,6 +29,9 @@ class QuarantineService
     private $connection;
     private $inbox;
     private $messages;
+    private $imapScan;
+    /** @var array<string, \Ddeboer\Imap\ConnectionInterface> open IMAP account connections */
+    private $accountConnections = [];
 
     public function __construct(
         EntityManagerInterface $em,
@@ -35,8 +39,10 @@ class QuarantineService
         SshService $ssh,
         ConnectionService $connection,
         InboxService $inbox,
-        MessageService $messages
+        MessageService $messages,
+        ImapScanService $imapScan
     ) {
+        $this->imapScan = $imapScan;
         $this->em = $em;
         $this->config = $config;
         $this->ssh = $ssh;
@@ -57,6 +63,14 @@ class QuarantineService
             $email = (string)$this->config->get('email');
             $recipient = trim((string)$this->config->get('digest.imap_recipient')) ?: $email;
             $out[] = ['key' => self::IMAP_KEY, 'label' => 'IMAP: ' . ($email ?: $this->config->get('login')), 'account_email' => $email, 'recipient' => $recipient];
+        }
+        foreach ($this->em->getRepository(Account::class)->findBy(['connectionType' => Account::CONNECTION_IMAP]) as $account) {
+            $out[] = [
+                'key' => 'imap-' . $account->getId(),
+                'label' => $account->getName() . ' (' . $account->getEmail() . ')',
+                'account_email' => $account->getEmail(),
+                'recipient' => $account->getEmail(),
+            ];
         }
         foreach ($this->em->getRepository(Account::class)->findBy(['connectionType' => Account::CONNECTION_SSH]) as $account) {
             if (!$account->getAgentDeployed()) {
@@ -89,8 +103,8 @@ class QuarantineService
      */
     public function listItems($key, ?\DateTimeInterface $since = null, $limit = 200)
     {
-        if ($key === self::IMAP_KEY) {
-            return $this->listImap($since, $limit);
+        if (self::isImapKey($key)) {
+            return $this->listImap($this->imapConnection($key), $since, $limit);
         }
         $account = $this->sshAccount($key);
         $res = $this->ssh->quarantineList($account, $since ? $since->getTimestamp() : null, $limit);
@@ -124,9 +138,9 @@ class QuarantineService
             return ['success' => false, 'message' => 'Ta skrzynka nie jest już obsługiwana.', 'sender' => ''];
         }
 
-        if ($key === self::IMAP_KEY) {
+        if (self::isImapKey($key)) {
             try {
-                $connection = $this->connection->getConnection();
+                $connection = $this->imapConnection($key);
                 $msg = $connection->getMailbox($this->inbox->getQuarantineFolderName())->getMessage((int)$id);
                 $sender = $msg->getFrom() ? strtolower((string)$msg->getFrom()->getAddress()) : '';
                 // Released mail must not be quarantined again on the next scan.
@@ -165,9 +179,9 @@ class QuarantineService
         if (!$this->getMailbox($key)) {
             return ['success' => false, 'message' => 'Ta skrzynka nie jest już obsługiwana.', 'sender' => ''];
         }
-        if ($key === self::IMAP_KEY) {
+        if (self::isImapKey($key)) {
             try {
-                $connection = $this->connection->getConnection();
+                $connection = $this->imapConnection($key);
                 $msg = $connection->getMailbox($this->inbox->getQuarantineFolderName())->getMessage((int)$id);
                 $sender = $msg->getFrom() ? strtolower((string)$msg->getFrom()->getAddress()) : '';
                 $msg->delete();
@@ -204,11 +218,35 @@ class QuarantineService
         return true;
     }
 
-    private function listImap(?\DateTimeInterface $since = null, $limit = 200)
+    private static function isImapKey($key)
     {
-        $inbox = $this->inbox;
+        return $key === self::IMAP_KEY || preg_match('/^imap-\d+\z/', (string)$key);
+    }
+
+    /** Connection of the legacy mailbox or of an IMAP account ("imap-<id>"). */
+    private function imapConnection($key)
+    {
+        if ($key === self::IMAP_KEY) {
+            return $this->connection->getConnection();
+        }
+        if (!isset($this->accountConnections[$key])) {
+            $account = $this->em->getRepository(Account::class)->find((int)substr((string)$key, 5));
+            if (!$account || !$account->isImap()) {
+                throw new \InvalidArgumentException('Unknown mailbox: ' . $key);
+            }
+            $this->accountConnections[$key] = $this->imapScan->connect($account);
+        }
+        return $this->accountConnections[$key];
+    }
+
+    private function listImap($connection, ?\DateTimeInterface $since = null, $limit = 200)
+    {
         $items = [];
-        foreach ($inbox->getInbox($inbox->getQuarantineFolderName()) as $msg) {
+        $folder = $this->inbox->getQuarantineFolderName();
+        if (!$connection->hasMailbox($folder)) {
+            return [];
+        }
+        foreach ($connection->getMailbox($folder)->getMessages() as $msg) {
             try {
                 $date = $msg->getDate();
                 if ($since && $date && $date < $since) {

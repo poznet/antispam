@@ -9,6 +9,7 @@ Symfony 7.4 LTS application for email spam filtering via IMAP or SSH+Maildir age
 - `.env` - default env vars (override in `.env.local`; Docker freezes them into `.env.local.php`)
 - `src/AntispamBundle/Resources/agent/` - standalone Maildir agent PHP script
 - `src/AntispamBundle/Resources/thunderbird/` - Thunderbird plugin (MailExtension), served as .xpi by `/plugin/download`
+- `src/AntispamBundle/Resources/outlook/` - Outlook add-in (manifest template + task pane), hosted under `/plugin/outlook/*`; `src/AntispamBundle/Resources/applemail/` - Apple Mail (MailKit) extension source, zipped by `/plugin/apple-mail/source.zip` (not buildable here, needs Xcode + Apple Developer signing)
 - Home page `/` (`HomeController`, `Resources/views/Home/index.html.twig`, assets in `Resources/public/landing/`) - public product page for antispam.pancernapanda.pl with the admin login form embedded (`#logowanie`); the admin dashboard is at `/panel`
 
 ## Key concepts
@@ -26,10 +27,13 @@ See `docs/` directory for detailed documentation:
 - `docs/deployment.md` - Docker / Coolify deployment guide
 - `docs/scoring.md` - scoring pipeline, DNSBL, regex/wildcard patterns
 - `docs/protection.md` - impersonation/BEC, link protection, attachment policy (web + agent)
+- `docs/spam-handling.md` - where spam goes (move vs delete), quarantine semantics, retroactive blacklist, cron log (`antispam:cron:run`, `/cron/logs`)
 - `docs/quarantine-digest.md` - end-user quarantine digest e-mail, signed `/q/` links, `antispam:digest:send`
 - `docs/feed.md` - shared spam feed (centralized spam DB): fingerprints, API, sync
 - `docs/feed-api.md` - shared spam feed HTTP API reference (endpoints, auth, examples)
 - `docs/thunderbird.md` - Thunderbird plugin: spam reports, on-arrival checks, login, `/api/plugin`
+- `docs/outlook.md` - Outlook add-in: hosting (HTTPS), sideload / admin deploy, task pane features and limits
+- `docs/apple-mail.md` - Apple Mail MailKit extension: why source-only, layout, build/sign notes
 
 ## Tech stack
 - PHP >= 8.2 (ext-imap, so not 8.4+), Symfony 7.4, Doctrine ORM 3 / DBAL 4 (PHP attributes mapping), MySQL/MariaDB

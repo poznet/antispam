@@ -2,9 +2,11 @@
 # Lightweight cron replacement for the `scheduler` service in
 # docker-compose.prod.yml. Ticks once a minute and runs the periodic console
 # commands as www-data. Each job is guarded by flock, so a long scan never
-# overlaps with the next tick.
+# overlaps with the next tick. Jobs go through antispam:cron:run, which stores
+# every run with its output in the panel (Przegląd → Logi crona).
 #
-#   SCAN_INTERVAL       minutes between antispam:agent:scan-all (default 5, 0 = off)
+#   SCAN_INTERVAL       minutes between antispam:agent:scan-all (default 5, 0 = off) -
+#                       SSH agents, IMAP accounts and the mailbox from the "E-mail" settings
 #   FEED_SYNC_INTERVAL  minutes between antispam:feed:sync      (default 15, 0 = off)
 #   DIGEST_HOUR         hour (container time, UTC) for antispam:digest:send (default 7, "off" = off)
 #
@@ -23,7 +25,7 @@ run() {
     (
         flock -n 9 || { echo "[scheduler] $name still running, skipping"; exit 0; }
         echo "[scheduler] $(date '+%F %T') start $name"
-        runuser -u www-data -- php "${APP_DIR}/bin/console" "$@" --no-debug \
+        runuser -u www-data -- php "${APP_DIR}/bin/console" antispam:cron:run "$1" --no-debug \
             || echo "[scheduler] $name exited with $?"
         echo "[scheduler] $(date '+%F %T') done $name"
     ) 9>"/tmp/antispam-${name}.lock" &

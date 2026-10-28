@@ -106,7 +106,7 @@ on **Przegląd → Logi crona** (see [spam-handling.md](spam-handling.md)).
 | `FEED_SYNC_INTERVAL` | `antispam:feed:sync` every N minutes (`0` = off) | `15` |
 | `CERT_SYNC_INTERVAL` | `antispam:cert:sync` (CERT Polska domain list) every N hours at minute :17 (`0` = off) | `6` |
 | `PHISHING_FORWARD_INTERVAL` | `antispam:phishing:forward` (automatic phishing forward to CERT Polska / SOC, see [phishing.md](phishing.md)) every N minutes (`0` = off) | `10` |
-| `DIGEST_HOUR` | `antispam:digest:send` daily at HH:00, container time = UTC (`off` = off) | `7` |
+| `DIGEST_HOUR` | `antispam:digest:send` daily at HH:00, container time = UTC (`off` = off); every other full hour `antispam:digest:send --scheduled-only` for mailboxes with their own send hour | `7` |
 | `PURGE_HOUR` | `antispam:purge` (score log retention, expired DNSBL cache) daily at HH:41, UTC (`off` = off) | `3` |
 | `JOB_TIMEOUT` | any job running longer is killed (`timeout -k 30`), so a hung run cannot hold its flock and block every later tick | `3600` s |
 

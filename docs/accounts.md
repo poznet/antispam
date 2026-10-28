@@ -57,6 +57,60 @@ Direct access to Maildir on hosting server via SSH.
 - **Agent Path** - where to deploy agent (default: `~/antispam-agent`; `~/` is the SSH user's home both for SFTP uploads and for commands)
 - **SSH host key** (read-only) - SHA256 fingerprint pinned on the first successful connection, see below
 
+## Per-mailbox settings (Ustawienia skrzynki)
+
+Departments differ, so a few settings can be overridden per account in the
+**Ustawienia skrzynki** section of the account edit page. An empty field
+means **dziedzicz** (inherit): the global value applies and is shown as the
+placeholder. The account list marks a mailbox with overrides with a
+*własne ustawienia* badge (hover for which ones).
+
+| Field | Column (`antispam_account`, nullable) | Inherits from | Used by |
+|-------|----------------------------------------|---------------|---------|
+| Próg spamu | `spam_threshold` (1-1000) | `scoring.spam_threshold` | IMAP scan, agent scan flags + synced settings, plugin `/check`, retroactive blacklist, header cap, CERT default score |
+| Próg kwarantanny | `quarantine_threshold` (0-1000) | `scoring.quarantine_threshold` | same as above |
+| Punktacja | `scoring_enabled` | `scoring.enabled` | same as above - off = only white/blacklists (a blacklist hit is spam outright) |
+| Raport kwarantanny | `digest_enabled` | `digest.enabled` | `antispam:digest:send` - on also works with the global switch off |
+| Odbiorca raportu | `digest_recipient` | the account e-mail | digest recipient (e.g. a department head) |
+| Godzina wysyłki | `digest_hour` (0-23, server time) | global schedule (cron / `DIGEST_HOUR`) | see [quarantine-digest.md](quarantine-digest.md#per-mailbox-settings) |
+
+*Usuwaj spam* (`delete_spam`) sits in the same section but has always been
+per account and does not inherit: IMAP accounts move or delete as set, the SSH
+agent always moves to `.SPAM`.
+
+**Validation:** thresholds are whole numbers in range, and the effective
+quarantine threshold must stay below the effective spam threshold - an empty
+field counts as the global value, so with the global 5/10 a spam threshold of
+5 alone is refused. Recipient must be a valid address, hour 0-23. A later
+change of the global thresholds is not re-validated against overrides; with
+quarantine >= spam the mailbox simply has no quarantine band (spam is checked
+first).
+
+**Precedence** is resolved in one place, `MailboxSettingsResolver`
+(account override -> global). `forAccount()` / `forEmail()` return an
+immutable `MailboxSettings`; `within($account, fn)` runs code with
+`ScoringService` scoped to that mailbox, so every listener of the pipeline,
+`HeaderAnalyzer`, `CheckCertHole` and `exportAgentSettings()` read the
+mailbox's values without being changed (the scope is restored afterwards,
+also on exceptions). Consumers: `ImapScanService::scanAccount`,
+`RawMessageScanner::scan` (plugin check of the logged-in account),
+`RetroactiveSpamService` (per mailbox: a rule may be strong enough for one
+mailbox and only add points in another), `SshService::runScan` (flags),
+`AgentRulesExporter::export` (synced `settings`; **Synchronizuj** after a
+change, the next scan passes the thresholds as flags anyway),
+`QuarantineService::getMailboxes` / `QuarantineDigestService`.
+
+Not per mailbox (on purpose): the **legacy mailbox** from *Ustawienia →
+E-mail* always uses the global settings (it has no account row); digest
+**language** (the digest is Polish only); **quarantine retention** (nothing
+expires quarantined mail, see [spam-handling.md](spam-handling.md#quarantine)).
+Other scoring knobs (DNSBL, ClamAV, links...) stay global.
+
+The `account.edit` audit entry lists the submitted field names plus
+`settings_overrides` (the overrides after saving, with values) and
+`settings_changed` (fields whose override changed). Backups export and import
+the six columns (see [backup.md](backup.md)).
+
 ## SSH host key (trust on first use)
 
 The first successful login stores the server's host key fingerprint
@@ -136,5 +190,6 @@ For automatic scanning (all SSH and IMAP accounts), add to crontab:
 [spam-handling.md](spam-handling.md). The Docker scheduler does this already.
 
 Spam is moved to the account's `SPAM` folder unless *Usuwaj spam* is checked
-(IMAP accounts). New blacklist rules are also applied to mail already in INBOX
+(IMAP accounts). Thresholds and the scoring switch can differ per mailbox, see
+[Per-mailbox settings](#per-mailbox-settings-ustawienia-skrzynki). New blacklist rules are also applied to mail already in INBOX
 (last 30 days).

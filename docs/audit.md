@@ -24,7 +24,7 @@ Page: **Przegląd → Dziennik audytu** (`/audit`, ROLE_ADMIN only).
 | `settings.save` | Filtr spamu, Wspólna baza spamu, Raport kwarantanny, Wtyczki pocztowe, Konfiguracja (stara), Lista CERT, Przekazywanie phishingu (`phishing_forward`) | `target_id` = page; submitted field **names**, `secrets_changed` = names of secret fields that were set or cleared |
 | `settings.digest_send` | "Wyślij teraz" of the digest page | as above |
 | `settings.uncheck_all`, `settings.reset_counters` | maintenance buttons of Filtr spamu | - |
-| `account.add`, `account.edit`, `account.delete`, `account.deploy`, `account.sync`, `account.host_key_reset` | `/account/*` | account id, name, mailbox; connection type, field names, `ok` |
+| `account.add`, `account.edit`, `account.delete`, `account.deploy`, `account.sync`, `account.host_key_reset` | `/account/*` | account id, name, mailbox; connection type, field names, `ok`; `account.edit` also `settings_overrides` (per-mailbox overrides with values) and `settings_changed` |
 | `user.add`, `user.edit`, `user.delete` | `/users/*` | user id, login; role, assigned mailboxes, `password_changed` (bool) |
 | `user.password_change` | own password (`/my/password`) | user |
 | `dnsbl.add`, `dnsbl.toggle`, `dnsbl.delete` | `/dnsbl/*` | provider id, zone; name, score, enabled |

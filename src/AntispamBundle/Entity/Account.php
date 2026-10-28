@@ -102,6 +102,33 @@ class Account
     #[ORM\Column(name: 'imap_last_uid', type: 'bigint', nullable: true)]
     private $imapLastUid;
 
+    // Per-mailbox settings ("Ustawienia skrzynki"). null = inherit the global
+    // value; MailboxSettingsResolver turns them into the effective settings.
+
+    /** Spam threshold override (null = scoring.spam_threshold). */
+    #[ORM\Column(name: 'spam_threshold', type: 'integer', nullable: true)]
+    private $spamThreshold;
+
+    /** Quarantine threshold override (null = scoring.quarantine_threshold). */
+    #[ORM\Column(name: 'quarantine_threshold', type: 'integer', nullable: true)]
+    private $quarantineThreshold;
+
+    /** Scoring on/off override (null = scoring.enabled). */
+    #[ORM\Column(name: 'scoring_enabled', type: 'boolean', nullable: true)]
+    private $scoringEnabled;
+
+    /** Quarantine digest for this mailbox on/off (null = digest.enabled). */
+    #[ORM\Column(name: 'digest_enabled', type: 'boolean', nullable: true)]
+    private $digestEnabled;
+
+    /** Digest recipient instead of the mailbox address (e.g. a department head); null = the account e-mail. */
+    #[ORM\Column(name: 'digest_recipient', type: 'string', length: 255, nullable: true)]
+    private $digestRecipient;
+
+    /** Hour (0-23, server time) to send this mailbox's digest; null = with the global antispam:digest:send run. */
+    #[ORM\Column(name: 'digest_hour', type: 'smallint', nullable: true)]
+    private $digestHour;
+
     public function getId() { return $this->id; }
 
     public function getName() { return $this->name; }
@@ -166,6 +193,47 @@ class Account
 
     public function getPluginPasswordHash() { return $this->pluginPasswordHash; }
     public function setPluginPasswordHash($hash) { $this->pluginPasswordHash = $hash; return $this; }
+
+    public function getSpamThreshold(): ?int { return $this->spamThreshold === null ? null : (int)$this->spamThreshold; }
+    public function setSpamThreshold(?int $v) { $this->spamThreshold = $v; return $this; }
+
+    public function getQuarantineThreshold(): ?int { return $this->quarantineThreshold === null ? null : (int)$this->quarantineThreshold; }
+    public function setQuarantineThreshold(?int $v) { $this->quarantineThreshold = $v; return $this; }
+
+    public function getScoringEnabled(): ?bool { return $this->scoringEnabled === null ? null : (bool)$this->scoringEnabled; }
+    public function setScoringEnabled(?bool $v) { $this->scoringEnabled = $v; return $this; }
+
+    public function getDigestEnabled(): ?bool { return $this->digestEnabled === null ? null : (bool)$this->digestEnabled; }
+    public function setDigestEnabled(?bool $v) { $this->digestEnabled = $v; return $this; }
+
+    public function getDigestRecipient(): ?string { return $this->digestRecipient; }
+    public function setDigestRecipient(?string $v) { $this->digestRecipient = ($v === null || trim($v) === '') ? null : trim($v); return $this; }
+
+    public function getDigestHour(): ?int { return $this->digestHour === null ? null : (int)$this->digestHour; }
+    public function setDigestHour(?int $v) { $this->digestHour = $v; return $this; }
+
+    /**
+     * Per-mailbox overrides that are set (field => value); empty = the
+     * mailbox inherits every global setting.
+     *
+     * @return array<string, int|bool|string>
+     */
+    public function getSettingsOverrides(): array
+    {
+        return array_filter([
+            'spam_threshold' => $this->getSpamThreshold(),
+            'quarantine_threshold' => $this->getQuarantineThreshold(),
+            'scoring_enabled' => $this->getScoringEnabled(),
+            'digest_enabled' => $this->getDigestEnabled(),
+            'digest_recipient' => $this->getDigestRecipient(),
+            'digest_hour' => $this->getDigestHour(),
+        ], static fn ($v) => $v !== null);
+    }
+
+    public function hasSettingsOverrides(): bool
+    {
+        return $this->getSettingsOverrides() !== [];
+    }
 
     public function getImapUidValidity() { return $this->imapUidValidity === null ? null : (int)$this->imapUidValidity; }
     public function getImapLastUid() { return $this->imapLastUid === null ? null : (int)$this->imapLastUid; }

@@ -10,6 +10,7 @@ use AntispamBundle\Services\CryptoService;
 use AntispamBundle\Services\ImapFlags;
 use AntispamBundle\Services\ImapScanService;
 use AntispamBundle\Services\ImapTlsProbe;
+use AntispamBundle\Services\MailboxSettingsResolver;
 use AntispamBundle\Services\SshService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
@@ -34,7 +35,15 @@ class AccountController extends AbstractController
         private CryptoService $crypto,
         private ImapTlsProbe $tlsProbe,
         private ConfigService $config,
+        private MailboxSettingsResolver $mailboxSettings,
     ) {
+    }
+
+    /** Connection fields + per-mailbox settings ("Ustawienia skrzynki"). */
+    private function validateForm(array $data): array
+    {
+        [, $settingsErrors] = $this->mailboxSettings->parseOverrides($data);
+        return array_merge(self::validateAccountData($data), $settingsErrors);
     }
 
     /**
@@ -62,7 +71,7 @@ class AccountController extends AbstractController
     {
         if ($request->getMethod() === 'POST') {
             $this->checkActionToken($request, 'account_form');
-            if ($errors = self::validateAccountData($request->request->all('account'))) {
+            if ($errors = $this->validateForm($request->request->all('account'))) {
                 $this->addFlash('danger', implode(' ', $errors));
                 return $this->redirectToRoute('antispam_account_add');
             }
@@ -86,22 +95,29 @@ class AccountController extends AbstractController
 
         if ($request->getMethod() === 'POST') {
             $this->checkActionToken($request, 'account_form');
-            if ($errors = self::validateAccountData($request->request->all('account'))) {
+            if ($errors = $this->validateForm($request->request->all('account'))) {
                 $this->addFlash('danger', implode(' ', $errors));
                 return $this->redirectToRoute('antispam_account_edit', ['id' => $account->getId()]);
             }
             $pinnedFor = [$account->getSshHost(), (int)$account->getSshPort()];
+            $overridesBefore = $account->getSettingsOverrides();
             $account = $this->fillAccountFromRequest($account, $request);
             // A pinned SSH host key belongs to the old host:port.
             if ($pinnedFor !== [$account->getSshHost(), (int)$account->getSshPort()]) {
                 $account->setSshHostKey(null);
             }
             $this->em->flush();
-            $this->audit('account.edit', targetType: 'account', targetId: $account->getId(), label: $account->getName(), mailbox: $account->getEmail(), details: AuditLogger::formFields($request->request->all('account'), ['imap_password', 'plugin_password']));
+            $details = AuditLogger::formFields($request->request->all('account'), ['imap_password', 'plugin_password']);
+            // Per-mailbox overrides with their values (no secrets among them).
+            $overridesAfter = $account->getSettingsOverrides();
+            $details['settings_overrides'] = $overridesAfter;
+            $details['settings_changed'] = array_values(array_filter(MailboxSettingsResolver::FIELDS, static fn ($f) => ($overridesBefore[$f] ?? null) !== ($overridesAfter[$f] ?? null)));
+            $this->audit('account.edit', targetType: 'account', targetId: $account->getId(), label: $account->getName(), mailbox: $account->getEmail(), details: $details);
             return $this->redirectToRoute('antispam_account_index');
         }
 
         return [
+            'global_settings' => $this->mailboxSettings->global(),
             'account' => $account,
             'imap_tls' => ImapFlags::parse($account->getImapFlags()),
             'imap_flags' => $account->getImapFlags() ?: ImapFlags::DEFAULT_FLAGS,
@@ -249,7 +265,7 @@ class AccountController extends AbstractController
                 $result['messages'][] = 'Agent został wdrożony (' . ($deployResult['remote_path'] ?? '') . ', wersja ' . ($deployResult['agent_version'] ?? '?') . ')';
                 // Settings (thresholds, switches) and rules live in the agent's
                 // per-account database: push them right away.
-                $sync = $this->ssh->syncRules($account, json_encode($this->rulesExporter->export($account->getEmail())));
+                $sync = $this->ssh->syncRules($account, json_encode($this->rulesExporter->export($account->getEmail(), $account)));
                 $result['messages'][] = ($sync['success'] ?? false) === true
                     ? 'Reguły i ustawienia zostały zsynchronizowane'
                     : 'Synchronizacja reguł nie powiodła się: ' . ($sync['error'] ?? 'nieznany błąd') . ' - użyj przycisku Synchronizuj.';
@@ -297,7 +313,7 @@ class AccountController extends AbstractController
         }
 
         try {
-            $rules = $this->rulesExporter->export($account->getEmail());
+            $rules = $this->rulesExporter->export($account->getEmail(), $account);
             $sshService = $this->ssh;
             $syncResult = $sshService->syncRules($account, json_encode($rules));
             $result['sync_result'] = $syncResult;
@@ -437,6 +453,8 @@ class AccountController extends AbstractController
         $account->setEmail($data['email'] ?? '');
         $account->setConnectionType($data['connection_type'] ?? Account::CONNECTION_IMAP);
         $account->setDeleteSpam(!empty($data['delete_spam']));
+        // Per-mailbox overrides; empty fields = inherit (validated by validateForm()).
+        MailboxSettingsResolver::apply($account, $this->mailboxSettings->parseOverrides($data)[0]);
 
         // IMAP fields
         $account->setImapHost($data['imap_host'] ?? null);

@@ -174,6 +174,13 @@ class BackupExporter
                 // Public fingerprint, not a secret: keeps the TOFU pin across servers.
                 'ssh_host_key' => $a->getSshHostKey(),
                 'agent_deployed' => (bool)$a->getAgentDeployed(),
+                // Per-mailbox settings (null = inherit the global setting).
+                'spam_threshold' => $a->getSpamThreshold(),
+                'quarantine_threshold' => $a->getQuarantineThreshold(),
+                'scoring_enabled' => $a->getScoringEnabled(),
+                'digest_enabled' => $a->getDigestEnabled(),
+                'digest_recipient' => $a->getDigestRecipient(),
+                'digest_hour' => $a->getDigestHour(),
             ];
             if ($includeSecrets) {
                 // A path, not key material - the key file itself is copied with var/data (docs/backup.md).

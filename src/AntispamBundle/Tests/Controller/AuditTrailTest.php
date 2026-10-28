@@ -342,6 +342,29 @@ class AuditTrailTest extends TestCase
         $this->assertSame(['4', 'Biuro', 'biuro@firma.pl'], [$this->audit->last()['targetId'], $this->audit->last()['label'], $this->audit->last()['mailbox']]);
     }
 
+    public function testAccountEditLogsMailboxSettingsOverrides()
+    {
+        $account = self::withId((new Account())->setName('Biuro')->setEmail('biuro@firma.pl')->setConnectionType(Account::CONNECTION_IMAP)->setDigestHour(7), 5);
+        $em = $this->emWith([Account::class => new InMemoryRepository([$account])]);
+        $scoring = new \AntispamBundle\Services\ScoringService($em);
+        $resolver = new \AntispamBundle\Services\MailboxSettingsResolver($scoring, $this->createMock(\AntispamBundle\Services\ConfigService::class), $em);
+        $controller = $this->wire($this->make(AccountController::class, ['em' => $em, 'mailboxSettings' => $resolver]));
+        $form = ['name' => 'Biuro', 'email' => 'biuro@firma.pl', 'connection_type' => 'imap', 'imap_host' => 'imap.firma.pl', 'imap_port' => '993', 'imap_login' => 'biuro'];
+
+        // quarantine >= spam (inherited 10) is refused, nothing changes.
+        $controller->editAction('5', $this->post(['account' => $form + ['quarantine_threshold' => '10']]));
+        $this->assertSame([], $this->audit->actions());
+        $this->assertNull($account->getQuarantineThreshold());
+
+        $controller->editAction('5', $this->post(['account' => $form + ['spam_threshold' => '6', 'digest_recipient' => 'szef@firma.pl', 'digest_hour' => '']]));
+        $details = $this->audit->last()['details'];
+        $this->assertSame('account.edit', $this->audit->last()['action']);
+        $this->assertSame(['spam_threshold' => 6, 'digest_recipient' => 'szef@firma.pl'], $details['settings_overrides']);
+        $this->assertSame(['spam_threshold', 'digest_recipient', 'digest_hour'], $details['settings_changed']);
+        $this->assertSame(6, $account->getSpamThreshold());
+        $this->assertNull($account->getDigestHour());
+    }
+
     public function testUserDelete()
     {
         $ola = self::withId((new User())->setUsername('ola')->setRole(User::ROLE_USER), 8);

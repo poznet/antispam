@@ -36,6 +36,8 @@ class ScoringService
     private $em;
     private $config;
     private $listCache = [];
+    /** Settings of the mailbox being scanned right now (withMailbox()); null = global values. */
+    private ?MailboxSettings $mailbox = null;
 
     public function __construct(EntityManagerInterface $em, ?ConfigService $config = null)
     {
@@ -43,17 +45,59 @@ class ScoringService
         $this->config = $config;
     }
 
+    /**
+     * Run $fn with the thresholds and the scoring switch of one mailbox
+     * (MailboxSettingsResolver builds them: account override -> global).
+     * Every consumer that asks this service while $fn runs - pipeline
+     * listeners, HeaderAnalyzer caps, the CERT default score, the agent
+     * settings export, classify() - gets the mailbox's values. The previous
+     * scope is restored afterwards, also when $fn throws.
+     */
+    public function withMailbox(?MailboxSettings $settings, callable $fn)
+    {
+        $previous = $this->mailbox;
+        $this->mailbox = $settings;
+        try {
+            return $fn();
+        } finally {
+            $this->mailbox = $previous;
+        }
+    }
+
+    /** Settings of the mailbox in scope, or null outside withMailbox(). */
+    public function getMailboxSettings(): ?MailboxSettings
+    {
+        return $this->mailbox;
+    }
+
+    /** Effective spam threshold: the mailbox in scope, else the global one. */
     public function getSpamThreshold()
     {
-        return $this->readInt('scoring.spam_threshold', self::DEFAULT_SPAM_THRESHOLD);
+        return $this->mailbox ? $this->mailbox->spamThreshold : $this->getGlobalSpamThreshold();
     }
 
     public function getQuarantineThreshold()
     {
-        return $this->readInt('scoring.quarantine_threshold', self::DEFAULT_QUARANTINE_THRESHOLD);
+        return $this->mailbox ? $this->mailbox->quarantineThreshold : $this->getGlobalQuarantineThreshold();
     }
 
     public function isScoringEnabled()
+    {
+        return $this->mailbox ? $this->mailbox->scoringEnabled : $this->isGlobalScoringEnabled();
+    }
+
+    /** Global value (Ustawienia → Filtr spamu), ignoring any mailbox in scope. */
+    public function getGlobalSpamThreshold(): int
+    {
+        return $this->readInt('scoring.spam_threshold', self::DEFAULT_SPAM_THRESHOLD);
+    }
+
+    public function getGlobalQuarantineThreshold(): int
+    {
+        return $this->readInt('scoring.quarantine_threshold', self::DEFAULT_QUARANTINE_THRESHOLD);
+    }
+
+    public function isGlobalScoringEnabled(): bool
     {
         return (bool)$this->readBool('scoring.enabled', true);
     }

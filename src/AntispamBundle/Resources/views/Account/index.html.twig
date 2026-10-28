@@ -27,7 +27,11 @@
         {% for account in accounts %}
             <tr>
                 <td><div class="pp-acct"><span class="pp-acct-ic">{{ account.name|first }}</span><b>{{ account.name }}</b></div></td>
-                <td class="pp-cell-wrap">{{ account.email }}</td>
+                <td class="pp-cell-wrap">{{ account.email }}
+                    {% if account.hasSettingsOverrides %}
+                        <a href="{{ path('antispam_account_edit', {id: account.id}) }}#mailboxSettings" class="label label-info" title="Własne ustawienia skrzynki: {{ account.settingsOverrides|keys|map(k => constant('AntispamBundle\\Services\\MailboxSettingsResolver::LABELS')[k] ?? k)|join(', ') }}">własne ustawienia</a>
+                    {% endif %}
+                </td>
                 <td>
                     {% if account.connectionType == 'ssh' %}
                         <span class="label label-info">SSH+Maildir</span>

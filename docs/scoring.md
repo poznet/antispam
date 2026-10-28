@@ -13,6 +13,15 @@ per message, then makes a final decision:
 Defaults: `quarantine_threshold = 5`, `spam_threshold = 10`. Configure under
 **Ustawienia → Filtr spamu**.
 
+**Per mailbox:** an account can override the spam threshold, the quarantine
+threshold and the scoring switch (**Konta → Edytuj → Ustawienia skrzynki**,
+empty = inherit). The effective value (account override -> global) applies to
+everything that reads a threshold for that mailbox: the IMAP pipeline
+(`classify()`/`decide()`), the header cap below, the CERT default score, the
+plugin `/check`, the retroactive blacklist pass and the SSH agent (scan flags
+and synced settings). The legacy mailbox always uses the global values. See
+[accounts.md](accounts.md#per-mailbox-settings-ustawienia-skrzynki).
+
 ## Scoring signals
 
 | Signal            | Listener              | Default score        |
@@ -67,7 +76,8 @@ Defaults: `quarantine_threshold = 5`, `spam_threshold = 10`. Configure under
   failures) but never send it to SPAM - that needs more evidence (blacklist,
   DNSBL, links, attachments, feed...). The cut is logged as a negative
   `header_cap` reason, so the reasons still add up. With the defaults (5/10):
-  soft ≤ 4, total ≤ 9.
+  soft ≤ 4, total ≤ 9. The caps follow the thresholds of the mailbox being
+  scored (per-mailbox overrides included).
 
 The Maildir agent has its own copy of these rules
 (`analyzeHeaders()` in `antispam-agent.php`) and must follow the same defaults.

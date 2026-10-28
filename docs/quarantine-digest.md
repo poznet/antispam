@@ -31,8 +31,8 @@ recipient clicks link ─► GET  /q/{token}   confirmation page (nothing happen
 | Key | Source | Recipient |
 |-----|--------|-----------|
 | `imap` | Legacy IMAP account (Ustawienia → Konfiguracja (stara)), folder `QUARANTINE` | *Recipient for the legacy IMAP mailbox*, or the configured IMAP e-mail |
-| `imap-<id>` | Every IMAP account (Konta), folder `QUARANTINE` | The account e-mail |
-| `ssh-<id>` | Every SSH account with a deployed agent, `~/Maildir/.QUARANTINE` | The account e-mail |
+| `imap-<id>` | Every IMAP account (Konta), folder `QUARANTINE` | *Odbiorca raportu* of the account, else the account e-mail |
+| `ssh-<id>` | Every SSH account with a deployed agent, `~/Maildir/.QUARANTINE` | *Odbiorca raportu* of the account, else the account e-mail |
 
 **Which messages are listed:** those received since the previous successful digest
 for that mailbox (on the first run, the last 24 hours), newest first, up to
@@ -115,12 +115,38 @@ Mail goes through Symfony Mailer (`MAILER_DSN` environment
 variable). Send from an address whose SPF/DKIM is set up for
 that transport, or the digest itself may be filtered.
 
+## Per-mailbox settings
+
+Each account (not the legacy mailbox) can override three digest settings on
+**Konta → Edytuj → Ustawienia skrzynki**; empty = inherit:
+
+| Setting | Column | Inherit = | Effect |
+|---------|--------|-----------|--------|
+| Raport kwarantanny | `digest_enabled` | `digest.enabled` | *wyłączony*: the mailbox gets no digest (status `disabled`, also with `--force` / *Zapisz i wyślij teraz*); *włączony*: it gets one even while the global switch is off (the command then runs for such mailboxes only) |
+| Odbiorca raportu | `digest_recipient` | account e-mail | e.g. a department head; links in it act on that mailbox's quarantine |
+| Godzina wysyłki | `digest_hour` | global schedule | the mailbox is sent at the first run at or after HH:00 (server time) that has not sent it yet today; earlier runs report `not-due` |
+
+Precedence: account override -> global setting (`MailboxSettingsResolver`,
+rows of `QuarantineService::getMailboxes()` carry `recipient`,
+`digest_enabled` - the mailbox's own value or null - and `digest_hour`). The
+mailbox table on **Raport kwarantanny** shows the overrides. Digests are
+Polish only, so there is no per-mailbox language.
+
 ## Scheduling
 
 ```bash
 # daily at 07:00
 0 7 * * * php bin/console antispam:digest:send
+# mailboxes with their own send hour: every other hour, only those
+0 0-6,8-23 * * * php bin/console antispam:digest:send --scheduled-only
 ```
+
+The daily run sends every mailbox without its own hour plus those whose hour
+has come; `--scheduled-only` looks at mailboxes with their own hour only and
+prints nothing else, so the hourly run is cheap. Without per-mailbox hours the
+second line is not needed. The Docker scheduler does both (`DIGEST_HOUR`, see
+[deployment.md](deployment.md)). Do not run both at the same hour - two
+parallel runs could send a due mailbox twice.
 
 See [commands.md](commands.md#antispamdigestsend) for options (`--dry-run`,
 `--mailbox`, `--since`, `--force`).

@@ -9,7 +9,9 @@
 #                       SSH agents, IMAP accounts and the mailbox from the "E-mail" settings
 #   FEED_SYNC_INTERVAL  minutes between antispam:feed:sync      (default 15, 0 = off)
 #   CERT_SYNC_INTERVAL  hours between antispam:cert:sync     (default 6, 0 = off); runs at minute 17
-#   DIGEST_HOUR         hour (container time, UTC) for antispam:digest:send (default 7, "off" = off)
+#   DIGEST_HOUR         hour (container time, UTC) for antispam:digest:send (default 7, "off" = off);
+#                       every other full hour runs `antispam:digest:send --scheduled-only` for
+#                       mailboxes with their own send hour (Konta → Ustawienia skrzynki)
 #   PHISHING_FORWARD_INTERVAL minutes between antispam:phishing:forward (default 10, 0 = off) -
 #                       automatic phishing forward to CERT Polska; no-op while off in the panel
 #   PURGE_HOUR          hour (container time, UTC) for antispam:purge, at minute 41 (default 3, "off" = off) -
@@ -37,7 +39,8 @@ run() {
     (
         flock -n 9 || { echo "[scheduler] $name still running, skipping"; exit 0; }
         echo "[scheduler] $(date '+%F %T') start $name"
-        runuser -u www-data -- timeout -k 30 "$JOB_TIMEOUT" php "${APP_DIR}/bin/console" antispam:cron:run "$1" --no-debug \
+        # Extra arguments ($2...) go to the wrapped command, after "--".
+        runuser -u www-data -- timeout -k 30 "$JOB_TIMEOUT" php "${APP_DIR}/bin/console" antispam:cron:run --no-debug "$@" \
             || echo "[scheduler] $name exited with $?"
         echo "[scheduler] $(date '+%F %T') done $name"
     ) 9>"/tmp/antispam-${name}.lock" &
@@ -62,8 +65,12 @@ while true; do
     if [ "$PHISHING_FORWARD_INTERVAL" -gt 0 ] && [ $(( TICK % PHISHING_FORWARD_INTERVAL )) -eq 0 ]; then
         run phishing antispam:phishing:forward
     fi
-    if [ -n "$DIGEST_HOUR" ] && [ "$HOUR" -eq "$DIGEST_HOUR" ] && [ "$MINUTE" -eq 0 ]; then
-        run digest antispam:digest:send
+    if [ -n "$DIGEST_HOUR" ] && [ "$MINUTE" -eq 0 ]; then
+        if [ "$HOUR" -eq "$DIGEST_HOUR" ]; then
+            run digest antispam:digest:send
+        else
+            run digest antispam:digest:send -- --scheduled-only
+        fi
     fi
     if [ -n "$PURGE_HOUR" ] && [ "$HOUR" -eq "$PURGE_HOUR" ] && [ "$MINUTE" -eq 41 ]; then
         run purge antispam:purge

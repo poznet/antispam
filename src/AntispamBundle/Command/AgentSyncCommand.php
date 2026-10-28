@@ -42,7 +42,7 @@ class AgentSyncCommand extends Command
 
         $output->writeln('Syncing rules for ' . $account->getEmail() . '...');
 
-        $rules = $this->rulesExporter->export($account->getEmail());
+        $rules = $this->rulesExporter->export($account->getEmail(), $account);
         $output->writeln(sprintf(
             'Rules: %d wl, %d email-wl, %d bl, %d email-bl, %d dnsbl',
             count($rules['whitelist']), count($rules['email_whitelist']),

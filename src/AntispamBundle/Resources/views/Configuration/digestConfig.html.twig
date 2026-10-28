@@ -73,12 +73,18 @@
         {% if mailboxes %}
             <div class="table-responsive">
             <table class="table table-striped">
-                <thead><tr><th>Skrzynka</th><th>Odbiorca raportu</th><th>Ostatni raport</th><th></th></tr></thead>
+                <thead><tr><th>Skrzynka</th><th>Odbiorca raportu</th><th>Raport</th><th>Ostatni raport</th><th></th></tr></thead>
                 <tbody>
                 {% for m in mailboxes %}
                     <tr>
                         <td>{{ m.label }} <small class="text-muted">({{ m.key }})</small></td>
                         <td>{{ m.recipient ?: '—' }}</td>
+                        <td>
+                            {% if m.digest_enabled is same as(false) %}<span class="label label-default">wyłączony dla skrzynki</span>
+                            {% elseif m.digest_enabled is same as(true) %}<span class="label label-info">włączony dla skrzynki</span>
+                            {% else %}<span class="text-muted">globalnie</span>{% endif %}
+                            {% if m.digest_hour is not null %}<span class="label label-info">o {{ m.digest_hour }}:00</span>{% endif %}
+                        </td>
                         <td>{{ m.last_sent ? m.last_sent|date('Y-m-d H:i') : 'nigdy' }}</td>
                         <td class="text-right">
                             <a href="{{ path('antispam_digest_preview', {key: m.key}) }}" class="btn btn-xs btn-default" target="_blank">
@@ -90,6 +96,7 @@
                 </tbody>
             </table>
             </div>
+            <p class="help-block">Włączenie, odbiorcę i godzinę raportu pojedynczej skrzynki ustawisz w <a href="{{ path('antispam_account_index') }}">Konta</a> → Edytuj → Ustawienia skrzynki. Skrzynka z własną godziną dostaje raport przy pierwszym uruchomieniu <code>antispam:digest:send</code> od tej godziny (scheduler w Dockerze uruchamia go co godzinę z <code>--scheduled-only</code>).</p>
         {% else %}
             <p class="text-muted">Żadna skrzynka nie ma jeszcze kwarantanny: skonfiguruj starą skrzynkę IMAP albo wdróż agenta na konto SSH.</p>
         {% endif %}

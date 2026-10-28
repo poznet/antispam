@@ -50,6 +50,53 @@ class QuarantineDigestService
     }
 
     /**
+     * Is the digest on for this mailbox (getMailboxes() row)? Its own setting
+     * (Ustawienia skrzynki) wins over the global switch; with $force an
+     * inheriting mailbox counts as on (--force, "Zapisz i wyślij teraz"), an
+     * explicit "off" never does.
+     */
+    public function isEnabledFor(array $mailbox, bool $force = false): bool
+    {
+        $own = $mailbox['digest_enabled'] ?? null;
+        if ($own !== null) {
+            return (bool)$own;
+        }
+        return $force || $this->isEnabled();
+    }
+
+    /** Does at least one mailbox get a digest (global switch or its own)? */
+    public function hasEnabledMailbox(): bool
+    {
+        foreach ($this->quarantine->getMailboxes() as $mailbox) {
+            if ($this->isEnabledFor($mailbox)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * A mailbox with its own send hour H is due at the first run at or after
+     * H:00 (server time) that has not sent it yet today, so a missed hourly
+     * run catches up later the same day. Mailboxes without one go out on
+     * every run (the global schedule: cron / DIGEST_HOUR).
+     */
+    public function isDue(array $mailbox, ?\DateTimeImmutable $now = null): bool
+    {
+        $hour = $mailbox['digest_hour'] ?? null;
+        if ($hour === null) {
+            return true;
+        }
+        $now = $now ?? new \DateTimeImmutable();
+        $slot = $now->setTime((int)$hour, 0);
+        if ($now < $slot) {
+            return false;
+        }
+        $last = $this->getLastSent($mailbox['key']);
+        return $last === null || $last < $slot;
+    }
+
+    /**
      * Public base URL of this application (links in the e-mail must be
      * absolute and reachable by the recipient, e.g. https://antispam.firma.pl).
      */
@@ -181,17 +228,39 @@ class QuarantineDigestService
      * skipped. The "last sent" marker only moves forward when a digest was
      * actually delivered (or there was nothing to send).
      *
+     * Per-mailbox settings: a mailbox switched off is reported as `disabled`,
+     * one with its own send hour that is not due yet as `not-due`.
+     *
+     * @param bool $force          inheriting mailboxes count as enabled even with the global switch off
+     * @param bool $scheduledOnly  only mailboxes with their own send hour (the hourly run)
+     * @param bool $ignoreSchedule send regardless of the mailboxes' send hours ("send now", --mailbox)
+     *
      * @return array list of ['key','recipient','count','status','error']
      */
-    public function sendAll($onlyKey = null, ?\DateTimeInterface $since = null, $dryRun = false)
+    public function sendAll($onlyKey = null, ?\DateTimeInterface $since = null, $dryRun = false, bool $force = false, bool $scheduledOnly = false, bool $ignoreSchedule = false, ?\DateTimeImmutable $now = null)
     {
         $report = [];
         foreach ($this->quarantine->getMailboxes() as $mailbox) {
             if ($onlyKey !== null && $mailbox['key'] !== $onlyKey) {
                 continue;
             }
+            if ($scheduledOnly && ($mailbox['digest_hour'] ?? null) === null) {
+                continue;
+            }
             $startedAt = time();
             $row = ['key' => $mailbox['key'], 'recipient' => $mailbox['recipient'], 'count' => 0, 'status' => 'skipped', 'error' => null];
+            if (!$this->isEnabledFor($mailbox, $force)) {
+                if (!$scheduledOnly) {
+                    $report[] = ['status' => 'disabled'] + $row;
+                }
+                continue;
+            }
+            if (!$ignoreSchedule && !$this->isDue($mailbox, $now)) {
+                if (!$scheduledOnly) {
+                    $report[] = ['status' => 'not-due'] + $row;
+                }
+                continue;
+            }
             try {
                 $digest = $this->build($mailbox, $since);
                 $row['count'] = $digest['total'];

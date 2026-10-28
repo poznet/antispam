@@ -1,0 +1,71 @@
+{% extends '@Antispam/main.html.twig' %}
+{% block title %}Moja kwarantanna{% endblock %}
+{% block page_title %}Moja kwarantanna{% endblock %}
+
+{% block body %}
+    <p class="text-muted">Wiadomości z Twojej poczty, które filtr uznał za podejrzane, ale nie na tyle, by je usunąć. Jeśli któraś jest wartościowa, wyciągnij ją do skrzynki odbiorczej.</p>
+
+    {% set token = csrf_token('my_quarantine_action') %}
+
+    {% for mailbox in mailboxes %}
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            <span class="glyphicon glyphicon-inbox"></span> {{ mailbox.label }}
+            <span class="badge pull-right">{{ mailbox.items|length }}</span>
+        </div>
+        {% if mailbox.error %}
+            <div class="panel-body">
+                <div class="alert alert-danger" style="margin:0;">{{ mailbox.error }}</div>
+            </div>
+        {% elseif mailbox.items|length > 0 %}
+        <div class="table-responsive">
+        <table class="table table-striped" style="margin-bottom:0;">
+            <thead><tr><th>Data</th><th>Nadawca</th><th>Temat</th><th>Punkty</th><th>Powód</th><th></th></tr></thead>
+            <tbody>
+            {% for item in mailbox.items %}
+                <tr>
+                    <td>{{ item.date ? item.date|date('Y-m-d H:i') : '—' }}</td>
+                    <td>{% if item.from_name %}{{ item.from_name }}<br>{% endif %}<small>{{ item.from }}</small></td>
+                    <td>{{ item.subject[:80] }}</td>
+                    <td>{% if item.score is not null %}<strong>{{ item.score }}</strong>{% endif %}</td>
+                    <td>
+                        {% if item.high_risk %}<span class="label label-danger">wysokie ryzyko</span><br>{% endif %}
+                        {% for label in item.labels %}<small>{{ label }}</small><br>{% endfor %}
+                    </td>
+                    <td class="text-right" style="white-space:nowrap;">
+                        <form method="post" action="{{ path('antispam_my_quarantine_action') }}" style="display:inline;">
+                            <input type="hidden" name="_token" value="{{ token }}">
+                            <input type="hidden" name="mailbox" value="{{ mailbox.key }}">
+                            <input type="hidden" name="id" value="{{ item.id }}">
+                            <button type="submit" name="action" value="release" class="btn btn-xs btn-success" title="Przenieś do skrzynki odbiorczej"{% if item.high_risk %} onclick="return confirm('Ta wiadomość ma wysokie ryzyko (phishing / złośliwy załącznik). Na pewno dostarczyć?');"{% endif %}>
+                                <span class="glyphicon glyphicon-ok"></span> Wyciągnij
+                            </button>
+                            {% if not item.high_risk %}
+                            <button type="submit" name="action" value="whitelist" class="btn btn-xs btn-info" title="Dostarcz i zawsze przepuszczaj pocztę od tego nadawcy">
+                                <span class="glyphicon glyphicon-star"></span> Zawsze akceptuj
+                            </button>
+                            {% endif %}
+                            <button type="submit" name="action" value="delete" class="btn btn-xs btn-danger" title="Usuń trwale" onclick="return confirm('Usunąć wiadomość na stałe?');">
+                                <span class="glyphicon glyphicon-trash"></span>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+            <div class="panel-body text-muted">Kwarantanna jest pusta</div>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <span class="glyphicon glyphicon-ok-circle"></span>
+        <p>Brak skrzynek z kwarantanną</p>
+        <p class="text-muted">Do Twojego konta nie przypisano żadnej skrzynki z kwarantanną. Skontaktuj się z administratorem.</p>
+    </div>
+    {% endfor %}
+
+    <p class="text-muted">Wiadomości uznane za spam i ich powody znajdziesz w <a href="{{ path('antispam_my_scorelog', {decision: 'spam'}) }}">dzienniku ocen</a>.</p>
+{% endblock %}

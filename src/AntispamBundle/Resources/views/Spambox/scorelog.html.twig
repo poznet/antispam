@@ -6,6 +6,7 @@
     {% set decisionLabels = {ham: 'Ham', quarantine: 'Kwarantanna', spam: 'Spam', whitelisted: 'Whitelista'} %}
     {% set sourceLabels = {scan: 'skan', plugin: 'wtyczka', retro: 'wstecz'} %}
     {% set outcomeLabels = {quarantined: 'do kwarantanny', spam_folder: 'do SPAM', deleted: 'usunięta', move_failed: 'nie przeniesiono'} %}
+    {% set scoreRoute = scorelog_route|default('antispam_spambox_scorelog') %}
     {% set baseQuery = query|filter((v, k) => k != 'decision') %}
 
     {# Decision tiles double as quick filters: click to show only that decision, click again to clear. #}
@@ -13,7 +14,7 @@
         {% for key, tile in {ham: 'text-success', quarantine: 'text-warning', spam: 'text-danger', whitelisted: 'text-info'} %}
             {% set active = filters.decision == key %}
             <div class="col-sm-3">
-                <a href="{{ path('antispam_spambox_scorelog', active ? baseQuery : baseQuery|merge({decision: key})) }}"
+                <a href="{{ path(scoreRoute, active ? baseQuery : baseQuery|merge({decision: key})) }}"
                    class="panel panel-default stat-tile{{ active ? ' is-active' }}"
                    title="{{ active ? 'Pokaż wszystkie decyzje' : 'Pokaż tylko: ' ~ decisionLabels[key]|lower }}">
                     <div class="panel-body text-center">
@@ -26,7 +27,7 @@
     </div>
 
     <div class="add-form scorelog-filter">
-        <form method="get" action="{{ path('antispam_spambox_scorelog') }}" class="form-inline">
+        <form method="get" action="{{ path(scoreRoute) }}" class="form-inline">
             <select name="decision" class="form-control" aria-label="Decyzja">
                 <option value="">Wszystkie decyzje</option>
                 {% for key, label in decisionLabels %}
@@ -45,7 +46,7 @@
             <input type="number" name="min_score" class="form-control" value="{{ filters.minScore }}" placeholder="Min. pkt" aria-label="Minimalna liczba punktów" style="width:100px;">
             <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-filter"></span> Filtruj</button>
             {% if query is not empty %}
-                <a href="{{ path('antispam_spambox_scorelog') }}" class="btn btn-default"><span class="glyphicon glyphicon-remove"></span> Wyczyść</a>
+                <a href="{{ path(scoreRoute) }}" class="btn btn-default"><span class="glyphicon glyphicon-remove"></span> Wyczyść</a>
             {% endif %}
         </form>
     </div>
@@ -91,15 +92,15 @@
         <nav class="text-center" aria-label="Strony dziennika">
             <ul class="pagination">
                 <li class="{{ page <= 1 ? 'disabled' }}">
-                    <a href="{{ page > 1 ? path('antispam_spambox_scorelog', query|merge({page: page - 1})) : '#' }}" aria-label="Poprzednia">&laquo;</a>
+                    <a href="{{ page > 1 ? path(scoreRoute, query|merge({page: page - 1})) : '#' }}" aria-label="Poprzednia">&laquo;</a>
                 </li>
                 {% for p in max(1, page - 3)..min(pages, page + 3) %}
                     <li class="{{ p == page ? 'active' }}">
-                        <a href="{{ path('antispam_spambox_scorelog', query|merge({page: p})) }}">{{ p }}</a>
+                        <a href="{{ path(scoreRoute, query|merge({page: p})) }}">{{ p }}</a>
                     </li>
                 {% endfor %}
                 <li class="{{ page >= pages ? 'disabled' }}">
-                    <a href="{{ page < pages ? path('antispam_spambox_scorelog', query|merge({page: page + 1})) : '#' }}" aria-label="Następna">&raquo;</a>
+                    <a href="{{ page < pages ? path(scoreRoute, query|merge({page: page + 1})) : '#' }}" aria-label="Następna">&raquo;</a>
                 </li>
             </ul>
         </nav>
@@ -108,13 +109,13 @@
         <div class="empty-state">
             <span class="glyphicon glyphicon-filter"></span>
             <p>Brak decyzji pasujących do filtra</p>
-            <p class="text-muted"><a href="{{ path('antispam_spambox_scorelog') }}">Wyczyść filtry</a></p>
+            <p class="text-muted"><a href="{{ path(scoreRoute) }}">Wyczyść filtry</a></p>
         </div>
     {% else %}
         <div class="empty-state">
             <span class="glyphicon glyphicon-list-alt"></span>
             <p>Brak zapisanych decyzji</p>
-            <p class="text-muted">Włącz zapisywanie wyników w <a href="{{ path('antispam_spam_config') }}">ustawieniach filtra</a> i uruchom skan.</p>
+            <p class="text-muted">{% if is_granted('ROLE_ADMIN') %}Włącz zapisywanie wyników w <a href="{{ path('antispam_spam_config') }}">ustawieniach filtra</a> i uruchom skan.{% else %}Gdy Twoja poczta zostanie sprawdzona, pojawią się tu decyzje i ich powody.{% endif %}</p>
         </div>
     {% endif %}
 {% endblock %}

@@ -20,6 +20,16 @@ class SecurityController extends AbstractController
         return $this->redirect($this->generateUrl('antispam_home') . '#logowanie');
     }
 
+    /**
+     * Landing page after login (form_login default_target_path): administrators
+     * go to the dashboard, everyone else to their own quarantine.
+     */
+    #[Route('/start', name: 'antispam_start')]
+    public function startAction(): RedirectResponse
+    {
+        return $this->redirectToRoute($this->isGranted('ROLE_ADMIN') ? 'antispam_index' : 'antispam_my_quarantine');
+    }
+
     #[Route('/logout', name: 'logout')]
     public function logoutAction()
     {

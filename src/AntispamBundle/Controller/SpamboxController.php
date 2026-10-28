@@ -214,7 +214,7 @@ class SpamboxController extends AbstractController
     }
 
     /** Parse and validate the score log filter from the query string; invalid values are ignored. */
-    private function scorelogFilters(Request $request): array
+    public static function scorelogFilters(Request $request): array
     {
         $q = $request->query;
         $decision = (string)$q->get('decision', '');

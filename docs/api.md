@@ -8,7 +8,33 @@
 | GET | `/login` | Redirects to `/#logowanie` (form_login entry point and failed-login redirect; the error is shown on the home page) |
 | POST | `/login` | Form login check (`_username`, `_password`, CSRF token `authenticate`) → `/panel` |
 | GET | `/logout` | Log out → `/` |
-| GET | `/panel` | Admin dashboard |
+| GET | `/start` | After-login redirect (ROLE_USER): admins -> `/panel`, users -> `/my/quarantine` |
+| GET | `/panel` | Admin dashboard (ROLE_ADMIN) |
+
+Access: `/`, `/login`, `/api/feed`, `/q/`, `/api/plugin` and the plugin downloads are public;
+`/my/*` and `/start` need `ROLE_USER` (admins included); **everything else needs `ROLE_ADMIN`**.
+See [users.md](users.md).
+
+## My mailbox (`/my`, ROLE_USER)
+
+Every action is limited to the mailboxes assigned to the user (an administrator sees all);
+a foreign mailbox key gives 403, see [users.md](users.md).
+
+| Method | URL | Description |
+|--------|-----|-------------|
+| GET | `/my/quarantine` | Quarantine of the user's mailboxes (IMAP / SSH accounts only; not the legacy mailbox) |
+| POST | `/my/quarantine/action` | `mailbox` (`imap-<id>` / `ssh-<id>`, must be assigned), `id`, `action` (`release` / `whitelist` / `delete`); CSRF token `my_quarantine_action`. `whitelist` is refused for high-risk messages |
+| GET | `/my/scorelog` | Own score log (same template and filters as `/spambox/scorelog`; `account` is limited to the user's mailboxes). `?decision=spam` is the user's "spam" view |
+| GET/POST | `/my/password` | Change own password (database users only; CSRF token `my_password`); logs out afterwards |
+
+## Users (`/users`, ROLE_ADMIN)
+
+| Method | URL | Description |
+|--------|-----|-------------|
+| GET | `/users` | List users |
+| GET/POST | `/users/add` | Create a user: login, password, role, mailboxes (CSRF token `user_form`) |
+| GET/POST | `/users/edit/{id}` | Edit; empty password keeps the current one (CSRF token `user_form`) |
+| POST | `/users/del/{id}` | Delete (CSRF token `user_action_{id}`); not your own account |
 
 ## Account Management (`/account`)
 

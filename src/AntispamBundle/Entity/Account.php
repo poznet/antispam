@@ -22,6 +22,11 @@ class Account
     const AUTH_OAUTH_GOOGLE = 'oauth_google';
     const AUTH_METHODS = [self::AUTH_PASSWORD, self::AUTH_OAUTH_MICROSOFT, self::AUTH_OAUTH_MICROSOFT_APP, self::AUTH_OAUTH_GOOGLE];
 
+    /** Weekly automatic rescan when no day / hour is set: Sunday, 02:00 server time. */
+    const DEFAULT_RESCAN_WEEKDAY = 7;
+    const DEFAULT_RESCAN_HOUR = 2;
+    const WEEKDAYS = [1 => 'poniedziałek', 2 => 'wtorek', 3 => 'środa', 4 => 'czwartek', 5 => 'piątek', 6 => 'sobota', 7 => 'niedziela'];
+
     #[ORM\Column(name: 'id', type: 'integer')]
     #[ORM\Id]
     #[ORM\GeneratedValue(strategy: 'AUTO')]
@@ -173,6 +178,30 @@ class Account
 
     #[ORM\Column(name: 'oauth_error_at', type: 'datetime', nullable: true)]
     private $oauthErrorAt;
+
+    // Full rescan of the whole INBOX ("Przeskanuj całą skrzynkę ponownie",
+    // docs/spam-handling.md#full-rescan). Not a per-mailbox override: there is
+    // no global value to inherit.
+
+    /** Weekly automatic rescan (antispam:rescan:due), off by default. */
+    #[ORM\Column(name: 'auto_rescan', type: 'boolean', options: ['default' => false])]
+    private $autoRescan = false;
+
+    /** ISO day of the week of the weekly rescan (1 = Monday ... 7 = Sunday); null = DEFAULT_RESCAN_WEEKDAY. */
+    #[ORM\Column(name: 'rescan_weekday', type: 'smallint', nullable: true)]
+    private $rescanWeekday;
+
+    /** Hour (0-23, server time) of the weekly rescan; null = DEFAULT_RESCAN_HOUR. */
+    #[ORM\Column(name: 'rescan_hour', type: 'smallint', nullable: true)]
+    private $rescanHour;
+
+    /** End of the last full rescan (panel or weekly), successful or not. */
+    #[ORM\Column(name: 'last_rescan_at', type: 'datetime', nullable: true)]
+    private $lastRescanAt;
+
+    /** JSON: counters of the last rescan + 'trigger' (panel / schedule), or 'error'. Never shown on the dashboard. */
+    #[ORM\Column(name: 'last_rescan_result', type: 'text', nullable: true)]
+    private $lastRescanResult;
 
     public function getId() { return $this->id; }
 
@@ -431,5 +460,39 @@ class Account
     public function getLastScanResultDecoded()
     {
         return $this->lastScanResult ? json_decode($this->lastScanResult, true) : null;
+    }
+
+    public function getAutoRescan(): bool { return (bool)$this->autoRescan; }
+    public function setAutoRescan(bool $v) { $this->autoRescan = $v; return $this; }
+
+    public function getRescanWeekday(): ?int { return $this->rescanWeekday === null ? null : (int)$this->rescanWeekday; }
+    public function setRescanWeekday(?int $v) { $this->rescanWeekday = $v === null || $v < 1 || $v > 7 ? null : $v; return $this; }
+
+    public function getRescanHour(): ?int { return $this->rescanHour === null ? null : (int)$this->rescanHour; }
+    public function setRescanHour(?int $v) { $this->rescanHour = $v === null || $v < 0 || $v > 23 ? null : $v; return $this; }
+
+    /** Effective day / hour of the weekly rescan. */
+    public function getEffectiveRescanWeekday(): int { return $this->getRescanWeekday() ?? self::DEFAULT_RESCAN_WEEKDAY; }
+    public function getEffectiveRescanHour(): int { return $this->getRescanHour() ?? self::DEFAULT_RESCAN_HOUR; }
+
+    public function getLastRescanAt() { return $this->lastRescanAt; }
+    public function getLastRescanResult() { return $this->lastRescanResult; }
+
+    public function getLastRescanResultDecoded(): ?array
+    {
+        $data = $this->lastRescanResult ? json_decode($this->lastRescanResult, true) : null;
+        return is_array($data) ? $data : null;
+    }
+
+    /**
+     * Store the end of a full rescan (counters or ['error' => ...]). Separate
+     * from markScanned(): the dashboard's "recent scans" and lastScanAt (health
+     * "last scan" age) stay untouched.
+     */
+    public function markRescanned(array $result, ?\DateTimeInterface $at = null)
+    {
+        $this->lastRescanAt = $at ? \DateTime::createFromInterface($at) : new \DateTime();
+        $this->lastRescanResult = json_encode($result, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        return $this;
     }
 }

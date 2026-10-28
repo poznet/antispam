@@ -13,6 +13,7 @@ use AntispamBundle\Services\ImapTlsProbe;
 use AntispamBundle\Services\Jobs\JobQueue;
 use AntispamBundle\Services\MailboxSettingsResolver;
 use AntispamBundle\Services\OAuth\OAuthSettings;
+use AntispamBundle\Services\RescanScheduler;
 use AntispamBundle\Services\SshService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
@@ -49,6 +50,7 @@ class AccountController extends AbstractController
         private ConfigService $config,
         private MailboxSettingsResolver $mailboxSettings,
         private ?OAuthSettings $oauthSettings = null,
+        private ?RescanScheduler $rescans = null,
     ) {
     }
 
@@ -56,7 +58,7 @@ class AccountController extends AbstractController
     private function validateForm(array $data): array
     {
         [, $settingsErrors] = $this->mailboxSettings->parseOverrides($data);
-        return array_merge(self::validateAccountData($data), $settingsErrors);
+        return array_merge(self::validateAccountData($data), $settingsErrors, self::validateRescanData($data));
     }
 
     /**
@@ -125,6 +127,7 @@ class AccountController extends AbstractController
             $overridesAfter = $account->getSettingsOverrides();
             $details['settings_overrides'] = $overridesAfter;
             $details['settings_changed'] = array_values(array_filter(MailboxSettingsResolver::FIELDS, static fn ($f) => ($overridesBefore[$f] ?? null) !== ($overridesAfter[$f] ?? null)));
+            $details['auto_rescan'] = $account->getAutoRescan() ? ['weekday' => $account->getEffectiveRescanWeekday(), 'hour' => $account->getEffectiveRescanHour()] : false;
             $this->audit('account.edit', targetType: 'account', targetId: $account->getId(), label: $account->getName(), mailbox: $account->getEmail(), details: $details);
             return $this->redirectToRoute('antispam_account_index');
         }
@@ -135,6 +138,7 @@ class AccountController extends AbstractController
             'imap_tls' => ImapFlags::parse($account->getImapFlags()),
             'imap_flags' => $account->getImapFlags() ?: ImapFlags::DEFAULT_FLAGS,
             'oauth_configured' => $this->oauthConfigured(),
+            'next_rescan' => $account->getAutoRescan() ? RescanScheduler::nextSlot($account, new \DateTimeImmutable()) : null,
         ];
     }
 
@@ -305,6 +309,29 @@ class AccountController extends AbstractController
         return $this->queueAccountJob($id, $request, BackgroundJob::TYPE_ACCOUNT_SCAN, 'Skanowanie');
     }
 
+    /**
+     * "Przeskanuj całą skrzynkę ponownie": the whole INBOX against the current
+     * rules, in the background, in batches (job account.rescan, one per account
+     * while queued / running). Spam is moved, never deleted; kept out of the
+     * statistics (docs/spam-handling.md#full-rescan).
+     */
+    #[Route('/rescan/{id}', name: 'antispam_account_rescan', methods: ['POST'])]
+    public function rescanAction($id, Request $request)
+    {
+        $this->checkActionToken($request, 'account_action_' . $id);
+        $account = $this->em->getRepository(Account::class)->find($id);
+        if (!$account || $this->rescans === null) {
+            $this->addFlash('danger', 'Nie znaleziono konta');
+            return $this->redirectToRoute('antispam_account_index');
+        }
+        if ($account->isSsh() && !$account->getAgentDeployed()) {
+            $this->addFlash('warning', 'Agent nie jest wdrożony na serwerze - najpierw użyj przycisku Wdróż.');
+            return $this->redirectToRoute('antispam_account_index');
+        }
+        $queued = $this->rescans->enqueue($account, RescanScheduler::TRIGGER_PANEL);
+        return $this->redirectToJob($queued, 'Ponowny skan całej skrzynki ' . $account->getEmail());
+    }
+
     /** Queue an account job (dedupe: one active job of a type per account) and show its page. */
     private function queueAccountJob($id, Request $request, string $type, string $what, bool $sshOnly = false)
     {
@@ -410,9 +437,33 @@ class AccountController extends AbstractController
         return $errors;
     }
 
+    /**
+     * Weekly rescan fields of the account form: day 1-7 and hour 0-23, empty =
+     * default (Sunday, 02:00).
+     *
+     * @return string[] error messages
+     */
+    public static function validateRescanData(array $data): array
+    {
+        $errors = [];
+        $day = (string)($data['rescan_weekday'] ?? '');
+        if ($day !== '' && (!ctype_digit($day) || (int)$day < 1 || (int)$day > 7)) {
+            $errors[] = 'Nieprawidłowy dzień cotygodniowego ponownego skanu.';
+        }
+        $hour = (string)($data['rescan_hour'] ?? '');
+        if ($hour !== '' && (!ctype_digit($hour) || (int)$hour > 23)) {
+            $errors[] = 'Godzina cotygodniowego ponownego skanu: 0-23.';
+        }
+        return $errors;
+    }
+
     private function fillAccountFromRequest(Account $account, Request $request)
     {
         $data = $request->request->all('account');
+
+        $account->setAutoRescan(!empty($data['auto_rescan']));
+        $account->setRescanWeekday(($data['rescan_weekday'] ?? '') === '' ? null : (int)$data['rescan_weekday']);
+        $account->setRescanHour(($data['rescan_hour'] ?? '') === '' ? null : (int)$data['rescan_hour']);
 
         $account->setName($data['name'] ?? '');
         $account->setEmail($data['email'] ?? '');

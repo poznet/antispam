@@ -4,7 +4,7 @@
 
 {% block body %}
     {% set decisionLabels = {ham: 'Czyste', quarantine: 'Kwarantanna', spam: 'Spam', whitelisted: 'Whitelista'} %}
-    {% set sourceLabels = {scan: 'skan', plugin: 'wtyczka', retro: 'wstecz'} %}
+    {% set sourceLabels = {scan: 'skan', plugin: 'wtyczka', retro: 'wstecz', rescan: 'ponowny skan'} %}
     {% set outcomeLabels = {quarantined: 'do kwarantanny', spam_folder: 'do SPAM', deleted: 'usunięta', move_failed: 'nie przeniesiono'} %}
     {% set scoreRoute = scorelog_route|default('antispam_spambox_scorelog') %}
     {% set baseQuery = query|filter((v, k) => k != 'decision') %}
@@ -74,7 +74,7 @@
                         {% elseif l.decision == 'quarantine' %}<span class="label label-warning">kwarantanna</span>
                         {% elseif l.decision == 'whitelisted' %}<span class="label label-info">whitelista</span>
                         {% else %}<span class="label label-success">czysta</span>{% endif %}
-                        {% if l.source %}<br><small class="text-muted">{{ sourceLabels[l.source]|default(l.source) }}{% if l.outcome and l.outcome != 'none' %}, {{ outcomeLabels[l.outcome]|default(l.outcome) }}{% endif %}{% if l.initialScan %}, pierwszy skan (poza statystyką){% endif %}</small>{% endif %}
+                        {% if l.source %}<br><small class="text-muted">{{ sourceLabels[l.source]|default(l.source) }}{% if l.outcome and l.outcome != 'none' %}, {{ outcomeLabels[l.outcome]|default(l.outcome) }}{% endif %}{% if l.initialScan %}, {{ l.source == 'rescan' ? 'poza statystyką' : 'pierwszy skan (poza statystyką)' }}{% endif %}</small>{% endif %}
                     </td>
                     <td>
                         {% for r in l.reasonsDecoded %}

@@ -1,0 +1,32 @@
+{# Result of a full rescan job (docs/spam-handling.md#full-rescan). #}
+{# A cancelled job keeps the counters of the finished batches as its result. #}
+{% set r = result.scan_result is defined ? result.scan_result : (result.checked is defined ? result : null) %}
+{% if r is not null %}
+    {% if result.success|default(false) %}
+    <div class="alert alert-success"><strong>Ponowny skan całej skrzynki zakończony.</strong>
+        <br><small>Wszystkie wiadomości ze skrzynki odbiorczej zostały sprawdzone według aktualnych reguł. Spam został przeniesiony (nie usunięty); wyniki nie są wliczane do statystyk.</small>
+    </div>
+    {% else %}
+    <div class="alert alert-warning"><strong>Ponowny skan przerwany</strong> - poniżej wynik sprawdzonej części skrzynki.</div>
+    {% endif %}
+    <div class="table-responsive">
+    <table class="table table-bordered">
+        <tr><th>Wiadomości w skrzynce</th><td>{{ r.total|default(0) }}</td></tr>
+        <tr><th>Sprawdzone ponownie</th><td>{{ r.checked|default(0) }}</td></tr>
+        <tr><th>Z whitelisty</th><td>{{ r.whitelisted|default(0) }}</td></tr>
+        <tr><th>Z blacklisty</th><td>{{ r.blacklisted|default(0) }}</td></tr>
+        <tr><th>Przeniesione do spamu</th><td>{{ r.moved_to_spam|default(0) }}</td></tr>
+        <tr><th>Przeniesione do kwarantanny</th><td>{{ r.quarantined|default(0) }}</td></tr>
+        {% if r.move_failed is defined %}<tr><th>Nieudane przeniesienia</th><td>{{ r.move_failed }}</td></tr>{% endif %}
+        <tr><th>Zlecone przez</th><td>{{ constant('AntispamBundle\\Services\\RescanScheduler::TRIGGERS')[r.trigger|default('panel')]|default(r.trigger|default('panel')) }}</td></tr>
+    </table>
+    </div>
+    {% if r.errors|default([])|length > 0 %}
+    <div class="alert alert-warning">
+        <strong>Nie udało się przetworzyć części wiadomości</strong> (zostały w skrzynce z dotychczasową oceną):
+        <ul>{% for e in r.errors %}<li><small>{{ e }}</small></li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+{% else %}
+    <div class="alert alert-danger"><strong>Ponowny skan nie powiódł się</strong></div>
+{% endif %}

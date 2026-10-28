@@ -111,6 +111,7 @@ on **Przegląd → Logi crona** (see [spam-handling.md](spam-handling.md)).
 | `PHISHING_FORWARD_INTERVAL` | `antispam:phishing:forward` (automatic phishing forward to CERT Polska / SOC, see [phishing.md](phishing.md)) every N minutes (`0` = off) | `10` |
 | `DIGEST_HOUR` | `antispam:digest:send` daily at HH:00, container time = UTC (`off` = off); every other full hour `antispam:digest:send --scheduled-only` for mailboxes with their own send hour | `7` |
 | `PURGE_HOUR` | `antispam:purge` (score log retention, expired DNSBL cache) daily at HH:41, UTC (`off` = off) | `3` |
+| `RESCAN_DUE` | `antispam:rescan:due` hourly at minute 7: queues the weekly full rescans of accounts that have them on (`off` = off) | `on` |
 | `JOB_TIMEOUT` | any job running longer is killed (`timeout -k 30`), so a hung run cannot hold its flock and block every later tick | `3600` s |
 | `SCAN_MAX_SECONDS` | time budget of one IMAP mailbox per `scan-all` run; the rest of a huge INBOX is scanned on the next run | `600` s |
 | `JOBS_WORKER` | background job worker `antispam:jobs:work` (runs what the panel queues: Skanuj, Wdróż, Synchronizuj, new rule → existing mail, CERT sync...), started next to the ticks and restarted when it exits (`off` = none) | `on` |

@@ -41,6 +41,8 @@ class ImapScanServiceTest extends TestCase
     private $processed = [];
     /** @var int[] UIDs whose processing throws */
     private $failing = [];
+    /** @var MessageEvent[] events that reached the end of the pipeline */
+    private $events = [];
 
     protected function setUp(): void
     {
@@ -73,6 +75,7 @@ class ImapScanServiceTest extends TestCase
                 throw new \RuntimeException('boom');
             }
             $this->processed[] = $uid;
+            $this->events[] = $e;
         }, 0);
         $dispatcher->addListener('antispam.check.message', [new SetAsChecked($ms), 'set'], -99999);
 
@@ -449,5 +452,70 @@ class ImapScanServiceTest extends TestCase
             flock($held, LOCK_UN);
             fclose($held);
         }
+    }
+
+    public function testRescanIgnoresMarkersMovesInsteadOfDeletingAndStaysOutOfStats()
+    {
+        $this->fill(1, 5);
+        $ms = $this->messages();
+        $scan = $this->service($ms);
+        $scan->scan($this->connection(), 'box@firma.pl', true, false, null, null, $cursor);
+        $this->assertSame([1, 2, 3, 4, 5], $this->processed);
+        $this->processed = [];
+        $this->events = [];
+
+        $stats = $scan->rescan($this->connection(), 'box@firma.pl');
+        $this->assertSame([1, 2, 3, 4, 5], $this->processed, 'every message again, markers ignored');
+        $this->assertSame([5, 0, 0], [$stats['checked'], $stats['skipped'], $stats['remaining']]);
+        $this->assertNull($stats['cursor'], 'done');
+        foreach ($this->events as $e) {
+            $this->assertTrue($e->isRescan());
+            $this->assertTrue($e->isInitialScan(), 'kept out of the statistics and rule counters');
+            $this->assertFalse($e->getDeleteSpam(), 'spam is moved, never deleted');
+        }
+
+        // A full pass of the normal scan afterwards still skips everything (markers set again).
+        $this->processed = [];
+        $scan->scan($this->connection(), 'box@firma.pl', true, false, ['uidvalidity' => 0, 'last_uid' => 0], null, $cursor);
+        $this->assertSame([], $this->processed);
+    }
+
+    public function testRescanRunsInBatchesUpToTheMessagesThatExistedAtTheStart()
+    {
+        $this->fill(1, 5);
+        $scan = $this->service($this->messages());
+
+        $stats = $scan->rescan($this->connection(), 'box@firma.pl', null, 2);
+        $this->assertSame([1, 2], $this->processed);
+        $this->assertSame(3, $stats['remaining']);
+        $this->assertSame(['uidvalidity' => 777, 'last_uid' => 2, 'until_uid' => 5], $stats['cursor']);
+
+        $this->fill(6, 6); // arrives during the rescan: the regular scan's job
+        $stats = $scan->rescan($this->connection(), 'box@firma.pl', $stats['cursor'], 2);
+        $this->assertSame([1, 2, 3, 4], $this->processed);
+        $this->assertSame(1, $stats['remaining']);
+
+        $stats = $scan->rescan($this->connection(), 'box@firma.pl', $stats['cursor'], 2);
+        $this->assertSame([1, 2, 3, 4, 5], $this->processed);
+        $this->assertSame([0, null], [$stats['remaining'], $stats['cursor']]);
+    }
+
+    public function testRescanSkipsAFailingMessageAndStartsOverAfterUidValidityChange()
+    {
+        $this->fill(1, 4);
+        $this->failing = [2];
+        $scan = $this->service($this->messages());
+
+        $stats = $scan->rescan($this->connection(), 'box@firma.pl');
+        $this->assertSame([1, 3, 4], $this->processed, 'a broken message does not stall the rescan');
+        $this->assertCount(1, $stats['errors']);
+        $this->assertNull($stats['cursor']);
+
+        $this->failing = [];
+        $this->processed = [];
+        $this->validity = 888;
+        $stats = $scan->rescan($this->connection(), 'box@firma.pl', ['uidvalidity' => 777, 'last_uid' => 3, 'until_uid' => 4]);
+        $this->assertSame([1, 2, 3, 4], $this->processed);
+        $this->assertStringContainsString('UIDVALIDITY', $stats['errors'][0]);
     }
 }

@@ -181,6 +181,10 @@ class BackupExporter
                 'digest_enabled' => $a->getDigestEnabled(),
                 'digest_recipient' => $a->getDigestRecipient(),
                 'digest_hour' => $a->getDigestHour(),
+                // Weekly full rescan (null day / hour = default Sunday 02:00).
+                'auto_rescan' => $a->getAutoRescan(),
+                'rescan_weekday' => $a->getRescanWeekday(),
+                'rescan_hour' => $a->getRescanHour(),
                 // IMAP login method (password / oauth_*) and the Microsoft tenant; no tokens here.
                 'imap_auth_method' => $a->getImapAuthMethod(),
                 'oauth_tenant' => $a->getOAuthTenant(),

@@ -46,6 +46,7 @@ class HealthService
         'antispam:cert:sync' => ['label' => 'Synchronizacja listy CERT', 'interval' => 360],
         'antispam:digest:send' => ['label' => 'Raport kwarantanny', 'interval' => 1440],
         'antispam:purge' => ['label' => 'Czyszczenie starych danych', 'interval' => 1440],
+        'antispam:rescan:due' => ['label' => 'Cotygodniowy ponowny skan skrzynek (kolejkowanie)', 'interval' => 60],
     ];
 
     /** A run without an end after this long was killed (as on the cron log page). */

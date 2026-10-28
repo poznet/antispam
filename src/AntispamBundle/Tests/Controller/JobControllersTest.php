@@ -13,6 +13,7 @@ use AntispamBundle\Services\CryptoService;
 use AntispamBundle\Services\ImapScanService;
 use AntispamBundle\Services\ImapTlsProbe;
 use AntispamBundle\Services\MailboxSettingsResolver;
+use AntispamBundle\Services\RescanScheduler;
 use AntispamBundle\Services\ScoringService;
 use AntispamBundle\Services\SshService;
 use AntispamBundle\Tests\Support\JobsDatabase;
@@ -71,7 +72,8 @@ class JobControllersTest extends TestCase
         $ssh ??= $this->createMock(SshService::class);
         $imap ??= $this->createMock(ImapScanService::class);
         return $this->wire(new AccountController($this->db->em, $ssh, $this->db->queue, $imap, $this->createMock(CryptoService::class),
-            $this->createMock(ImapTlsProbe::class), $this->createMock(ConfigService::class), $this->createMock(MailboxSettingsResolver::class)));
+            $this->createMock(ImapTlsProbe::class), $this->createMock(ConfigService::class), $this->createMock(MailboxSettingsResolver::class),
+            null, new RescanScheduler($this->db->em, $this->db->queue)));
     }
 
     private function account(string $type = Account::CONNECTION_IMAP, bool $deployed = false): Account
@@ -105,6 +107,56 @@ class JobControllersTest extends TestCase
         $this->assertSame('/antispam_job_show/1', $response->getTargetUrl());
         $this->assertStringContainsString('już w kolejce', $this->session->getFlashBag()->get('info')[0]);
         $this->assertSame(1, (int)$this->db->em->getConnection()->fetchOne('SELECT COUNT(*) FROM antispam_job'));
+    }
+
+    public function testRescanIsQueuedOncePerAccountAndNeverRunInTheRequest()
+    {
+        $account = $this->account();
+        $imap = $this->createMock(ImapScanService::class);
+        $imap->expects($this->never())->method('rescanAccount');
+        $imap->expects($this->never())->method('connect');
+        $controller = $this->accounts(null, $imap);
+
+        $response = $controller->rescanAction($account->getId(), self::post());
+        $this->assertSame('/antispam_job_show/1', $response->getTargetUrl());
+        $row = $this->db->row(1);
+        $this->assertSame([BackgroundJob::TYPE_ACCOUNT_RESCAN, 'queued', 'account.rescan:' . $account->getId()], [$row['type'], $row['status'], $row['active_key']]);
+        $this->assertSame(['trigger' => 'panel'], json_decode($row['payload'], true));
+        $this->assertStringContainsString('dodane do kolejki', $this->session->getFlashBag()->get('success')[0]);
+
+        // A second click while queued, and while running (exclusive), returns the same job.
+        $controller->rescanAction($account->getId(), self::post());
+        $this->assertStringContainsString('już w kolejce', $this->session->getFlashBag()->get('info')[0]);
+        $this->db->update(1, ['status' => 'running']);
+        $controller->rescanAction($account->getId(), self::post());
+        $this->assertStringContainsString('w trakcie wykonywania', $this->session->getFlashBag()->get('info')[0]);
+        $this->assertSame(1, (int)$this->db->em->getConnection()->fetchOne('SELECT COUNT(*) FROM antispam_job'));
+
+        // A normal scan of the same account is a separate job.
+        $controller->scanAction($account->getId(), self::post());
+        $this->assertSame(2, (int)$this->db->em->getConnection()->fetchOne('SELECT COUNT(*) FROM antispam_job'));
+    }
+
+    public function testRescanScheduleFieldsAreValidated()
+    {
+        $this->assertSame([], AccountController::validateRescanData(['auto_rescan' => '1', 'rescan_weekday' => '7', 'rescan_hour' => '0']));
+        $this->assertSame([], AccountController::validateRescanData([]), 'empty = defaults');
+        $this->assertCount(2, AccountController::validateRescanData(['rescan_weekday' => '8', 'rescan_hour' => '24']));
+        $this->assertCount(2, AccountController::validateRescanData(['rescan_weekday' => '0', 'rescan_hour' => '-1']));
+    }
+
+    public function testRescanRefusals()
+    {
+        $ssh = $this->account(Account::CONNECTION_SSH, false);
+        $controller = $this->accounts();
+        $controller->rescanAction($ssh->getId(), self::post());
+        $this->assertStringContainsString('Wdróż', $this->session->getFlashBag()->get('warning')[0]);
+        try {
+            $controller->rescanAction($ssh->getId(), self::post(['_token' => 'bad']));
+            $this->fail('CSRF');
+        } catch (AccessDeniedException) {
+        }
+        $this->assertSame(0, (int)$this->db->em->getConnection()->fetchOne('SELECT COUNT(*) FROM antispam_job'));
     }
 
     public function testSshButtonsQueueTheirJobs()

@@ -79,6 +79,28 @@
                         <p class="help-block">0-23, czas serwera.</p>
                     </div>
                 </div>
+                <hr id="rescan">
+                <div class="row">
+                    <div class="col-sm-6 form-group">
+                        <label><input type="checkbox" name="account[auto_rescan]" value="1" {% if account.autoRescan %}checked{% endif %}> Cotygodniowy ponowny skan całej skrzynki</label>
+                        <p class="help-block">Raz w tygodniu cała skrzynka odbiorcza (INBOX) jest sprawdzana ponownie według aktualnych reguł, w tle. Spam jest zawsze <strong>przenoszony</strong> do SPAM / kwarantanny, nigdy usuwany; wyniki nie trafiają do statystyk.{% if next_rescan|default(null) %} Najbliższy: <strong>{{ next_rescan|date('Y-m-d H:i') }}</strong>.{% endif %}</p>
+                    </div>
+                    <div class="col-sm-3 form-group">
+                        <label for="accRescanWeekday">Dzień</label>
+                        {% set weekdays = constant('AntispamBundle\\Entity\\Account::WEEKDAYS') %}
+                        <select class="form-control" id="accRescanWeekday" name="account[rescan_weekday]">
+                            <option value="" {% if account.rescanWeekday is null %}selected{% endif %}>domyślnie ({{ weekdays[constant('AntispamBundle\\Entity\\Account::DEFAULT_RESCAN_WEEKDAY')] }})</option>
+                            {% for n, day in weekdays %}
+                                <option value="{{ n }}" {% if account.rescanWeekday is same as(n) %}selected{% endif %}>{{ day }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-sm-3 form-group">
+                        <label for="accRescanHour">Godzina</label>
+                        <input type="number" min="0" max="23" class="form-control" id="accRescanHour" name="account[rescan_hour]" value="{{ account.rescanHour }}" placeholder="domyślnie ({{ constant('AntispamBundle\\Entity\\Account::DEFAULT_RESCAN_HOUR') }})">
+                        <p class="help-block">0-23, czas serwera.</p>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -169,6 +191,12 @@
         {% include '@Antispam/Account/_oauth_status.html.twig' with {account: account} %}
     {% endif %}
 
+    <form method="post" action="{{ path('antispam_account_rescan', {id: account.id}) }}" style="margin-top:15px">
+        <input type="hidden" name="_token" value="{{ csrf_token('account_action_' ~ account.id) }}">
+        <button type="submit" class="btn btn-default btn-sm" data-confirm="Przeskanować całą skrzynkę odbiorczą ponownie według aktualnych reguł? Zadanie wykona się w tle; spam zostanie przeniesiony do SPAM / kwarantanny (nigdy usunięty)."><span class="glyphicon glyphicon-repeat"></span> Przeskanuj całą skrzynkę ponownie</button>
+        {% if account.lastRescanAt %}<span class="text-muted small">&nbsp; ostatnio: {{ account.lastRescanAt|date('Y-m-d H:i') }}</span>{% endif %}
+    </form>
+
     {% if account.sshHostKey %}
     <form method="post" action="{{ path('antispam_account_reset_host_key', {id: account.id}) }}" style="margin-top:15px">
         <input type="hidden" name="_token" value="{{ csrf_token('account_action_' ~ account.id) }}">
@@ -181,4 +209,5 @@
 {% block javascripts %}
     <script src="{{ asset('bundles/antispam/js/imap-security.js') }}"></script>
     <script src="{{ asset('bundles/antispam/js/form-toggles.js') }}"></script>
+    <script src="{{ asset('bundles/antispam/js/data-confirm.js') }}"></script>
 {% endblock %}

@@ -74,6 +74,8 @@ class AuditLogger
         'account.delete' => 'Konto: usunięcie',
         'account.deploy' => 'Konto: wdrożenie agenta',
         'account.sync' => 'Konto: synchronizacja reguł',
+        'account.rescan_queued' => 'Konto: ponowny skan całej skrzynki - zlecenie',
+        'account.rescan' => 'Konto: ponowny skan całej skrzynki - wynik',
         'account.host_key_reset' => 'Konto: reset klucza hosta SSH',
         'account.oauth_connected' => 'Konto: połączenie OAuth (Microsoft 365 / Google)',
         'account.oauth_disconnected' => 'Konto: rozłączenie OAuth',

@@ -30,6 +30,12 @@ class MessageEvent extends Event
     private $scoreLog;
     /** First scan of a newly connected mailbox: decide and move as usual, but keep it out of stats and rule hit counters. */
     private $initialScan = false;
+    /**
+     * Full re-check of the INBOX ("Przeskanuj całą skrzynkę ponownie", weekly
+     * rescan): the "already checked" markers are ignored, spam is moved (never
+     * deleted) and, like the initial scan, nothing counts in the statistics.
+     */
+    private $rescan = false;
 
     public function __construct(MessageInterface $message, $email = null, ?ConnectionInterface $connection = null, ?bool $deleteSpam = null)
     {
@@ -47,6 +53,20 @@ class MessageEvent extends Event
     public function setInitialScan(bool $initialScan)
     {
         $this->initialScan = $initialScan;
+    }
+
+    public function isRescan(): bool
+    {
+        return $this->rescan;
+    }
+
+    /** A rescan is also kept out of the statistics and rule hit counters (isInitialScan() = true). */
+    public function setRescan(bool $rescan)
+    {
+        $this->rescan = $rescan;
+        if ($rescan) {
+            $this->initialScan = true;
+        }
     }
 
     public function getConnection(): ?ConnectionInterface

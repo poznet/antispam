@@ -46,6 +46,7 @@ class BackgroundJob
 
     /** Job types (Services\Jobs\Handler\*) with their Polish labels. */
     const TYPE_ACCOUNT_SCAN = 'account.scan';
+    const TYPE_ACCOUNT_RESCAN = 'account.rescan';
     const TYPE_ACCOUNT_DEPLOY = 'account.deploy';
     const TYPE_ACCOUNT_SYNC = 'account.sync';
     const TYPE_ACCOUNT_HEALTH = 'account.health';
@@ -57,6 +58,7 @@ class BackgroundJob
 
     const TYPES = [
         self::TYPE_ACCOUNT_SCAN => 'Skanowanie skrzynki',
+        self::TYPE_ACCOUNT_RESCAN => 'Ponowny skan całej skrzynki',
         self::TYPE_ACCOUNT_DEPLOY => 'Wdrożenie agenta',
         self::TYPE_ACCOUNT_SYNC => 'Synchronizacja reguł',
         self::TYPE_ACCOUNT_HEALTH => 'Stan agenta',

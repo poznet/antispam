@@ -187,6 +187,36 @@ Output:
 ```
 `decisions` is capped at 200 entries (`decisions_truncated`), `errors` at 50.
 
+### rescan
+```bash
+php antispam-agent.php rescan --reset --time-limit=110 --maildir=/home/user/Maildir --account=5
+php antispam-agent.php rescan --time-limit=110 --account=5      # next batch
+```
+Agent **3.3+**. Full re-check of the INBOX (`new`, `cur`) with the current
+rules: the "already checked" markers are **ignored**, every message goes
+through the same pipeline as `scan` (same flags and synced settings) and is
+moved to `.SPAM` / `.QUARANTINE` when the verdict says so - never deleted.
+Used by the panel's **Przeskanuj całą skrzynkę ponownie** and the weekly
+rescan ([spam-handling.md](spam-handling.md#full-rescan)).
+
+- **Batches:** the run stops starting messages after `--time-limit` seconds
+  (or `--limit` messages; at least one is processed) and reports the rest in
+  `remaining`. Every processed message is recorded in the `rescan_done` table,
+  so the next call (without `--reset`) continues where the previous one
+  stopped. `--reset` starts a new rescan from scratch; a finished rescan
+  (`remaining` 0) clears the table itself. A message that fails or whose move
+  fails counts as done for this rescan (the next normal `scan` retries a
+  failed move, the message is not marked checked).
+- **Statistics:** no `scan_log` entry (the "last scan" of `health` stays the
+  regular scan's) and no housekeeping; decisions are logged in `score_log`
+  as usual. Markers are set again, so the next `scan` skips the messages.
+- **Lock:** the same `<db>.lock` as `scan` - a rescan batch and a scan never
+  run at once (`{"locked": true}`).
+- Output: the `scan` counters plus `"rescan": true` and `"remaining"`.
+- Agents up to 3.2 do not know the command: they print their usage text and
+  the panel reports "Agent na serwerze nie obsługuje polecenia "rescan"
+  (starsza wersja) - wdróż go ponownie (Konta → Wdróż)".
+
 ### apply-blacklist
 ```bash
 php antispam-agent.php apply-blacklist --spam-threshold=10 --days=30 --account=5
@@ -322,6 +352,7 @@ CREATE TABLE cert_domains (domain TEXT PRIMARY KEY);   -- CERT Polska list, fetc
 CREATE TABLE cert_meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE agent_meta (key TEXT PRIMARY KEY, value TEXT);   -- e.g. last_prune_ts
 CREATE TABLE bayes_tokens (hash TEXT PRIMARY KEY, prob REAL);   -- 3.2+: Bayes token probabilities synced from the panel
+CREATE TABLE rescan_done (message_id TEXT PRIMARY KEY);   -- 3.3+: messages done by the current `rescan` (agent_meta rescan_started_ts)
 ```
 
 Columns added over time (`pattern_type`, `score`, `score_log.file`,

@@ -1,8 +1,8 @@
 # What happens to spam
 
 How detected mail leaves INBOX, how the quarantine works, how a new blacklist
-rule is applied to mail that already arrived, and where to see what the
-periodic jobs did.
+rule is applied to mail that already arrived, how a whole mailbox is checked
+again with the current rules, and where to see what the periodic jobs did.
 
 ## Spam: move or delete
 
@@ -137,6 +137,83 @@ Rules and limits:
 - Moved messages are logged in the score log (`Dziennik ocen`) as `spam` with
   the reason `retroactive blacklist:…` / `retroactive email_blacklist:…`.
 
+## Full rescan
+
+A scan only looks at **new** mail: a message that was checked once (marker /
+IMAP cursor, the agent's `checked` table) is not checked again, so rules,
+thresholds or patterns changed later do not touch mail that already sits in
+INBOX. The retroactive blacklist pass above covers only new blacklist rules and
+the last 30 days. The full rescan re-checks **every INBOX message** against
+everything that is current: white / blacklists (domain, e-mail, wildcard /
+regex), header heuristics, DNSBL, links, CERT list, attachments, Bayes,
+per-mailbox thresholds.
+
+Started by:
+
+- **Konta → ↻ Przeskanuj całą skrzynkę ponownie** (account list, or the button
+  below the account form) - per account, admin only;
+- **Cotygodniowy ponowny skan całej skrzynki** in the account's *Ustawienia
+  skrzynki* (off by default): once a week on the chosen day / hour (server
+  time; empty = Sunday 02:00), queued by `antispam:rescan:due`, which the Docker
+  scheduler runs hourly at minute 7 (`RESCAN_DUE=off` disables it; on a plain
+  server: `7 * * * * php bin/console antispam:cron:run antispam:rescan:due`).
+  A slot is caught up to 24 h late (scheduler down); after that the week is
+  skipped. A failed rescan counts as done for its week (the error is on the
+  account list);
+- `php bin/console antispam:rescan:due --account=ID` (now, from the console).
+
+How it runs (job `account.rescan`, [jobs.md](jobs.md)):
+
+- **In the background, in batches** of `JOBS_BATCH_SECONDS` (120 s): the job
+  re-queues itself until INBOX is done; the job page shows "Sprawdzono
+  ponownie N wiadomości, zostało M" and the final counters (checked,
+  whitelisted, blacklisted, moved to spam, quarantined, failed messages).
+  **Anuluj** stops it after the current batch.
+  - IMAP: the set of messages is fixed when the rescan starts (UIDs up to
+    UIDNEXT - 1); the rescan has **its own cursor** in the job state - the
+    account's incremental scan cursor and its last scan are not touched, so
+    the regular scan (scan-all, **Skanuj**) goes on between two batches and
+    handles the mail that arrives meanwhile. A changed UIDVALIDITY restarts
+    the rescan from the oldest message.
+  - SSH: agent 3.3+ command `rescan` ([agent.md](agent.md#rescan)); the agent
+    remembers the progress in its own database (`rescan_done`), the first
+    batch passes `--reset`. An older agent fails the job with "nie obsługuje
+    polecenia "rescan" ... wdróż go ponownie (Konta → Wdróż)".
+- **Markers ignored, then set again**: a message is re-evaluated even if it
+  was checked before; afterwards the normal scan skips it as usual.
+- **Same lock as the scan**: while the scheduled scan (or the agent) scans the
+  mailbox, the job waits and retries every 30 s (at most an hour).
+- **One rescan per account**: dedupe key `account.rescan:<id>` - a second click
+  (or the hourly schedule) while one is queued or running gets the existing
+  job. A rescan and a normal scan of the same account are separate jobs.
+- **Never deletes.** Spam is **moved** to `SPAM` (quarantine to `QUARANTINE`)
+  even when the account has *Usuwaj spam* on. Reason: a rescan re-judges mail
+  the user has already seen and kept, with rules that may have just changed
+  (a too-broad wildcard, a lowered threshold); a move can be undone from the
+  folder, a delete cannot. The same rule as the retroactive pass.
+- **Per-mailbox settings** apply (thresholds, scoring switch - the account's
+  *Ustawienia skrzynki* override, else global), as in a scan.
+- **Out of the statistics**, like the initial scan: IMAP decisions are logged
+  in the score log with `source = rescan` and `initial_scan = 1` (the
+  dashboard, 30-day / daily stats, health "quarantined" counts and rule hit
+  counters skip them; *Dziennik ocen* shows "ponowny skan, poza statystyką");
+  the agent writes no `scan_log` entry. The account's *Ostatni skan* and the
+  dashboard's recent scans are not changed - the rescan has its own
+  `last_rescan_at` / `last_rescan_result`, shown under the account on the
+  account list (time, counters or the error, link to the job).
+- **Audit**: `account.rescan_queued` when queued (actor = admin, or
+  `harmonogram` for the weekly one), `account.rescan` when it ends (`ok`,
+  counters, error) - see [audit.md](audit.md).
+
+Note: a message released from quarantine with **Przywróć** (without *Zawsze
+akceptuj*) is judged again and can go back to quarantine if the rules still say
+so - release with *Zawsze akceptuj* (sender on the whitelist) to keep it out.
+
+**Ustawienia → Filtr spamu → Resetuj flagi sprawdzenia** still exists: it
+forgets the markers of every IMAP mailbox at once, the next regular scan reads
+every INBOX in full - counted in the statistics and with the account's delete
+setting. For one mailbox prefer the full rescan.
+
 ## Periodic jobs and the cron log
 
 `antispam:agent:scan-all` scans **every** mailbox: SSH accounts through the
@@ -173,6 +250,7 @@ runs every job through `antispam:cron:run`. On a plain server:
 0 7 * * *   php /path/to/bin/console antispam:cron:run antispam:digest:send
 0 0-6,8-23 * * * php /path/to/bin/console antispam:cron:run antispam:digest:send -- --scheduled-only
 41 3 * * *  php /path/to/bin/console antispam:cron:run antispam:purge
+7 * * * *   php /path/to/bin/console antispam:cron:run antispam:rescan:due
 * * * * *   php /path/to/bin/console antispam:jobs:run --once
 ```
 

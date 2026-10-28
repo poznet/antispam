@@ -20,6 +20,7 @@ first scan of a big mailbox.
 | Panel action | Job type | Notes |
 | --- | --- | --- |
 | Konta → **Skanuj** | `account.scan` | IMAP: resumable batches (below); SSH: one agent `scan` |
+| Konta → **↻ Przeskanuj całą skrzynkę ponownie**, weekly rescan (`antispam:rescan:due`) | `account.rescan` | whole INBOX again with the current rules, batches for IMAP and SSH (agent 3.3+); [spam-handling.md](spam-handling.md#full-rescan) |
 | Konta → **Wdróż** (SSH) | `account.deploy` | upload + test the agent, then push rules and settings |
 | Konta → **Synchronizuj** (SSH) | `account.sync` | rules + settings to the agent |
 | Konta → **Stan** (SSH) | `account.health` | agent `health` |
@@ -40,11 +41,11 @@ own limits and timeouts.
 
 ## Dedupe
 
-A job may carry a dedupe key (`account.scan:<account id>`, `retro:<rule>:<id>`,
+A job may carry a dedupe key (`account.scan:<account id>`, `account.rescan:<account id>`, `retro:<rule>:<id>`,
 `cert.sync`, ...). While a job with that key is **queued** - and, for
 *exclusive* types, also while it is **running** - the key sits in the unique
 column `active_key`, so a second click gets the existing job back
-("to zadanie jest już w kolejce / w trakcie wykonywania"). Exclusive: scan,
+("to zadanie jest już w kolejce / w trakcie wykonywania"). Exclusive: scan, full rescan,
 deploy, health, retroactive pass, CERT sync, digest, full health check.
 Not exclusive: `account.sync` (a rule change during a running sync must queue
 another one - the running sync may have exported the rules before the change)
@@ -155,6 +156,22 @@ the deadline, stores the cursor at the last processed UID and reports
   marks every message in its own database, so a timed-out scan continues on the
   next run.
 
+## Full rescan (batches)
+
+`account.rescan` (`Handler\AccountRescanHandler`) works like the batched first
+scan, with its own progress: IMAP passes go through
+`ImapScanService::rescanAccount()` with a rescan cursor kept in the job `state`
+(`uidvalidity`, `last_uid`, `until_uid` = UIDNEXT - 1 when the rescan started),
+never the account's scan cursor; SSH passes call the agent's `rescan
+--time-limit=<batch> [--reset]` (the agent keeps its own progress). Counters are
+summed over the batches; when the last one is done the result goes to the job
+and to `Account::lastRescanAt` / `lastRescanResult` (also on failure, with
+`error`) - never to `lastScanAt` / `lastScanResult`, so the dashboard and the
+"last scan" health check ignore it. A busy mailbox lock makes it wait like a
+scan. scan-all does not skip a mailbox with an active rescan job: they take
+turns on the lock, and the rescan never moves the scan cursor. Behaviour and
+rules: [spam-handling.md](spam-handling.md#full-rescan).
+
 ## Concurrency with the scheduled scan
 
 Both the scan job and `antispam:agent:scan-all` go through
@@ -180,7 +197,8 @@ Jobs that were audited before keep their audit entries, written when the job
 **finishes**, with the requester as actor (`requested_by` / `requested_by_type`
 copied from the user who clicked) and the job id in the details:
 `account.deploy`, `account.sync` (panel only), `cert.sync`,
-`phishing.forward`. The client IP is empty (the worker has no request).
+`phishing.forward`, `account.rescan` (also `account.rescan_queued` when it is
+queued; actor `harmonogram` for the weekly rescan). The client IP is empty (the worker has no request).
 Cancelling a job is `job.cancel`. See [audit.md](audit.md).
 
 ## Health, doctor, metrics

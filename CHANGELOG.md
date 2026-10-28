@@ -38,7 +38,7 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   list, Stan systemu, `antispam:doctor` (`oauth`) and the audit log
   (`account.oauth_*`). Backups carry the login method, and with secrets the
   client secrets and refresh tokens. New dependency `symfony/http-client`; new
-  nullable columns on `antispam_account` (migration `VERSION_OAUTH`). Thunderbird plugin
+  nullable columns on `antispam_account` (migration `Version20261028181522`). Thunderbird plugin
   1.2.1 / Outlook add-in show the server's login error message. See `docs/oauth.md`.
 - Per-mailbox settings (**Konta → Edytuj → Ustawienia skrzynki**, empty =
   inherit the global value): spam / quarantine threshold, scoring on/off,

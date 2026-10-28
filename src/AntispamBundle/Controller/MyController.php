@@ -2,16 +2,21 @@
 
 namespace AntispamBundle\Controller;
 
+use AntispamBundle\Entity\AuditLog;
+use AntispamBundle\Entity\BackgroundJob;
 use AntispamBundle\Entity\SpamScoreLog;
 use AntispamBundle\Entity\User;
 use AntispamBundle\Security\MailboxAccess;
 use AntispamBundle\Services\DeferredAgentSync;
+use AntispamBundle\Services\Jobs\JobQueue;
 use AntispamBundle\Services\QuarantineDigestService;
+use AntispamBundle\Services\QuarantinePurge;
 use AntispamBundle\Services\QuarantineService;
 use AntispamBundle\Services\SpamFolderService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
@@ -28,6 +33,7 @@ use Symfony\Component\Routing\Attribute\Route;
 class MyController extends AbstractController
 {
     use AuditTrait;
+    use JobQueueTrait;
 
     private const SCORELOG_PER_PAGE = 50;
 
@@ -38,6 +44,8 @@ class MyController extends AbstractController
         private UserPasswordHasherInterface $hasher,
         private SpamFolderService $spam,
         private DeferredAgentSync $agentSync,
+        private ?QuarantinePurge $purger = null,
+        private ?JobQueue $jobs = null,
     ) {
     }
 
@@ -50,7 +58,7 @@ class MyController extends AbstractController
             $items = [];
             $error = null;
             try {
-                foreach ($this->quarantine->listItems($mailbox['key'], null, 100) as $item) {
+                foreach ($this->quarantine->listItems($mailbox['key'], null, SpamboxController::QUARANTINE_LIST_LIMIT) as $item) {
                     $item['labels'] = QuarantineDigestService::reasonLabels($item['reasons']);
                     $item['high_risk'] = QuarantineDigestService::isHighRisk($item['reasons']);
                     $items[] = $item;
@@ -59,7 +67,7 @@ class MyController extends AbstractController
                 // Raw exception text (hosts, paths) stays in the admin area.
                 $error = 'Nie udało się odczytać kwarantanny tej skrzynki. Spróbuj później lub skontaktuj się z administratorem.';
             }
-            $mailboxes[] = $mailbox + ['items' => $items, 'error' => $error];
+            $mailboxes[] = $mailbox + ['items' => $items, 'error' => $error] + SpamboxController::purgeCounts($items, SpamboxController::QUARANTINE_LIST_LIMIT);
         }
 
         return ['mailboxes' => $mailboxes];
@@ -102,6 +110,91 @@ class MyController extends AbstractController
 
         $this->addFlash($result['success'] ? 'success' : 'danger', $result['message']);
         return $this->redirectToRoute('antispam_my_quarantine');
+    }
+
+    /**
+     * "Usuń wszystkie wysokiego ryzyka" / "Usuń wszystko z kwarantanny" of an
+     * own mailbox, as a background job (quarantine.purge). The mailbox key is
+     * checked first (403 for a foreign one); the job checks ownership again
+     * when it runs and decides then what is deleted.
+     */
+    #[Route('/quarantine/purge', name: 'antispam_my_quarantine_purge', methods: ['POST'])]
+    public function quarantinePurgeAction(Request $request)
+    {
+        if (!$this->isCsrfTokenValid('my_quarantine_purge', (string)$request->request->get('_token'))) {
+            $this->addFlash('danger', 'Nieprawidłowy token formularza, spróbuj ponownie');
+            return $this->redirectToRoute('antispam_my_quarantine');
+        }
+        $key = (string)$request->request->get('mailbox');
+        if (!$this->access->canAccessMailboxKey($this->getUser(), $key)) {
+            throw $this->createAccessDeniedException();
+        }
+        $mode = (string)$request->request->get('mode');
+        $mailbox = $this->quarantine->getMailbox($key);
+        if (!QuarantinePurge::isMode($mode) || !$mailbox || $this->purger === null) {
+            $this->addFlash('danger', 'Nieznana skrzynka lub tryb usuwania.');
+            return $this->redirectToRoute('antispam_my_quarantine');
+        }
+
+        $shown = $request->request->get('shown');
+        $queued = $this->purger->enqueue($mailbox, $mode, QuarantinePurge::SOURCE_MY, is_numeric($shown) ? max(0, (int)$shown) : null, $this->getUser());
+        $job = $this->jobs?->find($queued->id);
+        if (!$job || !$this->mayViewJob($job)) {
+            // Already queued by someone else (an administrator): not this user's job page.
+            $this->addFlash('info', 'Usuwanie z kwarantanny tej skrzynki jest już w kolejce lub w trakcie - odśwież stronę za chwilę.');
+            return $this->redirectToRoute('antispam_my_quarantine');
+        }
+        $this->flashQueued($queued, 'Trwałe usuwanie z kwarantanny');
+        return $this->redirectToRoute('antispam_my_job_show', ['id' => $queued->id]);
+    }
+
+    /** Status and result of an own quarantine purge job (the admin job pages stay admin-only). */
+    #[Route('/jobs/{id}', name: 'antispam_my_job_show', requirements: ['id' => '\d+'], methods: ['GET'])]
+    #[Template('@Antispam/My/job.html.twig')]
+    public function jobAction(int $id)
+    {
+        $job = $this->ownJob($id);
+        return ['job' => $job, 'result' => $job->getResult(), 'is_admin' => $this->access->isAdmin($this->getUser())];
+    }
+
+    /** Polled by job-status.js on /my/jobs/{id}. */
+    #[Route('/jobs/{id}/status', name: 'antispam_my_job_status', requirements: ['id' => '\d+'], methods: ['GET'])]
+    public function jobStatusAction(int $id): JsonResponse
+    {
+        $response = new JsonResponse(JobController::statusData($this->ownJob($id)));
+        $response->headers->set('Cache-Control', 'no-store');
+        return $response;
+    }
+
+    /** 404 (not 403) for anything but an own purge job, so job ids reveal nothing. */
+    private function ownJob(int $id): BackgroundJob
+    {
+        $job = $this->jobs?->find($id);
+        if (!$job || !$this->mayViewJob($job)) {
+            throw $this->createNotFoundException('Nie ma takiego zadania.');
+        }
+        return $job;
+    }
+
+    /**
+     * Only quarantine purge jobs of a mailbox the user may access and - for a
+     * ROLE_USER - only the ones this user queued.
+     */
+    private function mayViewJob(BackgroundJob $job): bool
+    {
+        if ($job->getType() !== BackgroundJob::TYPE_QUARANTINE_PURGE) {
+            return false;
+        }
+        $user = $this->getUser();
+        if (!$this->access->canAccessMailboxKey($user, (string)($job->getPayload()['key'] ?? ''))) {
+            return false;
+        }
+        if ($this->access->isAdmin($user)) {
+            return true;
+        }
+        return $user instanceof User
+            && $job->getRequestedByType() === AuditLog::ACTOR_USER
+            && $job->getRequestedBy() === (string)$user->getUsername();
     }
 
     /** Fail closed: a message that cannot be found in the listing is treated as high risk. */

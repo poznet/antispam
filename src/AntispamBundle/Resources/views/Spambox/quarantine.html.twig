@@ -6,6 +6,18 @@
     <p class="text-muted">Wiadomości, których wynik spamu mieści się między progiem kwarantanny a progiem spamu.</p>
 
     {% set token = csrf_token('quarantine_action') %}
+    {% set purge_token = csrf_token('quarantine_purge') %}
+
+    {% set all_high_risk = mailboxes|reduce((sum, m) => sum + m.high_risk_count, 0) %}
+    {% if mailboxes|length > 1 and all_high_risk > 0 %}
+    <form method="post" action="{{ path('antispam_spambox_quarantine_purge_all') }}" class="text-right" style="margin-bottom:10px;">
+        <input type="hidden" name="_token" value="{{ purge_token }}">
+        <button type="submit" class="btn btn-sm btn-warning"
+                data-confirm="Trwale usunąć wiadomości wysokiego ryzyka z kwarantanny WSZYSTKICH skrzynek ({{ mailboxes|length }})? Na listach: {{ all_high_risk }}. Każda skrzynka to osobne zadanie w tle; ryzyko zostanie sprawdzone ponownie w chwili usuwania. Usuniętych wiadomości nie da się odzyskać.">
+            <span class="glyphicon glyphicon-fire" aria-hidden="true"></span> Usuń wszystkie wysokiego ryzyka (wszystkie skrzynki)
+        </button>
+    </form>
+    {% endif %}
 
     {% for mailbox in mailboxes %}
     <div class="panel panel-default">
@@ -55,6 +67,7 @@
             </tbody>
         </table>
         </div>
+        {% include '@Antispam/Spambox/_purge_buttons.html.twig' with {mailbox: mailbox, purge_path: path('antispam_spambox_quarantine_purge'), purge_token: purge_token} only %}
         {% else %}
             <div class="panel-body text-muted">Kwarantanna jest pusta</div>
         {% endif %}

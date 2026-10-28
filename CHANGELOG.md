@@ -32,6 +32,25 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   `/{domainblacklst,emailblacklst,whitelist,emailwhitelist}/global[/{id}]`;
   shared `Services\RuleGlobalizer` (also used by `antispam:rules:make-global`,
   which now also merges two copies of a value within one run). No migration.
+- **Bulk delete in the quarantine.** Per mailbox, on **Skrzynki → Kwarantanna**
+  and on the user's `/my/quarantine`: **Usuń wszystkie wysokiego ryzyka** and
+  **Usuń wszystko z kwarantanny** (permanent deletion, `data-confirm` naming the
+  mailbox and the listed count); on the admin page also **Usuń wszystkie
+  wysokiego ryzyka (wszystkie skrzynki)**. Runs as a background job
+  `quarantine.purge` (one per mailbox and mode while queued / running) that
+  lists the quarantine when it runs and re-evaluates each message - only mail
+  still in the quarantine is deleted, INBOX / SPAM are never opened. "High
+  risk" = the rule that hides *Zawsze akceptuj*
+  (`QuarantineDigestService::isHighRisk()`, now `HIGH_RISK_PATTERN`), including
+  messages without a score log row. Users may purge only their own mailboxes
+  (checked again when the job runs) and see the result on the new user-area job
+  page `/my/jobs/{id}`; the admin job pages stay admin-only. Audit
+  `quarantine.purge_queued` / `quarantine.purge` (counts deleted / skipped /
+  failed). See `docs/spam-handling.md` ("Bulk deletion").
+- SSH+Maildir agent **3.4**: `quarantine-purge --mode=all|high_risk` (same
+  high-risk pattern as the panel, `AgentParityTest`). Redeploy the agent
+  (*Konta → Wdróż*) - with an older agent the purge job of an SSH mailbox fails
+  with "wdróż go ponownie".
 - **Full mailbox rescan.** New per-account button **Przeskanuj całą skrzynkę
   ponownie** (account list ↻ and the account edit page, admin only): the whole
   INBOX is checked again with the current rules (white / blacklists, patterns,

@@ -1,0 +1,34 @@
+{#
+  Bulk permanent deletion of one mailbox's quarantine (background job quarantine.purge,
+  docs/spam-handling.md#bulk-deletion). Shared by /spambox/quarantine and /my/quarantine.
+  Params: mailbox (row with items, high_risk_count, capped), purge_path, purge_token.
+  The counts only feed the confirmations: what is deleted is decided when the job runs.
+#}
+{% set listed = mailbox.items|length %}
+{% set more = mailbox.capped ? ' (lista pokazuje tylko pierwsze ' ~ listed ~ ' - usuwanie obejmie całą kwarantannę)' : '' %}
+<div class="panel-footer text-right">
+    {% if mailbox.high_risk_count > 0 %}
+    <form method="post" action="{{ purge_path }}" style="display:inline;">
+        <input type="hidden" name="_token" value="{{ purge_token }}">
+        <input type="hidden" name="mailbox" value="{{ mailbox.key }}">
+        <input type="hidden" name="mode" value="high_risk">
+        <input type="hidden" name="shown" value="{{ mailbox.high_risk_count }}">
+        <button type="submit" class="btn btn-xs btn-warning"
+                title="Trwale usuwa wiadomości oznaczone jako wysokie ryzyko (phishing, podszywanie się, złośliwe załączniki i linki, brak zapisanej oceny)"
+                data-confirm="Trwale usunąć wiadomości wysokiego ryzyka z kwarantanny skrzynki {{ mailbox.label }}? Na liście: {{ mailbox.high_risk_count }}{{ more }}. Ryzyko zostanie sprawdzone ponownie w chwili usuwania, pozostałe wiadomości zostaną w kwarantannie. Usuniętych wiadomości nie da się odzyskać.">
+            <span class="glyphicon glyphicon-fire" aria-hidden="true"></span> Usuń wszystkie wysokiego ryzyka
+        </button>
+    </form>
+    {% endif %}
+    <form method="post" action="{{ purge_path }}" style="display:inline;">
+        <input type="hidden" name="_token" value="{{ purge_token }}">
+        <input type="hidden" name="mailbox" value="{{ mailbox.key }}">
+        <input type="hidden" name="mode" value="all">
+        <input type="hidden" name="shown" value="{{ listed }}">
+        <button type="submit" class="btn btn-xs btn-danger"
+                title="Trwale usuwa wszystkie wiadomości z kwarantanny tej skrzynki"
+                data-confirm="Trwale usunąć WSZYSTKIE wiadomości z kwarantanny skrzynki {{ mailbox.label }}? Na liście: {{ listed }}{{ more }}. Wiadomości nie wrócą do skrzynki odbiorczej i nie da się ich odzyskać.">
+            <span class="glyphicon glyphicon-trash" aria-hidden="true"></span> Usuń wszystko z kwarantanny
+        </button>
+    </form>
+</div>

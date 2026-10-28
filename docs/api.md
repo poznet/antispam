@@ -25,6 +25,9 @@ a foreign mailbox key gives 403, see [users.md](users.md).
 |--------|-----|-------------|
 | GET | `/my/quarantine` | Quarantine of the user's mailboxes (IMAP / SSH accounts only; not the legacy mailbox) |
 | POST | `/my/quarantine/action` | `mailbox` (`imap-<id>` / `ssh-<id>`, must be assigned), `id`, `action` (`release` / `whitelist` / `delete`); CSRF token `my_quarantine_action`. `whitelist` is refused for high-risk messages |
+| POST | `/my/quarantine/purge` | Bulk permanent delete: `mailbox` (must be assigned, else 403), `mode` (`high_risk` / `all`), optional `shown` (count named in the confirmation, display only); CSRF token `my_quarantine_purge`. Queues a `quarantine.purge` job → `/my/jobs/{id}` ([spam-handling.md](spam-handling.md#bulk-deletion)) |
+| GET | `/my/jobs/{id}` | Page of an own quarantine purge job (status, counts); 404 for any other job |
+| GET | `/my/jobs/{id}/status` | Its JSON status (same fields as `/jobs/{id}/status`), `Cache-Control: no-store` |
 | GET | `/my/spam` | Newest 100 messages of the SPAM folder of each own mailbox (IMAP account folder / agent `spam-list`) |
 | POST | `/my/spam/action` | `mailbox` (`imap-<id>` / `ssh-<id>`, must be assigned), `id`, `action` (`release` / `whitelist` = release + exact e-mail whitelist rule), optional `uidvalidity` (IMAP); CSRF token `my_spam_action`. `whitelist` is refused for high-risk / unscored / unlisted messages |
 | GET | `/my/scorelog` | Own score log (same template and filters as `/spambox/scorelog`; `account` is limited to the user's mailboxes) |
@@ -77,6 +80,8 @@ a foreign mailbox key gives 403, see [users.md](users.md).
 | POST | `/spambox/restore/{folder}/{id}` | Move a message from `SPAM` / `QUARANTINE` back to INBOX (CSRF token `spambox_restore`) |
 | GET | `/spambox/quarantine` | Quarantine of every mailbox (legacy IMAP `QUARANTINE`, each IMAP account, each SSH account with a deployed agent) and the last 30 days of `quarantine` decisions from the score log (what the dashboard tile counts) |
 | POST | `/spambox/quarantine/action` | `mailbox` (`imap` / `imap-<id>` / `ssh-<id>`), `id`, `action` (`release` / `whitelist` / `delete`); CSRF token `quarantine_action` |
+| POST | `/spambox/quarantine/purge` | Bulk permanent delete of one mailbox's quarantine: `mailbox` (`imap` / `imap-<id>` / `ssh-<id>`), `mode` (`high_risk` / `all`), optional `shown`; CSRF token `quarantine_purge`. Queues a `quarantine.purge` job → `/jobs/{id}` |
+| POST | `/spambox/quarantine/purge-all` | High-risk purge of every mailbox (one job each) → `/jobs/?type=quarantine.purge`; CSRF token `quarantine_purge` |
 | GET | `/spambox/scorelog` | Score log ("Dziennik ocen"), 50 per page. Query filters: `decision` (`ham`/`quarantine`/`spam`/`whitelisted`), `account`, `q` (sender/subject substring), `from`/`to` (`Y-m-d`), `min_score`, `page`. The decision tiles link to the matching `decision` filter |
 | GET | `/spambox/plugin-reports` | Mail plugin reports - Thunderbird and Outlook (anonymous + logged in), filters `?verdict=spam\|ham`, `?who=anonymous\|account` |
 

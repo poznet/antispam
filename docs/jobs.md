@@ -32,6 +32,7 @@ first scan of a big mailbox.
 | Raport kwarantanny → **Wyślij teraz** | `digest.send` | reads every quarantine, sends the digests |
 | Phishing → bulk **Wyślij zaznaczone** | `phishing.forward` | one e-mail per report |
 | Stan systemu → **Sprawdź teraz** (full check) | `health.full` | IMAP login to every account, every SSH agent; the job page links to the report (`/system/status?job={id}`) |
+| Kwarantanna (admin and `/my/quarantine`) → **Usuń wszystkie wysokiego ryzyka** / **Usuń wszystko z kwarantanny**, admin **... (wszystkie skrzynki)** | `quarantine.purge` | permanent deletion from one mailbox's quarantine, mode `high_risk` / `all` decided at run time; IMAP `QuarantineService::purge()`, SSH agent 3.4 `quarantine-purge`; result: total / deleted / skipped / failed ([spam-handling.md](spam-handling.md#bulk-deletion)) |
 
 Still synchronous, on purpose: **Test** of an account (short timeouts: IMAP
 open 10 s / read 20 s, SSH 15 s connect + 20 s per command), the IMAP/TLS check
@@ -43,11 +44,11 @@ own limits and timeouts.
 ## Dedupe
 
 A job may carry a dedupe key (`account.scan:<account id>`, `account.rescan:<account id>`, `retro:<rule>:<id>`,
-`cert.sync`, ...). While a job with that key is **queued** - and, for
+`cert.sync`, `quarantine.purge:<mailbox key>:<mode>`, ...). While a job with that key is **queued** - and, for
 *exclusive* types, also while it is **running** - the key sits in the unique
 column `active_key`, so a second click gets the existing job back
 ("to zadanie jest już w kolejce / w trakcie wykonywania"). Exclusive: scan, full rescan,
-deploy, health, retroactive pass, CERT sync, digest, full health check.
+deploy, health, retroactive pass, CERT sync, digest, full health check, quarantine purge.
 Not exclusive: `account.sync` (a rule change during a running sync must queue
 another one - the running sync may have exported the rules before the change)
 and `phishing.forward`.
@@ -64,8 +65,14 @@ queued job at once; a running one stops at its next check (a batched scan after
 the current batch; a single SSH command finishes). The account list shows a
 "Skanowanie skrzynki: w kolejce / trwa" badge per account with an active job.
 
-Access: `ROLE_ADMIN` only (`#[IsGranted]` + the `^/` access rule). No user-area
-action opens a job page.
+Access: `ROLE_ADMIN` only (`#[IsGranted]` + the `^/` access rule). The one
+user-area job is the quarantine purge from `/my/quarantine`: it gets its own
+page in the user area, `/my/jobs/{id}` (+ `/my/jobs/{id}/status` for
+`job-status.js`, `MyController`), which shows only `quarantine.purge` jobs of a
+mailbox the user owns **and** queued by that user (`requested_by` = login,
+`requested_by_type` = `user`); anything else is a 404. No cancel there, raw
+error text only for admins. A click while an admin's purge of the same mailbox
+and mode is queued does not open that job (flash on `/my/quarantine` instead).
 
 ## Worker
 
@@ -199,7 +206,8 @@ Jobs that were audited before keep their audit entries, written when the job
 copied from the user who clicked) and the job id in the details:
 `account.deploy`, `account.sync` (panel only), `cert.sync`,
 `phishing.forward`, `account.rescan` (also `account.rescan_queued` when it is
-queued; actor `harmonogram` for the weekly rescan). The client IP is empty (the worker has no request).
+queued; actor `harmonogram` for the weekly rescan), `quarantine.purge` (also
+`quarantine.purge_queued` when it is queued). The client IP is empty (the worker has no request).
 Cancelling a job is `job.cancel`. See [audit.md](audit.md).
 
 ## Health, doctor, metrics

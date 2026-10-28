@@ -321,4 +321,24 @@ class AgentParityTest extends TestCase
         $this->assertSame('1700000000.M1P2.host,S=123', \agentBaseId('1700000000.M1P2.host,S=123:2,FRS'));
         $this->assertSame('1700000000.M1P2.host:2,Sab', \agentLegacyId('1700000000.M1P2.host:2,Sab'));
     }
+
+    /** "Usuń wszystkie wysokiego ryzyka" must select the same messages in the panel (IMAP) and the agent (SSH). */
+    public function testHighRiskRuleIsTheSameInTheAgent()
+    {
+        $this->assertSame(\AntispamBundle\Services\QuarantineDigestService::HIGH_RISK_PATTERN, \AGENT_HIGH_RISK_PATTERN);
+        $rules = ['impersonation_vip:Jan', 'lookalike_domain', 'internal_domain_spoof', 'display_name_embedded_address', 'attachment_blocked',
+            'clamav:Eicar', 'virustotal', 'url_safebrowsing', 'url_dbl:x.ru', 'cert_hole', 'score_unknown',
+            'dkim_fail', 'url_shortener', 'dnsbl:zen', 'score_unknown_x', 'bayes', 'blacklist'];
+        foreach ($rules as $rule) {
+            $reasons = [['rule' => $rule, 'score' => 3], ['rule' => 'dkim_fail', 'score' => 1]];
+            $this->assertSame(
+                \AntispamBundle\Services\QuarantineDigestService::isHighRisk($reasons),
+                \quarantineIsHighRisk(['score' => 4, 'reasons' => json_encode($reasons)]),
+                $rule
+            );
+        }
+        // No score_log row: the panel shows score_unknown (high risk), the agent treats it the same.
+        $this->assertTrue(\quarantineIsHighRisk(false));
+        $this->assertFalse(\quarantineIsHighRisk(['score' => 4, 'reasons' => '[]']));
+    }
 }

@@ -41,6 +41,8 @@ class SshService
         'quarantine-list' => 180,
         'quarantine-release' => 60,
         'quarantine-delete' => 60,
+        // bulk delete of a whole quarantine (one unlink per file, no network)
+        'quarantine-purge' => 600,
         'spam-list' => 180,
         'spam-release' => 60,
     ];
@@ -529,6 +531,22 @@ class SshService
             $args .= ' --whitelist';
         }
         return $this->runAgent($account, 'quarantine-' . $action, $args);
+    }
+
+    /**
+     * Permanently delete messages from the agent's .QUARANTINE (agent 3.4+):
+     * $mode "all" or "high_risk" (judged by the agent at run time, same rule as
+     * QuarantineDigestService::isHighRisk()). An older agent answers with its
+     * usage text, which interpret() turns into "wdróż go ponownie".
+     *
+     * @return array agent answer: success, total, deleted, skipped, failed, errors
+     */
+    public function quarantinePurge(Account $account, string $mode)
+    {
+        if (!in_array($mode, ['all', 'high_risk'], true)) {
+            throw new \InvalidArgumentException('Unknown quarantine purge mode: ' . $mode);
+        }
+        return $this->runAgent($account, 'quarantine-purge', $this->maildirArg($account) . ' --mode=' . $mode);
     }
 
     /** Newest messages of the agent's .SPAM folder (agent 3.1+). */

@@ -101,19 +101,19 @@ Full reference: **[thunderbird.md](thunderbird.md)**, clients:
 | Method | URL | Description |
 |--------|-----|-------------|
 | GET | `/whitelist/index` | Domain whitelist |
-| POST | `/whitelist/add` | Add domain to whitelist |
-| GET | `/whitelist/del/{id}` | Remove from whitelist |
+| POST | `/whitelist/add` | Add domain to whitelist (CSRF token `list_rules`) |
+| POST | `/whitelist/del/{id}` | Remove from whitelist (CSRF token `list_rules`) |
 | GET | `/emailwhitelist/index` | Email whitelist |
-| POST | `/emailwhitelist/add` | Add email to whitelist |
-| GET | `/emailwhitelist/del/{id}` | Remove from email whitelist |
+| POST | `/emailwhitelist/add` | Add email to whitelist (CSRF token `list_rules`) |
+| POST | `/emailwhitelist/del/{id}` | Remove from email whitelist (CSRF token `list_rules`) |
 
 ## Blacklists
 
 | Method | URL | Description |
 |--------|-----|-------------|
 | GET | `/domainblacklst/index` | Domain blacklist |
-| POST | `/domainblacklst/add` | Add domain to blacklist; matching INBOX mail from the last 30 days is moved to SPAM ([spam-handling.md](spam-handling.md#retroactive-blacklist)) |
-| GET | `/domainblacklst/del/{id}` | Remove from blacklist |
+| POST | `/domainblacklst/add` | Add domain to blacklist (CSRF token `list_rules`); matching INBOX mail from the last 30 days is moved to SPAM ([spam-handling.md](spam-handling.md#retroactive-blacklist)) |
+| POST | `/domainblacklst/del/{id}` | Remove from blacklist (CSRF token `list_rules`) |
 | GET | `/emailblacklst/index` | Email blacklist |
-| POST | `/emailblacklst/add` | Add email to blacklist; matching INBOX mail is moved to SPAM, as above |
-| GET | `/emailblacklst/del/{id}` | Remove from email blacklist |
+| POST | `/emailblacklst/add` | Add email to blacklist (CSRF token `list_rules`); matching INBOX mail is moved to SPAM, as above |
+| POST | `/emailblacklst/del/{id}` | Remove from email blacklist (CSRF token `list_rules`) |

@@ -5,6 +5,7 @@
 {% block body %}
     <div class="add-form">
         <form method="post" action="{{ path('antispam_emailwhitelist_add') }}" class="form-inline">
+            <input type="hidden" name="_token" value="{{ csrf_token('list_rules') }}">
             <input type="text" class="form-control" name="email" placeholder="znajomy@example.com lub *@zaufana.example" required style="min-width:280px;">
             <select name="pattern_type" class="form-control">
                 <option value="exact">Dokładny</option>
@@ -19,9 +20,10 @@
     <ul class="list-group">
         {% for l in list %}
         <li class="list-group-item">
-            <a href="{{ path('antispam_emailwhitelist_del',{'id':l.id}) }}" class="btn btn-danger btn-xs list-actions" onclick="return confirm('Usunąć ten adres z whitelisty?')">
-                <span class="glyphicon glyphicon-remove"></span> Usuń
-            </a>
+            <form method="post" action="{{ path('antispam_emailwhitelist_del',{'id':l.id}) }}" style="display:inline;" onsubmit="return confirm('Usunąć ten adres z whitelisty?')">
+                <input type="hidden" name="_token" value="{{ csrf_token('list_rules') }}">
+                <button type="submit" class="btn btn-danger btn-xs list-actions"><span class="glyphicon glyphicon-remove"></span> Usuń</button>
+            </form>
             <span class="badge badge-counter">{{ l.counter }} trafień</span>
             <span class="label label-default">{{ l.patternType }}</span>
             <span class="glyphicon glyphicon-envelope"></span> {{ l.whitelistemail }}

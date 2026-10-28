@@ -41,9 +41,10 @@ class DigestTokenService
     }
 
     /**
-     * @param string $mailbox mailbox key ("imap" or "ssh-<accountId>")
+     * @param string $mailbox mailbox key ("imap", "imap-<accountId>" or "ssh-<accountId>")
      * @param string $id      message id inside that mailbox's quarantine
-     * @param array  $meta    display-only data (sender, subject) shown on the confirmation page
+     * @param array  $meta    display-only data (sender, subject) shown on the confirmation page,
+     *                        plus 'account': the mailbox address the link was issued for
      */
     public function create($mailbox, $id, $action, $ttlSeconds, array $meta = [])
     {
@@ -59,6 +60,9 @@ class DigestTokenService
         if (!empty($meta['sender'])) {
             $payload['s'] = mb_substr((string)$meta['sender'], 0, 120, 'UTF-8');
         }
+        if (!empty($meta['account'])) {
+            $payload['o'] = strtolower((string)$meta['account']);
+        }
         if (!empty($meta['subject'])) {
             $payload['j'] = mb_substr((string)$meta['subject'], 0, 80, 'UTF-8');
         }
@@ -67,7 +71,7 @@ class DigestTokenService
     }
 
     /**
-     * @return array|null ['mailbox','id','action','expires','sender','subject'] or null when invalid / expired
+     * @return array|null ['mailbox','id','action','expires','sender','subject','account'] or null when invalid / expired
      */
     public function verify($token)
     {
@@ -93,6 +97,7 @@ class DigestTokenService
             'expires' => (int)$payload['e'],
             'sender' => isset($payload['s']) ? (string)$payload['s'] : '',
             'subject' => isset($payload['j']) ? (string)$payload['j'] : '',
+            'account' => isset($payload['o']) ? (string)$payload['o'] : null,
         ];
     }
 

@@ -82,6 +82,9 @@ Rules and limits:
 - SSH accounts need the agent redeployed (**Konta → Wdróż**) to get
   `apply-blacklist`; an old agent produces an error message, nothing else
   breaks.
+- A Thunderbird/Outlook report triggers at most 10 retroactive passes per
+  account and hour (`PluginApiController::RETRO_RATE_LIMIT`); above that the
+  rule still applies to new mail at the next scan.
 - Moved messages are logged in the score log (`Dziennik ocen`) as `spam` with
   the reason `retroactive blacklist:…` / `retroactive email_blacklist:…`.
 

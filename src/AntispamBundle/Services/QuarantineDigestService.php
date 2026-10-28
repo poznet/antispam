@@ -121,7 +121,7 @@ class QuarantineDigestService
 
         $ttl = $this->getTtlDays() * 86400;
         foreach ($items as &$item) {
-            $meta = ['sender' => $item['from'], 'subject' => $item['subject']];
+            $meta = ['sender' => $item['from'], 'subject' => $item['subject'], 'account' => $mailbox['account_email']];
             $item['links'] = [];
             // Never offer to permanently trust an impersonator or a malware sender:
             // no whitelist token is minted, so the action can't be performed.

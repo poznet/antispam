@@ -220,7 +220,7 @@ class QuarantineService
 
     private static function isImapKey($key)
     {
-        return $key === self::IMAP_KEY || preg_match('/^imap-\d+$/', (string)$key);
+        return $key === self::IMAP_KEY || preg_match('/^imap-\d+\z/', (string)$key);
     }
 
     /** Connection of the legacy mailbox or of an IMAP account ("imap-<id>"). */

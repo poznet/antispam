@@ -36,6 +36,9 @@ class PluginApiController extends AbstractController
     ) {
     }
 
+    /** Retroactive passes (IMAP/SSH login each) per account and hour. */
+    const RETRO_RATE_LIMIT = 10;
+
     const PLUGIN_VERSION = '1.0.1';
 
     #[Route('/plugin/download', name: 'antispam_plugin_download', methods: ['GET'])]
@@ -149,7 +152,10 @@ class PluginApiController extends AbstractController
         $result['authenticated'] = $account !== null;
 
         // A newly blacklisted sender: older mail from them leaves INBOX too.
-        if ($account && in_array('email_blacklist_added:' . $result['sender'], $result['rules'], true)) {
+        // It logs in to the mailbox (IMAP/SSH), so it has its own, tighter limit;
+        // over the limit the rule still applies to new mail on the next scan.
+        if ($account && in_array('email_blacklist_added:' . $result['sender'], $result['rules'], true)
+            && $this->plugin->hit('retro', 'acc:' . $account->getId(), self::RETRO_RATE_LIMIT, 3600)) {
             $rule = $this->em->getRepository(EmailBlacklist::class)->findOneBy([
                 'email' => $account->getEmail(), 'blacklistemail' => $result['sender'], 'patternType' => 'exact',
             ]);

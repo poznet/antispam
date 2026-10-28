@@ -52,8 +52,8 @@ detail key that looks like a secret (`pass`, `secret`, `token`, `api_key`, `*_ke
 | `mailbox` | the mailbox concerned (`*` = all mailboxes) |
 | `details` | short JSON |
 
-Indexes on `created_at`, `action`, `actor`, `mailbox`. The table is created by
-`doctrine:schema:update --force` at boot (additive, no migration).
+Indexes on `created_at`, `action`, `actor`, `mailbox`. The table is part of the
+baseline migration (`antispam:db:upgrade` at boot, [migrations.md](migrations.md)).
 
 ## Design
 

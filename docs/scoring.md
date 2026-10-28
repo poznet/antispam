@@ -205,8 +205,8 @@ not twice for one mailbox, and a mailbox rule is skipped when an identical
 global rule exists (a global rule can still be added next to mailbox rules).
 Comparison is case-insensitive (the MySQL collation; bulk import lowercases
 exact/wildcard values). There is deliberately **no unique index** on
-`(email, value)`: the schema is applied by `doctrine:schema:update --force` at
-boot, and an existing install may already hold duplicates (plugin/phishing
+`(email, value)`: adding one needs a migration that runs on every install
+([migrations.md](migrations.md)), and an existing install may already hold duplicates (plugin/phishing
 rules are deduped per pattern type only, double submits), which would make
 the index creation - and the container start - fail; a 255+255 character
 utf8mb4 key would also exceed the 767-byte limit of legacy row formats.
@@ -273,8 +273,9 @@ php antispam-agent.php health --maildir=~/Maildir --db=/path/to/rules.sqlite
 
 ## Schema changes
 
-The following columns / tables are new and must be created via
-`bin/console doctrine:schema:update --force` (or equivalent migration):
+The following columns / tables were added in 1.x (by `doctrine:schema:update` at
+the time; they are part of the baseline migration now, and `antispam:db:upgrade`
+adds them to an older install):
 
 ```sql
 -- existing rule tables gain:

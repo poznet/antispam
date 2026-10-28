@@ -43,10 +43,11 @@ Signals live in `antispam_shared_spam_signal`:
 | `reports`    | how many observations have accumulated (corroboration)       |
 | `created_at` / `updated_at` | `updated_at` drives incremental pulls         |
 
-Create the table after deploying:
+The table is part of the baseline migration; `antispam:db:upgrade` creates it
+(the Docker entrypoint runs it at boot):
 
 ```bash
-php bin/console doctrine:schema:update --force
+php bin/console antispam:db:upgrade
 ```
 
 ## Configuration

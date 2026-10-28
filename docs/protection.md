@@ -175,8 +175,9 @@ CREATE TABLE antispam_list_setting (
 );
 ```
 
-Create it with `bin/console doctrine:schema:update --force` (Docker does this at
-boot when `RUN_MIGRATIONS=true`). Until the table exists the defaults are used.
+It is part of the baseline migration; `bin/console antispam:db:upgrade` creates it
+(Docker does this at boot when `RUN_MIGRATIONS=true`, see [migrations.md](migrations.md)).
+Until the table exists the defaults are used.
 
 All settings are pushed to agents in the `settings` section of `import-rules`, so
 **re-sync each SSH account** (Accounts → Sync or `antispam:agent:sync`) after

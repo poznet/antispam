@@ -12,8 +12,9 @@ The repository ships a production-ready Docker setup:
   database data, the application data (`var/data`) and the log directory.
 - `docker/entrypoint.sh` - freezes the environment variables into
   `.env.local.php` at every container start (Apache does not pass the container
-  environment to PHP), waits for MySQL, rebuilds the Symfony cache and runs
-  `doctrine:schema:update --force`. It also hashes `ADMIN_PASSWORD` (bcrypt) so
+  environment to PHP), waits for MySQL, rebuilds the Symfony cache and
+  upgrades the database schema with `antispam:db:upgrade` (Doctrine Migrations,
+  see [Database schema at boot](#database-schema-at-boot)). It also hashes `ADMIN_PASSWORD` (bcrypt) so
   the operator never handles password hashes directly, and builds
   `MAILER_DSN` from the legacy `MAILER_HOST` / `MAILER_USER` /
   `MAILER_PASSWORD` variables when it is not set.
@@ -34,7 +35,8 @@ The repository ships a production-ready Docker setup:
 | `DATABASE_SERVER_VERSION` | Database server version for Doctrine (`8.0.36` for MySQL) | `10.6.0-MariaDB` |
 | `MAILER_DSN` | Symfony Mailer DSN, e.g. `smtp://user:pass@smtp.example.com:587` | _(empty = mail disabled)_ |
 | `MAILER_HOST` / `MAILER_USER` / `MAILER_PASSWORD` | Legacy (Swiftmailer) settings, used to build `MAILER_DSN` (`smtp://…:25`) when it is empty | _(empty)_ |
-| `RUN_MIGRATIONS` | Run `doctrine:schema:update --force` at boot | `true` |
+| `RUN_MIGRATIONS` | Run `antispam:db:upgrade` (Doctrine Migrations) at boot; `false` = you run it after each deploy | `true` |
+| `RUN_MIGRATIONS_STRICT` | `true` = the container exits when the upgrade fails (default: ERROR banner in the log, Apache starts anyway) | `false` |
 | `SSH_KEYS_DIR` | Directory with the SSH private keys of SSH+Maildir accounts | `var/data/ssh-keys` |
 | `ALLOW_INSECURE_DEFAULTS` | `1` lets the container start with default/empty secrets (local testing only) | `0` |
 | `SYMFONY_TRUSTED_PROXIES` | Comma-separated IPs / CIDRs whose `X-Forwarded-*` headers are trusted (Coolify's Traefik, a host nginx), so Symfony sees `https://` and the real client IP (HSTS, login throttling, absolute URLs) - see [Behind a reverse proxy](#behind-a-reverse-proxy-nginx) | private ranges (compose files) |
@@ -89,7 +91,7 @@ the `app` service on port `80`.
 
 | Service | Role |
 | --- | --- |
-| `app` | Apache + PHP, web UI. Runs `doctrine:schema:update` at boot; healthy once Apache is up |
+| `app` | Apache + PHP, web UI. Runs `antispam:db:upgrade` (migrations) at boot; healthy once Apache is up |
 | `db` | MariaDB 10.6 (volume `db-data`) |
 | `scheduler` | Same image, runs `docker/scheduler.sh` instead of Apache. No migrations; starts after `app` is healthy |
 | `clamav` | ClamAV daemon (`clamav/clamav-debian:1.4`, multi-arch) for attachment scanning; signatures in volume `clamav-db` |
@@ -136,10 +138,39 @@ For agents, run clamd on the mail server and use a separate install there.
 ### Updating
 
 Push a new commit to the branch Coolify is tracking and press *Redeploy*.
-The entrypoint runs `doctrine:schema:update --force` on every boot, so entity
-changes are picked up without a manual migration step. If you do not want
-that behaviour (for example because you manage schema via
-`doctrine-migrations`), set `RUN_MIGRATIONS=false`.
+The entrypoint runs `antispam:db:upgrade` on every boot, so the migrations of
+the new release are applied before Apache starts. To apply them yourself
+instead (maintenance window, DB backup first), set `RUN_MIGRATIONS=false` and run
+`docker compose exec app php bin/console antispam:db:upgrade --dry-run`, then
+without `--dry-run`, after each deploy.
+
+### Database schema at boot
+
+With `RUN_MIGRATIONS=true` (default) the `app` container runs
+`doctrine:database:create --if-not-exists` and `antispam:db:upgrade`
+([migrations.md](migrations.md)) before Apache starts; the `scheduler` never
+touches the schema. `antispam:db:upgrade` picks the path by itself:
+
+| Database | Boot does |
+| --- | --- |
+| empty (new install) | runs all migrations - the baseline creates the full schema |
+| created by an older release (`doctrine:schema:update` at boot, before migrations) | one last `schema:update` to the current entities (every statement is logged, column drops tagged `[DROPS DATA]`, unknown tables are never dropped), records the baseline as executed |
+| already migrated | runs the pending migrations; nothing to do = `No pending migrations.` |
+
+Its lines start with `[db:upgrade]` in the `app` logs. On failure the
+entrypoint prints an ERROR banner and still starts Apache (as the old
+`schema:update || true` did): a crash loop would hide the panel and `/health`,
+which report the problem (`antispam:doctor` / health check `schema`). Fix the
+cause and restart the container, or run `antispam:db:upgrade` by hand. Set
+`RUN_MIGRATIONS_STRICT=true` to make the container exit instead. Exit code `2`
+(warning banner) means an entity change without a migration or a database
+upgraded by a newer release - see [migrations.md](migrations.md).
+
+**Upgrading from 2.0.0 or older** needs no manual step: the first boot of the
+new image adopts the database (path 2 above). Take the usual database backup
+before the redeploy ([Backup and restore](#backup-and-restore)); to see the plan
+first run the new image once with `RUN_MIGRATIONS=false` and
+`php bin/console antispam:db:upgrade --dry-run` in it.
 
 To check which release a host runs: the panel footer (admins) shows
 `wersja 2.0.0 (abc1234)` and links to *Co nowego* (`/changelog`);
@@ -193,7 +224,7 @@ gunzip -c antispam-db-2026-10-28.sql.gz \
 docker compose exec -T app tar -C /var/www/html/var -xzf - < antispam-data-2026-10-28.tar.gz
 docker compose exec app chown -R www-data:www-data /var/www/html/var/data
 docker compose exec app chmod 700 /var/www/html/var/data/ssh-keys
-docker compose restart app && docker compose start scheduler   # entrypoint runs doctrine:schema:update
+docker compose restart app && docker compose start scheduler   # entrypoint runs antispam:db:upgrade
 docker compose exec -u www-data app php bin/console antispam:doctor
 ```
 
@@ -383,10 +414,17 @@ checks) should read the parameter or the constant, never parse `CHANGELOG.md`.
    The panel compares every agent answer with the bundled version
    (`SshService::bundledAgentVersion()`) and asks to redeploy an older agent
    (*Konta → Wdróż*).
-6. **Verify:** `vendor/bin/phpunit`, `bin/console lint:container`,
+6. **Database migrations:** every entity change since the last release must
+   have a migration in `migrations/` (`doctrine:migrations:diff` against a dev
+   database at the previous release, review, commit - see
+   [migrations.md](migrations.md#adding-a-migration-developers)). Check on a dev
+   database with all migrations applied: `bin/console antispam:db:upgrade` exits
+   `0` (not `2`) and `bin/console doctrine:schema:validate` is in sync. Never
+   edit a released migration.
+7. **Verify:** `vendor/bin/phpunit`, `bin/console lint:container`,
    `bin/console lint:twig src/AntispamBundle/Resources/views templates`,
    `docker build .`.
-7. **Commit and tag** on `master`: `git commit -m "Release x.y.z"`,
+8. **Commit and tag** on `master`: `git commit -m "Release x.y.z"`,
    `git tag -a vx.y.z -m "x.y.z"`, `git push --follow-tags`. Then redeploy in
    Coolify and confirm `server_version` / the footer on the host.
 

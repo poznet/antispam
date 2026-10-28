@@ -114,7 +114,7 @@ address instead of / next to CERT).
   plugin already truncated (`truncated`) is sent as is with a notice that
   parts / attachments may be missing.
 
-**Recorded on the report** (nullable columns, added by `schema:update`):
+**Recorded on the report** (nullable columns, part of the baseline migration):
 `forwarded_at`, `forwarded_to` (To + Cc), `forward_error` (last failure,
 cleared on success), `forward_attempted_at`. On success the status moves from
 `nowe` / `potwierdzony phishing` to `zgłoszone do CERT`.

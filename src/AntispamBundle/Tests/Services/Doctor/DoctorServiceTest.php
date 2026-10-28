@@ -12,6 +12,7 @@ use AntispamBundle\Services\Backup\AppVersion;
 use AntispamBundle\Services\ClamavService;
 use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\CryptoService;
+use AntispamBundle\Services\Database\DatabaseUpgrader;
 use AntispamBundle\Services\Doctor\DoctorCheck;
 use AntispamBundle\Services\Doctor\DoctorService;
 use Doctrine\DBAL\DriverManager;
@@ -63,10 +64,12 @@ class DoctorServiceTest extends TestCase
             ['cookie_secure' => $o['cookie_secure'] ?? true],
             '/project',
             '/nonexistent-keys',
+            $this->createMock(DatabaseUpgrader::class),
         ) extends DoctorService {
             public array $stub = [];
 
             protected function schemaDiff(): array { return $this->stub['schema'] ?? []; }
+            protected function pendingMigrations(): array { return $this->stub['pending_migrations'] ?? []; }
             protected function extensionLoaded(string $ext): bool { return !in_array($ext, $this->stub['missing_ext'] ?? [], true); }
             protected function isWritableDir(string $path): bool { return !in_array(basename($path), $this->stub['readonly'] ?? [], true); }
             protected function freeSpace(string $dir): ?float { return $this->stub['free'] ?? 50e9; }
@@ -148,11 +151,21 @@ class DoctorServiceTest extends TestCase
         $this->assertSame(DoctorCheck::OK, $this->checks()['public_url']->status);
     }
 
-    public function testSchemaOutOfSync()
+    public function testPendingMigrationsFail()
+    {
+        $check = $this->checks(['pending_migrations' => ['DoctrineMigrations\\Version20261028132604']])['schema'];
+        $this->assertSame(DoctorCheck::FAIL, $check->status);
+        $this->assertStringContainsString('Version20261028132604', $check->message);
+        $this->assertStringContainsString('antispam:db:upgrade', $check->hint);
+    }
+
+    public function testEntityChangeWithoutMigrationWarns()
     {
         $check = $this->checks(['schema' => ['ALTER TABLE antispam_account ADD foo INT']])['schema'];
-        $this->assertSame(DoctorCheck::FAIL, $check->status);
-        $this->assertStringContainsString('doctrine:schema:update', $check->hint);
+        $this->assertSame(DoctorCheck::WARN, $check->status);
+        $this->assertStringContainsString('doctrine:migrations:diff', $check->hint);
+
+        $this->assertSame(DoctorCheck::OK, $this->checks()['schema']->status);
     }
 
     public function testCron()

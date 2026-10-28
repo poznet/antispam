@@ -18,6 +18,17 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 
 ## [Unreleased]
 
+### Changed
+- Database schema is versioned with Doctrine Migrations (`migrations/`, baseline =
+  full 2.0.0 schema). The Docker entrypoint runs the new `antispam:db:upgrade` instead
+  of `doctrine:schema:update --force`: fresh database -> all migrations; install made
+  by `schema:update` -> one last `schema:update` (never drops unknown tables), baseline
+  recorded as executed; migrated -> pending migrations only. `--dry-run`, MySQL named
+  lock against concurrent boots, exit 2 when an entity change has no migration.
+  `RUN_MIGRATIONS_STRICT=true` stops the container when the upgrade fails (default:
+  loud error, start anyway). `antispam:doctor` `schema` now fails on pending
+  migrations and warns on entity changes without a migration. See `docs/migrations.md`.
+
 ## [2.0.0] - 2026-10-28 (current)
 
 Major version: several user and operator visible behaviours changed (multiple

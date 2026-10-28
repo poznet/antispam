@@ -43,7 +43,9 @@ services:
       MAILER_USER: ${MAILER_USER:-}
       MAILER_PASSWORD: ${MAILER_PASSWORD:-}
 
+      # schema upgrade at boot (antispam:db:upgrade, docs/migrations.md); STRICT=true stops the container when it fails
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+      RUN_MIGRATIONS_STRICT: ${RUN_MIGRATIONS_STRICT:-false}
 
       # Coolify's Traefik lives on a private Docker network - trust its X-Forwarded-*.
       SYMFONY_TRUSTED_PROXIES: ${SYMFONY_TRUSTED_PROXIES:-127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}

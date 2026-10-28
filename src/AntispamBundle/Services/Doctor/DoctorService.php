@@ -13,11 +13,11 @@ use AntispamBundle\Services\Backup\AppVersion;
 use AntispamBundle\Services\ClamavService;
 use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\CryptoService;
+use AntispamBundle\Services\Database\DatabaseUpgrader;
 use AntispamBundle\Services\RuleOwnership;
 use AntispamBundle\Services\ScoringService;
 use AntispamBundle\Services\SshService;
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\Tools\SchemaTool;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 /**
@@ -55,6 +55,7 @@ class DoctorService
         #[Autowire('%session.storage.options%')] private array $sessionOptions,
         #[Autowire('%kernel.project_dir%')] private string $projectDir,
         #[Autowire('%antispam.ssh_keys_dir%')] private string $sshKeysDir,
+        private DatabaseUpgrader $upgrader,
     ) {
     }
 
@@ -257,22 +258,32 @@ class DoctorService
 
     private function checkSchema(): DoctorCheck
     {
+        $pending = $this->pendingMigrations();
+        if ($pending) {
+            return DoctorCheck::fail('schema', sprintf('%d database migration(s) not executed yet (%s).', count($pending), implode(', ', array_map(fn($v) => preg_replace('/^.*\\\\/', '', $v), $pending))),
+                'Run php bin/console antispam:db:upgrade (the Docker entrypoint does it at boot unless RUN_MIGRATIONS=false).');
+        }
         $sql = $this->schemaDiff();
         if ($sql) {
-            return DoctorCheck::fail('schema', sprintf('The database schema is not in sync with the entities (%d statement(s) pending, e.g. %s).', count($sql), self::oneLine(mb_substr($sql[0], 0, 120))),
-                'Run php bin/console doctrine:schema:update --force (the Docker entrypoint does it at boot unless RUN_MIGRATIONS=false).');
+            return DoctorCheck::warn('schema', sprintf('All migrations are executed, but the entities differ from the database (%d statement(s), e.g. %s) - an entity change has no migration.', count($sql), self::oneLine(mb_substr($sql[0], 0, 120))),
+                'Generate and commit a migration: php bin/console doctrine:migrations:diff (docs/migrations.md).');
         }
 
-        return DoctorCheck::ok('schema', 'Database schema is in sync with the entities.');
+        return DoctorCheck::ok('schema', 'All database migrations are executed and the schema matches the entities.');
     }
 
-    /** @return string[] SQL that `doctrine:schema:update` would run */
+    /** @return string[] migration versions not executed yet */
+    protected function pendingMigrations(): array
+    {
+        return $this->upgrader->pendingMigrations();
+    }
+
+    /** @return string[] non-DROP SQL that `doctrine:schema:update` would still run */
     protected function schemaDiff(): array
     {
-        $metadata = $this->em->getMetadataFactory()->getAllMetadata();
-
-        return (new SchemaTool($this->em))->getUpdateSchemaSql($metadata);
+        return $this->upgrader->pendingSchemaChanges();
     }
+
 
     private function checkCron(): DoctorCheck
     {

@@ -14,7 +14,7 @@ The panel supports several logins with two roles:
 1. **Legacy environment admin** - `ADMIN_USER` / `ADMIN_PASSWORD` (`ADMIN_PASSWORD_HASH`),
    `AntispamBundle\Security\AdminUserProvider`. Always `ROLE_ADMIN`, answered without
    a database query, so existing deployments keep working unchanged and can never lock
-   themselves out (also before `doctrine:schema:update` has created the user table).
+   themselves out (also before `antispam:db:upgrade` has created the user table).
    It is not stored in the database and is not editable in the UI; its login is
    reserved (a database user cannot use it). Its password is changed through the
    environment, as before.
@@ -40,7 +40,8 @@ account e-mail is edited or duplicated, and one person often owns several mailbo
 or a login that is not an address. Score-log rows (`SpamScoreLog.accountEmail`) are
 scoped through the e-mails of the assigned accounts.
 
-The schema is created by `doctrine:schema:update --force` at boot (no migration needed).
+The tables are part of the baseline migration, created by `antispam:db:upgrade` at boot
+([migrations.md](migrations.md)).
 
 ## Ownership enforcement (no IDOR)
 

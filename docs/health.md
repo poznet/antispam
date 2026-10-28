@@ -35,7 +35,7 @@ not `fail`.
 | `clamav` | `PING` to clamd (3 s timeout) when ClamAV scanning is enabled | yes | yes |
 | `cert` | CERT list: never synced or last success > 72 h = `fail`; > 18 h, or the last attempt failed = `warn` | yes | yes |
 | `feed` | shared feed with a remote hub: last **successful** `antispam:feed:sync` in the cron log > 2 h `warn`, > 24 h `fail` | yes | yes |
-| `schema` | statements `doctrine:schema:update --force` would still run (DROPs ignored) = `warn` | - | yes |
+| `schema` | statements `doctrine:schema:update` would still run (DROPs ignored) = `warn`: pending migrations (`antispam:db:upgrade`) or an entity change without a migration ([migrations.md](migrations.md)) | - | yes |
 | `disk` | free space of the filesystem holding `var/`: < 500 MB `fail`, < 2 GB or < 5 % `warn` | yes | yes |
 | `versions` | mail client plugin version, bundled agent version, PHP (always `ok`; TODO: application version once it exists) | yes | yes |
 

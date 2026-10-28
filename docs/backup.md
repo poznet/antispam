@@ -164,7 +164,7 @@ docker compose exec -u www-data app php bin/console antispam:doctor
 | `disk_space` | < 100 MB free on var/data | < 1 GB |
 | `https` (prod only) | session cookie not always `Secure` | `SYMFONY_TRUSTED_PROXIES` empty (no https detection behind the proxy) |
 | `database` | not reachable - every check below is then skipped | |
-| `schema` | `doctrine:schema:update` has pending SQL | |
+| `schema` | Doctrine migrations pending (`antispam:db:upgrade`; also an install never adopted with `RUN_MIGRATIONS=false`) | all migrations executed but the entities still differ from the database (DROPs ignored) = entity change without a migration ([migrations.md](migrations.md)) |
 | `admin_login` | no `ADMIN_PASSWORD_HASH` and no ROLE_ADMIN user | |
 | `mailer` | digest (or e-mail alerts) enabled but `MAILER_DSN` empty / `null://` | |
 | `public_url` | | `plugin.public_url` not https / local host / empty while plugins are on; `digest.base_url` not https |

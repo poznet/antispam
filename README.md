@@ -47,7 +47,7 @@ composer install
 
 # Create database
 php bin/console doctrine:database:create
-php bin/console doctrine:schema:create
+php bin/console antispam:db:upgrade   # Doctrine Migrations, docs/migrations.md
 ```
 
 Point the web server's document root at `public/`.

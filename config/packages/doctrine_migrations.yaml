@@ -1,0 +1,19 @@
+# Doctrine Migrations - versioned schema changes (docs/migrations.md).
+# The Docker entrypoint applies them at boot through antispam:db:upgrade.
+doctrine_migrations:
+    migrations_paths:
+        'DoctrineMigrations': '%kernel.project_dir%/migrations'
+    storage:
+        table_storage:
+            table_name: 'doctrine_migration_versions'
+    # MySQL/MariaDB commit DDL implicitly, so a transaction around a migration
+    # protects nothing and only produces "no active transaction" noise. Write
+    # migrations so they can be re-run after a partial failure instead.
+    transactional: false
+    all_or_nothing: false
+    # Generated migrations get an abortIf() guard from the template below
+    # (any MySQL/MariaDB platform). The built-in guard (--check-database-platform)
+    # would pin the exact MariaDB version class, so it stays off.
+    check_database_platform: false
+    custom_template: '%kernel.project_dir%/config/doctrine_migrations/migration.php.tpl'
+    enable_profiler: false

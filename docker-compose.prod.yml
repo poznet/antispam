@@ -26,12 +26,14 @@ services:
       - DATABASE_SERVER_VERSION=${DATABASE_SERVER_VERSION:-10.6.0-MariaDB}
       # np. smtp://user:pass@smtp.example.com:587 (puste = wysylka wylaczona)
       - MAILER_DSN=${MAILER_DSN:-}
+      # migracje schematu przy starcie (antispam:db:upgrade, docs/migrations.md); STRICT=true zatrzymuje kontener po bledzie
       - RUN_MIGRATIONS=true
+      - RUN_MIGRATIONS_STRICT=${RUN_MIGRATIONS_STRICT:-false}
       # token szczegolow /health?token= i /metrics (docs/health.md); puste = ustawiany w panelu
       - HEALTH_TOKEN=${HEALTH_TOKEN:-}
       # Traefik Coolify siedzi w prywatnej sieci Dockera - ufamy jego X-Forwarded-*
       - SYMFONY_TRUSTED_PROXIES=${SYMFONY_TRUSTED_PROXIES:-127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
-    # Apache startuje dopiero po migracjach, wiec "healthy" = schemat gotowy
+    # Apache startuje dopiero po migracjach (antispam:db:upgrade), wiec "healthy" = schemat gotowy
     healthcheck:
       test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/80"]
       interval: 10s

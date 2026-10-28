@@ -14,6 +14,7 @@
         "ddeboer/imap": "^1.19",
         "doctrine/dbal": "^4.5",
         "doctrine/doctrine-bundle": "^2.19.2",
+        "doctrine/doctrine-migrations-bundle": "^3.7.1",
         "doctrine/orm": "^3.7.5",
         "phpseclib/phpseclib": "^3.0.57",
         "symfony/asset": "7.4.*",

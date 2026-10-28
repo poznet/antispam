@@ -61,9 +61,9 @@ php -v
 # 3. Zależności (czyści cache i publikuje assety do public/bundles)
 composer install --no-dev --optimize-autoloader
 
-# 4. Schemat bazy - powinno być "Nothing to update"
-php bin/console doctrine:schema:update --dump-sql
-php bin/console doctrine:schema:update --force
+# 4. Schemat bazy (Doctrine Migrations, docs/migrations.md) - najpierw podgląd
+php bin/console antispam:db:upgrade --dry-run
+php bin/console antispam:db:upgrade
 
 # 5. Web serwer: document root -> public/
 # 6. Cron: ścieżki bin/console bez zmian (php bin/console antispam:...)

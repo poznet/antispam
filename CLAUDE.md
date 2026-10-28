@@ -26,6 +26,7 @@ See `docs/` directory for detailed documentation:
 - `docs/commands.md` - CLI commands reference
 - `docs/api.md` - web controller endpoints
 - `docs/deployment.md` - Docker / Coolify deployment guide; "Releasing": version in `AntispamBundle\AppVersion::VERSION` (+ `CHANGELOG.md`, plugin/agent bump rules, build arg `GIT_COMMIT` -> `REVISION`)
+- `docs/migrations.md` - Doctrine Migrations (`migrations/`): `antispam:db:upgrade` at boot (fresh / legacy schema:update install / migrated), every entity change needs a reviewed `doctrine:migrations:diff` migration
 - `docs/scoring.md` - scoring pipeline, DNSBL, regex/wildcard patterns, rule ownership (per-mailbox vs global `*` rules)
 - `docs/protection.md` - impersonation/BEC, link protection, attachment policy (web + agent)
 - `docs/spam-handling.md` - where spam goes (move vs delete), quarantine semantics, retroactive blacklist, cron log (`antispam:cron:run`, `/cron/logs`)
@@ -42,7 +43,7 @@ See `docs/` directory for detailed documentation:
 - `docs/backup.md` - configuration backup/restore (`antispam:export` / `antispam:import`, panel `/backup`), secrets handling, `antispam:doctor` checks
 
 ## Tech stack
-- PHP >= 8.2 (ext-imap, so not 8.4+), Symfony 7.4, Doctrine ORM 3 / DBAL 4 (PHP attributes mapping), MySQL/MariaDB
+- PHP >= 8.2 (ext-imap, so not 8.4+), Symfony 7.4, Doctrine ORM 3 / DBAL 4 (PHP attributes mapping) + Doctrine Migrations, MySQL/MariaDB
 - Symfony Mailer (`MAILER_DSN`), PHPUnit 11 (`vendor/bin/phpunit`)
 - Settings: key/value `config` table via `AntispamBundle\Services\ConfigService` (formerly poznet/configbundle)
 - ddeboer/imap (IMAP mode), phpseclib/phpseclib (SSH mode)

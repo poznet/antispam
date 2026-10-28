@@ -14,6 +14,7 @@ APP_DIR=/var/www/html
 : "${APP_SECRET:=ChangeMeInProductionPlease}"
 : "${ADMIN_USER:=admin}"
 : "${RUN_MIGRATIONS:=true}"
+: "${RUN_MIGRATIONS_STRICT:=false}"
 : "${SYMFONY_TRUSTED_PROXIES:=}"
 : "${SSH_KEYS_DIR:=}"
 : "${HEALTH_TOKEN:=}"
@@ -99,10 +100,28 @@ chmod 700 "${APP_DIR}/var/data/ssh-keys"
 # Rebuild the cache for the current configuration
 php "${APP_DIR}/bin/console" cache:clear --no-debug || true
 
-# Create schema on first boot / keep it in sync
+# Database schema: Doctrine Migrations via antispam:db:upgrade (docs/migrations.md).
+# Empty database -> all migrations; install made by the old schema:update boot ->
+# schema:update once + baseline marked as executed; migrated -> pending ones only.
+# A failure does not stop the container (unless RUN_MIGRATIONS_STRICT=true): a
+# crash loop would also take down the panel and /health, which report the
+# problem (schema check), and retrying a failed migration rarely fixes it.
 if [ "${RUN_MIGRATIONS}" = "true" ]; then
     php "${APP_DIR}/bin/console" doctrine:database:create --if-not-exists || true
-    php "${APP_DIR}/bin/console" doctrine:schema:update --force || true
+    rc=0
+    php "${APP_DIR}/bin/console" antispam:db:upgrade --no-interaction || rc=$?
+    if [ "$rc" = "2" ]; then
+        echo "[entrypoint] WARNING: database upgraded with warnings (see [db:upgrade] above)."
+    elif [ "$rc" != "0" ]; then
+        echo "[entrypoint] ################################################################"
+        echo "[entrypoint] ERROR: database upgrade FAILED (antispam:db:upgrade exit $rc)."
+        echo "[entrypoint] The app may not work. Fix the cause shown above, then restart the"
+        echo "[entrypoint] container or run: php bin/console antispam:db:upgrade"
+        echo "[entrypoint] ################################################################"
+        if [ "${RUN_MIGRATIONS_STRICT}" = "true" ]; then
+            exit 1
+        fi
+    fi
 fi
 
 chown -R www-data:www-data "${APP_DIR}/var"

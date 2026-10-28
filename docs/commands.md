@@ -148,6 +148,25 @@ php bin/console antispam:feed:sync --push-only
 php bin/console antispam:feed:sync --pull-only
 ```
 
+## Database
+
+### antispam:db:upgrade
+Creates or upgrades the schema with Doctrine Migrations; the Docker entrypoint runs it
+at boot (`RUN_MIGRATIONS=true`). Empty database -> all migrations; install made by the
+old `doctrine:schema:update` boot -> `schema:update` once (unknown tables are never
+dropped) and every migration recorded as executed; migrated -> pending migrations.
+Idempotent, serialized with a MySQL named lock (`--lock-timeout`, default 600 s).
+Exit `0` up to date, `1` failed, `2` done with warnings (entity change without a
+migration, or migrations in the database this release does not ship). See
+[migrations.md](migrations.md).
+```bash
+php bin/console antispam:db:upgrade --dry-run   # state and plan, changes nothing
+php bin/console antispam:db:upgrade
+```
+The plain Doctrine commands work too: `doctrine:migrations:status`,
+`doctrine:migrations:list`, `doctrine:migrations:diff` (new migration, see
+[migrations.md](migrations.md#adding-a-migration-developers)).
+
 ## Backup / Diagnostics
 
 See [backup.md](backup.md) for the file format, secrets handling and the panel page
@@ -177,7 +196,7 @@ php bin/console antispam:import backup.json --mode=replace --confirm-replace
 
 ### antispam:doctor
 Configuration sanity checks (APP_SECRET, encryption, mailer, https / proxies, public
-URL, schema sync, cron, accounts, SSH agent versions, plaintext passwords, orphaned
+URL, pending migrations / schema drift, cron, accounts, SSH agent versions, plaintext passwords, orphaned
 rules, feed keys, ClamAV, PHP extensions, var/ permissions, disk space). Exit 1 when
 a check fails; `--strict` also fails on warnings; `--format=json` for scripts.
 ```bash

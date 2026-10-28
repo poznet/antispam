@@ -390,7 +390,7 @@ class HealthService
     {
         $pending = $this->data->pendingSchemaChanges();
         if ($pending) {
-            return [self::WARN, count($pending) . ' zmian(y) schematu czeka - uruchom doctrine:schema:update --force (kontener app robi to przy starcie).', ['pending' => count($pending), 'sql' => array_slice($pending, 0, 20)]];
+            return [self::WARN, count($pending) . ' zmian(y) schematu czeka - uruchom php bin/console antispam:db:upgrade (kontener app robi to przy starcie); jeśli migracje są aktualne, brakuje migracji dla zmiany encji (docs/migrations.md).', ['pending' => count($pending), 'sql' => array_slice($pending, 0, 20)]];
         }
         return [self::OK, 'Zgodny z encjami', ['pending' => 0]];
     }

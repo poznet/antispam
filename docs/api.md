@@ -31,10 +31,16 @@
 | Method | URL | Description |
 |--------|-----|-------------|
 | GET | `/spambox/index` | View first 20 spam messages |
-| GET | `/spambox/quarantine` | Quarantine of every mailbox (legacy IMAP `QUARANTINE` + each SSH account with a deployed agent) and the last 30 days of `quarantine` decisions from the score log (what the dashboard tile counts) |
-| POST | `/spambox/quarantine/action` | `mailbox` (`imap` / `ssh-<id>`), `id`, `action` (`release` / `whitelist` / `delete`); CSRF token `quarantine_action` |
+| GET | `/spambox/quarantine` | Quarantine of every mailbox (legacy IMAP `QUARANTINE`, each IMAP account, each SSH account with a deployed agent) and the last 30 days of `quarantine` decisions from the score log (what the dashboard tile counts) |
+| POST | `/spambox/quarantine/action` | `mailbox` (`imap` / `imap-<id>` / `ssh-<id>`), `id`, `action` (`release` / `whitelist` / `delete`); CSRF token `quarantine_action` |
 | GET | `/spambox/scorelog` | Score log ("Dziennik ocen"), 50 per page. Query filters: `decision` (`ham`/`quarantine`/`spam`/`whitelisted`), `account`, `q` (sender/subject substring), `from`/`to` (`Y-m-d`), `min_score`, `page`. The decision tiles link to the matching `decision` filter |
 | GET | `/spambox/plugin-reports` | Thunderbird plugin reports (anonymous + logged in), filters `?verdict=spam\|ham`, `?who=anonymous\|account` |
+
+## Cron log (`/cron`)
+
+| Method | URL | Description |
+|--------|-----|-------------|
+| GET | `/cron/logs` | Runs recorded by `antispam:cron:run` (last 200), filters `?command=…`, `?failed=1`. See [spam-handling.md](spam-handling.md) |
 
 ## Configuration (`/config`)
 
@@ -101,8 +107,8 @@ exempt from form login. Full reference: **[thunderbird.md](thunderbird.md)**.
 | Method | URL | Description |
 |--------|-----|-------------|
 | GET | `/domainblacklst/index` | Domain blacklist |
-| POST | `/domainblacklst/add` | Add domain to blacklist |
+| POST | `/domainblacklst/add` | Add domain to blacklist; matching INBOX mail from the last 30 days is moved to SPAM ([spam-handling.md](spam-handling.md#retroactive-blacklist)) |
 | GET | `/domainblacklst/del/{id}` | Remove from blacklist |
 | GET | `/emailblacklst/index` | Email blacklist |
-| POST | `/emailblacklst/add` | Add email to blacklist |
+| POST | `/emailblacklst/add` | Add email to blacklist; matching INBOX mail is moved to SPAM, as above |
 | GET | `/emailblacklst/del/{id}` | Remove from email blacklist |

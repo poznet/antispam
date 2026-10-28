@@ -88,7 +88,13 @@ Triggers remote scan and retrieves results as JSON.
 
 ## Cron Setup
 
-For automatic scanning, add to crontab:
+For automatic scanning (all SSH and IMAP accounts), add to crontab:
 ```
-*/5 * * * * php /path/to/bin/console antispam:agent:scan-all
+*/5 * * * * php /path/to/bin/console antispam:cron:run antispam:agent:scan-all
 ```
+`antispam:cron:run` records each run on **Przegląd → Logi crona**; see
+[spam-handling.md](spam-handling.md). The Docker scheduler does this already.
+
+Spam is moved to the account's `SPAM` folder unless *Usuwaj spam* is checked
+(IMAP accounts). New blacklist rules are also applied to mail already in INBOX
+(last 30 days).

@@ -9,7 +9,8 @@ php bin/console antispam:check
 ```
 
 ### antispam:go
-Runs spam filtering on INBOX via IMAP (legacy single-account mode).
+Runs spam filtering on INBOX of the legacy mailbox from Ustawienia → E-mail
+(also included in `antispam:agent:scan-all`).
 ```bash
 php bin/console antispam:go
 ```
@@ -35,9 +36,22 @@ php bin/console antispam:agent:scan {accountId}
 ```
 
 ### antispam:agent:scan-all
-Scans all configured accounts. Suitable for cron.
+Scans every mailbox: SSH accounts with a deployed agent, IMAP accounts and the
+legacy mailbox (if configured). Prints per-mailbox counters (new, spam,
+quarantine, whitelisted) and per-message errors. Exits non-zero when any
+mailbox failed. Suitable for cron.
 ```bash
 php bin/console antispam:agent:scan-all
+```
+
+## Cron Log
+
+### antispam:cron:run
+Runs another `antispam:*` command and stores the run (start/end, exit code,
+output) in the cron log shown on **Przegląd → Logi crona**. Use it in crontab
+and the Docker scheduler. See [spam-handling.md](spam-handling.md).
+```bash
+php bin/console antispam:cron:run antispam:agent:scan-all
 ```
 
 ## Quarantine Digest Commands
@@ -50,7 +64,7 @@ Suitable for cron. Exits non-zero when any digest failed.
 ```bash
 php bin/console antispam:digest:send
 php bin/console antispam:digest:send --dry-run            # build and count, don't send
-php bin/console antispam:digest:send --mailbox=ssh-3      # one mailbox ("imap" or "ssh-<accountId>")
+php bin/console antispam:digest:send --mailbox=ssh-3      # one mailbox ("imap", "imap-<accountId>" or "ssh-<accountId>")
 php bin/console antispam:digest:send --since="-3 days"    # ignore the last-sent marker
 php bin/console antispam:digest:send --force              # send even if disabled in settings
 ```

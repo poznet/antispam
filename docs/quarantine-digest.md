@@ -31,6 +31,7 @@ recipient clicks link ─► GET  /q/{token}   confirmation page (nothing happen
 | Key | Source | Recipient |
 |-----|--------|-----------|
 | `imap` | Legacy IMAP account (Settings → Legacy Account Config), folder `QUARANTINE` | *Recipient for the legacy IMAP mailbox*, or the configured IMAP e-mail |
+| `imap-<id>` | Every IMAP account (Konta), folder `QUARANTINE` | The account e-mail |
 | `ssh-<id>` | Every SSH account with a deployed agent, `~/Maildir/.QUARANTINE` | The account e-mail |
 
 **Which messages are listed:** those received since the previous successful digest

@@ -95,11 +95,13 @@ the `app` service on port `80`.
 
 `app` and `scheduler` share `app-data` (`var/data`) and `app-logs` (`var/log`).
 The scheduler ticks once a minute and runs each command as `www-data`. A job
-that is still running is skipped on the next tick (flock).
+that is still running is skipped on the next tick (flock). Every job goes
+through `antispam:cron:run`, so its runs and output are visible in the panel
+on **Przegląd → Logi crona** (see [spam-handling.md](spam-handling.md)).
 
 | Variable | Command | Default |
 | --- | --- | --- |
-| `SCAN_INTERVAL` | `antispam:agent:scan-all` every N minutes (`0` = off) | `5` |
+| `SCAN_INTERVAL` | `antispam:agent:scan-all` (SSH agents, IMAP accounts, legacy mailbox) every N minutes (`0` = off) | `5` |
 | `FEED_SYNC_INTERVAL` | `antispam:feed:sync` every N minutes (`0` = off) | `15` |
 | `DIGEST_HOUR` | `antispam:digest:send` daily at HH:00, container time = UTC (`off` = off) | `7` |
 

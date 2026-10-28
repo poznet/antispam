@@ -21,6 +21,11 @@ even when the feed itself is disabled, so the data is ready once it is
 enabled. Anonymous "not spam" is refused (spammers could whitelist
 themselves).
 
+When a logged-in spam report creates a new blacklist rule, mail from that
+sender already in the account's INBOX on the server (last 30 days) is moved to
+`SPAM` as well; the response carries `moved_existing`. See
+[spam-handling.md](spam-handling.md#retroactive-blacklist).
+
 Every accepted report (anonymous or logged in) is also logged in
 `antispam_plugin_report` — verdict, account (empty = anonymous), sender,
 subject, client IP, fingerprints recorded and rule changes — and listed in the
@@ -113,7 +118,7 @@ RFC 822 source (`raw_base64`, max 4 MiB decoded).
 |--------|-----|------|-------------|
 | GET | `/api/plugin/status` | optional | Feature flags, whether the token is valid |
 | POST | `/api/plugin/login` | — | `{email, password}` → `{token, email, expires_at}` |
-| POST | `/api/plugin/report` | optional for `spam`, required for `ham` | `{raw_base64, verdict: "spam"\|"ham"}` → `{verdict, sender, signals, rules[], authenticated}` |
+| POST | `/api/plugin/report` | optional for `spam`, required for `ham` | `{raw_base64, verdict: "spam"\|"ham"}` → `{verdict, sender, signals, rules[], authenticated, moved_existing?}` |
 | POST | `/api/plugin/check` | required | `{raw_base64}` → `{decision, spam, score, spam_threshold, quarantine_threshold, reasons[], sender, subject}` |
 | GET | `/plugin/download` | — | The `.xpi` |
 

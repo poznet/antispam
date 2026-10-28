@@ -26,6 +26,7 @@ See `docs/` directory for detailed documentation:
 - `docs/deployment.md` - Docker / Coolify deployment guide
 - `docs/scoring.md` - scoring pipeline, DNSBL, regex/wildcard patterns
 - `docs/protection.md` - impersonation/BEC, link protection, attachment policy (web + agent)
+- `docs/spam-handling.md` - where spam goes (move vs delete), quarantine semantics, retroactive blacklist, cron log (`antispam:cron:run`, `/cron/logs`)
 - `docs/quarantine-digest.md` - end-user quarantine digest e-mail, signed `/q/` links, `antispam:digest:send`
 - `docs/feed.md` - shared spam feed (centralized spam DB): fingerprints, API, sync
 - `docs/feed-api.md` - shared spam feed HTTP API reference (endpoints, auth, examples)

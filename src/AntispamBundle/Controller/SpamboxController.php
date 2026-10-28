@@ -147,7 +147,7 @@ class SpamboxController extends AbstractController
             } elseif ($log->getOutcome() === SpamScoreLog::OUTCOME_MOVE_FAILED) {
                 $out[$log->getId()] = ['label' => 'przeniesienie nie powiodło się - została w INBOX', 'class' => 'danger'];
             } elseif ($log->getOutcome() === SpamScoreLog::OUTCOME_QUARANTINED) {
-                $out[$log->getId()] = ['label' => 'już nie w kwarantannie (dostarczona lub usunięta)', 'class' => 'success'];
+                $out[$log->getId()] = ['label' => 'już nie w kwarantannie (przywrócona lub usunięta)', 'class' => 'success'];
             } else {
                 $out[$log->getId()] = ['label' => 'brak w kwarantannie (wpis sprzed zapisywania wyniku)', 'class' => 'default'];
             }

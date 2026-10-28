@@ -22,7 +22,7 @@ use Doctrine\ORM\EntityManagerInterface;
 class QuarantineService
 {
     const IMAP_KEY = 'imap';
-    const NOT_FOUND = 'Nie znaleziono wiadomości w kwarantannie (została już dostarczona lub usunięta?).';
+    const NOT_FOUND = 'Nie znaleziono wiadomości w kwarantannie (została już przywrócona lub usunięta?).';
 
     /**
      * Synthetic reason put on a listed message whose score log row could not
@@ -180,7 +180,7 @@ class QuarantineService
         } else {
             $res = $this->ssh->quarantineAction($this->sshAccount($key), 'release', $id, $whitelist);
             if (empty($res['success'])) {
-                return ['success' => false, 'message' => self::agentError($res, 'Nie udało się dostarczyć wiadomości.'), 'sender' => ''];
+                return ['success' => false, 'message' => self::agentError($res, 'Nie udało się przywrócić wiadomości.'), 'sender' => ''];
             }
             $sender = strtolower((string)($res['sender'] ?? ''));
         }
@@ -192,8 +192,8 @@ class QuarantineService
         return [
             'success' => true,
             'message' => $whitelist && $sender !== ''
-                ? sprintf('Wiadomość została dostarczona do skrzynki odbiorczej. Poczta od %s nie będzie już filtrowana.', $sender)
-                : 'Wiadomość została dostarczona do skrzynki odbiorczej.',
+                ? sprintf('Wiadomość została przywrócona do skrzynki odbiorczej. Poczta od %s nie będzie już filtrowana.', $sender)
+                : 'Wiadomość została przywrócona do skrzynki odbiorczej.',
             'sender' => $sender,
         ];
     }

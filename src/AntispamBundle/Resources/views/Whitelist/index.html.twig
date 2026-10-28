@@ -24,9 +24,9 @@
     <ul class="list-group">
         {% for l in list %}
         <li class="list-group-item">
-            <form method="post" action="{{ path('antispam_whitelist_del',{'id':l.id}) }}" style="display:inline;" onsubmit="return confirm('Usunąć tę domenę z whitelisty?')">
+            <form method="post" action="{{ path('antispam_whitelist_del',{'id':l.id}) }}" style="display:inline;">
                 <input type="hidden" name="_token" value="{{ csrf_token('list_rules') }}">
-                <button type="submit" class="btn btn-danger btn-xs list-actions"><span class="glyphicon glyphicon-remove"></span> Usuń</button>
+                <button type="submit" class="btn btn-danger btn-xs list-actions" data-confirm="Usunąć tę domenę z whitelisty?"><span class="glyphicon glyphicon-remove"></span> Usuń</button>
             </form>
             <span class="badge badge-counter">{{ l.counter }} trafień</span>
             <span class="label label-default">{{ l.patternType }}</span>
@@ -42,4 +42,8 @@
         <p class="text-muted">Obsługuje wzorce dokładne, wildcard i regex</p>
     </div>
     {% endif %}
+{% endblock %}
+
+{% block javascripts %}
+    <script src="{{ asset('bundles/antispam/js/data-confirm.js') }}"></script>
 {% endblock %}

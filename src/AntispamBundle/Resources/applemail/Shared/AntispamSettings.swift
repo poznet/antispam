@@ -29,10 +29,11 @@ final class AntispamSettings {
 
     var server: String {
         get {
-            let s = defaults.string(forKey: "server") ?? ""
-            return (s.isEmpty ? ServerConfig.defaultServer : s).trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
+            let s = ServerConfig.normalize(defaults.string(forKey: "server") ?? "")
+            return s.isEmpty ? ServerConfig.normalize(ServerConfig.defaultServer) : s
         }
-        set { defaults.set(newValue.trimmingCharacters(in: .whitespaces), forKey: "server") }
+        // Pasted setup links (https://host/plugin/setup) are cut to the base URL.
+        set { defaults.set(ServerConfig.normalize(newValue), forKey: "server") }
     }
 
     var token: String {

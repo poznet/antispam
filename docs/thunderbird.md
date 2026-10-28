@@ -55,8 +55,26 @@ in the plugin settings when antispam runs behind a TLS-terminating proxy,
 otherwise the URL is taken from the request (and may come out as `http://`).
 
 Install in Thunderbird: *Add-ons and Themes → ⚙ → Install Add-on From File…*.
-Thunderbird does not require add-on signing for this. Requires the PHP `zip`
+Thunderbird does not verify add-on signatures at all (and ATN does not sign),
+so the self-built package installs without warnings. Requires the PHP `zip`
 extension on the server (present in the Docker image).
+
+Since 1.2.0 there are three variants (details, ATN submission and the
+release workflow: [plugin-distribution.md](plugin-distribution.md)):
+
+- `?build=instance` - the URL baked in as above, plus (https only)
+  `update_url` → `/plugin/thunderbird/updates.json`, so Thunderbird updates
+  the plugin from the instance by itself;
+- `?build=generic` - no `config.json`, no `update_url`: the package for
+  addons.thunderbird.net. On first install the plugin opens its settings with
+  a *Pierwsze uruchomienie* box asking for the server address (the
+  `/plugin/setup` page shows it; pasting the whole link works);
+- an **uploaded** generic package (*Ustawienia → Wtyczki pocztowe → Wgraj
+  wersję ogólną*, e.g. the file from ATN), served by `/plugin/download` by
+  default while its version equals `PLUGIN_VERSION`.
+
+`bin/build-thunderbird-xpi --generic|--server=URL` and
+`bin/console antispam:plugin:build` build the same reproducible packages.
 
 The download is sent with `Cache-Control: private, no-store` and the panel /
 home page links carry `?v=<PLUGIN_VERSION>`, so a browser or proxy cannot hand
@@ -174,7 +192,9 @@ plugin version the server bundles) and `server_version` (the antispam release,
 | POST | `/api/plugin/phishing` | required | `{raw_base64 (max 10 MiB decoded), client: "thunderbird"\|"outlook", truncated: bool}` → report fields + `{phishing_id, duplicate}`. 30/h per account. See [phishing.md](phishing.md) |
 | POST | `/api/plugin/ping` | optional | Connection test from the settings page: `{client, client_version, app}` → `{ok, enabled, server_version, plugin_version, authenticated, email, client_ip, received_at}`. Nothing is learned; written to the audit log as `plugin.ping`. 60/h per IP |
 | POST | `/api/plugin/check` | required | `{raw_base64}` → `{decision, spam, score, spam_threshold, quarantine_threshold, reasons[], sender, subject}` |
-| GET | `/plugin/download` | — | The `.xpi` |
+| GET | `/plugin/download` | — | The `.xpi` (`?build=instance` / `generic`; default: uploaded package if current, else instance) |
+| GET | `/plugin/thunderbird/updates.json` | — | Update manifest for the instance build's `update_url` |
+| GET | `/plugin/setup` | — | Setup page: server address to paste into a generic build |
 
 Errors: `400` bad payload, `401` login required / bad credentials / expired token,
 `403` feature disabled, `413` message too large, `429` rate limit, `507`

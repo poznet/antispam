@@ -7,3 +7,6 @@
 /.phpunit.cache/
 /config/reference.php
 /REVISION
+/build/
+src/AntispamBundle/Resources/applemail/build/
+src/AntispamBundle/Resources/applemail/*.xcodeproj/

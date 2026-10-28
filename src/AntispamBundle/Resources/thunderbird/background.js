@@ -52,10 +52,12 @@ const UPLOAD_TIMEOUT_MS = 120 * 1000;
 // junk changes within this window of arrival are not treated as user verdicts.
 const ARRIVAL_GRACE_MS = 2 * 60 * 1000;
 
-// Server URL baked into config.json by the antispam download endpoint.
+// Server URL baked into config.json by the antispam download endpoint
+// (instance build). The generic build (addons.thunderbird.net) has no
+// config.json: the user enters the address on first run (settings page).
 const bundledServer = fetch(messenger.runtime.getURL("config.json"))
   .then(r => r.json())
-  .then(c => (c.server || "").replace(/\/+$/, ""))
+  .then(c => normalizeServer(c.server))
   .catch(() => "");
 const BUTTON_TITLE = "Zgłoś spam (Antyspam)";
 const ownChanges = new Set();   // message ids whose junk flag we changed ourselves
@@ -82,10 +84,25 @@ function logEvent(kind, ok, text) {
 
 async function settings() {
   const s = Object.assign({}, DEFAULTS, await messenger.storage.local.get(Object.keys(DEFAULTS)));
-  if (!s.server) s.server = await bundledServer;
-  s.server = (s.server || "").replace(/\/+$/, "");
+  s.bundledServer = await bundledServer;
+  s.server = normalizeServer(s.server) || s.bundledServer;
   return s;
 }
+
+// First run of a build without a server address (generic build): open the
+// settings page, which asks for the address.
+messenger.runtime.onInstalled.addListener(async details => {
+  if (!details || details.reason !== "install") return;
+  try {
+    const s = await settings();
+    if (!s.server) {
+      logEvent("setup", false, "Brak adresu serwera - otwieram ustawienia (pierwsze uruchomienie)");
+      await messenger.runtime.openOptionsPage();
+    }
+  } catch (e) {
+    console.warn("antispam: first run", e);
+  }
+});
 
 async function api(path, { method = "GET", body = null, auth = true, timeout = REQUEST_TIMEOUT_MS } = {}) {
   const s = await settings();
@@ -638,13 +655,14 @@ async function connectionTest() {
   const manifest = messenger.runtime.getManifest();
   let app = "";
   try { const i = await messenger.runtime.getBrowserInfo(); app = i.name + " " + i.version; } catch (e) { /* ignore */ }
-  step("Wtyczka", true, "wersja " + manifest.version + (app ? ", " + app : ""));
+  step("Wtyczka", true, "wersja " + manifest.version + (app ? ", " + app : "")
+    + (s.bundledServer ? ", adres z pobranej wersji" : ", wersja ogólna (adres wpisany ręcznie)"));
 
   if (!step("Adres serwera", !!s.server, s.server || "nie ustawiono - wpisz adres w sekcji Serwer i zapisz")) {
     return finishTest(steps);
   }
   let origin = null;
-  try { const u = new URL(s.server); origin = u.protocol + "//" + u.hostname + "/*"; } catch (e) { /* invalid */ }
+  origin = originPattern(s.server);
   if (!step("Poprawny adres", !!origin, origin ? s.server : "nieprawidłowy adres URL")) return finishTest(steps);
   let allowed = false;
   try { allowed = await messenger.permissions.contains({ origins: [origin] }); } catch (e) { /* older API */ }

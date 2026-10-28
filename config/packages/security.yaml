@@ -70,10 +70,12 @@ security:
         # a token; details and /metrics check HEALTH_TOKEN in the controller.
         - { path: ^/(health|metrics)$, roles: PUBLIC_ACCESS }
         # Mail client plugins: bearer-token API, the public Thunderbird .xpi
-        # download (offered on the home page), the Outlook add-in (manifest +
-        # task pane loaded by Outlook) and the Apple Mail extension source.
+        # download (offered on the home page), its self-hosted update manifest
+        # (/plugin/thunderbird/updates.json), the setup page with the server
+        # address (/plugin/setup), the Outlook add-in (manifest + task pane
+        # loaded by Outlook) and the Apple Mail extension source.
         - { path: ^/api/plugin, roles: PUBLIC_ACCESS }
-        - { path: ^/plugin/(download|outlook/|apple-mail/), roles: PUBLIC_ACCESS }
+        - { path: ^/plugin/(download|thunderbird/|setup$|outlook/|apple-mail/), roles: PUBLIC_ACCESS }
         # End-user area (own quarantine / spam / score log): ROLE_USER, ownership
         # of each mailbox is enforced in the controller (Security\MailboxAccess).
         # /start redirects to the role's landing page after login; /2fa is the

@@ -11,6 +11,7 @@ Symfony 7.4 LTS application for email spam filtering via IMAP or SSH+Maildir age
 - `src/AntispamBundle/Resources/agent/` - standalone Maildir agent PHP script
 - `src/AntispamBundle/Resources/thunderbird/` - Thunderbird plugin (MailExtension), served as .xpi by `/plugin/download`
 - `src/AntispamBundle/Resources/outlook/` - Outlook add-in (manifest template + task pane), hosted under `/plugin/outlook/*`; `src/AntispamBundle/Resources/applemail/` - Apple Mail (MailKit) extension source, zipped by `/plugin/apple-mail/source.zip` (not buildable here, needs Xcode + Apple Developer signing)
+- Plugin distribution (generic / ATN Thunderbird build, uploaded package, self-hosted updates, `/plugin/setup`, Outlook central deployment, Apple notarization): `docs/plugin-distribution.md`, `bin/build-thunderbird-xpi`, `.github/workflows/thunderbird-plugin.yml`
 - Home page `/` (`HomeController`, `Resources/views/Home/index.html.twig`, assets in `Resources/public/landing/`) - public product page for antispam.pancernapanda.pl with the admin login form embedded (`#logowanie`); the admin dashboard is at `/panel`
 
 ## Key concepts
@@ -40,6 +41,7 @@ See `docs/` directory for detailed documentation:
 - `docs/thunderbird.md` - Thunderbird plugin: spam reports, on-arrival checks, login, `/api/plugin`
 - `docs/outlook.md` - Outlook add-in: hosting (HTTPS), sideload / admin deploy, task pane features and limits
 - `docs/apple-mail.md` - Apple Mail MailKit extension: why source-only, layout, build/sign notes
+- `docs/plugin-distribution.md` - store / signed builds: ATN, self-hosted updates, Outlook central deployment / AppSource, Apple notarization
 - `docs/backup.md` - configuration backup/restore (`antispam:export` / `antispam:import`, panel `/backup`), secrets handling, `antispam:doctor` checks
 
 ## Tech stack

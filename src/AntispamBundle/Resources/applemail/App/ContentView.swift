@@ -105,7 +105,7 @@ struct ContentView: View {
     @MainActor
     private func refreshStatus() async {
         guard !settings.server.isEmpty else {
-            serverStatus = "Podaj adres serwera antyspamu."
+            serverStatus = "Podaj adres serwera antyspamu (od administratora: strona …/plugin/setup – możesz wkleić cały link)."
             return
         }
         do {

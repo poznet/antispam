@@ -15,6 +15,17 @@
     </div>
   </header>
 
+  <section id="setup" class="setup" hidden>
+    <h2>Pierwsze uruchomienie</h2>
+    <p>Podaj adres serwera antyspamu. Znajdziesz go na stronie „Konfiguracja wtyczki” od administratora
+      (adres kończy się na <code>/plugin/setup</code>) - możesz wkleić cały link.</p>
+    <form id="setupForm">
+      <label>Adres antyspamu <input type="text" id="setupServer" placeholder="https://antispam.example.pl" required autocomplete="url"></label>
+      <button type="submit">Połącz</button>
+    </form>
+    <p id="setupMsg" class="msg" hidden></p>
+  </section>
+
   <section>
     <h2>Konto</h2>
     <div id="loggedOut">
@@ -58,8 +69,8 @@
 
   <section>
     <h2>Serwer</h2>
-    <label>Adres antyspamu <input type="url" id="server" placeholder="https://antispam.example.com"></label>
-    <p class="muted">Ustawiony automatycznie przy pobraniu wtyczki. Zmieniaj tylko, jeśli antyspam działa pod innym adresem.</p>
+    <label>Adres antyspamu <input type="text" id="server" placeholder="https://antispam.example.com" autocomplete="url"></label>
+    <p class="muted" id="serverHint">Ustawiony automatycznie przy pobraniu wtyczki. Zmieniaj tylko, jeśli antyspam działa pod innym adresem.</p>
   </section>
 
   <button type="button" id="save" disabled>Zapisz ustawienia</button>
@@ -80,6 +91,7 @@
     <ul id="events" class="events"></ul>
   </section>
 
+  <script src="common.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

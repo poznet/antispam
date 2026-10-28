@@ -11,7 +11,11 @@ Status: **source code, no prebuilt app** ("wkrótce" in the UI).
   the Mac App Store). A server cannot produce that per instance.
 
 So the app offers the Xcode source with the server URL baked in, and an admin
-with an Apple Developer account builds and distributes the app.
+with an Apple Developer account builds and distributes the app. Alternatively
+the owner builds **one** signed + notarized app from the repository (no URL
+baked in, the user pastes the address or the `/plugin/setup` link on first
+run): `scripts/build-and-notarize.sh` - see
+[plugin-distribution.md](plugin-distribution.md#apple-mail).
 
 Source: `src/AntispamBundle/Resources/applemail/` (build instructions in its
 `README.md`, in Polish, shipped inside the zip). Download:
@@ -29,6 +33,7 @@ which replaces `__ANTISPAM_SERVER__` in `Shared/ServerConfig.swift`.
 | `MailExtension/MessageActionHandler.swift` | `MEMessageActionHandler` – on-arrival check |
 | `Shared/AntispamClient.swift` | `/api/plugin/*` client (status, login, report, check) |
 | `Shared/AntispamSettings.swift` | settings in App Group `UserDefaults` (shared app ↔ extension) |
+| `scripts/build-and-notarize.sh` | owner's Mac: XcodeGen, archive, Developer ID export, `notarytool submit --wait`, staple, zip / dmg (`--unsigned` = compile check) |
 | `*.entitlements` | sandbox, outgoing network, App Group `$(TeamIdentifierPrefix)pl.pancernapanda.antispam` |
 
 ## Behaviour

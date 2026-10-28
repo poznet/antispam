@@ -415,7 +415,12 @@ checks) should read the parameter or the constant, never parse `CHANGELOG.md`.
    plugin code or manifest changed:
    - Thunderbird: `version` in `Resources/thunderbird/manifest.json` **and**
      `PluginApiController::PLUGIN_VERSION` (same value - it is the `?v=` cache
-     buster of the `.xpi` link and `version` in `/api/plugin/status`).
+     buster of the `.xpi` link, `version` in `/api/plugin/status` and in
+     `/plugin/thunderbird/updates.json`, which makes installed instance builds
+     update themselves). For a store release tag `thunderbird-v<version>`
+     (workflow `thunderbird-plugin.yml`) and, after ATN review, upload the new
+     package in every panel - an uploaded package of an older version stops
+     being served. See [plugin-distribution.md](plugin-distribution.md).
    - Outlook: `<Version>` in `Resources/outlook/manifest.xml` (four parts,
      `1.1.0.0`; Outlook caches add-ins by it).
    - New `/api/plugin` response fields are additive; a plugin must keep

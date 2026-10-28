@@ -10,6 +10,7 @@ use AntispamBundle\Services\DeferredRetroactivePass;
 use AntispamBundle\Services\PhishingReportService;
 use AntispamBundle\Services\PluginService;
 use AntispamBundle\Services\RawMessageScanner;
+use AntispamBundle\Services\ThunderbirdPluginBuilder;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -28,11 +29,13 @@ use Symfony\Component\Routing\Attribute\Route;
  *     on-arrival checks (/check) and per-account rule learning.
  *
  * Routes are exempt from form login (security.yml: ^/api/plugin and
- * ^/plugin/download); auth is a bearer token issued by /api/plugin/login.
+ * ^/plugin/(download|thunderbird/|setup)); auth is a bearer token issued by /api/plugin/login.
  */
 class PluginApiController extends AbstractController
 {
     use AuditTrait;
+
+    private ThunderbirdPluginBuilder $tb;
 
     public function __construct(
         private RawMessageScanner $rawScanner,
@@ -40,7 +43,9 @@ class PluginApiController extends AbstractController
         private DeferredRetroactivePass $retroactive,
         private EntityManagerInterface $em,
         private PhishingReportService $phishing,
+        ?ThunderbirdPluginBuilder $tb = null,
     ) {
+        $this->tb = $tb ?? new ThunderbirdPluginBuilder();
     }
 
     /** Retroactive passes (IMAP/SSH login each) per account and hour. */
@@ -48,8 +53,14 @@ class PluginApiController extends AbstractController
     /** Phishing reports (full messages up to 10 MiB each) per account and hour. */
     const PHISHING_RATE_LIMIT = 30;
 
-    const PLUGIN_VERSION = '1.1.3';
+    const PLUGIN_VERSION = '1.2.0';
 
+    /**
+     * The Thunderbird .xpi. Default: the uploaded generic package (e.g. the
+     * file from addons.thunderbird.net) when one of the current version is
+     * stored, otherwise the instance build (server URL in config.json, self-hosted
+     * updates). ?build=instance / ?build=generic force a variant.
+     */
     #[Route('/plugin/download', name: 'antispam_plugin_download', methods: ['GET'])]
     public function downloadAction(Request $request)
     {
@@ -60,32 +71,62 @@ class PluginApiController extends AbstractController
             return new Response('PHP zip extension is required to build the plugin', 500);
         }
 
-        $server = $this->plugin->getPublicUrl() ?: $request->getSchemeAndHttpHost() . $request->getBasePath();
-        $src = __DIR__ . '/../Resources/thunderbird';
-        $tmp = tempnam(sys_get_temp_dir(), 'tbxpi');
-
-        $zip = new \ZipArchive();
-        $zip->open($tmp, \ZipArchive::OVERWRITE);
-        $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($src, \FilesystemIterator::SKIP_DOTS));
-        foreach ($it as $file) {
-            $rel = str_replace('\\', '/', substr($file->getPathname(), strlen($src) + 1));
-            if ($rel === 'manifest.json') {
-                $zip->addFromString($rel, $this->buildManifest($file->getPathname(), $server));
-            } elseif ($rel !== 'config.json') {
-                $zip->addFile($file->getPathname(), $rel);
-            }
+        $build = (string)$request->query->get('build', '');
+        $uploaded = $build === 'instance' ? null : $this->tb->uploadedBuild();
+        if ($uploaded && $uploaded['current']) {
+            $response = new BinaryFileResponse($uploaded['path'], 200, [], false);
+            $name = 'antispam-thunderbird-' . $uploaded['version'] . '.xpi';
+        } else {
+            $server = $build === 'generic' ? null : $this->baseUrl($request);
+            $response = new BinaryFileResponse($this->tb->buildTemp($server), 200, [], false);
+            $response->deleteFileAfterSend(true);
+            $name = $server === null ? 'antispam-thunderbird-generic.xpi' : 'antispam-thunderbird.xpi';
         }
-        // Pre-configured server URL, so the user never has to type it.
-        $zip->addFromString('config.json', json_encode(['server' => $server], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-        $zip->close();
-
         // Built per request with the current code: never let a browser or proxy keep an old .xpi.
-        $response = new BinaryFileResponse($tmp, 200, [], false);
         $response->headers->set('Content-Type', 'application/x-xpinstall');
         $response->headers->set('Cache-Control', 'private, no-store');
-        $response->setContentDisposition(ResponseHeaderBag::DISPOSITION_ATTACHMENT, 'antispam-thunderbird.xpi');
-        $response->deleteFileAfterSend(true);
+        $response->setContentDisposition(ResponseHeaderBag::DISPOSITION_ATTACHMENT, $name);
         return $response;
+    }
+
+    /**
+     * Self-hosted update manifest (update_url of the instance build, https only).
+     * Points at the instance build, so an update keeps the baked-in server URL.
+     */
+    #[Route('/plugin/thunderbird/updates.json', name: 'antispam_plugin_thunderbird_updates', methods: ['GET'])]
+    public function updatesAction(Request $request)
+    {
+        if (!$this->plugin->isEnabled()) {
+            throw $this->createNotFoundException('Thunderbird plugin is disabled');
+        }
+        $link = $this->baseUrl($request) . '/plugin/download?build=instance&v=' . rawurlencode(self::PLUGIN_VERSION);
+        $response = new JsonResponse($this->tb->updatesManifest($link));
+        $response->setEncodingOptions(JsonResponse::DEFAULT_ENCODING_OPTIONS | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+        $response->headers->set('Cache-Control', 'public, max-age=300');
+        return $response;
+    }
+
+    /**
+     * Public setup page: the server address to paste into a generic plugin
+     * build (first run), with install steps. Linked from the panel.
+     */
+    #[Route('/plugin/setup', name: 'antispam_plugin_setup', methods: ['GET'])]
+    public function setupAction(Request $request)
+    {
+        if (!$this->plugin->isEnabled()) {
+            throw $this->createNotFoundException('Mail client plugins are disabled');
+        }
+        $response = $this->render('@Antispam/Configuration/pluginSetup.html.twig', [
+            'server' => $this->baseUrl($request),
+            'version' => self::PLUGIN_VERSION,
+        ]);
+        $response->headers->set('X-Robots-Tag', 'noindex');
+        return $response;
+    }
+
+    private function baseUrl(Request $request): string
+    {
+        return rtrim($this->plugin->getPublicUrl() ?: $request->getSchemeAndHttpHost() . $request->getBasePath(), '/');
     }
 
     #[Route('/api/plugin/status', name: 'antispam_plugin_api_status', methods: ['GET'])]
@@ -338,23 +379,5 @@ class PluginApiController extends AbstractController
     {
         $h = (string)$request->headers->get('Authorization', '');
         return stripos($h, 'Bearer ') === 0 ? trim(substr($h, 7)) : '';
-    }
-
-    /** Manifest with the server origin added to host permissions. */
-    private function buildManifest($path, $server)
-    {
-        $manifest = json_decode(file_get_contents($path), true);
-        $parts = parse_url($server);
-        if (!empty($parts['scheme']) && !empty($parts['host'])) {
-            // Match patterns cannot carry a port; the host alone covers every port.
-            $manifest['permissions'][] = $parts['scheme'] . '://' . $parts['host'] . '/*';
-            if ($parts['scheme'] === 'http') {
-                // The proxy may redirect http:// to https:// — without this the
-                // redirected request is blocked as cross-origin.
-                $manifest['permissions'][] = 'https://' . $parts['host'] . '/*';
-            }
-            $manifest['permissions'] = array_values(array_unique($manifest['permissions']));
-        }
-        return json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
 }

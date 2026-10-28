@@ -17,11 +17,49 @@
             <div class="panel panel-default">
                 <div class="panel-heading"><span class="glyphicon glyphicon-download-alt"></span> Thunderbird</div>
                 <div class="panel-body">
-                    <p><a href="{{ path('antispam_plugin_download', {v: constant('AntispamBundle\\Controller\\PluginApiController::PLUGIN_VERSION')}) }}" class="btn btn-success">
+                    {% set tb_version = constant('AntispamBundle\\Controller\\PluginApiController::PLUGIN_VERSION') %}
+                    {% set up = thunderbird_uploaded %}
+                    <p><a href="{{ path('antispam_plugin_download', {v: tb_version}) }}" class="btn btn-success">
                         <span class="glyphicon glyphicon-download-alt"></span> Pobierz antispam-thunderbird.xpi
                     </a></p>
                     <p class="text-muted small">Thunderbird 115+: Dodatki i motywy → ⚙ → Zainstaluj dodatek z pliku…
-                        Zgłaszanie, „To nie spam”, sprawdzanie nowej poczty przy odbiorze. Link jest też na stronie głównej.</p>
+                        Zgłaszanie, „To nie spam”, sprawdzanie nowej poczty przy odbiorze. Link jest też na stronie głównej.
+                        Ten przycisk wydaje: <strong>{{ up and up.current ? 'wgraną wersję ogólną' : 'wersję z adresem tego serwera' }}</strong>.</p>
+                    <table class="table table-condensed small" style="margin-bottom:8px">
+                        <tr>
+                            <td><a href="{{ path('antispam_plugin_download', {build: 'instance', v: tb_version}) }}">Z adresem serwera</a></td>
+                            <td class="text-muted">{{ base_url }} wpisany w config.json;
+                                {% if thunderbird_auto_update %}automatyczne aktualizacje z <a href="{{ path('antispam_plugin_thunderbird_updates') }}">updates.json</a>{% else %}bez automatycznych aktualizacji (wymagają https){% endif %}</td>
+                        </tr>
+                        <tr>
+                            <td><a href="{{ path('antispam_plugin_download', {build: 'generic', v: tb_version}) }}">Ogólna</a></td>
+                            <td class="text-muted">bez adresu - do zgłoszenia w addons.thunderbird.net; użytkownik wkleja adres przy pierwszym uruchomieniu</td>
+                        </tr>
+                        <tr>
+                            <td>Wgrana</td>
+                            <td>{% if up %}
+                                    <a href="{{ path('antispam_plugin_thunderbird_uploaded') }}">{{ up.version }}</a>
+                                    {% if up.signed %}<span class="label label-success">podpisana</span>{% else %}<span class="label label-default">bez podpisu</span>{% endif %}
+                                    {% if not up.current %}<span class="label label-warning">nieaktualna - nie jest wydawana</span>{% endif %}
+                                    <span class="text-muted">{{ up.uploaded_at|date('Y-m-d H:i') }}</span>
+                                {% else %}<span class="text-muted">brak</span>{% endif %}</td>
+                        </tr>
+                    </table>
+                    <form method="post" action="{{ path('antispam_plugin_thunderbird_upload') }}" enctype="multipart/form-data" class="small">
+                        <input type="hidden" name="_token" value="{{ csrf_token('plugin_thunderbird_upload') }}">
+                        <input type="file" name="xpi" accept=".xpi,application/x-xpinstall" required>
+                        <button type="submit" class="btn btn-default btn-xs" style="margin-top:4px"><span class="glyphicon glyphicon-upload"></span> Wgraj wersję ogólną {{ tb_version }}</button>
+                    </form>
+                    {% if up %}
+                    <form method="post" action="{{ path('antispam_plugin_thunderbird_upload_delete') }}" style="margin-top:4px">
+                        <input type="hidden" name="_token" value="{{ csrf_token('plugin_thunderbird_upload_delete') }}">
+                        <button type="submit" class="btn btn-link btn-xs text-danger" style="padding-left:0" data-confirm="Usunąć wgraną wtyczkę? Pobieranie wróci do wersji z adresem tego serwera.">Usuń wgraną</button>
+                    </form>
+                    {% endif %}
+                    <p class="text-muted small" style="margin-top:8px">Wgraj plik pobrany z addons.thunderbird.net (lub zbudowany <code>bin/build-thunderbird-xpi --generic</code>), aby wszyscy dostawali ten sam pakiet.
+                        Musi mieć id <code>antispam@pancernapanda.pl</code>, wersję {{ tb_version }} i nie mieć wpisanego adresu.
+                        Strona z adresem do wklejenia: <a href="{{ path('antispam_plugin_setup') }}">{{ base_url }}/plugin/setup</a>.
+                        Opis: docs/plugin-distribution.md.</p>
                 </div>
             </div>
         </div>
@@ -116,4 +154,5 @@
 
     <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-floppy-disk"></span> Zapisz</button>
     </form>
+    <script src="{{ asset('bundles/antispam/js/data-confirm.js') }}"></script>
 {% endblock %}

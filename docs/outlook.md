@@ -55,7 +55,9 @@ antispam instances are deployed for the same Microsoft 365 tenant, change the
   (default for most Microsoft 365 tenants; Outlook.com allows it).
 - **Admin (whole organisation):** Microsoft 365 admin center → *Settings →
   Integrated apps → Upload custom apps* → *Office Add-in* → upload the manifest
-  file (or give its URL). Deployment to users can take up to 24 h.
+  file (or give its URL). Deployment to users can take 24-72 h. Step by step,
+  the XML vs unified (JSON) manifest status and what an AppSource listing
+  would need (the per-instance URL problem): [plugin-distribution.md](plugin-distribution.md#outlook).
 
 The add-in appears as an **Antyspam** button on the ribbon / message toolbar
 when a message is open (read mode).

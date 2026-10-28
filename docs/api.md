@@ -194,7 +194,12 @@ Full reference: **[thunderbird.md](thunderbird.md)**, clients:
 | POST | `/api/plugin/report` | User verdict (`spam` anonymous or logged in, `ham` logged in) |
 | POST | `/api/plugin/check` | Score a raw message (logged in) |
 | POST | `/api/plugin/phishing` | Phishing report: full message stored for the admin + spam report (logged in) |
-| GET | `/plugin/download` | Download the `.xpi` (public, `Cache-Control: private, no-store`) |
+| GET | `/plugin/download` | Download the `.xpi` (public, `Cache-Control: private, no-store`; `?build=instance\|generic`, default = uploaded package when current, else instance build) |
+| GET | `/plugin/thunderbird/updates.json` | Update manifest for the instance build's `update_url` (public) |
+| GET | `/plugin/setup` | Setup page with the server address for generic plugin builds (public) |
+| POST | `/config/plugin/thunderbird-upload` | Upload the generic Thunderbird package (admin, CSRF `plugin_thunderbird_upload`, field `xpi`) |
+| POST | `/config/plugin/thunderbird-upload/delete` | Remove it (admin, CSRF `plugin_thunderbird_upload_delete`) |
+| GET | `/config/plugin/thunderbird-uploaded.xpi` | The stored upload (admin) |
 | GET | `/plugin/outlook/manifest.xml` | Outlook add-in manifest (public; `409` when the server URL is not HTTPS) |
 | GET | `/plugin/outlook/{file}` | Outlook task pane files (`taskpane.html/js/css`, `commands.html`, `icons/icon-*.png`; public) |
 | GET | `/plugin/apple-mail/source.zip` | Apple Mail extension source with the server URL set (public) |

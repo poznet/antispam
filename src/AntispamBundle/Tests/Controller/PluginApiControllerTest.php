@@ -9,6 +9,7 @@ use AntispamBundle\Services\DeferredRetroactivePass;
 use AntispamBundle\Services\PhishingReportService;
 use AntispamBundle\Services\PluginService;
 use AntispamBundle\Services\RawMessageScanner;
+use AntispamBundle\Services\ThunderbirdPluginBuilder;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
@@ -48,9 +49,64 @@ class PluginApiControllerTest extends TestCase
         $this->phishing = $this->createMock(PhishingReportService::class);
     }
 
+    private ?ThunderbirdPluginBuilder $tb = null;
+    private ?string $tbStorage = null;
+
+    protected function tearDown(): void
+    {
+        if ($this->tb) {
+            $this->tb->removeUpload();
+            @rmdir((string)$this->tbStorage);
+        }
+    }
+
+    private function tb(): ThunderbirdPluginBuilder
+    {
+        if (!$this->tb) {
+            $this->tbStorage = sys_get_temp_dir() . '/tbctl-' . bin2hex(random_bytes(4));
+            $this->tb = new ThunderbirdPluginBuilder(null, $this->tbStorage);
+        }
+        return $this->tb;
+    }
+
     private function controller(): PluginApiController
     {
-        return new PluginApiController($this->createMock(RawMessageScanner::class), $this->plugin, $this->deferred, $this->em, $this->phishing);
+        return new PluginApiController($this->createMock(RawMessageScanner::class), $this->plugin, $this->deferred, $this->em, $this->phishing, $this->tb());
+    }
+
+    /** @return array{manifest: array, config: array|null} of a downloaded .xpi (file deleted) */
+    private function download(string $query = ''): array
+    {
+        $res = $this->controller()->downloadAction(Request::create('/plugin/download' . $query));
+        $this->assertSame(200, $res->getStatusCode());
+        $this->assertSame('application/x-xpinstall', $res->headers->get('Content-Type'));
+        $path = $res->getFile()->getPathname();
+        $zip = new \ZipArchive();
+        $this->assertTrue($zip->open($path));
+        $out = [
+            'manifest' => json_decode($zip->getFromName('manifest.json'), true),
+            'config' => ($c = $zip->getFromName('config.json')) === false ? null : json_decode($c, true),
+            'marker' => $zip->getFromName('uploaded-marker.txt'),
+            'disposition' => $res->headers->get('Content-Disposition'),
+        ];
+        $zip->close();
+        if (!str_starts_with($path, (string)$this->tbStorage)) {
+            @unlink($path);
+        }
+        return $out;
+    }
+
+    /** Stores an "uploaded" generic package with a marker file. */
+    private function upload(): void
+    {
+        $xpi = tempnam(sys_get_temp_dir(), 'tbup');
+        $this->tb()->build(null, $xpi);
+        $zip = new \ZipArchive();
+        $zip->open($xpi);
+        $zip->addFromString('uploaded-marker.txt', 'from ATN');
+        $zip->close();
+        $this->tb()->storeUpload($xpi, 'antispam.xpi');
+        unlink($xpi);
     }
 
     private function post(array|string $body, string $token = ''): Request
@@ -220,5 +276,68 @@ class PluginApiControllerTest extends TestCase
         $this->assertSame('https://antispam.example.com', $config['server']);
         $this->assertContains('https://antispam.example.com/*', $manifest['permissions']);
         $this->assertSame(['none'], $manifest['browser_specific_settings']['gecko']['data_collection_permissions']['required']);
+    }
+
+    #[RequiresPhpExtension('zip')]
+    public function testDownloadPrefersTheUploadedBuild()
+    {
+        $this->plugin->method('getPublicUrl')->willReturn('https://antispam.example.com');
+        $this->assertNotFalse($this->download()['config'], 'instance build without an upload');
+
+        $this->upload();
+        $default = $this->download();
+        $this->assertSame('from ATN', $default['marker']);
+        $this->assertNull($default['config']);
+        $this->assertStringContainsString('antispam-thunderbird-' . PluginApiController::PLUGIN_VERSION . '.xpi', $default['disposition']);
+
+        // The update link of instance builds asks for the instance build explicitly.
+        $instance = $this->download('?build=instance');
+        $this->assertFalse($instance['marker']);
+        $this->assertSame('https://antispam.example.com', $instance['config']['server']);
+    }
+
+    #[RequiresPhpExtension('zip')]
+    public function testOutdatedUploadIsNotServed()
+    {
+        $this->plugin->method('getPublicUrl')->willReturn('https://antispam.example.com');
+        $this->upload();
+        $meta = $this->tbStorage . '/' . ThunderbirdPluginBuilder::UPLOAD_META;
+        file_put_contents($meta, json_encode(['version' => '0.1'] + json_decode(file_get_contents($meta), true)));
+
+        $res = $this->download();
+        $this->assertFalse($res['marker']);
+        $this->assertSame('https://antispam.example.com', $res['config']['server']);
+    }
+
+    #[RequiresPhpExtension('zip')]
+    public function testGenericDownloadHasNoServer()
+    {
+        $this->plugin->method('getPublicUrl')->willReturn('https://antispam.example.com');
+        $res = $this->download('?build=generic');
+        $this->assertNull($res['config']);
+        $this->assertArrayNotHasKey('update_url', $res['manifest']['browser_specific_settings']['gecko']);
+        $this->assertNotContains('https://antispam.example.com/*', $res['manifest']['permissions']);
+    }
+
+    public function testUpdatesJsonListsTheCurrentVersion()
+    {
+        $this->plugin->method('getPublicUrl')->willReturn('https://antispam.example.com/');
+        $res = $this->controller()->updatesAction(Request::create('/plugin/thunderbird/updates.json'));
+
+        $this->assertSame(200, $res->getStatusCode());
+        $this->assertStringContainsString('application/json', $res->headers->get('Content-Type'));
+        $data = json_decode($res->getContent(), true);
+        $update = $data['addons']['antispam@pancernapanda.pl']['updates'][0];
+        $this->assertSame(PluginApiController::PLUGIN_VERSION, $update['version']);
+        $this->assertSame('https://antispam.example.com/plugin/download?build=instance&v=' . PluginApiController::PLUGIN_VERSION, $update['update_link']);
+        $this->assertStringNotContainsString('\\/', $res->getContent(), 'readable URLs');
+    }
+
+    public function testUpdatesJsonIsGoneWhenPluginsAreDisabled()
+    {
+        $this->plugin = $this->createMock(PluginService::class);
+        $this->plugin->method('isEnabled')->willReturn(false);
+        $this->expectException(\Symfony\Component\HttpKernel\Exception\NotFoundHttpException::class);
+        $this->controller()->updatesAction(Request::create('/plugin/thunderbird/updates.json'));
     }
 }

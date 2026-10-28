@@ -1,0 +1,112 @@
+{% extends '@Antispam/main.html.twig' %}
+{% block title %}Dziennik audytu{% endblock %}
+{% block page_title %}Dziennik audytu{% endblock %}
+
+{% block body %}
+    {% set groupLabels = {'auth.': 'Logowanie', 'rule.': 'Reguły list', 'rules.': 'Reguły (konsola)', 'quarantine.': 'Kwarantanna', 'spambox.': 'Folder spamu', 'plugin.': 'Wtyczki', 'phishing.': 'Phishing', 'settings.': 'Ustawienia', 'account.': 'Konta', 'user.': 'Użytkownicy', 'dnsbl.': 'DNSBL', 'cert.': 'Lista CERT'} %}
+    {% set sourceLabels = {panel: 'panel', my: 'moja poczta', digest: 'link z raportu'} %}
+
+    <p class="text-muted">Kto, co i kiedy zrobił w panelu, w strefie użytkownika, przez linki z raportu kwarantanny i przez wtyczki pocztowe.
+    {% if retention > 0 %}Wpisy starsze niż {{ retention }} dni usuwa <code>antispam:purge</code> (klucz <code>audit.retention_days</code>).{% else %}Wpisy są przechowywane bezterminowo (<code>audit.retention_days</code> = 0).{% endif %}
+    Hasła i klucze nigdy nie są zapisywane.</p>
+
+    <div class="add-form scorelog-filter">
+        <form method="get" action="{{ path('antispam_audit_index') }}" class="form-inline">
+            <input type="date" name="from" class="form-control" value="{{ query.from|default('') }}" aria-label="Od dnia" title="Od dnia">
+            <input type="date" name="to" class="form-control" value="{{ query.to|default('') }}" aria-label="Do dnia" title="Do dnia">
+            <input type="search" name="actor" class="form-control" value="{{ filters.actor }}" placeholder="Kto (login / skrzynka)" aria-label="Kto">
+            <select name="action" class="form-control" aria-label="Akcja">
+                <option value="">Wszystkie akcje</option>
+                <optgroup label="Grupy">
+                    {% for g in action_groups %}
+                        <option value="{{ g }}"{{ filters.action == g ? ' selected' }}>{{ groupLabels[g]|default(g) }} (wszystkie)</option>
+                    {% endfor %}
+                </optgroup>
+                <optgroup label="Akcje">
+                    {% for key, label in actions %}
+                        <option value="{{ key }}"{{ filters.action == key ? ' selected' }}>{{ label ?: key }}</option>
+                    {% endfor %}
+                </optgroup>
+            </select>
+            <input type="search" name="mailbox" class="form-control" value="{{ filters.mailbox }}" placeholder="Skrzynka" aria-label="Skrzynka">
+            <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-filter"></span> Filtruj</button>
+            {% if query is not empty %}
+                <a href="{{ path('antispam_audit_index') }}" class="btn btn-default"><span class="glyphicon glyphicon-remove"></span> Wyczyść</a>
+            {% endif %}
+            <a href="{{ path('antispam_audit_export', query) }}" class="btn btn-default"><span class="glyphicon glyphicon-download-alt"></span> Eksport CSV</a>
+        </form>
+    </div>
+
+    {% if entries|length > 0 %}
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            <span class="glyphicon glyphicon-eye-open"></span>
+            {{ query is empty ? 'Ostatnie zdarzenia' : 'Wyniki filtrowania' }}
+            <span class="text-muted pull-right">{{ total }} {{ total == 1 ? 'wpis' : (total % 10 in [2, 3, 4] and total % 100 not in [12, 13, 14] ? 'wpisy' : 'wpisów') }}</span>
+        </div>
+        <div class="table-responsive">
+        <table class="table table-striped" style="margin-bottom:0;">
+            <thead><tr><th>Czas</th><th>Kto</th><th>IP</th><th>Akcja</th><th>Cel</th><th>Skrzynka</th><th>Szczegóły</th></tr></thead>
+            <tbody>
+            {% for e in entries %}
+                {% set d = e.detailsArray %}
+                <tr>
+                    <td class="pp-cell-nowrap">{{ e.createdAt|date('Y-m-d H:i:s') }}</td>
+                    <td>
+                        {{ e.actor }}
+                        <br><small class="text-muted">{{ e.actorTypeLabel }}{% if e.role %} · {{ e.role == 'ROLE_ADMIN' ? 'admin' : 'użytkownik' }}{% endif %}</small>
+                    </td>
+                    <td class="pp-cell-nowrap"><small>{{ e.ip ?: '—' }}</small></td>
+                    <td>
+                        {{ actions[e.action] ?? e.action }}
+                        {% if d.ok is defined %}
+                            {% if d.ok %}<span class="label label-success">OK</span>{% else %}<span class="label label-danger">błąd</span>{% endif %}
+                        {% endif %}
+                        <br><small class="text-muted"><code>{{ e.action }}</code>{% if d.source is defined %} · {{ sourceLabels[d.source]|default(d.source) }}{% endif %}</small>
+                    </td>
+                    <td>
+                        {% if e.targetLabel %}{{ e.targetLabel }}{% endif %}
+                        {% if e.targetType %}<br><small class="text-muted">{{ e.targetType }}{% if e.targetId %} #{{ e.targetId }}{% endif %}</small>{% endif %}
+                    </td>
+                    <td>{{ e.mailbox == '*' ? 'wszystkie skrzynki' : (e.mailbox ?: '—') }}</td>
+                    <td>
+                        {% if e.details %}
+                            <details>
+                                <summary><small>pokaż</small></summary>
+                                <pre style="max-height:300px; overflow:auto; margin-top:8px; white-space:pre-wrap;">{{ e.details }}</pre>
+                            </details>
+                        {% else %}
+                            <small class="text-muted">—</small>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+
+    {% if pages > 1 %}
+        <nav class="text-center">
+            <ul class="pagination">
+                <li class="{{ page <= 1 ? 'disabled' }}">
+                    <a href="{{ page > 1 ? path('antispam_audit_index', query|merge({page: page - 1})) : '#' }}" aria-label="Poprzednia">&laquo;</a>
+                </li>
+                {% for p in max(1, page - 3)..min(pages, page + 3) %}
+                    <li class="{{ p == page ? 'active' }}"><a href="{{ path('antispam_audit_index', query|merge({page: p})) }}">{{ p }}</a></li>
+                {% endfor %}
+                <li class="{{ page >= pages ? 'disabled' }}">
+                    <a href="{{ page < pages ? path('antispam_audit_index', query|merge({page: page + 1})) : '#' }}" aria-label="Następna">&raquo;</a>
+                </li>
+            </ul>
+        </nav>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+        <span class="glyphicon glyphicon-eye-open"></span>
+        <p>Brak wpisów{{ query is not empty ? ' dla tych filtrów' }}</p>
+        <p class="text-muted">Zdarzenia pojawią się tu po pierwszym logowaniu lub zmianie w panelu.</p>
+    </div>
+    {% endif %}
+{% endblock %}

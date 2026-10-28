@@ -25,6 +25,8 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/my')]
 class MyController extends AbstractController
 {
+    use AuditTrait;
+
     private const SCORELOG_PER_PAGE = 50;
 
     public function __construct(
@@ -92,6 +94,7 @@ class MyController extends AbstractController
         } catch (\Throwable $e) {
             $result = ['success' => false, 'message' => 'Operacja nie powiodła się. Spróbuj ponownie lub skontaktuj się z administratorem.'];
         }
+        $this->auditLogger()?->quarantine($action, 'my', $key, $id, $result);
 
         $this->addFlash($result['success'] ? 'success' : 'danger', $result['message']);
         return $this->redirectToRoute('antispam_my_quarantine');
@@ -169,6 +172,7 @@ class MyController extends AbstractController
                 // would otherwise log the user out because the password hash changed.
                 $user->setPassword($this->hasher->hashPassword($user, $new));
                 $this->em->flush();
+                $this->audit('user.password_change', targetType: 'user', targetId: $user->getId(), label: $user->getUsername());
                 $this->addFlash('success', 'Hasło zostało zmienione. Zaloguj się ponownie.');
                 return $this->redirectToRoute('logout');
             }

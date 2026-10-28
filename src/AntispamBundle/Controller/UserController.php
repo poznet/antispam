@@ -20,6 +20,8 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/users')]
 class UserController extends AbstractController
 {
+    use AuditTrait;
+
     const MIN_PASSWORD_LENGTH = 10;
 
     public function __construct(
@@ -51,6 +53,7 @@ class UserController extends AbstractController
                 $this->apply($user, $data);
                 $this->em->persist($user);
                 $this->em->flush();
+                $this->audit('user.add', targetType: 'user', targetId: $user->getId(), label: $user->getUsername(), details: $this->auditDetails($user, $data));
                 $this->addFlash('success', sprintf('Użytkownik %s został utworzony.', $user->getUsername()));
                 return $this->redirectToRoute('antispam_user_index');
             }
@@ -84,6 +87,7 @@ class UserController extends AbstractController
             if (!$errors) {
                 $this->apply($user, $data);
                 $this->em->flush();
+                $this->audit('user.edit', targetType: 'user', targetId: $user->getId(), label: $user->getUsername(), details: $this->auditDetails($user, $data));
                 $this->addFlash('success', sprintf('Zapisano zmiany użytkownika %s.', $user->getUsername()));
                 return $this->redirectToRoute('antispam_user_index');
             }
@@ -107,6 +111,7 @@ class UserController extends AbstractController
         } else {
             $this->em->remove($user);
             $this->em->flush();
+            $this->audit('user.delete', targetType: 'user', targetId: $id, label: $user->getUsername(), details: ['role' => $user->getRole()]);
             $this->addFlash('success', sprintf('Użytkownik %s został usunięty.', $user->getUsername()));
         }
         return $this->redirectToRoute('antispam_user_index');
@@ -190,6 +195,16 @@ class UserController extends AbstractController
     private function findAccounts(array $ids): array
     {
         return $ids ? $this->em->getRepository(Account::class)->findBy(['id' => array_values(array_unique($ids))]) : [];
+    }
+
+    /** Role, mailboxes and whether the password was set - never the password. */
+    private function auditDetails(User $user, array $data): array
+    {
+        return [
+            'role' => $user->getRole(),
+            'mailboxes' => array_map(fn(Account $a) => (string)$a->getEmail(), $user->getAccounts()->toArray()),
+            'password_changed' => (string)($data['password'] ?? '') !== '',
+        ];
     }
 
     private function apply(User $user, array $data): void

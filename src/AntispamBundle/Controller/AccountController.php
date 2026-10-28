@@ -4,6 +4,7 @@ namespace AntispamBundle\Controller;
 
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Services\AgentRulesExporter;
+use AntispamBundle\Services\AuditLogger;
 use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\CryptoService;
 use AntispamBundle\Services\ImapFlags;
@@ -23,6 +24,8 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/account')]
 class AccountController extends AbstractController
 {
+    use AuditTrait;
+
     public function __construct(
         private EntityManagerInterface $em,
         private SshService $ssh,
@@ -66,6 +69,7 @@ class AccountController extends AbstractController
             $account = $this->fillAccountFromRequest(new Account(), $request);
             $this->em->persist($account);
             $this->em->flush();
+            $this->audit('account.add', targetType: 'account', targetId: $account->getId(), label: $account->getName(), mailbox: $account->getEmail(), details: ['connection_type' => $account->getConnectionType()]);
             return $this->redirectToRoute('antispam_account_index');
         }
         return ['imap_tls' => ImapFlags::defaultOptions(), 'imap_flags' => ImapFlags::DEFAULT_FLAGS];
@@ -93,6 +97,7 @@ class AccountController extends AbstractController
                 $account->setSshHostKey(null);
             }
             $this->em->flush();
+            $this->audit('account.edit', targetType: 'account', targetId: $account->getId(), label: $account->getName(), mailbox: $account->getEmail(), details: AuditLogger::formFields($request->request->all('account'), ['imap_password', 'plugin_password']));
             return $this->redirectToRoute('antispam_account_index');
         }
 
@@ -178,6 +183,7 @@ class AccountController extends AbstractController
         if ($account) {
             $this->em->remove($account);
             $this->em->flush();
+            $this->audit('account.delete', targetType: 'account', targetId: $id, label: $account->getName(), mailbox: $account->getEmail(), details: ['connection_type' => $account->getConnectionType()]);
         }
         return $this->redirectToRoute('antispam_account_index');
     }
@@ -253,6 +259,7 @@ class AccountController extends AbstractController
         } catch (\Exception $e) {
             $result['messages'][] = 'Wdrożenie nie powiodło się: ' . $e->getMessage();
         }
+        $this->audit('account.deploy', targetType: 'account', targetId: $id, label: $account->getName(), mailbox: $account->getEmail(), details: ['ok' => $result['success']]);
 
         return ['account' => $account, 'result' => $result];
     }
@@ -271,6 +278,7 @@ class AccountController extends AbstractController
         }
         $account->setSshHostKey(null);
         $this->em->flush();
+        $this->audit('account.host_key_reset', targetType: 'account', targetId: $id, label: $account->getName(), mailbox: $account->getEmail());
         $this->addFlash('success', 'Zapisany klucz hosta SSH został usunięty. Przy następnym połączeniu zostanie zapamiętany klucz, który przedstawi serwer.');
         return $this->redirectToRoute('antispam_account_edit', ['id' => $account->getId()]);
     }
@@ -305,6 +313,7 @@ class AccountController extends AbstractController
         } catch (\Exception $e) {
             $result['messages'][] = 'Synchronizacja nie powiodła się: ' . $e->getMessage();
         }
+        $this->audit('account.sync', targetType: 'account', targetId: $id, label: $account->getName(), mailbox: $account->getEmail(), details: ['ok' => $result['success']]);
 
         return ['account' => $account, 'result' => $result];
     }

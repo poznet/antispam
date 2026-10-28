@@ -1,0 +1,108 @@
+# Audit log ("Dziennik audytu")
+
+Who did what, when and from where - for RODO / compliance questions ("who released
+this message?", "who removed that blacklist rule?", "who logged in from this IP?").
+Page: **Przegląd → Dziennik audytu** (`/audit`, ROLE_ADMIN only).
+
+## What is recorded
+
+| Action key | When | Target / mailbox / details |
+|------------|------|----------------------------|
+| `auth.login` | panel login (form_login) | user; firewall |
+| `auth.login_failed` | failed panel login (also throttled) | the login that was typed; `reason` = exception class or `throttled` |
+| `auth.logout` | logout | user |
+| `rule.add`, `rule.delete` | white/blacklist rule (domain and e-mail lists) | list type + rule id, value, owner mailbox (`*` = all); pattern type, score |
+| `rule.import` | bulk import (`/bulk/import/{type}`) | list type, owner; added / skipped counts |
+| `rules.make_global` | `antispam:rules:make-global` (not with `--dry-run`) | owner; moved / merged counts; actor `cli` |
+| `quarantine.release`, `quarantine.whitelist` ("Zawsze akceptuj"), `quarantine.delete` | admin panel (`source: panel`), user area `/my` (`source: my`), digest link `/q/` (`source: digest`, actor `link z raportu`) | message id, sender, mailbox address, quarantine key; `ok` = whether it worked (failed attempts are recorded too) |
+| `spambox.restore` | restore from the legacy SPAM / QUARANTINE folder | message number, folder |
+| `plugin.login`, `plugin.login_failed` | plugin login (`/api/plugin/login`) | mailbox address typed / logged in |
+| `plugin.report` | spam / not-spam report from a plugin | sender, mailbox; verdict, learned rules; actor = plugin account (or anonymous) |
+| `plugin.phishing` | phishing report from a plugin | phishing report id, sender, mailbox; duplicate, client |
+| `phishing.update`, `phishing.block`, `phishing.delete`, `phishing.eml_download` | `/phishing/*` | report id, sender, mailbox; status from/to, blocked value, rule id |
+| `settings.save` | Filtr spamu, Wspólna baza spamu, Raport kwarantanny, Wtyczki pocztowe, Konfiguracja (stara), Lista CERT | `target_id` = page; submitted field **names**, `secrets_changed` = names of secret fields that were set or cleared |
+| `settings.digest_send` | "Wyślij teraz" of the digest page | as above |
+| `settings.uncheck_all`, `settings.reset_counters` | maintenance buttons of Filtr spamu | - |
+| `account.add`, `account.edit`, `account.delete`, `account.deploy`, `account.sync`, `account.host_key_reset` | `/account/*` | account id, name, mailbox; connection type, field names, `ok` |
+| `user.add`, `user.edit`, `user.delete` | `/users/*` | user id, login; role, assigned mailboxes, `password_changed` (bool) |
+| `user.password_change` | own password (`/my/password`) | user |
+| `dnsbl.add`, `dnsbl.toggle`, `dnsbl.delete` | `/dnsbl/*` | provider id, zone; name, score, enabled |
+| `cert.sync` | manual "Pobierz teraz" on `/cert/` | result message; `ok` |
+
+Not recorded: read-only pages, connection tests, scans, cron jobs (they have the
+cron log), the plugin `/check` endpoint and the score pipeline itself (score log).
+
+**Never stored:** passwords, API keys, feed keys, tokens, message content. Settings
+are recorded by field name only; `AuditLogger::sanitize()` additionally drops any
+detail key that looks like a secret (`pass`, `secret`, `token`, `api_key`, `*_key`,
+`hash`, `credential`, `raw`) and shortens strings (300 chars, JSON max 4000 bytes).
+
+## Columns (`antispam_audit_log`)
+
+| Column | Content |
+|--------|---------|
+| `created_at` | server time |
+| `actor` | login, env admin login, plugin mailbox, `link z raportu`, `cli`, or the typed login of a failed attempt |
+| `actor_type` | `user` (database user), `env_admin` (ADMIN_USER), `anonymous`, `digest_link`, `plugin`, `cli` |
+| `role` | `ROLE_ADMIN` / `ROLE_USER` when known |
+| `ip` | `Request::getClientIp()` - the real client only when the reverse proxy is trusted (`SYMFONY_TRUSTED_PROXIES`, see [deployment.md](deployment.md#behind-a-reverse-proxy-nginx)); empty for console commands |
+| `action` | key from the table above |
+| `target_type`, `target_id`, `target_label` | what was acted on (e.g. `whitelist` / `12` / `firma.pl`) |
+| `mailbox` | the mailbox concerned (`*` = all mailboxes) |
+| `details` | short JSON |
+
+Indexes on `created_at`, `action`, `actor`, `mailbox`. The table is created by
+`doctrine:schema:update --force` at boot (additive, no migration).
+
+## Design
+
+- `Services\AuditLogger::log(action, targetType:, targetId:, label:, mailbox:, details:, actor:, actorType:)`
+  resolves the actor (security token: `Entity\User` -> `user` + role, the in-memory
+  env admin -> `env_admin`, no token -> `anonymous`, console without a request ->
+  `cli`) and the IP, and inserts the row with **plain DBAL** - outside the ORM unit of
+  work, so logging never flushes or loses the caller's pending entity changes.
+- **Best effort:** every failure (table missing, database down) is caught and logged
+  to the application log (`Audit log write failed`); the audited action goes on.
+- Controllers use `Controller\AuditTrait` (`use AuditTrait;` + one `$this->audit(...)`
+  line per action). The logger is a lazily subscribed, optional service of the
+  controller's locator, so constructors are unchanged; a controller without it
+  (hand-wired unit tests) just does not audit.
+- `AuditLogger::quarantine()` maps the three quarantine actions and resolves the
+  mailbox address from the quarantine key (`imap`, `imap-<id>`, `ssh-<id>`).
+- `Security\AuditSecuritySubscriber` listens to `LoginSuccessEvent`,
+  `LoginFailureEvent` and `LogoutEvent` (registered on every firewall dispatcher by
+  Symfony). The password is never read.
+- Entries are written after the change succeeded (rules, users, accounts...) or after
+  the attempt with `ok: true|false` (quarantine, deploy, sync, CERT sync). CSRF / 403
+  refusals happen before and are not audit entries.
+
+## Page and export
+
+`/audit` - newest first, 50 per page. Filters (GET): `from`, `to` (`Y-m-d`, both
+inclusive), `actor` (substring), `action` (exact key, or a group like `rule.` /
+`quarantine.`), `mailbox` (substring), `page`.
+
+`/audit/export.csv` - the same filters, newest 50 000 rows, UTF-8 with BOM, `;`
+separated (opens directly in Excel / LibreOffice). Cells starting with `= + - @`
+are prefixed with `'` (CSV formula injection).
+
+Both routes need `ROLE_ADMIN`: the catch-all `access_control` rule and
+`#[IsGranted('ROLE_ADMIN')]` on `AuditController`. The ROLE_USER menu has no entry.
+
+## Retention
+
+Config key `audit.retention_days` (default **365**, `0` = keep forever), applied by
+`antispam:purge` (daily in the Docker scheduler). `--days` of that command only
+concerns the score log; `--dry-run` counts audit rows too. Set it e.g. with:
+
+```sql
+INSERT INTO config (name, value) VALUES ('audit.retention_days', '730');
+```
+
+(or `UPDATE config SET value = '730' WHERE name = 'audit.retention_days'` when it exists).
+
+## Tests
+
+`Tests/Services/AuditLoggerTest.php` (SQLite: actor / IP / secrets / failures /
+purge / CSV / filters), `Tests/Controller/AuditTrailTest.php` (every area writes
+its entry), `Tests/Security/AuditAccessTest.php` (ROLE_ADMIN only, wiring, page render).

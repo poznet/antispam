@@ -81,6 +81,8 @@ DNSBL cache rows (`antispam_dnsbl_cache`) older than the longest provider cache
 TTL (at least 24 h). Retention comes from the config key
 `scorelog.retention_days` (default 180; `0` = keep the score log forever). There
 is no panel field yet - set it with `--days` per run or in the `config` table.
+Audit log rows (`antispam_audit_log`) older than `audit.retention_days` (default
+365, `0` = forever; not affected by `--days`) are deleted too, see [audit.md](audit.md).
 ```bash
 php bin/console antispam:purge
 php bin/console antispam:purge --days=90     # override the retention for this run

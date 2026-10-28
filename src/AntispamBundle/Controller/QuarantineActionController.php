@@ -2,6 +2,7 @@
 
 namespace AntispamBundle\Controller;
 
+use AntispamBundle\Entity\AuditLog;
 use AntispamBundle\Services\DigestTokenService;
 use AntispamBundle\Services\QuarantineService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -20,6 +21,8 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/q')]
 class QuarantineActionController extends AbstractController
 {
+    use AuditTrait;
+
     public function __construct(
         private DigestTokenService $tokens,
         private QuarantineService $quarantine,
@@ -56,6 +59,7 @@ class QuarantineActionController extends AbstractController
         } catch (\Throwable $e) {
             $result = ['success' => false, 'message' => 'Nie udało się połączyć z serwerem poczty. Spróbuj ponownie później.'];
         }
+        $this->auditLogger()?->quarantine($data['action'], 'digest', $data['mailbox'], (string)$data['id'], $result, $data['account'], 'link z raportu', AuditLog::ACTOR_DIGEST_LINK);
 
         return $this->page('done', $data, $result, $result['success'] ? 200 : 409);
     }

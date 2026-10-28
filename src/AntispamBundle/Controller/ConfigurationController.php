@@ -8,6 +8,7 @@ use AntispamBundle\Entity\EmailWhitelist;
 use AntispamBundle\Entity\SharedSpamSignal;
 use AntispamBundle\Entity\Whitelist;
 use AntispamBundle\Services\AttachmentPolicyAnalyzer;
+use AntispamBundle\Services\AuditLogger;
 use AntispamBundle\Services\ClamavService;
 use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\CryptoService;
@@ -31,6 +32,8 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/config')]
 class ConfigurationController extends AbstractController
 {
+    use AuditTrait;
+
     /**
      * Secrets are kept in the VARCHAR(255) `config.value` column; an encrypted
      * value of this length (enc:v1: + base64(nonce + MAC + text)) still fits.
@@ -77,6 +80,7 @@ class ConfigurationController extends AbstractController
             $this->config->set('imap_flags', ImapFlags::fromFormData($post));
             // `delete` belongs to the spam settings page: this form has no such
             // checkbox, so saving it used to switch "delete spam" off.
+            $this->audit('settings.save', targetType: 'settings', targetId: 'email', label: 'Konfiguracja (stara)', details: AuditLogger::formFields($post, ['password']));
             $this->addFlash('success', 'Ustawienia konta zapisane');
             return $this->redirectToRoute('antispam_account_config');
         }
@@ -154,6 +158,7 @@ class ConfigurationController extends AbstractController
             }
             $this->scoring->setListSetting(ScoringService::LIST_BLOCKED_EXTENSIONS, implode(', ', AttachmentPolicyAnalyzer::parseExtensions($post['blocked_extensions'] ?? '')));
 
+            $this->audit('settings.save', targetType: 'settings', targetId: 'spam', label: 'Filtr spamu', details: AuditLogger::formFields($post, ['vt_api_key', 'url_gsb_api_key']));
             $this->addFlash('success', 'Ustawienia zapisane');
             return $this->redirectToRoute('antispam_spam_config');
         }
@@ -221,6 +226,7 @@ class ConfigurationController extends AbstractController
             $c->set('digest.token_ttl_days', max(1, min(30, (int)($post['token_ttl_days'] ?? QuarantineDigestService::DEFAULT_TTL_DAYS))));
             $c->set('digest.max_items', max(1, min(500, (int)($post['max_items'] ?? QuarantineDigestService::DEFAULT_MAX_ITEMS))));
 
+            $this->audit($request->request->get('send_now') ? 'settings.digest_send' : 'settings.save', targetType: 'settings', targetId: 'digest', label: 'Raport kwarantanny', details: AuditLogger::formFields($post));
             if ($request->request->get('send_now')) {
                 $errors = $this->digest->configurationErrors();
                 if ($errors) {
@@ -302,6 +308,7 @@ class ConfigurationController extends AbstractController
             $this->setSecret('feed.server_key', $post, 'server_key');
             $c->set('feed.remote_url', rtrim(trim($post['remote_url'] ?? ''), '/'));
             $this->setSecret('feed.remote_key', $post, 'remote_key');
+            $this->audit('settings.save', targetType: 'settings', targetId: 'feed', label: 'Wspólna baza spamu', details: AuditLogger::formFields($post, ['server_key', 'remote_key']));
             $this->addFlash('success', 'Ustawienia wspólnej bazy spamu zapisane');
             return $this->redirectToRoute('antispam_feed_config');
         }
@@ -355,6 +362,7 @@ class ConfigurationController extends AbstractController
                 return $this->redirectToRoute('antispam_plugin_config');
             }
             $c->set('plugin.public_url', $publicUrl);
+            $this->audit('settings.save', targetType: 'settings', targetId: 'plugin', label: 'Wtyczki pocztowe', details: AuditLogger::formFields($post));
             $this->addFlash('success', 'Ustawienia wtyczek pocztowych zapisane');
             return $this->redirectToRoute('antispam_plugin_config');
         }
@@ -385,6 +393,7 @@ class ConfigurationController extends AbstractController
             return $this->redirectToRoute('antispam_spam_config');
         }
         $this->messages->unCheckAll();
+        $this->audit('settings.uncheck_all', targetType: 'settings', targetId: 'spam');
         $this->addFlash('success', 'Flagi sprawdzenia zresetowane');
         return $this->redirectToRoute('antispam_spam_config');
     }
@@ -438,6 +447,7 @@ class ConfigurationController extends AbstractController
         foreach ([Blacklist::class, Whitelist::class, EmailBlacklist::class, EmailWhitelist::class] as $entity) {
             $this->em->createQuery('UPDATE ' . $entity . ' r SET r.counter = 0')->execute();
         }
+        $this->audit('settings.reset_counters', targetType: 'settings', targetId: 'spam');
         $this->addFlash('success', 'Liczniki reguł wyzerowane');
         return $this->redirectToRoute('antispam_spam_config');
     }

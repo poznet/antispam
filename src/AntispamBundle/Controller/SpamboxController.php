@@ -18,6 +18,8 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/spambox')]
 class SpamboxController extends AbstractController
 {
+    use AuditTrait;
+
     private const SCORELOG_PER_PAGE = 50;
     private const DECISIONS = [
         SpamScoreLog::DECISION_HAM,
@@ -186,6 +188,7 @@ class SpamboxController extends AbstractController
         } catch (\Throwable $e) {
             $result = ['success' => false, 'message' => 'Operacja nie powiodła się: ' . $e->getMessage()];
         }
+        $this->auditLogger()?->quarantine($action, 'panel', $key, $id, $result);
 
         $this->addFlash($result['success'] ? 'success' : 'danger', $result['message']);
         return $this->redirectToRoute('antispam_spambox_quarantine');
@@ -217,6 +220,7 @@ class SpamboxController extends AbstractController
             $msg->move($inboxMailbox);
             $this->inbox->expunge();
             $this->addFlash('success', 'Wiadomość przywrócona do INBOX');
+            $this->audit('spambox.restore', targetType: 'message', targetId: $id, mailbox: $this->auditLogger()?->mailboxForKey('imap'), details: ['folder' => $folder]);
         } catch (\Throwable $e) {
             $this->addFlash('danger', 'Przywracanie nie powiodło się: ' . $e->getMessage());
         }

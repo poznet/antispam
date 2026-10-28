@@ -11,6 +11,7 @@ use AntispamBundle\Entity\Whitelist;
 use Ddeboer\Imap\ConnectionInterface;
 use Ddeboer\Imap\Search\Date\Since;
 use Ddeboer\Imap\Search\Email\From;
+use Ddeboer\Imap\SearchExpression;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -18,14 +19,18 @@ use Doctrine\ORM\EntityManagerInterface;
  * matching messages from the last DAYS days are moved to SPAM (never deleted,
  * so a mistake can be undone from the spam folder).
  *
- * Cheap on purpose: IMAP lets the server search by sender (exact rules) or by
- * date (wildcard/regex), the Maildir agent only reads headers. Rules below the
+ * Cheap on purpose: IMAP lets the server search by date (and by sender for
+ * exact rules), newest mail first, capped per rule; the Maildir agent only
+ * reads headers. Rules below the
  * spam threshold only add points in the scan, so they are not applied here.
  */
 class RetroactiveSpamService
 {
     const DAYS = 30;
-    const IMAP_MAX_CANDIDATES = 500;
+    /** Wildcard/regex rules: at most this many messages of the window are inspected. */
+    const IMAP_MAX_CANDIDATES = 2000;
+    /** At most this many messages are moved per rule and mailbox. */
+    const IMAP_MAX_MOVES = 500;
 
     public function __construct(
         private EntityManagerInterface $em,
@@ -60,7 +65,7 @@ class RetroactiveSpamService
                 } else {
                     $connection = $this->imapScan->connect($account);
                     try {
-                        $result['moved'] += $this->applyImap($connection, $owner, $rule);
+                        $result['moved'] += $this->applyImap($connection, $owner, $rule, $result['errors']);
                     } finally {
                         $connection->close();
                     }
@@ -72,7 +77,7 @@ class RetroactiveSpamService
 
         if ($this->imapScan->isLegacyConfigured() && strcasecmp((string)$this->config->get('email'), $owner) === 0) {
             try {
-                $result['moved'] += $this->applyImap($this->legacyConnection->getConnection(), $owner, $rule);
+                $result['moved'] += $this->applyImap($this->legacyConnection->getConnection(), $owner, $rule, $result['errors']);
             } catch (\Throwable $e) {
                 $result['errors'][] = 'IMAP: ' . $e->getMessage();
             }
@@ -114,46 +119,66 @@ class RetroactiveSpamService
         return (int)$res['moved_to_spam'];
     }
 
-    /** @param Blacklist|EmailBlacklist $rule */
-    private function applyImap(ConnectionInterface $connection, $owner, $rule)
+    /**
+     * @param Blacklist|EmailBlacklist $rule
+     * @param string[] $errors per-message problems are appended here
+     */
+    private function applyImap(ConnectionInterface $connection, $owner, $rule, array &$errors = [])
     {
         $isDomain = $rule instanceof Blacklist;
         $pattern = strtolower((string)($isDomain ? $rule->getHost() : $rule->getBlacklistemail()));
         $type = $rule->getPatternType() ?: PatternMatcher::EXACT;
 
-        // Exact rules: let the server find the sender (substring match, verified below).
-        $search = $type === PatternMatcher::EXACT
-            ? new From($isDomain ? '@' . $pattern : $pattern)
-            : new Since(new \DateTimeImmutable('-' . self::DAYS . ' days'));
+        // Same window for every rule type (docs: "the last 30 days"). Exact
+        // rules also let the server pre-filter by sender (substring match,
+        // verified below) - unless the value cannot be put in a quoted IMAP
+        // string, then the date window alone is searched.
+        $search = (new SearchExpression())->addCondition(new Since(new \DateTimeImmutable('-' . self::DAYS . ' days')));
+        $serverFiltered = $type === PatternMatcher::EXACT && preg_match('/^[\x21\x23-\x5b\x5d-\x7e]+$/', $pattern);
+        if ($serverFiltered) {
+            $search->addCondition(new From($isDomain ? '@' . $pattern : $pattern));
+        }
 
         $whitelist = $this->em->getRepository(Whitelist::class)->findBy(['email' => $owner]);
         $emailWhitelist = $this->em->getRepository(EmailWhitelist::class)->findBy(['email' => $owner]);
         $spam = $this->inbox->getSpamFolder($connection);
+        $inbox = $connection->getMailbox('INBOX');
+
+        // Newest first, so the caps cut off the oldest mail, not today's.
+        $uids = array_map('intval', $inbox->getMessages($search)->getArrayCopy());
+        rsort($uids, SORT_NUMERIC);
 
         $moved = 0;
         $seen = 0;
-        foreach ($connection->getMailbox('INBOX')->getMessages($search) as $msg) {
-            if (++$seen > self::IMAP_MAX_CANDIDATES) {
+        foreach ($uids as $uid) {
+            if ($moved >= self::IMAP_MAX_MOVES || (!$serverFiltered && ++$seen > self::IMAP_MAX_CANDIDATES)) {
                 break;
             }
-            $from = $msg->getFrom();
-            $sender = $from ? strtolower((string)$from->getAddress()) : '';
-            $host = substr(strrchr($sender, '@') ?: '', 1);
-            if ($sender === '' || PatternMatcher::match($pattern, $isDomain ? $host : $sender, $type) === false) {
-                continue;
-            }
-            if (PatternMatcher::findMatching($whitelist, $host, 'getHost')
-                || PatternMatcher::findMatching($emailWhitelist, $sender, 'getWhitelistemail')) {
-                continue;
-            }
+            try {
+                $msg = $inbox->getMessage($uid);
+                $from = $msg->getFrom();
+                $sender = $from ? strtolower((string)$from->getAddress()) : '';
+                $host = substr(strrchr($sender, '@') ?: '', 1);
+                if ($sender === '' || PatternMatcher::match($pattern, $isDomain ? $host : $sender, $type) === false) {
+                    continue;
+                }
+                if (PatternMatcher::findMatching($whitelist, $host, 'getHost')
+                    || PatternMatcher::findMatching($emailWhitelist, $sender, 'getWhitelistemail')) {
+                    continue;
+                }
 
-            $subject = (string)$msg->getSubject();
-            $msg->move($spam);
-            $moved++;
-            $this->scoring->logDecision($owner, $rule->getScore(), SpamScoreLog::DECISION_SPAM, [[
-                'rule' => 'retroactive ' . ($isDomain ? 'blacklist:' : 'email_blacklist:') . $pattern,
-                'score' => (int)$rule->getScore(),
-            ]], $sender, $subject, SpamScoreLog::SOURCE_RETRO, SpamScoreLog::OUTCOME_SPAM_FOLDER);
+                $subject = (string)$msg->getSubject();
+                $msg->move($spam);
+                $moved++;
+                $this->scoring->logDecision($owner, $rule->getScore(), SpamScoreLog::DECISION_SPAM, [[
+                    'rule' => 'retroactive ' . ($isDomain ? 'blacklist:' : 'email_blacklist:') . $pattern,
+                    'score' => (int)$rule->getScore(),
+                ]], $sender, $subject, SpamScoreLog::SOURCE_RETRO, SpamScoreLog::OUTCOME_SPAM_FOLDER);
+            } catch (\Throwable $e) {
+                if (count($errors) < 10) {
+                    $errors[] = 'UID ' . $uid . ': ' . $e->getMessage();
+                }
+            }
         }
 
         if ($moved > 0) {

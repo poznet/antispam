@@ -26,7 +26,10 @@ deleted only when deletion is switched on:
 
 The `SPAM` and `QUARANTINE` folders are created on first use. In IMAP the
 message is moved with `MOVE`/`COPY`+`\Deleted` and the INBOX is expunged at the
-end of the scan.
+end of the scan. If the move fails (quota, permissions...) the score log gets
+`move_failed`, the message stays in INBOX and is **retried on the next scan**
+(both for SPAM and QUARANTINE; the IMAP cursor stays below it, see
+[architecture.md](architecture.md#incremental-inbox-scan)).
 
 `MoveToSpam` and `ApplyScoreDecision` act on the IMAP connection the message
 came from (`MessageEvent::getConnection()`), so every IMAP account uses its own
@@ -86,10 +89,13 @@ rule is added:
   e-mail blacklist rule, see [thunderbird.md](thunderbird.md)),
 
 `RetroactiveSpamService::applyRule()` moves matching INBOX messages from the
-last 30 days to `SPAM` in every mailbox owned by the rule's account e-mail. The
+last 30 days (every rule type) to `SPAM` in every mailbox owned by the rule's
+account e-mail. The
 panel shows how many were moved. For a plugin report the pass runs after the
-response has been sent (`DeferredRetroactivePass` on `kernel.terminate`, IMAP
-timeouts 20 s), so the plugin is not kept waiting; the API only answers
+response has been sent (`DeferredRetroactivePass` on `kernel.terminate`; the
+usual IMAP timeouts apply and `set_time_limit(0)` keeps mod_php's
+`max_execution_time` from cutting the pass short), so the plugin is not kept
+waiting; the API only answers
 `"retroactive": "scheduled"` and the result goes to the application log and
 the score log. On Apache + mod_php (the Docker image) such a response gets
 `Content-Length` + `Connection: close` and no mod_deflate, so the client sees
@@ -102,8 +108,12 @@ Rules and limits:
 - Senders on the domain / e-mail whitelist are left alone, as in the scan.
 - With scoring enabled, a rule below the spam threshold only adds points in
   the scan, so it is not applied retroactively (the panel says so).
-- Cost: IMAP exact rules use a server-side `SEARCH FROM`; wildcard/regex rules
-  search `SINCE <30 days>` and check at most 500 messages. SSH accounts get the
+- Cost: IMAP searches `SINCE <30 days>`, exact rules also `FROM "<value>"`
+  (server-side; a value that cannot be quoted safely is matched client-side
+  only). Messages are processed **newest first**; wildcard/regex rules inspect
+  at most 2000 messages of the window, and at most 500 are moved per rule and
+  mailbox. A message that cannot be read or moved is reported and skipped,
+  the pass goes on. SSH accounts get the
   rules synced first, then the agent's `apply-blacklist` reads only the headers
   of INBOX files modified in the last 30 days (at most 5000).
 - SSH accounts need the agent redeployed (**Konta → Wdróż**) to get

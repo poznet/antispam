@@ -132,3 +132,40 @@ php bin/console antispam:feed:sync
 php bin/console antispam:feed:sync --push-only
 php bin/console antispam:feed:sync --pull-only
 ```
+
+## Backup / Diagnostics
+
+See [backup.md](backup.md) for the file format, secrets handling and the panel page
+(**Ustawienia → Kopia zapasowa**).
+
+### antispam:export
+Writes the configuration (settings, list rules, DNSBL providers, accounts, users -
+no quarantine, logs or phishing reports) as one versioned JSON, or a ZIP holding it.
+Secrets only with `--include-secrets`, and then encrypted with the instance key
+(derived from `APP_SECRET`).
+```bash
+php bin/console antispam:export --output=backup.json
+php bin/console antispam:export --output=backup.zip --include-secrets
+php bin/console antispam:export > backup.json        # stdout
+```
+
+### antispam:import
+Restores such a file: validates the schema version, matches records by natural keys
+(rule owner + value + type, DNSBL zone, account e-mail, username), never overwrites
+secrets with empty values, runs in one transaction and prints a per-section summary.
+```bash
+php bin/console antispam:import backup.json --dry-run
+php bin/console antispam:import backup.json                      # merge (default)
+php bin/console antispam:import backup.json --only=rules,dnsbl
+php bin/console antispam:import backup.json --mode=replace --confirm-replace
+```
+
+### antispam:doctor
+Configuration sanity checks (APP_SECRET, encryption, mailer, https / proxies, public
+URL, schema sync, cron, accounts, SSH agent versions, plaintext passwords, orphaned
+rules, feed keys, ClamAV, PHP extensions, var/ permissions, disk space). Exit 1 when
+a check fails; `--strict` also fails on warnings; `--format=json` for scripts.
+```bash
+php bin/console antispam:doctor
+php bin/console antispam:doctor --strict
+```

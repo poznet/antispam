@@ -37,6 +37,7 @@ See `docs/` directory for detailed documentation:
 - `docs/thunderbird.md` - Thunderbird plugin: spam reports, on-arrival checks, login, `/api/plugin`
 - `docs/outlook.md` - Outlook add-in: hosting (HTTPS), sideload / admin deploy, task pane features and limits
 - `docs/apple-mail.md` - Apple Mail MailKit extension: why source-only, layout, build/sign notes
+- `docs/backup.md` - configuration backup/restore (`antispam:export` / `antispam:import`, panel `/backup`), secrets handling, `antispam:doctor` checks
 
 ## Tech stack
 - PHP >= 8.2 (ext-imap, so not 8.4+), Symfony 7.4, Doctrine ORM 3 / DBAL 4 (PHP attributes mapping), MySQL/MariaDB

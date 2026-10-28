@@ -25,6 +25,8 @@ class SpamFeedApiController extends AbstractController
     /** Upper bounds for one /report call, so a peer cannot flood the database. */
     const MAX_SIGNALS_PER_REPORT = 1000;
     const MAX_REPORT_BYTES = 262144;
+    /** Page size cap of one /pull call. */
+    const MAX_SIGNALS_PER_PULL = 5000;
 
     public function __construct(
         private EntityManagerInterface $em,
@@ -74,9 +76,12 @@ class SpamFeedApiController extends AbstractController
     }
 
     /**
-     * Serve signals updated since a timestamp (incremental pull).
+     * Serve signals updated since a cursor (incremental, paginated pull).
      *
-     * GET /api/feed/pull?since=<ISO8601>&limit=<n>
+     * GET /api/feed/pull?since=<ISO8601>&after_id=<id>&limit=<n>
+     *
+     * Rows come ordered by (updated_at, id). When `count` equals `limit` there
+     * may be more: ask again with the returned `next` cursor.
      */
     #[Route('/pull', name: 'antispam_feed_api_pull', methods: ['GET'])]
     public function pullAction(Request $request)
@@ -91,23 +96,32 @@ class SpamFeedApiController extends AbstractController
             try { $since = new \DateTime($sinceRaw); } catch (\Exception $e) {
                 return new JsonResponse(['error' => 'invalid since'], 400);
             }
+            // The datetime column has no zone: compare in the zone it was written in.
+            $since->setTimezone(new \DateTimeZone(date_default_timezone_get()));
         }
-        $limit = min(5000, max(1, (int)$request->query->get('limit', 5000)));
+        $afterId = max(0, (int)$request->query->get('after_id', 0));
+        $limit = min(self::MAX_SIGNALS_PER_PULL, max(1, (int)$request->query->get('limit', self::MAX_SIGNALS_PER_PULL)));
 
         $repo = $this->em->getRepository(SharedSpamSignal::class);
         $signals = [];
-        foreach ($repo->findUpdatedSince($since, $limit) as $s) {
+        $last = null;
+        foreach ($repo->findUpdatedSince($since, $limit, $afterId) as $s) {
             $signals[] = [
+                'id' => $s->getId(),
                 'type' => $s->getType(),
                 'hash' => $s->getHash(),
                 'reports' => $s->getReports(),
                 'updated_at' => $s->getUpdatedAt()->format(\DateTime::ATOM),
             ];
+            $last = $s;
         }
 
         return new JsonResponse([
             'signals' => $signals,
             'count' => count($signals),
+            'limit' => $limit,
+            'has_more' => count($signals) === $limit,
+            'next' => $last ? ['since' => $last->getUpdatedAt()->format(\DateTime::ATOM), 'after_id' => $last->getId()] : null,
             'now' => (new \DateTime())->format(\DateTime::ATOM),
         ]);
     }

@@ -141,6 +141,14 @@ runs every job through `antispam:cron:run`. On a plain server:
 */5 * * * * php /path/to/bin/console antispam:cron:run antispam:agent:scan-all
 */15 * * * * php /path/to/bin/console antispam:cron:run antispam:feed:sync
 0 7 * * *   php /path/to/bin/console antispam:cron:run antispam:digest:send
+41 3 * * *  php /path/to/bin/console antispam:cron:run antispam:purge
 ```
+
+`antispam:purge` keeps the tables that grow with every message bounded: score
+log rows older than `scorelog.retention_days` (default **180**, `0` = keep
+forever) and DNSBL cache entries older than the longest provider cache TTL (at
+least one day). See [commands.md](commands.md#antispampurge). A purged score log
+row also means an IMAP quarantine entry that old shows no reasons and gets no
+"Zawsze akceptuj" button (see [quarantine-digest.md](quarantine-digest.md)).
 
 Only `antispam:*` commands are accepted.

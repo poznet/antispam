@@ -121,7 +121,8 @@ class QuarantineDigestService
 
         $ttl = $this->getTtlDays() * 86400;
         foreach ($items as &$item) {
-            $meta = ['sender' => $item['from'], 'subject' => $item['subject'], 'account' => $mailbox['account_email']];
+            // IMAP UIDs are only unique within one UIDVALIDITY: bind the link to it.
+            $meta = ['sender' => $item['from'], 'subject' => $item['subject'], 'account' => $mailbox['account_email'], 'uidvalidity' => $item['uidvalidity'] ?? null];
             $item['links'] = [];
             // Never offer to permanently trust an impersonator or a malware sender:
             // no whitelist token is minted, so the action can't be performed.
@@ -214,13 +215,15 @@ class QuarantineDigestService
     }
 
     /**
-     * Reasons that make "always accept this sender" unsafe.
+     * Reasons that make "always accept this sender" unsafe. score_unknown
+     * (QuarantineService::REASON_SCORE_UNKNOWN: no score log row found) counts
+     * too - without the reasons we can't tell, so fail closed.
      */
     public static function isHighRisk(array $reasons)
     {
         foreach ($reasons as $r) {
             $rule = (string)($r['rule'] ?? '');
-            if (preg_match('/^(impersonation_|lookalike_domain|internal_domain_spoof|display_name_embedded_address|attachment_|clamav|virustotal|url_safebrowsing|url_dbl|cert_hole)/', $rule)) {
+            if (preg_match('/^(score_unknown$|impersonation_|lookalike_domain|internal_domain_spoof|display_name_embedded_address|attachment_|clamav|virustotal|url_safebrowsing|url_dbl|cert_hole)/', $rule)) {
                 return true;
             }
         }
@@ -274,6 +277,7 @@ class QuarantineDigestService
             'cert_hole' => 'Domena z Listy Ostrzeżeń CERT Polska (phishing)',
             'clamav' => 'Wykryto wirusa',
             'virustotal' => 'Złośliwy załącznik',
+            'score_unknown' => 'Brak zapisanej oceny - zachowaj ostrożność',
         ];
         usort($reasons, function ($a, $b) {
             return (int)($b['score'] ?? 0) - (int)($a['score'] ?? 0);

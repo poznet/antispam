@@ -111,6 +111,7 @@ counter incremented; new ones are created with `origin = remote`.
 |--------|------|-------|
 | `400`  | `{"error":"invalid payload"}` | body is not an object, or `signals` is missing / not an array |
 | `401` / `403` | see [Authentication](#authentication) | auth failure |
+| `413`  | `{"error":"payload too large"}` / `{"error":"too many signals"}` | body over 256 KiB / more than 1000 signals |
 
 **Example**
 
@@ -129,19 +130,22 @@ curl -sS -X POST https://hub.example.com/api/feed/report \
 
 ### GET `/api/feed/pull`
 
-Return signals **updated after** a given timestamp, for incremental sync. The
-response includes a `now` timestamp the caller should store and pass as `since`
-on the next call so each pull only transfers the delta.
+Return signals **updated after** a cursor, for incremental, paginated sync.
+Rows are ordered by `(updated_at, id)` ascending. The cursor is the
+`(updated_at, id)` of the last row received (returned as `next`) - not the
+response's `now`, which is taken after the query and would skip rows written
+meanwhile.
 
 **Query parameters**
 
-| Param   | Required | Default | Notes |
-|---------|----------|---------|-------|
-| `since` | no       | —       | ISO 8601 timestamp; only signals with `updated_at > since` are returned. Omit on the first call to get everything (up to `limit`). |
-| `limit` | no       | `5000`  | Clamped to the range `1..5000`. |
+| Param      | Required | Default | Notes |
+|------------|----------|---------|-------|
+| `since`    | no       | —       | ISO 8601 timestamp. Alone: only signals with `updated_at > since`. Omit on the first call to start from the beginning. |
+| `after_id` | no       | `0`     | With `since`: keyset paging, returns rows with `(updated_at, id) > (since, after_id)`, so a page boundary inside one second loses nothing. |
+| `limit`    | no       | `5000`  | Clamped to the range `1..5000`. |
 
-Signals are ordered by `updated_at` ascending (then `id`), so paging by
-advancing `since` is stable.
+`since` is interpreted in the hub's time zone after parsing its offset (the
+column has no zone), so echoing back the hub's own `updated_at` is exact.
 
 **Response** `200 OK`
 
@@ -149,6 +153,7 @@ advancing `since` is stable.
 {
   "signals": [
     {
+      "id": 4711,
       "type": "sender",
       "hash": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
       "reports": 7,
@@ -156,18 +161,23 @@ advancing `since` is stable.
     }
   ],
   "count": 1,
+  "limit": 5000,
+  "has_more": false,
+  "next": { "since": "2026-06-05T12:29:58+00:00", "after_id": 4711 },
   "now": "2026-06-05T12:30:00+00:00"
 }
 ```
 
-| Field     | Meaning |
-|-----------|---------|
-| `signals` | array of signal objects (with `reports` and `updated_at`) |
-| `count`   | number of signals returned (== `signals.length`) |
-| `now`     | server time at the moment of the response — store this as the next `since` |
+| Field      | Meaning |
+|------------|---------|
+| `signals`  | array of signal objects (`id`, `type`, `hash`, `reports` = the hub's total count, `updated_at`) |
+| `count`    | number of signals returned (== `signals.length`) |
+| `limit`    | the effective page size after clamping |
+| `has_more` | `count == limit`: more rows may be waiting |
+| `next`     | cursor of the last row (`null` when empty): pass `since` + `after_id` to get the next page |
+| `now`      | server time of the response, informational only - do **not** use it as a cursor |
 
-If `count` equals `limit`, more rows may be waiting: call again with `since` set
-to the last `updated_at` (or to `now`) to continue.
+While `has_more` is true, call again with `since=next.since&after_id=next.after_id`.
 
 **Errors**
 
@@ -182,8 +192,8 @@ to the last `updated_at` (or to `now`) to continue.
 # First pull — everything (capped at limit)
 curl -sS "https://hub.example.com/api/feed/pull" -H "X-Feed-Key: $FEED_KEY"
 
-# Incremental pull — only what changed since the last 'now'
-curl -sS "https://hub.example.com/api/feed/pull?since=2026-06-05T12:30:00%2B00:00&limit=2000" \
+# Next page / incremental pull — continue after the last row received
+curl -sS "https://hub.example.com/api/feed/pull?since=2026-06-05T12:29:58%2B00:00&after_id=4711&limit=2000" \
   -H "X-Feed-Key: $FEED_KEY"
 ```
 
@@ -227,6 +237,7 @@ curl -sS https://hub.example.com/api/feed/stats -H "X-Feed-Key: $FEED_KEY"
 | `400` | malformed request (bad JSON body / missing `signals` / unparseable `since`) |
 | `401` | `X-Feed-Key` missing or wrong |
 | `403` | API disabled on this instance (`feed.server_key` empty) |
+| `413` | `report` over 1000 signals or 256 KiB |
 
 ## Semantics & guarantees
 
@@ -236,9 +247,15 @@ curl -sS https://hub.example.com/api/feed/stats -H "X-Feed-Key: $FEED_KEY"
   bumps the counter (it is not strictly idempotent on the count).
 - **Invalid items are tolerated.** A batch with some bad items still succeeds;
   the bad items are dropped and reflected in `accepted` vs `received`.
-- **Batch size.** `pull` returns at most 5000 signals per call. There is no hard
-  server limit on `report` batch size, but keep batches reasonable (the built-in
-  client uses 1000) to stay within PHP request limits.
+- **Batch size.** `pull` returns at most 5000 signals per call (page with
+  `next`). `report` accepts at most 1000 signals and 256 KiB per call and answers
+  `413` above that; the built-in client never sends more than 1000 (`--batch` is
+  capped).
+- **Pulled `reports` are totals.** The hub's `reports` already includes every
+  instance's reports - also yours. The reference client stores
+  `max(local reports, hub reports)` instead of adding to it, so pulling back your
+  own pushed signal never counts as a second, corroborating report
+  (`feed.min_reports`), and re-importing the same rows changes nothing.
 - **Privacy.** Only SHA-256 hashes cross the wire. The server cannot recover the
   original sender or body from a hash.
 
@@ -248,10 +265,14 @@ The bundled `antispam:feed:sync` command (see [commands.md](commands.md) and
 [feed.md](feed.md#syncing)) implements the full client flow:
 
 1. **Push:** `POST /api/feed/report` for local signals newer than the stored
-   `feed.last_push_id`, in batches of 1000, advancing the checkpoint.
-2. **Pull:** `GET /api/feed/pull?since=<feed.last_pull_at>`, import the returned
-   signals as `origin = remote`, then store the response `now` as the new
-   `feed.last_pull_at`.
+   `feed.last_push_id`, in batches of at most 1000, advancing the checkpoint.
+2. **Pull:** `GET /api/feed/pull?since=<feed.last_pull_at minus 1 s>`, then page
+   with `since` + `after_id` of the last row while a page is full (up to 200
+   pages per run). Each page is imported (new rows as `origin = remote`, existing
+   rows get `reports = max(local, hub)`, origin unchanged) and flushed, then
+   `feed.last_pull_at` is set to the last row's `updated_at`. The one-second
+   overlap at the start of a run catches rows updated again within the second
+   already pulled; it is harmless because the import is idempotent.
 
 A minimal equivalent in shell:
 
@@ -264,8 +285,8 @@ curl -sS -X POST "$HUB/api/feed/report" -H "X-Feed-Key: $KEY" \
   -H "Content-Type: application/json" \
   -d '{"signals":[{"type":"sender","hash":"<64-hex>"}]}'
 
-# pull and save the cursor
-resp=$(curl -sS "$HUB/api/feed/pull?since=$SINCE" -H "X-Feed-Key: $KEY")
+# pull one page and keep the cursor of its last row
+resp=$(curl -sS "$HUB/api/feed/pull?since=$SINCE&after_id=$AFTER_ID" -H "X-Feed-Key: $KEY")
 echo "$resp" | jq '.signals'
-echo "$resp" | jq -r '.now'   # persist as the next ?since
+echo "$resp" | jq -r '.next.since, .next.after_id, .has_more'   # repeat while has_more
 ```

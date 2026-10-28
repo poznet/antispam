@@ -14,6 +14,8 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Index(name: 'idx_account_email', columns: ['account_email'])]
 #[ORM\Index(name: 'idx_scored_at', columns: ['scored_at'])]
 #[ORM\Index(name: 'idx_decision_scored_at', columns: ['decision', 'scored_at'])]
+#[ORM\Index(name: 'idx_account_scored_at', columns: ['account_email', 'scored_at'])]
+#[ORM\Index(name: 'idx_account_sender', columns: ['account_email', 'sender'])]
 class SpamScoreLog
 {
     const DECISION_HAM = 'ham';

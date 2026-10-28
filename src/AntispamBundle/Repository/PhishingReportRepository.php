@@ -25,8 +25,9 @@ class PhishingReportRepository extends EntityRepository
             $qb->andWhere('r.accountEmail = :account')->setParameter('account', $filters['account']);
         }
         if (isset($filters['q']) && trim($filters['q']) !== '') {
-            $qb->andWhere('r.sender LIKE :q OR r.replyTo LIKE :q OR r.subject LIKE :q')
-               ->setParameter('q', '%' . addcslashes(trim($filters['q']), '%_\\') . '%');
+            // Explicit, portable ESCAPE char (backslash is only MySQL's implicit default).
+            $qb->andWhere("(r.sender LIKE :q ESCAPE '!' OR r.replyTo LIKE :q ESCAPE '!' OR r.subject LIKE :q ESCAPE '!')")
+               ->setParameter('q', '%' . strtr(trim($filters['q']), ['!' => '!!', '%' => '!%', '_' => '!_']) . '%');
         }
 
         $total = (int)(clone $qb)->select('COUNT(r.id)')->getQuery()->getSingleScalarResult();

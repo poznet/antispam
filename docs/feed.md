@@ -86,7 +86,16 @@ php bin/console antispam:feed:sync --pull-only
 
 Run it from cron (e.g. every 15 minutes). Push/pull checkpoints are stored in
 `feed.last_push_id` and `feed.last_pull_at`, so each run only transfers the
-delta.
+delta. Push batches are capped at the hub's limit of 1000 signals (`--batch`
+above that is lowered, it would only get `413`). Pull pages through the hub
+with a `(updated_at, id)` cursor until a page comes back short (max 200 pages
+of 5000 per run), and `feed.last_pull_at` is the hub time of the last row
+received - see [feed-api.md](feed-api.md#reference-client).
+
+Pulled signals keep `reports = max(local, hub)` rather than adding one per pull:
+the hub's count already includes this instance's own push, so an echo of your
+own signal never satisfies `feed.min_reports` on its own. A local signal stays
+`origin = local`.
 
 ## HTTP API (hub side)
 
@@ -100,7 +109,7 @@ All routes are under `/api/feed` and require the `X-Feed-Key` header to match
 | Method | Path               | Body / query                              | Returns |
 |--------|--------------------|-------------------------------------------|---------|
 | POST   | `/api/feed/report` | `{"signals":[{"type","hash"}, ...]}`      | `{accepted, received}` |
-| GET    | `/api/feed/pull`   | `?since=<ISO8601>&limit=<n>` (both optional) | `{signals:[{type,hash,reports,updated_at}], count, now}` |
+| GET    | `/api/feed/pull`   | `?since=<ISO8601>&after_id=<id>&limit=<n>` (all optional) | `{signals:[{id,type,hash,reports,updated_at}], count, limit, has_more, next, now}` |
 | GET    | `/api/feed/stats`  | —                                         | `{signals:{local,remote,total}}` |
 
 Example push:

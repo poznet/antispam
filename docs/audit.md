@@ -19,8 +19,8 @@ Page: **Przegląd → Dziennik audytu** (`/audit`, ROLE_ADMIN only).
 | `plugin.login`, `plugin.login_failed` | plugin login (`/api/plugin/login`) | mailbox address typed / logged in |
 | `plugin.report` | spam / not-spam report from a plugin | sender, mailbox; verdict, learned rules; actor = plugin account (or anonymous) |
 | `plugin.phishing` | phishing report from a plugin | phishing report id, sender, mailbox; duplicate, client |
-| `phishing.update`, `phishing.block`, `phishing.delete`, `phishing.eml_download` | `/phishing/*` | report id, sender, mailbox; status from/to, blocked value, rule id |
-| `settings.save` | Filtr spamu, Wspólna baza spamu, Raport kwarantanny, Wtyczki pocztowe, Konfiguracja (stara), Lista CERT | `target_id` = page; submitted field **names**, `secrets_changed` = names of secret fields that were set or cleared |
+| `phishing.update`, `phishing.block`, `phishing.delete`, `phishing.eml_download`, `phishing.forward` | `/phishing/*` | report id, sender, mailbox; status from/to, blocked value, rule id; forward result, recipients, resend/bulk |
+| `settings.save` | Filtr spamu, Wspólna baza spamu, Raport kwarantanny, Wtyczki pocztowe, Konfiguracja (stara), Lista CERT, Przekazywanie phishingu (`phishing_forward`) | `target_id` = page; submitted field **names**, `secrets_changed` = names of secret fields that were set or cleared |
 | `settings.digest_send` | "Wyślij teraz" of the digest page | as above |
 | `settings.uncheck_all`, `settings.reset_counters` | maintenance buttons of Filtr spamu | - |
 | `account.add`, `account.edit`, `account.delete`, `account.deploy`, `account.sync`, `account.host_key_reset` | `/account/*` | account id, name, mailbox; connection type, field names, `ok` |

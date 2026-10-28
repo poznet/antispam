@@ -188,6 +188,7 @@ class PhishingController extends AbstractController
         }
 
         $result = $this->forwarder->forward($report, $resend);
+        $this->audit('phishing.forward', targetType: 'phishing', targetId: $id, label: $report->getSender(), mailbox: $report->getAccountEmail(), details: ['status' => $result['status'], 'to' => $report->getForwardedTo(), 'resend' => $resend, 'error' => $result['error'] ?? null]);
         if ($result['status'] === 'sent') {
             $this->addFlash('success', 'Wysłano zgłoszenie do ' . $report->getForwardedTo() . '.');
         } elseif ($result['status'] === 'failed') {
@@ -226,6 +227,7 @@ class PhishingController extends AbstractController
                 continue;
             }
             $result = $this->forwarder->forward($report);
+            $this->audit('phishing.forward', targetType: 'phishing', targetId: $id, label: $report->getSender(), mailbox: $report->getAccountEmail(), details: ['status' => $result['status'], 'to' => $report->getForwardedTo(), 'bulk' => true, 'error' => $result['error'] ?? null]);
             $counts[$result['status']]++;
             if ($result['status'] === 'sent') {
                 $sent[$report->getSha256()] = true;
@@ -256,6 +258,7 @@ class PhishingController extends AbstractController
             [$input, $errors] = $this->forwarder->validateSettings($request->request->all('config'));
             if (!$errors) {
                 $this->forwarder->saveSettings($input);
+                $this->audit('settings.save', targetType: 'settings', targetId: 'phishing_forward', details: ['fields' => array_keys($input)]);
                 $this->addFlash('success', 'Zapisano ustawienia przekazywania.');
                 return $this->redirectToRoute('antispam_phishing_forward_settings');
             }

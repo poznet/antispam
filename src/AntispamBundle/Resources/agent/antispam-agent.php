@@ -21,7 +21,9 @@
  * that arrived before it. Only headers are read, which keeps it cheap.
  *
  * It also manages the quarantine for the end-user digest: list, release (with
- * optional sender whitelisting) and delete quarantined messages.
+ * optional sender whitelisting) and delete quarantined messages, and lets
+ * the panel's user area list the SPAM folder and release from it
+ * (spam-list / spam-release, agent 3.1+).
  *
  * Requirements: PHP 7.1+, SQLite3 and mbstring extensions, DNS resolution for
  * DNSBL lookups. Optional: a reachable clamd for ClamAV scanning, the curl
@@ -32,7 +34,7 @@
  * PHP warnings never reach STDOUT; they are collected into "warnings".
  */
 
-const AGENT_VERSION = '3.0';
+const AGENT_VERSION = '3.1';
 const CERT_DEFAULT_URL = 'https://hole.cert.pl/domains/v2/domains.txt';
 const CERT_MAX_BYTES = 52428800;
 const CERT_MIN_ROWS = 100;
@@ -118,6 +120,12 @@ try {
         case 'quarantine-delete':
             agentPrint(quarantineDelete($maildirPath, $dbPath, $options));
             break;
+        case 'spam-list':
+            agentPrint(spamList($maildirPath, $dbPath, $options));
+            break;
+        case 'spam-release':
+            agentPrint(spamRelease($maildirPath, $dbPath, $options));
+            break;
         case 'version':
             agentPrint(['success' => true, 'php' => PHP_VERSION]);
             break;
@@ -134,6 +142,8 @@ try {
             echo "  php antispam-agent.php quarantine-list [--maildir=path] [--account=ID] [--db=path] [--since=unix-ts] [--limit=N]\n";
             echo "  php antispam-agent.php quarantine-release --id=ID [--whitelist] [--maildir=path] [--account=ID] [--db=path]\n";
             echo "  php antispam-agent.php quarantine-delete --id=ID [--maildir=path] [--account=ID] [--db=path]\n";
+            echo "  php antispam-agent.php spam-list [--maildir=path] [--account=ID] [--db=path] [--limit=N]\n";
+            echo "  php antispam-agent.php spam-release --id=ID [--whitelist] [--maildir=path] [--account=ID] [--db=path]\n";
             break;
     }
 } catch (\Throwable $e) {
@@ -2438,10 +2448,10 @@ function validQuarantineId($id)
         && preg_match('/^[A-Za-z0-9._,=\-]+$/', $id) && strpos($id, '..') === false;
 }
 
-function findQuarantineFile($maildirPath, $id)
+function findQuarantineFile($maildirPath, $id, $folder = '.QUARANTINE')
 {
     foreach (['new', 'cur'] as $subdir) {
-        $dir = $maildirPath . '/.QUARANTINE/' . $subdir;
+        $dir = $maildirPath . '/' . $folder . '/' . $subdir;
         if (!is_dir($dir)) {
             continue;
         }
@@ -2582,6 +2592,118 @@ function quarantineDelete($maildirPath, $dbPath, array $options)
     }
     return ['success' => true, 'id' => $id, 'sender' => $from['email']];
 }
+
+/* ---------------------------------------------------------------------- */
+/* SPAM folder (panel user area: list + release)                          */
+/* ---------------------------------------------------------------------- */
+
+/**
+ * Newest messages of .SPAM. The folder can hold many thousands of files, so
+ * only names and mtimes are collected first; headers are read for the
+ * newest --limit (default 100, max 500) only. Ids are Maildir base names,
+ * like the quarantine ones.
+ */
+function spamList($maildirPath, $dbPath, array $options)
+{
+    $limit = isset($options['limit']) ? min(500, max(1, (int)$options['limit'])) : 100;
+    $files = [];
+    foreach (['new', 'cur'] as $subdir) {
+        $dir = $maildirPath . '/.SPAM/' . $subdir;
+        if (!is_dir($dir)) {
+            continue;
+        }
+        foreach ((array)@scandir($dir) as $file) {
+            $path = $dir . '/' . $file;
+            if (!is_string($file) || $file === '.' || $file === '..' || !is_file($path)) {
+                continue;
+            }
+            $files[] = [$path, $file, (int)@filemtime($path)];
+        }
+    }
+    usort($files, function ($a, $b) { return $b[2] - $a[2]; });
+
+    $db = getDb($dbPath);
+    $scoreStmt = $db->prepare('SELECT score, reasons FROM score_log WHERE file = :f ORDER BY id DESC LIMIT 1');
+    $items = [];
+    $errors = [];
+    foreach (array_slice($files, 0, $limit) as $f) {
+        list($path, $file, $mtime) = $f;
+        try {
+            $headers = readHeaderBlock($path);
+            if ($headers === false) {
+                continue;
+            }
+            $dateHeader = grabHeader($headers, 'Date');
+            $ts = $dateHeader !== '' ? strtotime($dateHeader) : false;
+            $id = agentBaseId($file);
+            $from = parseFromHeader(grabHeader($headers, 'From'));
+            $scoreStmt->bindValue(':f', $id);
+            $row = $scoreStmt->execute()->fetchArray(SQLITE3_ASSOC);
+            $items[] = [
+                'id' => $id,
+                'from' => agentUtf8($from['email']),
+                'from_name' => agentUtf8($from['name']),
+                'subject' => mb_substr(agentUtf8(decodeHeaderValue(grabHeader($headers, 'Subject'))), 0, 200, 'UTF-8'),
+                'date' => $ts ? date('c', $ts) : date('c', $mtime),
+                'received_at' => date('c', $mtime),
+                'size' => (int)@filesize($path),
+                'score' => $row ? (int)$row['score'] : null,
+                'reasons' => $row ? (json_decode($row['reasons'], true) ?: []) : [],
+            ];
+        } catch (\Throwable $e) {
+            $errors[] = $file . ': ' . $e->getMessage();
+        }
+    }
+
+    $out = ['success' => true, 'total' => count($files), 'items' => $items];
+    if ($errors) {
+        $out['errors'] = array_slice($errors, 0, 20);
+    }
+    return $out;
+}
+
+
+/** Move a message from .SPAM back to INBOX and mark it checked (it is not filtered again). */
+function spamRelease($maildirPath, $dbPath, array $options)
+{
+    $id = $options['id'] ?? '';
+    if (!validQuarantineId($id)) {
+        return ['success' => false, 'error' => 'Invalid id'];
+    }
+    $found = findQuarantineFile($maildirPath, $id, '.SPAM');
+    if (!$found) {
+        return ['success' => false, 'error' => 'Message not found in the SPAM folder (already released or deleted?)'];
+    }
+
+    $from = parseFromHeader(grabHeaderFolded(readHeaderBlock($found['path']), 'From'));
+    $targetDir = $maildirPath . '/' . $found['subdir'];
+    if (!is_dir($targetDir)) {
+        @mkdir($targetDir, 0755, true);
+    }
+    if (!@rename($found['path'], $targetDir . '/' . $found['file'])) {
+        return ['success' => false, 'error' => 'Could not move message back to INBOX'];
+    }
+
+    $db = getDb($dbPath);
+    markChecked($db, $id);
+
+    $whitelisted = false;
+    if (!empty($options['whitelist']) && $from['email'] !== '') {
+        $stmt = $db->prepare('SELECT 1 FROM email_whitelist WHERE whitelistemail = :w');
+        $stmt->bindValue(':w', $from['email']);
+        if (!$stmt->execute()->fetchArray()) {
+            $ins = $db->prepare('INSERT INTO email_whitelist (email, whitelistemail, pattern_type) VALUES (:e, :w, :pt)');
+            $ins->bindValue(':e', '');
+            $ins->bindValue(':w', $from['email']);
+            $ins->bindValue(':pt', 'exact');
+            $ins->execute();
+        }
+        $whitelisted = true;
+    }
+
+    return ['success' => true, 'id' => $id, 'sender' => $from['email'], 'whitelisted' => $whitelisted];
+}
+
 
 /* ---------------------------------------------------------------------- */
 /* Persistence helpers                                                    */

@@ -18,6 +18,17 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 
 ## [Unreleased]
 
+### Added
+- User self-service: own sender white/blacklists (`/my/rules`, exact + wildcard,
+  owned by the user's mailboxes; SSH agents get the rules synced after the response),
+  SPAM folder with "Przywróć do skrzynki" / "Przywróć i zawsze akceptuj" for IMAP and
+  SSH mailboxes (`/my/spam`; the user menu "Spam" now points there).
+- Two-factor authentication (TOTP, local QR code, hashed backup codes, throttled code
+  step) for database users; `ADMIN_TOTP_SECRET` for the env admin; admin reset and
+  "Wymagaj 2FA dla administratorów"; `antispam:2fa:secret`.
+- Agent 3.1: `spam-list` / `spam-release` (redeploy SSH accounts: Konta → Wdróż).
+- Audit actions `spam.release`, `spam.whitelist`, `auth.2fa_*`.
+
 ## [2.0.0] - 2026-10-28 (current)
 
 Major version: several user and operator visible behaviours changed (multiple

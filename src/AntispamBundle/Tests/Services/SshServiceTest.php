@@ -201,6 +201,29 @@ class SshServiceTest extends TestCase
         $this->assertSame(2, $ssh->runScan($this->account())['total']);
     }
 
+    public function testSpamFolderCommandsQuoteTheIdAndUseTheirTimeouts()
+    {
+        $list = $this->sshMock(null);
+        $list->expects($this->once())->method('setTimeout')->with(SshService::TIMEOUTS['spam-list']);
+        $list->expects($this->once())->method('exec')->with($this->callback(fn($cmd) => str_contains($cmd, " spam-list --maildir='/srv/mail/Maildir' --limit=100 --account=5")))
+            ->willReturn('{"success":true,"total":0,"items":[],"agent_version":"9.9"}');
+        $this->assertTrue($this->service([$list])->spamList($this->account(), 100)['success']);
+
+        $release = $this->sshMock(null);
+        $release->expects($this->once())->method('setTimeout')->with(SshService::TIMEOUTS['spam-release']);
+        $release->expects($this->once())->method('exec')->with($this->callback(fn($cmd) => str_contains($cmd, " spam-release --maildir='/srv/mail/Maildir' --id=''\\''x; rm -rf ~'\\''' --whitelist --account=5")))
+            ->willReturn('{"success":true,"sender":"a@b.pl","agent_version":"9.9"}');
+        $this->assertSame('a@b.pl', $this->service([$release])->spamRelease($this->account(), "'x; rm -rf ~'", true)['sender']);
+    }
+
+    public function testOldAgentWithoutSpamCommandsGetsADeployHint()
+    {
+        $ssh = $this->service([$this->sshMock("Antispam Maildir Agent 3.0\nUsage:\n  php antispam-agent.php test\n")]);
+        $res = $ssh->spamList($this->account());
+        $this->assertFalse($res['success']);
+        $this->assertStringContainsString('nie obsługuje polecenia "spam-list"', $res['error']);
+    }
+
     public function testScoringOffDisablesEveryHeuristicForOldAgents()
     {
         $mock = $this->sshMock(null);

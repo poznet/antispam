@@ -11,10 +11,23 @@
     <p class="text-muted">Administrator widzi wszystko. Użytkownik widzi wyłącznie kwarantannę, spam i dziennik ocen przypisanych mu skrzynek i może przywracać wiadomości z kwarantanny do skrzynki odbiorczej.
     {% if env_admin %}Konto <strong>{{ env_admin }}</strong> pochodzi z konfiguracji serwera (ADMIN_USER) i nie jest tu edytowalne.{% endif %}</p>
 
+    <form method="post" action="{{ path('antispam_user_2fa_policy') }}" class="panel panel-default">
+        <div class="panel-body">
+            <input type="hidden" name="_token" value="{{ csrf_token('user_2fa_policy') }}">
+            <input type="hidden" name="required" value="{{ two_factor_required ? '0' : '1' }}">
+            <span class="glyphicon glyphicon-phone"></span>
+            <strong>Weryfikacja dwuetapowa (2FA) dla administratorów:</strong>
+            {% if two_factor_required %}<span class="label label-success">wymagana</span>{% else %}<span class="label label-default">dobrowolna</span>{% endif %}
+            <button type="submit" class="btn btn-xs btn-default" style="margin-left:8px;">{{ two_factor_required ? 'Nie wymagaj' : 'Wymagaj 2FA dla administratorów' }}</button>
+            <p class="help-block" style="margin-bottom:0;">Gdy wymagana, administrator bez 2FA po zalogowaniu musi ją najpierw włączyć (menu konta → Weryfikacja dwuetapowa).
+            {% if env_admin %}Konto <strong>{{ env_admin }}</strong> z konfiguracji serwera używa 2FA tylko ze zmienną <code>ADMIN_TOTP_SECRET</code>{% if env_admin_2fa %} (<span class="text-success">ustawiona</span>){% else %} (<span class="text-danger">nieustawiona - to konto loguje się samym hasłem</span>){% endif %}.{% endif %}</p>
+        </div>
+    </form>
+
     <div class="table-responsive">
     <table class="table table-bordered">
         <thead>
-            <tr><th>Login</th><th>Rola</th><th>Skrzynki</th><th>Utworzono</th><th>Akcje</th></tr>
+            <tr><th>Login</th><th>Rola</th><th>Skrzynki</th><th>2FA</th><th>Utworzono</th><th>Akcje</th></tr>
         </thead>
         <tbody>
         {% for u in users %}
@@ -30,19 +43,23 @@
                         {% for a in u.accounts %}<span class="label label-info" title="{{ a.email }}">{{ a.name }}</span> {% else %}<span class="text-muted">brak</span>{% endfor %}
                     {% endif %}
                 </td>
+                <td>{% if u.totpEnabled %}<span class="label label-success">włączona</span>{% elseif u.admin and two_factor_required %}<span class="label label-warning">brak (wymagana)</span>{% else %}<span class="text-muted">brak</span>{% endif %}</td>
                 <td class="pp-mono">{{ u.createdAt|date('Y-m-d H:i') }}</td>
                 <td>
                     <form method="post" action="{{ path('antispam_user_del', {id: u.id}) }}" style="margin:0">
                         <input type="hidden" name="_token" value="{{ csrf_token('user_action_' ~ u.id) }}">
                         <div class="btn-group btn-group-xs">
                             <a href="{{ path('antispam_user_edit', {id: u.id}) }}" class="btn btn-default"><span class="glyphicon glyphicon-pencil"></span> Edytuj</a>
+                            {% if u.totpEnabled %}
+                            <button type="submit" formaction="{{ path('antispam_user_2fa_reset', {id: u.id}) }}" class="btn btn-warning" title="Resetuj 2FA (zgubiony telefon)" data-confirm="Zresetować weryfikację dwuetapową tego użytkownika? Zaloguje się samym hasłem i będzie mógł ją skonfigurować ponownie."><span class="glyphicon glyphicon-phone" aria-hidden="true"></span> Reset 2FA</button>
+                            {% endif %}
                             <button type="submit" class="btn btn-danger" title="Usuń" aria-label="Usuń użytkownika" data-confirm="Usunąć tego użytkownika?"><span class="glyphicon glyphicon-trash" aria-hidden="true"></span></button>
                         </div>
                     </form>
                 </td>
             </tr>
         {% else %}
-            <tr><td colspan="5" class="text-center text-muted" style="padding:40px;">Brak użytkowników &mdash; <a href="{{ path('antispam_user_add') }}">dodaj pierwszego</a></td></tr>
+            <tr><td colspan="6" class="text-center text-muted" style="padding:40px;">Brak użytkowników &mdash; <a href="{{ path('antispam_user_add') }}">dodaj pierwszego</a></td></tr>
         {% endfor %}
         </tbody>
     </table>

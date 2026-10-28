@@ -37,6 +37,8 @@ class SshService
         'quarantine-list' => 180,
         'quarantine-release' => 60,
         'quarantine-delete' => 60,
+        'spam-list' => 180,
+        'spam-release' => 60,
     ];
 
     /** Directory under which every account's SSH private key must live. */
@@ -496,6 +498,22 @@ class SshService
             $args .= ' --whitelist';
         }
         return $this->runAgent($account, 'quarantine-' . $action, $args);
+    }
+
+    /** Newest messages of the agent's .SPAM folder (agent 3.1+). */
+    public function spamList(Account $account, $limit = 100)
+    {
+        return $this->runAgent($account, 'spam-list', $this->maildirArg($account) . ' --limit=' . (int)$limit);
+    }
+
+    /** Move a message from .SPAM back to INBOX, optionally whitelisting its sender in the agent (agent 3.1+). */
+    public function spamRelease(Account $account, $id, $whitelist = false)
+    {
+        $args = $this->maildirArg($account) . ' --id=' . escapeshellarg((string)$id);
+        if ($whitelist) {
+            $args .= ' --whitelist';
+        }
+        return $this->runAgent($account, 'spam-release', $args);
     }
 
     public function runHealth(Account $account)

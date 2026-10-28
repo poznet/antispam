@@ -28,6 +28,8 @@ services:
       # Application login (form-based, required to access every page).
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      # Optional 2FA of ADMIN_USER (php bin/console antispam:2fa:secret)
+      ADMIN_TOTP_SECRET: ${ADMIN_TOTP_SECRET:-}
 
       DATABASE_HOST: db
       DATABASE_PORT: 3306

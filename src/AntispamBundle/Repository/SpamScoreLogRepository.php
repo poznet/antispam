@@ -108,6 +108,19 @@ class SpamScoreLogRepository extends EntityRepository
      */
     public function findQuarantineBySenders($accountEmail, array $senders, $limit = 2000)
     {
+        return $this->findDecisionsBySenders($accountEmail, $senders, SpamScoreLog::DECISION_QUARANTINE, $limit);
+    }
+
+    /**
+     * Decisions $decision of one mailbox for the given senders, newest first
+     * (quarantine items, and spam items of the user area SPAM view).
+     *
+     * @param string[] $senders lower-case sender addresses
+     *
+     * @return SpamScoreLog[]
+     */
+    public function findDecisionsBySenders($accountEmail, array $senders, string $decision, $limit = 2000)
+    {
         $senders = array_values(array_unique(array_filter(array_map('strval', $senders), 'strlen')));
         if ((string)$accountEmail === '' || !$senders) {
             return [];
@@ -116,7 +129,7 @@ class SpamScoreLogRepository extends EntityRepository
         foreach (array_chunk($senders, 200) as $chunk) {
             $rows = $this->createQueryBuilder('l')
                 ->andWhere('l.accountEmail = :account')->setParameter('account', (string)$accountEmail)
-                ->andWhere('l.decision = :d')->setParameter('d', SpamScoreLog::DECISION_QUARANTINE)
+                ->andWhere('l.decision = :d')->setParameter('d', $decision)
                 ->andWhere('l.sender IN (:senders)')->setParameter('senders', $chunk)
                 ->orderBy('l.scoredAt', \SortDirection::Descending)
                 ->addOrderBy('l.id', \SortDirection::Descending)

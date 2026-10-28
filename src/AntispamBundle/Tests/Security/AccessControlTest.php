@@ -34,6 +34,19 @@ class AccessControlTest extends KernelTestCase
         }
     }
 
+    public function testUserAreaPagesNeedRoleUser()
+    {
+        self::bootKernel();
+        foreach (['/2fa', '/my/2fa', '/my/spam', '/my/rules', '/my/rules/add'] as $path) {
+            [$attributes] = self::getContainer()->get('security.access_map')->getPatterns(Request::create($path));
+            $this->assertSame(['ROLE_USER'], $attributes, $path);
+        }
+        foreach (['/2fax', '/users/2fa-reset/1', '/users/2fa-policy'] as $path) {
+            [$attributes] = self::getContainer()->get('security.access_map')->getPatterns(Request::create($path));
+            $this->assertSame(['ROLE_ADMIN'], $attributes, $path);
+        }
+    }
+
     public function testAdminAreaStaysAdmin()
     {
         self::bootKernel();

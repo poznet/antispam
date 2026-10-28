@@ -4,6 +4,7 @@ namespace AntispamBundle\Controller;
 
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\User;
+use AntispamBundle\Security\TwoFactor\TwoFactorService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -28,6 +29,7 @@ class UserController extends AbstractController
         private EntityManagerInterface $em,
         private UserPasswordHasherInterface $hasher,
         #[Autowire('%env(ADMIN_USER)%')] private string $envAdminUser,
+        private ?TwoFactorService $twoFactor = null,
     ) {
     }
 
@@ -35,7 +37,47 @@ class UserController extends AbstractController
     #[Template('@Antispam/User/index.html.twig')]
     public function indexAction()
     {
-        return ['users' => $this->em->getRepository(User::class)->findBy([], ['username' => 'ASC']), 'env_admin' => $this->envAdminUser];
+        return [
+            'users' => $this->em->getRepository(User::class)->findBy([], ['username' => 'ASC']),
+            'env_admin' => $this->envAdminUser,
+            'two_factor_required' => $this->twoFactor?->isRequiredForAdmins() ?? false,
+            'env_admin_2fa' => $this->twoFactor?->hasEnvSecret() ?? false,
+        ];
+    }
+
+    /** Admin reset of a user's 2FA (lost phone and backup codes): the user logs in with the password only and may set it up again. */
+    #[Route('/2fa-reset/{id}', name: 'antispam_user_2fa_reset', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function resetTwoFactorAction(int $id, Request $request)
+    {
+        $this->checkToken($request, 'user_action_' . $id);
+        $user = $this->em->getRepository(User::class)->find($id);
+        if (!$user) {
+            $this->addFlash('danger', 'Nie znaleziono użytkownika.');
+        } elseif (!$user->isTotpEnabled()) {
+            $this->addFlash('info', sprintf('Użytkownik %s nie ma włączonej weryfikacji dwuetapowej.', $user->getUsername()));
+        } else {
+            $user->clearTotp();
+            $this->em->flush();
+            $this->audit('auth.2fa_reset', targetType: 'user', targetId: $user->getId(), label: $user->getUsername());
+            $this->addFlash('success', sprintf('Zresetowano weryfikację dwuetapową użytkownika %s.', $user->getUsername()));
+        }
+        return $this->redirectToRoute('antispam_user_index');
+    }
+
+    /** "Wymagaj 2FA dla administratorów" (config security.2fa_required_admins). */
+    #[Route('/2fa-policy', name: 'antispam_user_2fa_policy', methods: ['POST'])]
+    public function twoFactorPolicyAction(Request $request)
+    {
+        $this->checkToken($request, 'user_2fa_policy');
+        if ($this->twoFactor) {
+            $required = $request->request->getBoolean('required');
+            $this->twoFactor->setRequiredForAdmins($required);
+            $this->audit('settings.save', targetType: 'settings', targetId: '2fa_policy', details: ['fields' => ['required'], 'required' => $required]);
+            $this->addFlash('success', $required
+                ? 'Administratorzy muszą teraz używać weryfikacji dwuetapowej - bez niej zostaną poproszeni o jej włączenie.'
+                : 'Weryfikacja dwuetapowa nie jest już wymagana dla administratorów.');
+        }
+        return $this->redirectToRoute('antispam_user_index');
     }
 
     #[Route('/add', name: 'antispam_user_add')]

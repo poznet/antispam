@@ -1,0 +1,16 @@
+{% extends '@Antispam/main.html.twig' %}
+{% block title %}Kody zapasowe{% endblock %}
+{% block page_title %}Kody zapasowe 2FA{% endblock %}
+
+{% block body %}
+    <div class="panel panel-warning" style="max-width:560px;">
+        <div class="panel-heading"><span class="glyphicon glyphicon-save"></span> Zapisz te kody teraz</div>
+        <div class="panel-body">
+            <p>Każdy kod działa <strong>jeden raz</strong> zamiast kodu z aplikacji - gdy zgubisz telefon. Przechowuj je w bezpiecznym miejscu (menedżer haseł, wydruk). <strong>Nie zobaczysz ich ponownie</strong>; w razie potrzeby wygenerujesz nowe.</p>
+            <ul class="list-unstyled pp-mono" style="font-size:16px; columns:2;">
+                {% for code in codes %}<li>{{ code }}</li>{% endfor %}
+            </ul>
+            <a href="{{ path('antispam_my_2fa') }}" class="btn btn-primary"><span class="glyphicon glyphicon-ok"></span> Zapisałem kody</a>
+        </div>
+    </div>
+{% endblock %}

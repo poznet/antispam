@@ -9,11 +9,12 @@
 | POST | `/login` | Form login check (`_username`, `_password`, CSRF token `authenticate`) → `/panel`. Throttled: 5 failed attempts per login + client IP per 15 minutes (`login_throttling`), then the form shows "too many failed login attempts" |
 | GET | `/logout` | Log out → `/` |
 | GET | `/start` | After-login redirect (ROLE_USER): admins -> `/panel`, users -> `/my/quarantine` |
+| GET/POST | `/2fa` | Second login step when 2FA is on: `code` (TOTP or a backup code), CSRF token `two_factor_verify`; success -> `/start`. Throttled: 5 wrong codes per login per 15 minutes (`two_factor_code` limiter). Until it succeeds every non-public page redirects here (`TwoFactorGuard`); without a pending code it redirects to `/start` |
 | GET | `/panel` | Admin dashboard (ROLE_ADMIN) |
 
 Access: `/`, `/login`, `/api/feed`, `/q/`, `/api/plugin` and the plugin downloads are public;
-`/my/*` and `/start` need `ROLE_USER` (admins included); **everything else needs `ROLE_ADMIN`**.
-See [users.md](users.md).
+`/my/*`, `/2fa` and `/start` need `ROLE_USER` (admins included); **everything else needs
+`ROLE_ADMIN`**. See [users.md](users.md).
 
 ## My mailbox (`/my`, ROLE_USER)
 
@@ -24,8 +25,17 @@ a foreign mailbox key gives 403, see [users.md](users.md).
 |--------|-----|-------------|
 | GET | `/my/quarantine` | Quarantine of the user's mailboxes (IMAP / SSH accounts only; not the legacy mailbox) |
 | POST | `/my/quarantine/action` | `mailbox` (`imap-<id>` / `ssh-<id>`, must be assigned), `id`, `action` (`release` / `whitelist` / `delete`); CSRF token `my_quarantine_action`. `whitelist` is refused for high-risk messages |
-| GET | `/my/scorelog` | Own score log (same template and filters as `/spambox/scorelog`; `account` is limited to the user's mailboxes). `?decision=spam` is the user's "spam" view |
+| GET | `/my/spam` | Newest 100 messages of the SPAM folder of each own mailbox (IMAP account folder / agent `spam-list`) |
+| POST | `/my/spam/action` | `mailbox` (`imap-<id>` / `ssh-<id>`, must be assigned), `id`, `action` (`release` / `whitelist` = release + exact e-mail whitelist rule), optional `uidvalidity` (IMAP); CSRF token `my_spam_action`. `whitelist` is refused for high-risk / unscored / unlisted messages |
+| GET | `/my/scorelog` | Own score log (same template and filters as `/spambox/scorelog`; `account` is limited to the user's mailboxes) |
+| GET | `/my/rules` | Own sender rules (4 lists) of the user's mailboxes |
+| POST | `/my/rules/add` | `list` (`whitelist` / `email_whitelist` / `blacklist` / `email_blacklist`), `owner` (an own mailbox e-mail; `*` or foreign -> 403), `value`, `pattern_type` (`exact` / `wildcard`; regex refused); CSRF token `my_rules`. SSH mailboxes: agent rules sync after the response |
+| POST | `/my/rules/delete` | `list`, `id`; a rule of another mailbox or a global rule -> 403; CSRF token `my_rules` |
 | GET/POST | `/my/password` | Change own password (database users only; CSRF token `my_password`); logs out afterwards |
+| GET | `/my/2fa` | Own 2FA: status, setup with a local SVG QR code (pending secret kept in the session), backup codes |
+| POST | `/my/2fa/enable` | `code` of the pending secret; CSRF token `my_2fa`; shows the 10 backup codes once |
+| POST | `/my/2fa/disable` | `current` (password) + `code` (TOTP / backup); CSRF `my_2fa`; refused for admins while 2FA is required |
+| POST | `/my/2fa/backup-codes` | `current` + `code`; CSRF `my_2fa`; new backup codes replace the old ones |
 
 ## Users (`/users`, ROLE_ADMIN)
 
@@ -35,6 +45,8 @@ a foreign mailbox key gives 403, see [users.md](users.md).
 | GET/POST | `/users/add` | Create a user: login, password, role, mailboxes (CSRF token `user_form`) |
 | GET/POST | `/users/edit/{id}` | Edit; empty password keeps the current one (CSRF token `user_form`) |
 | POST | `/users/del/{id}` | Delete (CSRF token `user_action_{id}`); not your own account |
+| POST | `/users/2fa-reset/{id}` | Reset the user's 2FA (secret + backup codes); CSRF token `user_action_{id}` |
+| POST | `/users/2fa-policy` | `required` = `1` / `0`: "Wymagaj 2FA dla administratorów"; CSRF token `user_2fa_policy` |
 
 ## Account Management (`/account`)
 

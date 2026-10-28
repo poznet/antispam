@@ -57,15 +57,15 @@
 ] %}
 {# ROLE_USER sees only their own mailbox views (access is enforced server-side too). #}
 {% if not is_granted('ROLE_ADMIN') %}
-    {# "Spam" and "Dziennik ocen" are the same route; the decision=spam filter tells them apart. #}
-    {% set spam_view = app.request.query.get('decision') == 'spam' %}
     {% set nav = [
         {section: 'Moja poczta'},
         {label: 'Kwarantanna',   icon: 'warning-sign', path: 'antispam_my_quarantine', match: ['antispam_my_quarantine']},
-        {label: 'Spam',          icon: 'inbox',        path: 'antispam_my_scorelog', params: {decision: 'spam'},  match: spam_view ? ['antispam_my_scorelog'] : []},
-        {label: 'Dziennik ocen', icon: 'list-alt',     path: 'antispam_my_scorelog', match: spam_view ? [] : ['antispam_my_scorelog']},
+        {label: 'Spam',          icon: 'inbox',        path: 'antispam_my_spam',       match: ['antispam_my_spam']},
+        {label: 'Dziennik ocen', icon: 'list-alt',     path: 'antispam_my_scorelog',   match: ['antispam_my_scorelog']},
+        {label: 'Moje reguły',   icon: 'filter',       path: 'antispam_my_rules',      match: ['antispam_my_rules']},
         {section: 'Konto'},
-        {label: 'Zmiana hasła',  icon: 'lock',         path: 'antispam_my_password', match: ['antispam_my_password']}
+        {label: 'Zmiana hasła',  icon: 'lock',         path: 'antispam_my_password', match: ['antispam_my_password']},
+        {label: 'Weryfikacja dwuetapowa', icon: 'phone', path: 'antispam_my_2fa',    match: ['antispam_my_2fa']}
     ] %}
 {% endif %}
 {% set home_path = is_granted('ROLE_ADMIN') ? 'antispam_index' : 'antispam_my_quarantine' %}
@@ -130,6 +130,7 @@
                     {% if app.user.role is defined %}
                     <li><a href="{{ path('antispam_my_password') }}"><span class="glyphicon glyphicon-lock"></span> Zmiana hasła</a></li>
                     {% endif %}
+                    <li><a href="{{ path('antispam_my_2fa') }}"><span class="glyphicon glyphicon-phone"></span> Weryfikacja dwuetapowa</a></li>
                     <li role="separator" class="divider"></li>
                     <li><a href="{{ path('logout') }}"><span class="glyphicon glyphicon-log-out"></span> Wyloguj</a></li>
                 </ul>

@@ -5,8 +5,10 @@ namespace AntispamBundle\Controller;
 use AntispamBundle\Entity\SpamScoreLog;
 use AntispamBundle\Entity\User;
 use AntispamBundle\Security\MailboxAccess;
+use AntispamBundle\Services\DeferredAgentSync;
 use AntispamBundle\Services\QuarantineDigestService;
 use AntispamBundle\Services\QuarantineService;
+use AntispamBundle\Services\SpamFolderService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -16,8 +18,8 @@ use Symfony\Component\Routing\Attribute\Route;
 
 /**
  * End-user area (ROLE_USER; administrators may open it too and then see every
- * mailbox): own quarantine with release / whitelist / delete, own score log
- * (also the "spam" view - filter decision=spam) and the own password.
+ * mailbox): own quarantine with release / whitelist / delete, own SPAM folder
+ * with release / release + whitelist, own score log and the own password.
  *
  * Ownership is enforced here, server-side, on every query and every action
  * that takes an id from the request - see Security\MailboxAccess.
@@ -34,6 +36,8 @@ class MyController extends AbstractController
         private QuarantineService $quarantine,
         private MailboxAccess $access,
         private UserPasswordHasherInterface $hasher,
+        private SpamFolderService $spam,
+        private DeferredAgentSync $agentSync,
     ) {
     }
 
@@ -104,6 +108,91 @@ class MyController extends AbstractController
     private function isHighRisk(string $key, string $id): bool
     {
         foreach ($this->quarantine->listItems($key, null, 500) as $item) {
+            if ((string)$item['id'] === $id) {
+                return QuarantineDigestService::isHighRisk($item['reasons']);
+            }
+        }
+        return true;
+    }
+
+    /** Newest messages of the SPAM folder of each own mailbox (IMAP or SSH agent). */
+    #[Route('/spam', name: 'antispam_my_spam', methods: ['GET'])]
+    #[Template('@Antispam/My/spam.html.twig')]
+    public function spamAction()
+    {
+        $mailboxes = [];
+        foreach ($this->access->filterMailboxes($this->getUser(), $this->quarantine->getMailboxes()) as $mailbox) {
+            $items = [];
+            $total = 0;
+            $error = null;
+            try {
+                $list = $this->spam->listItems($mailbox['key'], SpamFolderService::DEFAULT_LIMIT);
+                $total = $list['total'];
+                foreach ($list['items'] as $item) {
+                    $item['labels'] = QuarantineDigestService::reasonLabels($item['reasons']);
+                    $item['high_risk'] = QuarantineDigestService::isHighRisk($item['reasons']);
+                    $items[] = $item;
+                }
+            } catch (\Throwable $e) {
+                // Raw exception text (hosts, paths) stays in the admin area.
+                $error = 'Nie udało się odczytać folderu SPAM tej skrzynki. Spróbuj później lub skontaktuj się z administratorem.';
+            }
+            $mailboxes[] = $mailbox + ['items' => $items, 'total' => $total, 'error' => $error];
+        }
+
+        return ['mailboxes' => $mailboxes, 'limit' => SpamFolderService::DEFAULT_LIMIT];
+    }
+
+    /** "Przywróć do skrzynki" / "Przywróć i zawsze akceptuj" from the SPAM folder of an own mailbox. */
+    #[Route('/spam/action', name: 'antispam_my_spam_action', methods: ['POST'])]
+    public function spamItemAction(Request $request)
+    {
+        if (!$this->isCsrfTokenValid('my_spam_action', (string)$request->request->get('_token'))) {
+            $this->addFlash('danger', 'Nieprawidłowy token formularza, spróbuj ponownie');
+            return $this->redirectToRoute('antispam_my_spam');
+        }
+
+        $key = (string)$request->request->get('mailbox');
+        $id = (string)$request->request->get('id');
+        $action = (string)$request->request->get('action');
+        $uidValidity = $request->request->get('uidvalidity');
+        $uidValidity = is_numeric($uidValidity) ? (int)$uidValidity : null;
+
+        // The key decides everything; the id is only looked up inside that mailbox.
+        if (!$this->access->canAccessMailboxKey($this->getUser(), $key)) {
+            throw $this->createAccessDeniedException();
+        }
+
+        try {
+            if (!in_array($action, ['release', 'whitelist'], true)) {
+                $result = ['success' => false, 'message' => 'Nieznana akcja', 'sender' => ''];
+            } elseif ($action === 'whitelist' && $this->isSpamHighRisk($key, $id)) {
+                $result = ['success' => false, 'message' => 'Nadawcy tej wiadomości nie można dodać do zaufanych (wysokie ryzyko lub brak zapisanej oceny). Możesz ją przywrócić bez akceptowania nadawcy.', 'sender' => ''];
+            } else {
+                $result = $this->spam->release($key, $id, $action === 'whitelist', $uidValidity);
+            }
+        } catch (\Throwable $e) {
+            $result = ['success' => false, 'message' => 'Operacja nie powiodła się. Spróbuj ponownie lub skontaktuj się z administratorem.', 'sender' => ''];
+        }
+
+        $mailbox = $this->quarantine->getMailbox($key);
+        $this->audit($action === 'whitelist' ? 'spam.whitelist' : 'spam.release', targetType: 'message', targetId: $id,
+            label: ($result['sender'] ?? '') !== '' ? $result['sender'] : null, mailbox: $mailbox['account_email'] ?? null,
+            details: ['source' => 'my', 'mailbox_id' => $key, 'ok' => (bool)$result['success']]);
+
+        if ($result['success'] && !empty($result['whitelisted']) && $mailbox && str_starts_with($key, 'ssh-')) {
+            // The agent whitelisted the sender locally already; the sync keeps it equal to the panel's list.
+            $this->agentSync->deferForOwner((string)$mailbox['account_email']);
+        }
+
+        $this->addFlash($result['success'] ? 'success' : 'danger', $result['message']);
+        return $this->redirectToRoute('antispam_my_spam');
+    }
+
+    /** Fail closed, like the quarantine: unlisted / unknown-score / risky messages get no whitelist. */
+    private function isSpamHighRisk(string $key, string $id): bool
+    {
+        foreach ($this->spam->listItems($key, 500)['items'] as $item) {
             if ((string)$item['id'] === $id) {
                 return QuarantineDigestService::isHighRisk($item['reasons']);
             }

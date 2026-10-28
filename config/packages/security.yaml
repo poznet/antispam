@@ -76,8 +76,9 @@ security:
         - { path: ^/plugin/(download|outlook/|apple-mail/), roles: PUBLIC_ACCESS }
         # End-user area (own quarantine / spam / score log): ROLE_USER, ownership
         # of each mailbox is enforced in the controller (Security\MailboxAccess).
-        # /start redirects to the role's landing page after login.
-        - { path: ^/(my|start)(/|$), roles: ROLE_USER }
+        # /start redirects to the role's landing page after login; /2fa is the
+        # second login step (Security\TwoFactor\TwoFactorGuard).
+        - { path: ^/(my|start|2fa)(/|$), roles: ROLE_USER }
         # Everything else is administration.
         - { path: ^/, roles: ROLE_ADMIN }
 

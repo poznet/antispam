@@ -1,0 +1,73 @@
+{% extends '@Antispam/main.html.twig' %}
+{% block title %}Mój spam{% endblock %}
+{% block page_title %}Folder SPAM{% endblock %}
+
+{% block body %}
+    <p class="text-muted">Wiadomości, które filtr przeniósł do folderu SPAM Twojej skrzynki (najnowsze {{ limit }}). Jeśli któraś jest potrzebna, przywróć ją do skrzynki odbiorczej - nie zostanie ponownie odfiltrowana. „Przywróć i zawsze akceptuj” dodaje też nadawcę do Twoich <a href="{{ path('antispam_my_rules') }}">zaufanych nadawców</a>.</p>
+
+    {% set token = csrf_token('my_spam_action') %}
+
+    {% for mailbox in mailboxes %}
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            <span class="glyphicon glyphicon-inbox"></span> {{ mailbox.label }}
+            <span class="badge pull-right" title="Wiadomości w folderze SPAM">{{ mailbox.total }}</span>
+        </div>
+        {% if mailbox.error %}
+            <div class="panel-body">
+                <div class="alert alert-danger" style="margin:0;">{{ mailbox.error }}</div>
+            </div>
+        {% elseif mailbox.items|length > 0 %}
+        <div class="table-responsive">
+        <table class="table table-striped" style="margin-bottom:0;">
+            <thead><tr><th>Data</th><th>Nadawca</th><th>Temat</th><th>Punkty</th><th>Powód</th><th></th></tr></thead>
+            <tbody>
+            {% for item in mailbox.items %}
+                <tr>
+                    <td class="pp-cell-nowrap">{{ item.date ? item.date|date('Y-m-d H:i') : '—' }}</td>
+                    <td class="pp-cell-wrap">{% if item.from_name %}{{ item.from_name }}<br>{% endif %}<small>{{ item.from }}</small></td>
+                    <td class="pp-cell-wrap" title="{{ item.subject }}">{{ item.subject|length > 80 ? item.subject[:80] ~ '…' : item.subject }}</td>
+                    <td>{% if item.score is not null %}<strong>{{ item.score }}</strong>{% endif %}</td>
+                    <td>
+                        {% if item.high_risk %}<span class="label label-danger">wysokie ryzyko</span><br>{% endif %}
+                        {% for label in item.labels %}<small>{{ label }}</small><br>{% endfor %}
+                    </td>
+                    <td class="text-right pp-cell-nowrap">
+                        <form method="post" action="{{ path('antispam_my_spam_action') }}" style="display:inline;">
+                            <input type="hidden" name="_token" value="{{ token }}">
+                            <input type="hidden" name="mailbox" value="{{ mailbox.key }}">
+                            <input type="hidden" name="id" value="{{ item.id }}">
+                            {% if item.uidvalidity is not null %}<input type="hidden" name="uidvalidity" value="{{ item.uidvalidity }}">{% endif %}
+                            <button type="submit" name="action" value="release" class="btn btn-xs btn-success" title="Przywróć do skrzynki odbiorczej"{% if item.high_risk %} data-confirm="Ta wiadomość ma wysokie ryzyko (phishing / złośliwy załącznik) albo nie ma zapisanej oceny. Na pewno przywrócić ją do skrzynki?"{% endif %}>
+                                <span class="glyphicon glyphicon-ok" aria-hidden="true"></span> Przywróć do skrzynki
+                            </button>
+                            {% if not item.high_risk and item.from %}
+                            <button type="submit" name="action" value="whitelist" class="btn btn-xs btn-info" title="Przywróć i zawsze przepuszczaj pocztę od tego nadawcy">
+                                <span class="glyphicon glyphicon-star" aria-hidden="true"></span> Przywróć i zawsze akceptuj
+                            </button>
+                            {% endif %}
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+            <div class="panel-body text-muted">Folder SPAM jest pusty</div>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <span class="glyphicon glyphicon-ok-circle"></span>
+        <p>Brak skrzynek</p>
+        <p class="text-muted">Do Twojego konta nie przypisano żadnej skrzynki. Skontaktuj się z administratorem.</p>
+    </div>
+    {% endfor %}
+
+    <p class="text-muted">Dlaczego wiadomość uznano za spam - zobacz <a href="{{ path('antispam_my_scorelog', {decision: 'spam'}) }}">dziennik ocen</a>.</p>
+{% endblock %}
+
+{% block javascripts %}
+    <script src="{{ asset('bundles/antispam/js/data-confirm.js') }}"></script>
+{% endblock %}

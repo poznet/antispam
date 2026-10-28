@@ -42,6 +42,25 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(name: 'created_at', type: 'datetime')]
     private $createdAt;
 
+    /**
+     * Two-factor authentication (TOTP, see Security\TwoFactor\TwoFactorService).
+     * The base32 secret is stored encrypted (CryptoService, "enc:v1:"); 2FA is
+     * on only when both the secret and totp_enabled_at are set.
+     */
+    #[ORM\Column(name: 'totp_secret', type: 'string', length: 255, nullable: true)]
+    private $totpSecret;
+
+    #[ORM\Column(name: 'totp_enabled_at', type: 'datetime', nullable: true)]
+    private $totpEnabledAt;
+
+    /** Last accepted TOTP time step - a code is accepted only once (replay protection). */
+    #[ORM\Column(name: 'totp_last_counter', type: 'integer', nullable: true)]
+    private $totpLastCounter;
+
+    /** @var string[]|null password_hash() of the unused backup codes */
+    #[ORM\Column(name: 'totp_backup_codes', type: 'json', nullable: true)]
+    private $totpBackupCodes;
+
     /** @var Collection<int, Account> */
     #[ORM\ManyToMany(targetEntity: Account::class)]
     #[ORM\JoinTable(name: 'antispam_user_account')]
@@ -79,6 +98,35 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     }
 
     public function getCreatedAt() { return $this->createdAt; }
+
+    public function getTotpSecret(): ?string { return $this->totpSecret; }
+    public function setTotpSecret(?string $secret) { $this->totpSecret = $secret; return $this; }
+
+    public function getTotpEnabledAt(): ?\DateTimeInterface { return $this->totpEnabledAt; }
+    public function setTotpEnabledAt(?\DateTimeInterface $at) { $this->totpEnabledAt = $at; return $this; }
+
+    public function getTotpLastCounter(): ?int { return $this->totpLastCounter === null ? null : (int)$this->totpLastCounter; }
+    public function setTotpLastCounter(?int $counter) { $this->totpLastCounter = $counter; return $this; }
+
+    /** @return string[] hashes of the unused backup codes */
+    public function getTotpBackupCodes(): array { return array_values((array)($this->totpBackupCodes ?? [])); }
+    /** @param string[]|null $hashes */
+    public function setTotpBackupCodes(?array $hashes) { $this->totpBackupCodes = $hashes === null ? null : array_values($hashes); return $this; }
+
+    public function isTotpEnabled(): bool
+    {
+        return $this->totpSecret !== null && $this->totpSecret !== '' && $this->totpEnabledAt !== null;
+    }
+
+    /** Turn 2FA off and forget every secret (disable / admin reset). */
+    public function clearTotp()
+    {
+        $this->totpSecret = null;
+        $this->totpEnabledAt = null;
+        $this->totpLastCounter = null;
+        $this->totpBackupCodes = null;
+        return $this;
+    }
 
     /** @return Collection<int, Account> */
     public function getAccounts()

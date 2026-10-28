@@ -21,6 +21,9 @@
 } %}
 {% set page = pages[code] ?? (code >= 500 ? pages[500] : {title: 'Nie udało się otworzyć strony', text: 'Wróć na stronę główną albo do panelu.'}) %}
 {% set user = app.user ?? null %}
+{# "Wróć" without javascript: (CSP-safe): offered only for a same-origin Referer, otherwise left out. #}
+{% set referer = app.request.headers.get('referer') ?? '' %}
+{% set back = referer starts with app.request.schemeAndHttpHost ~ '/' and referer != app.request.uri ? referer : null %}
 <!DOCTYPE html>
 <html lang="pl">
 <head>
@@ -32,13 +35,7 @@
     <title>{{ code }} · {{ page.title }} · Antispam Pancernapanda</title>
     <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}">
     <link rel="stylesheet" href="{{ asset('bundles/antispam/vendor/fonts/fonts.css') }}">
-    <script>
-        (function () {
-            var t = null;
-            try { t = localStorage.getItem('pp-theme'); } catch (e) {}
-            if (t) { document.documentElement.setAttribute('data-theme', t); }
-        })();
-    </script>
+    <script src="{{ asset('bundles/antispam/js/theme-init.js') }}"></script>
     <style>
         :root {
             --bg: #f4f7fc; --surface: #ffffff; --border: #e3e8f0;
@@ -111,15 +108,15 @@
                 <a class="btn btn-primary" href="{{ path('antispam_start') }}">Przejdź do panelu</a>
                 {% if code == 403 %}
                     <a class="btn" href="{{ path('logout') }}">Zaloguj na inne konto</a>
-                {% else %}
-                    <a class="btn" href="javascript:history.back()">Wróć</a>
+                {% elseif back %}
+                    <a class="btn" href="{{ back }}">Wróć</a>
                 {% endif %}
             {% elseif code == 401 or code == 403 %}
                 <a class="btn btn-primary" href="{{ path('antispam_home') }}#logowanie">Zaloguj się</a>
                 <a class="btn" href="{{ path('antispam_home') }}">Strona główna</a>
             {% else %}
                 <a class="btn btn-primary" href="{{ path('antispam_home') }}">Strona główna</a>
-                <a class="btn" href="javascript:history.back()">Wróć</a>
+                {% if back %}<a class="btn" href="{{ back }}">Wróć</a>{% endif %}
             {% endif %}
         </div>
         <div class="foot">Kod błędu {{ code }}{% if code >= 500 %} · {{ "now"|date("Y-m-d H:i") }}{% endif %}</div>

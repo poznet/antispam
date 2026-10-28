@@ -52,10 +52,10 @@
                 <div class="panel-body">
                     <form method="post" action="{{ path('antispam_phishing_update', {id: report.id}) }}">
                         <input type="hidden" name="_token" value="{{ token }}">
-                        <select name="status" class="form-control input-sm" style="margin-bottom:8px;">
+                        <select name="status" class="form-control input-sm" style="margin-bottom:8px;" aria-label="Status zgłoszenia">
                             {% for key, label in statuses %}<option value="{{ key }}" {% if key == report.status %}selected{% endif %}>{{ label }}</option>{% endfor %}
                         </select>
-                        <textarea name="note" class="form-control input-sm" rows="3" placeholder="Notatka (np. numer zgłoszenia w CERT)" style="margin-bottom:8px;">{{ report.note }}</textarea>
+                        <textarea name="note" class="form-control input-sm" rows="3" aria-label="Notatka" placeholder="Notatka (np. numer zgłoszenia w CERT)" style="margin-bottom:8px;">{{ report.note }}</textarea>
                         <button type="submit" class="btn btn-primary btn-sm"><span class="glyphicon glyphicon-floppy-disk"></span> Zapisz</button>
                     </form>
                 </div>
@@ -73,7 +73,7 @@
                                 <p><button type="submit" name="what" value="sender" class="btn btn-sm btn-default">Zablokuj adres {{ report.sender }}</button></p>
                             {% endif %}
                             {% if a.from_host and not a.freemail %}
-                                <p><button type="submit" name="what" value="domain" class="btn btn-sm btn-danger" onclick="return confirm('Zablokować całą domenę nadawcy dla tej skrzynki?');">Zablokuj domenę {{ a.from_host }}</button></p>
+                                <p><button type="submit" name="what" value="domain" class="btn btn-sm btn-danger" data-confirm="Zablokować całą domenę nadawcy dla tej skrzynki?">Zablokuj domenę {{ a.from_host }}</button></p>
                             {% elseif a.freemail %}
                                 <p class="text-muted"><small>{{ a.from_host }} to darmowa poczta - zablokuj tylko adres.</small></p>
                             {% endif %}
@@ -116,12 +116,13 @@
     {% if a.attachments %}
     <div class="panel panel-default">
         <div class="panel-heading"><span class="glyphicon glyphicon-paperclip"></span> Załączniki ({{ a.attachments|length }})</div>
+        <div class="table-responsive">
         <table class="table table-condensed" style="margin-bottom:0;">
             <thead><tr><th>Nazwa</th><th>Typ</th><th>Rozmiar</th><th>SHA-256</th></tr></thead>
             <tbody>
             {% for att in a.attachments %}
                 <tr class="{{ att.risky ? 'danger' }}">
-                    <td>{{ att.filename }}</td>
+                    <td class="pp-cell-wrap">{{ att.filename }}</td>
                     <td><small>{{ att.type }}</small></td>
                     <td>{{ (att.size / 1024)|round(1) }} KiB</td>
                     <td><a href="https://www.virustotal.com/gui/file/{{ att.sha256 }}" target="_blank" rel="noopener noreferrer"><code>{{ att.sha256 }}</code></a></td>
@@ -129,6 +130,7 @@
             {% endfor %}
             </tbody>
         </table>
+        </div>
     </div>
     {% endif %}
 
@@ -154,8 +156,12 @@
         </div>
     </div>
 
-    <form method="post" action="{{ path('antispam_phishing_delete', {id: report.id}) }}" onsubmit="return confirm('Usunąć zgłoszenie razem z treścią wiadomości?');">
+    <form method="post" action="{{ path('antispam_phishing_delete', {id: report.id}) }}">
         <input type="hidden" name="_token" value="{{ token }}">
-        <button type="submit" class="btn btn-danger btn-sm"><span class="glyphicon glyphicon-trash"></span> Usuń zgłoszenie</button>
+        <button type="submit" class="btn btn-danger btn-sm" data-confirm="Usunąć zgłoszenie razem z treścią wiadomości?"><span class="glyphicon glyphicon-trash" aria-hidden="true"></span> Usuń zgłoszenie</button>
     </form>
+{% endblock %}
+
+{% block javascripts %}
+    <script src="{{ asset('bundles/antispam/js/data-confirm.js') }}"></script>
 {% endblock %}

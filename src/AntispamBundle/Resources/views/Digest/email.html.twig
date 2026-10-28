@@ -21,8 +21,8 @@
                     Nie trafiły do skrzynki odbiorczej, bo wyglądają podejrzanie.
                 </p>
                 <p style="margin:0 0 10px;color:#5b6b85;">
-                    Jeśli czekasz na którąś z nich, kliknij <strong>Dostarcz</strong>.
-                    <strong>Zawsze akceptuj</strong> dostarczy wiadomość i doda nadawcę do białej listy.
+                    Jeśli czekasz na którąś z nich, kliknij <strong>Przywróć</strong> - wróci do skrzynki odbiorczej.
+                    <strong>Zawsze akceptuj</strong> przywróci wiadomość i doda nadawcę do białej listy.
                     Wiadomości, których nie ruszysz, zostaną w folderze QUARANTINE.
                 </p>
             </td></tr>
@@ -40,9 +40,9 @@
                         <div style="color:#b45309;font-size:12px;margin-bottom:8px;">{{ item.reason_labels|join(' · ') }}</div>
                         {% endif %}
                         {% if not item.allow_whitelist %}
-                        <div style="color:#9b1c1c;font-size:12px;margin-bottom:8px;">Wysokie ryzyko oszustwa &mdash; dostarcz tylko, jeśli na pewno znasz nadawcę.</div>
+                        <div style="color:#9b1c1c;font-size:12px;margin-bottom:8px;">Wysokie ryzyko oszustwa &mdash; przywracaj tylko, jeśli na pewno znasz nadawcę.</div>
                         {% endif %}
-                        <a href="{{ item.links.release }}" style="display:inline-block;padding:6px 12px;margin:2px 4px 2px 0;background:#1e7e34;color:#ffffff;text-decoration:none;border-radius:4px;">Dostarcz</a>
+                        <a href="{{ item.links.release }}" style="display:inline-block;padding:6px 12px;margin:2px 4px 2px 0;background:#1e7e34;color:#ffffff;text-decoration:none;border-radius:4px;">Przywróć</a>
                         {% if item.links.whitelist is defined %}
                         <a href="{{ item.links.whitelist }}" style="display:inline-block;padding:6px 12px;margin:2px 4px 2px 0;background:#1e4a8a;color:#ffffff;text-decoration:none;border-radius:4px;">Zawsze akceptuj</a>
                         {% endif %}

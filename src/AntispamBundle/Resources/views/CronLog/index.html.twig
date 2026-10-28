@@ -11,7 +11,8 @@
     <code>php bin/console antispam:cron:run antispam:agent:scan-all</code>.</p>
 
     <form method="get" class="form-inline" style="margin-bottom:15px;">
-        <select name="command" class="form-control input-sm">
+        <label for="cronCommand" class="sr-only">Zadanie</label>
+        <select name="command" id="cronCommand" class="form-control input-sm">
             <option value="">Wszystkie zadania</option>
             {% for c in commands %}
                 <option value="{{ c }}" {% if c == command %}selected{% endif %}>{{ c }}</option>
@@ -24,6 +25,7 @@
     {% if runs|length > 0 %}
 
     <div class="panel panel-default">
+        <div class="table-responsive">
         <table class="table table-striped" style="margin-bottom:0;">
             <thead><tr><th>Start</th><th>Zadanie</th><th>Czas</th><th>Status</th><th>Wynik</th></tr></thead>
             <tbody>
@@ -31,7 +33,7 @@
             {% for run in runs %}
 
                 <tr>
-                    <td style="white-space:nowrap;">{{ run.startedAt|date('Y-m-d H:i:s') }}</td>
+                    <td class="pp-cell-nowrap">{{ run.startedAt|date('Y-m-d H:i:s') }}</td>
                     <td><code>{{ run.command }}</code></td>
                     <td>{{ run.duration is not null ? run.duration ~ ' s' : '—' }}</td>
                     <td>
@@ -63,6 +65,7 @@
 
             </tbody>
         </table>
+        </div>
     </div>
 
     {% else %}

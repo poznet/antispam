@@ -191,7 +191,7 @@
                     <li>MX i serwer poczty zostają bez zmian</li>
                     <li>Treść i załączniki analizowane na Twoim serwerze lub VPS-ie</li>
                     <li>Reguły, dziennik ocen i kwarantanna w Twojej bazie danych</li>
-                    <li>Zewnętrzne sprawdzenia reputacji są opcjonalne i nie dostają treści maili ani plików</li>
+                    <li>Zewnętrzne sprawdzenia są opcjonalne i nie dostają treści maili ani plików. Jedyny wyjątek: po włączeniu Google Safe Browsing (domyślnie wyłączone) do Google trafiają pełne adresy linków (<a href="#dane">szczegóły niżej</a>)</li>
                 </ul>
             </article>
         </div>
@@ -541,12 +541,12 @@
             <article class="feature reveal">
                 <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg></div>
                 <h3>Raport kwarantanny e-mailem</h3>
-                <p>Raz dziennie właściciel skrzynki dostaje listę zatrzymanych wiadomości z przyciskami <b>Dostarcz</b>, <b>Zawsze akceptuj</b> i <b>Usuń</b>. Linki są podpisane i wygasają, a maile z oznakami oszustwa nie mają opcji „Zawsze akceptuj”.</p>
+                <p>Raz dziennie właściciel skrzynki dostaje listę zatrzymanych wiadomości z przyciskami <b>Przywróć</b>, <b>Zawsze akceptuj</b> i <b>Usuń</b>. Linki są podpisane i wygasają, a maile z oznakami oszustwa nie mają opcji „Zawsze akceptuj”.</p>
             </article>
             <article class="feature reveal">
                 <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></div>
                 <h3>Własne konto w panelu</h3>
-                <p>Administrator przypisuje pracownikowi jego skrzynki. Pracownik widzi swoją kwarantannę, spam i dziennik ocen, wyciąga wiadomości i zmienia hasło. Do cudzych skrzynek nie ma dostępu.</p>
+                <p>Administrator przypisuje pracownikowi jego skrzynki. Pracownik widzi swoją kwarantannę, spam i dziennik ocen, przywraca wiadomości do skrzynki i zmienia hasło. Do cudzych skrzynek nie ma dostępu.</p>
             </article>
             <article class="feature reveal">
                 <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01"/></svg></div>
@@ -790,13 +790,12 @@
             </div>
         </div>
         <div class="foot-bottom">
-            <span>&copy; <span id="year">2026</span> Pancerna Panda · antispam.pancernapanda.pl</span>
+            <span>&copy; <span id="year">{{ "now"|date("Y") }}</span> Pancerna Panda · antispam.pancernapanda.pl</span>
             <span>Antyspam dla firm na Twoim serwerze</span>
         </div>
     </div>
 </footer>
 
 <script src="{{ asset('bundles/antispam/landing/js/main.js') }}"></script>
-<script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 </body>
 </html>

@@ -10,16 +10,16 @@
             <div class="panel-heading"><span class="glyphicon glyphicon-user"></span> Ogólne</div>
             <div class="panel-body">
                 <div class="form-group">
-                    <label>Nazwa konta</label>
-                    <input type="text" class="form-control" name="account[name]" value="{{ account.name }}" required>
+                    <label for="accName">Nazwa konta</label>
+                    <input type="text" class="form-control" id="accName" name="account[name]" value="{{ account.name }}" required>
                 </div>
                 <div class="form-group">
-                    <label>E-mail</label>
-                    <input type="email" class="form-control" name="account[email]" value="{{ account.email }}" required>
+                    <label for="accEmail">E-mail</label>
+                    <input type="email" class="form-control" id="accEmail" name="account[email]" value="{{ account.email }}" required>
                 </div>
                 <div class="form-group">
-                    <label>Typ połączenia</label>
-                    <select class="form-control" name="account[connection_type]" id="connectionType" onchange="toggleFields()">
+                    <label for="connectionType">Typ połączenia</label>
+                    <select class="form-control" name="account[connection_type]" id="connectionType">
                         <option value="imap" {% if account.connectionType == 'imap' %}selected{% endif %}>IMAP</option>
                         <option value="ssh" {% if account.connectionType == 'ssh' %}selected{% endif %}>SSH + Maildir</option>
                     </select>
@@ -34,19 +34,19 @@
             <div class="panel-heading"><span class="glyphicon glyphicon-cloud"></span> Ustawienia IMAP</div>
             <div class="panel-body">
                 <div class="form-group">
-                    <label>Host IMAP</label>
+                    <label for="imapHost">Host IMAP</label>
                     <input type="text" class="form-control" id="imapHost" name="account[imap_host]" value="{{ account.imapHost }}">
                 </div>
                 <div class="form-group">
-                    <label>Port IMAP</label>
+                    <label for="imapPort">Port IMAP</label>
                     <input type="number" class="form-control" id="imapPort" name="account[imap_port]" value="{{ account.imapPort }}">
                 </div>
                 <div class="form-group">
-                    <label>Login</label>
+                    <label for="imapLogin">Login</label>
                     <input type="text" class="form-control" id="imapLogin" name="account[imap_login]" value="{{ account.imapLogin }}">
                 </div>
                 <div class="form-group">
-                    <label>Hasło</label>
+                    <label for="imapPassword">Hasło</label>
                     <input type="password" class="form-control" id="imapPassword" name="account[imap_password]" value="" placeholder="(bez zmian)" autocomplete="new-password">
                     <p class="help-block">Zostaw puste, żeby zachować obecne hasło.</p>
                 </div>
@@ -58,28 +58,28 @@
             <div class="panel-heading"><span class="glyphicon glyphicon-console"></span> Ustawienia SSH + Maildir</div>
             <div class="panel-body">
                 <div class="form-group">
-                    <label>Host SSH</label>
-                    <input type="text" class="form-control" name="account[ssh_host]" value="{{ account.sshHost }}">
+                    <label for="sshHost">Host SSH</label>
+                    <input type="text" class="form-control" id="sshHost" name="account[ssh_host]" value="{{ account.sshHost }}">
                 </div>
                 <div class="form-group">
-                    <label>Port SSH</label>
-                    <input type="number" class="form-control" name="account[ssh_port]" value="{{ account.sshPort }}">
+                    <label for="sshPort">Port SSH</label>
+                    <input type="number" class="form-control" id="sshPort" name="account[ssh_port]" value="{{ account.sshPort }}">
                 </div>
                 <div class="form-group">
-                    <label>Użytkownik SSH</label>
-                    <input type="text" class="form-control" name="account[ssh_user]" value="{{ account.sshUser }}">
+                    <label for="sshUser">Użytkownik SSH</label>
+                    <input type="text" class="form-control" id="sshUser" name="account[ssh_user]" value="{{ account.sshUser }}">
                 </div>
                 <div class="form-group">
-                    <label>Klucz SSH (plik w katalogu kluczy na tym serwerze)</label>
-                    <input type="text" class="form-control" name="account[ssh_key_path]" value="{{ account.sshKeyPath }}">
+                    <label for="sshKeyPath">Klucz SSH (plik w katalogu kluczy na tym serwerze)</label>
+                    <input type="text" class="form-control" id="sshKeyPath" name="account[ssh_key_path]" value="{{ account.sshKeyPath }}">
                 </div>
                 <div class="form-group">
-                    <label>Ścieżka Maildir (na hostingu)</label>
-                    <input type="text" class="form-control" name="account[maildir_path]" value="{{ account.maildirPath }}">
+                    <label for="maildirPath">Ścieżka Maildir (na hostingu)</label>
+                    <input type="text" class="form-control" id="maildirPath" name="account[maildir_path]" value="{{ account.maildirPath }}">
                 </div>
                 <div class="form-group">
-                    <label>Ścieżka agenta (na hostingu)</label>
-                    <input type="text" class="form-control" name="account[agent_path]" value="{{ account.agentPath }}">
+                    <label for="agentPath">Ścieżka agenta (na hostingu)</label>
+                    <input type="text" class="form-control" id="agentPath" name="account[agent_path]" value="{{ account.agentPath }}">
                 </div>
             </div>
         </div>
@@ -93,8 +93,8 @@
                     <div class="checkbox"><label><input type="checkbox" name="account[plugin_password_clear]" value="1"> Usuń hasło wtyczki</label></div>
                 {% endif %}
                 <div class="form-group">
-                    <label>Hasło wtyczki</label>
-                    <input type="password" class="form-control" name="account[plugin_password]" value="" autocomplete="new-password">
+                    <label for="pluginPassword">Hasło wtyczki</label>
+                    <input type="password" class="form-control" id="pluginPassword" name="account[plugin_password]" value="" autocomplete="new-password">
                 </div>
             </div>
         </div>
@@ -102,16 +102,9 @@
         <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-floppy-disk"></span> Zapisz</button>
         <a href="{{ path('antispam_account_index') }}" class="btn btn-default">Anuluj</a>
     </form>
-
-    <script>
-    function toggleFields() {
-        var type = document.getElementById('connectionType').value;
-        document.getElementById('imapFields').style.display = type === 'imap' ? 'block' : 'none';
-        document.getElementById('sshFields').style.display = type === 'ssh' ? 'block' : 'none';
-    }
-    </script>
 {% endblock %}
 
 {% block javascripts %}
     <script src="{{ asset('bundles/antispam/js/imap-security.js') }}"></script>
+    <script src="{{ asset('bundles/antispam/js/form-toggles.js') }}"></script>
 {% endblock %}

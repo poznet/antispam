@@ -3,7 +3,7 @@
 {% block page_title %}Moja kwarantanna{% endblock %}
 
 {% block body %}
-    <p class="text-muted">Wiadomości z Twojej poczty, które filtr uznał za podejrzane, ale nie na tyle, by je usunąć. Jeśli któraś jest wartościowa, wyciągnij ją do skrzynki odbiorczej.</p>
+    <p class="text-muted">Wiadomości z Twojej poczty, które filtr uznał za podejrzane, ale nie na tyle, by je usunąć. Jeśli któraś jest wartościowa, przywróć ją do skrzynki odbiorczej.</p>
 
     {% set token = csrf_token('my_quarantine_action') %}
 
@@ -24,29 +24,29 @@
             <tbody>
             {% for item in mailbox.items %}
                 <tr>
-                    <td>{{ item.date ? item.date|date('Y-m-d H:i') : '—' }}</td>
-                    <td>{% if item.from_name %}{{ item.from_name }}<br>{% endif %}<small>{{ item.from }}</small></td>
-                    <td>{{ item.subject[:80] }}</td>
+                    <td class="pp-cell-nowrap">{{ item.date ? item.date|date('Y-m-d H:i') : '—' }}</td>
+                    <td class="pp-cell-wrap">{% if item.from_name %}{{ item.from_name }}<br>{% endif %}<small>{{ item.from }}</small></td>
+                    <td class="pp-cell-wrap" title="{{ item.subject }}">{{ item.subject|length > 80 ? item.subject[:80] ~ '…' : item.subject }}</td>
                     <td>{% if item.score is not null %}<strong>{{ item.score }}</strong>{% endif %}</td>
                     <td>
                         {% if item.high_risk %}<span class="label label-danger">wysokie ryzyko</span><br>{% endif %}
                         {% for label in item.labels %}<small>{{ label }}</small><br>{% endfor %}
                     </td>
-                    <td class="text-right" style="white-space:nowrap;">
+                    <td class="text-right pp-cell-nowrap">
                         <form method="post" action="{{ path('antispam_my_quarantine_action') }}" style="display:inline;">
                             <input type="hidden" name="_token" value="{{ token }}">
                             <input type="hidden" name="mailbox" value="{{ mailbox.key }}">
                             <input type="hidden" name="id" value="{{ item.id }}">
-                            <button type="submit" name="action" value="release" class="btn btn-xs btn-success" title="Przenieś do skrzynki odbiorczej"{% if item.high_risk %} onclick="return confirm('Ta wiadomość ma wysokie ryzyko (phishing / złośliwy załącznik). Na pewno dostarczyć?');"{% endif %}>
-                                <span class="glyphicon glyphicon-ok"></span> Wyciągnij
+                            <button type="submit" name="action" value="release" class="btn btn-xs btn-success" title="Przywróć do skrzynki odbiorczej"{% if item.high_risk %} data-confirm="Ta wiadomość ma wysokie ryzyko (phishing / złośliwy załącznik). Na pewno przywrócić ją do skrzynki?"{% endif %}>
+                                <span class="glyphicon glyphicon-ok" aria-hidden="true"></span> Przywróć
                             </button>
                             {% if not item.high_risk %}
-                            <button type="submit" name="action" value="whitelist" class="btn btn-xs btn-info" title="Dostarcz i zawsze przepuszczaj pocztę od tego nadawcy">
-                                <span class="glyphicon glyphicon-star"></span> Zawsze akceptuj
+                            <button type="submit" name="action" value="whitelist" class="btn btn-xs btn-info" title="Przywróć do skrzynki i zawsze przepuszczaj pocztę od tego nadawcy">
+                                <span class="glyphicon glyphicon-star" aria-hidden="true"></span> Zawsze akceptuj
                             </button>
                             {% endif %}
-                            <button type="submit" name="action" value="delete" class="btn btn-xs btn-danger" title="Usuń trwale" onclick="return confirm('Usunąć wiadomość na stałe?');">
-                                <span class="glyphicon glyphicon-trash"></span>
+                            <button type="submit" name="action" value="delete" class="btn btn-xs btn-danger" title="Usuń trwale" aria-label="Usuń trwale" data-confirm="Usunąć wiadomość na stałe?">
+                                <span class="glyphicon glyphicon-trash" aria-hidden="true"></span>
                             </button>
                         </form>
                     </td>
@@ -68,4 +68,8 @@
     {% endfor %}
 
     <p class="text-muted">Wiadomości uznane za spam i ich powody znajdziesz w <a href="{{ path('antispam_my_scorelog', {decision: 'spam'}) }}">dzienniku ocen</a>.</p>
+{% endblock %}
+
+{% block javascripts %}
+    <script src="{{ asset('bundles/antispam/js/data-confirm.js') }}"></script>
 {% endblock %}

@@ -18,34 +18,35 @@
                 <div class="alert alert-danger" style="margin:0;">Nie udało się odczytać kwarantanny: {{ mailbox.error }}</div>
             </div>
         {% elseif mailbox.items|length > 0 %}
+        <div class="table-responsive">
         <table class="table table-striped" style="margin-bottom:0;">
             <thead><tr><th>Data</th><th>Nadawca</th><th>Temat</th><th>Punkty</th><th>Powód</th><th></th></tr></thead>
             <tbody>
             {% for item in mailbox.items %}
                 <tr>
-                    <td>{{ item.date ? item.date|date('Y-m-d H:i') : '—' }}</td>
-                    <td>{% if item.from_name %}{{ item.from_name }}<br>{% endif %}<small>{{ item.from }}</small></td>
-                    <td>{{ item.subject[:80] }}</td>
+                    <td class="pp-cell-nowrap">{{ item.date ? item.date|date('Y-m-d H:i') : '—' }}</td>
+                    <td class="pp-cell-wrap">{% if item.from_name %}{{ item.from_name }}<br>{% endif %}<small>{{ item.from }}</small></td>
+                    <td class="pp-cell-wrap" title="{{ item.subject }}">{{ item.subject|length > 80 ? item.subject[:80] ~ '…' : item.subject }}</td>
                     <td>{% if item.score is not null %}<strong>{{ item.score }}</strong>{% endif %}</td>
                     <td>
                         {% if item.high_risk %}<span class="label label-danger">wysokie ryzyko</span><br>{% endif %}
                         {% for label in item.labels %}<small>{{ label }}</small><br>{% endfor %}
                     </td>
-                    <td class="text-right" style="white-space:nowrap;">
+                    <td class="text-right pp-cell-nowrap">
                         <form method="post" action="{{ path('antispam_spambox_quarantine_action') }}" style="display:inline;">
                             <input type="hidden" name="_token" value="{{ token }}">
                             <input type="hidden" name="mailbox" value="{{ mailbox.key }}">
                             <input type="hidden" name="id" value="{{ item.id }}">
-                            <button type="submit" name="action" value="release" class="btn btn-xs btn-success" title="Przenieś do skrzynki odbiorczej">
-                                <span class="glyphicon glyphicon-ok"></span> Dostarcz
+                            <button type="submit" name="action" value="release" class="btn btn-xs btn-success" title="Przywróć do skrzynki odbiorczej">
+                                <span class="glyphicon glyphicon-ok" aria-hidden="true"></span> Przywróć
                             </button>
                             {% if not item.high_risk %}
-                            <button type="submit" name="action" value="whitelist" class="btn btn-xs btn-info" title="Dostarcz i dodaj nadawcę do białej listy">
-                                <span class="glyphicon glyphicon-star"></span> Zawsze akceptuj
+                            <button type="submit" name="action" value="whitelist" class="btn btn-xs btn-info" title="Przywróć do skrzynki i dodaj nadawcę do białej listy">
+                                <span class="glyphicon glyphicon-star" aria-hidden="true"></span> Zawsze akceptuj
                             </button>
                             {% endif %}
-                            <button type="submit" name="action" value="delete" class="btn btn-xs btn-danger" title="Usuń trwale" onclick="return confirm('Usunąć wiadomość na stałe?');">
-                                <span class="glyphicon glyphicon-trash"></span>
+                            <button type="submit" name="action" value="delete" class="btn btn-xs btn-danger" title="Usuń trwale" aria-label="Usuń trwale" data-confirm="Usunąć wiadomość na stałe?">
+                                <span class="glyphicon glyphicon-trash" aria-hidden="true"></span>
                             </button>
                         </form>
                     </td>
@@ -53,6 +54,7 @@
             {% endfor %}
             </tbody>
         </table>
+        </div>
         {% else %}
             <div class="panel-body text-muted">Kwarantanna jest pusta</div>
         {% endif %}
@@ -73,16 +75,17 @@
             Decyzje agentów SSH są zapisywane na serwerze z pocztą, więc tu ich nie ma - ich wiadomości widać w kafelkach powyżej.</p>
         </div>
         {% if logs|length > 0 %}
+        <div class="table-responsive">
         <table class="table table-striped" style="margin-bottom:0;">
             <thead><tr><th>Kiedy</th><th>Konto</th><th>Nadawca</th><th>Temat</th><th>Punkty</th><th>Powód</th><th>Gdzie teraz</th></tr></thead>
             <tbody>
             {% for l in logs %}
                 {% set loc = locations[l.id] %}
                 <tr>
-                    <td>{{ l.scoredAt|date('Y-m-d H:i') }}</td>
-                    <td>{{ l.accountEmail }}</td>
-                    <td>{{ l.sender }}</td>
-                    <td>{{ l.subject[:60] }}</td>
+                    <td class="pp-cell-nowrap">{{ l.scoredAt|date('Y-m-d H:i') }}</td>
+                    <td class="pp-cell-wrap">{{ l.accountEmail }}</td>
+                    <td class="pp-cell-wrap">{{ l.sender }}</td>
+                    <td class="pp-cell-wrap" title="{{ l.subject }}">{{ l.subject|length > 60 ? l.subject[:60] ~ '…' : l.subject }}</td>
                     <td><strong>{{ l.score }}</strong></td>
                     <td>
                         {% for r in l.reasonsDecoded %}
@@ -94,8 +97,13 @@
             {% endfor %}
             </tbody>
         </table>
+        </div>
         {% else %}
             <div class="panel-body text-muted">Brak decyzji w dzienniku.</div>
         {% endif %}
     </div>
+{% endblock %}
+
+{% block javascripts %}
+    <script src="{{ asset('bundles/antispam/js/data-confirm.js') }}"></script>
 {% endblock %}

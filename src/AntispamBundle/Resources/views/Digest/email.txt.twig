@@ -1,7 +1,7 @@
 Pancernapanda antispam - raport kwarantanny ({{ mailbox.recipient }})
 
 {{ total }} {{ total == 1 ? 'wiadomość' : 'wiadomości' }} w kwarantannie{% if since %} od {{ since|date('d.m.Y H:i') }}{% endif %}.
-Aby odebrać wiadomość, otwórz link "Dostarcz". "Zawsze akceptuj" doda też nadawcę do białej listy.
+Aby odebrać wiadomość, otwórz link "Przywróć" - wróci do skrzynki odbiorczej. "Zawsze akceptuj" doda też nadawcę do białej listy.
 {% for item in items %}
 
 ----------------------------------------
@@ -10,9 +10,9 @@ Aby odebrać wiadomość, otwórz link "Dostarcz". "Zawsze akceptuj" doda też n
 Temat: {{ item.subject|default('(brak tematu)')|slice(0, 120) }}
 {% if item.reason_labels %}Powód: {{ item.reason_labels|join(', ') }}
 {% endif %}
-Dostarcz:         {{ item.links.release }}
+Przywróć:         {{ item.links.release }}
 {% if item.links.whitelist is defined %}Zawsze akceptuj:  {{ item.links.whitelist }}
-{% else %}UWAGA: wysokie ryzyko oszustwa - dostarcz tylko, jeśli na pewno znasz nadawcę.
+{% else %}UWAGA: wysokie ryzyko oszustwa - przywracaj tylko, jeśli na pewno znasz nadawcę.
 {% endif %}Usuń:             {{ item.links.delete }}
 {% endfor %}
 {% if total > items|length %}

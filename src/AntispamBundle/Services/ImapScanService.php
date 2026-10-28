@@ -4,6 +4,11 @@ namespace AntispamBundle\Services;
 
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Event\MessageEvent;
+use AntispamBundle\Imap\ImapClient;
+use AntispamBundle\Imap\ImapException;
+use AntispamBundle\Imap\SocketConnection;
+use AntispamBundle\Services\OAuth\OAuthSettings;
+use AntispamBundle\Services\OAuth\OAuthTokenManager;
 use Ddeboer\Imap\ConnectionInterface;
 use Ddeboer\Imap\Exception\InvalidSearchCriteriaException;
 use Ddeboer\Imap\MailboxInterface;
@@ -55,6 +60,7 @@ class ImapScanService
         private ?ManagerRegistry $doctrine = null,
         #[Autowire('%kernel.project_dir%/var/data/locks')] private ?string $lockDir = null,
         private ?MailboxSettingsResolver $mailboxSettings = null,
+        private ?OAuthTokenManager $oauthTokens = null,
     ) {
     }
 
@@ -75,12 +81,75 @@ class ImapScanService
         @imap_timeout(IMAP_CLOSETIMEOUT, (int)$open);
     }
 
-    /** Opens an IMAP connection for an IMAP account. */
+    /**
+     * Opens an IMAP connection for an IMAP account: ext-imap with the
+     * password, or the socket client with SASL XOAUTH2 for OAuth accounts
+     * (Microsoft 365 / Google, docs/oauth.md). Both return the same ddeboer
+     * ConnectionInterface, so callers do not care which one they got.
+     */
     public function connect(Account $account): ConnectionInterface
     {
+        if ($account->isOAuth()) {
+            return $this->connectOAuth($account);
+        }
         self::applyImapTimeouts();
         $server = new Server($account->getImapHost(), $account->getImapPort(), $account->getImapFlags());
         return $server->authenticate($account->getImapLogin(), (string)$this->crypto->decrypt($account->getImapPassword()));
+    }
+
+    private function connectOAuth(Account $account): ConnectionInterface
+    {
+        if ($this->oauthTokens === null) {
+            throw new \RuntimeException('Logowanie OAuth nie jest dostępne w tym kontekście.');
+        }
+        [$host, $port, $encryption, $validate] = self::oauthEndpoint($account);
+        $user = $account->getOAuthImapUser();
+
+        $attempt = function () use ($account, $host, $port, $encryption, $validate, $user): SocketConnection {
+            $client = new ImapClient(self::IMAP_READ_TIMEOUT, self::IMAP_OPEN_TIMEOUT);
+            $client->connect($host, $port, $encryption, $validate);
+            try {
+                $client->authenticateXoauth2($user, $this->oauthTokens->getAccessToken($account));
+            } catch (\Throwable $e) {
+                $client->disconnect();
+                throw $e;
+            }
+            return new SocketConnection($client);
+        };
+        try {
+            return $attempt();
+        } catch (ImapException $e) {
+            // A stored token can be refused before its expiry (revoked session,
+            // changed password): get a new one once and retry.
+            if (!str_contains($e->getMessage(), '(XOAUTH2) odrzucone')) {
+                throw $e;
+            }
+            $this->oauthTokens->invalidate($account);
+            return $attempt();
+        }
+    }
+
+    /**
+     * Host, port, encryption and certificate check of an OAuth account. A
+     * token must never travel unencrypted: "no encryption" is refused and
+     * "STARTTLS if available" becomes required STARTTLS.
+     *
+     * @return array{0:string, 1:int, 2:string, 3:bool}
+     */
+    public static function oauthEndpoint(Account $account): array
+    {
+        $host = trim((string)$account->getImapHost());
+        if ($host === '') {
+            $host = OAuthSettings::DEFAULT_IMAP_HOST[$account->getOAuthProvider() ?? OAuthSettings::MICROSOFT];
+        }
+        $options = ImapFlags::parse($account->getImapFlags());
+        $encryption = match ($options['encryption']) {
+            ImapFlags::ENCRYPTION_SSL => ImapClient::ENC_SSL,
+            ImapFlags::ENCRYPTION_STARTTLS, ImapFlags::ENCRYPTION_AUTO => ImapClient::ENC_STARTTLS,
+            default => throw new \RuntimeException('Logowanie OAuth wymaga szyfrowania (SSL/TLS lub STARTTLS) - token nie może być wysłany otwartym tekstem.'),
+        };
+        $port = (int)$account->getImapPort() ?: ($encryption === ImapClient::ENC_SSL ? 993 : 143);
+        return [$host, $port, $encryption, (bool)$options['validate_cert']];
     }
 
     public function isLegacyConfigured(): bool

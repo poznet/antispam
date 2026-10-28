@@ -26,10 +26,12 @@ Page: **Przegląd → Dziennik audytu** (`/audit`, ROLE_ADMIN only).
 | `plugin.phishing` | phishing report from a plugin | phishing report id, sender, mailbox; duplicate, client |
 | `phishing.update`, `phishing.block`, `phishing.delete`, `phishing.eml_download`, `phishing.forward` | `/phishing/*` | report id, sender, mailbox; status from/to, blocked value, rule id; forward result, recipients, resend/bulk |
 | `backup.export`, `backup.import` | Kopia zapasowa | file name, with/without secrets, format; import mode, sections, created/updated/deleted/skipped counts |
-| `settings.save` | Filtr spamu, Wspólna baza spamu, Raport kwarantanny, Wtyczki pocztowe, Konfiguracja (stara), Lista CERT, Przekazywanie phishingu (`phishing_forward`), "Wymagaj 2FA dla administratorów" (`2fa_policy`, `required`) | `target_id` = page; submitted field **names**, `secrets_changed` = names of secret fields that were set or cleared |
+| `settings.save` | Filtr spamu, Wspólna baza spamu, Raport kwarantanny, Wtyczki pocztowe, Konfiguracja (stara), Lista CERT, Przekazywanie phishingu (`phishing_forward`), "Wymagaj 2FA dla administratorów" (`2fa_policy`, `required`), Logowanie OAuth (`oauth`) | `target_id` = page; submitted field **names**, `secrets_changed` = names of secret fields that were set or cleared |
 | `settings.digest_send` | "Wyślij teraz" of the digest page | as above |
 | `settings.uncheck_all`, `settings.reset_counters` | maintenance buttons of Filtr spamu | - |
 | `account.add`, `account.edit`, `account.delete`, `account.deploy`, `account.sync`, `account.host_key_reset` | `/account/*` | account id, name, mailbox; connection type, field names, `ok`; `account.edit` also `settings_overrides` (per-mailbox overrides with values) and `settings_changed` |
+| `account.oauth_connected`, `account.oauth_disconnected` | OAuth consent finished / tokens deleted (`/account/oauth/*`, [oauth.md](oauth.md)) | account id, name, mailbox; `provider`, `oauth_username` |
+| `account.oauth_refresh_failed` | token renewal (refresh / client credentials) failed - once per new error, also from cron | account; `provider`, `method`, `error_code` (`invalid_grant`...), `reconnect`, `message` |
 | `user.add`, `user.edit`, `user.delete` | `/users/*` | user id, login; role, assigned mailboxes, `password_changed` (bool) |
 | `user.password_change` | own password (`/my/password`) | user |
 | `dnsbl.add`, `dnsbl.toggle`, `dnsbl.delete` | `/dnsbl/*` | provider id, zone; name, score, enabled |

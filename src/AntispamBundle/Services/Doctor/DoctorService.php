@@ -14,6 +14,7 @@ use AntispamBundle\Services\ClamavService;
 use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\CryptoService;
 use AntispamBundle\Services\Database\DatabaseUpgrader;
+use AntispamBundle\Services\OAuth\OAuthSettings;
 use AntispamBundle\Services\RuleOwnership;
 use AntispamBundle\Services\ScoringService;
 use AntispamBundle\Services\SshService;
@@ -83,6 +84,7 @@ class DoctorService
             'accounts_scanned' => [fn() => $this->checkAccountsScanned(), true],
             'ssh_agents' => [fn() => $this->checkSshAgents(), true],
             'stored_passwords' => [fn() => $this->checkStoredPasswords(), true],
+            'oauth' => [fn() => $this->checkOAuth(), true],
             'orphan_rules' => [fn() => $this->checkOrphanRules(), true],
             'feed' => [fn() => $this->checkFeed(), true],
             'clamav' => [fn() => $this->checkClamav(), true],
@@ -355,6 +357,54 @@ class DoctorService
     protected function bundledAgentVersion(): ?string
     {
         return SshService::bundledAgentVersion();
+    }
+
+    /**
+     * OAuth IMAP accounts (docs/oauth.md): app settings of the provider set,
+     * client secret readable, account connected, last token refresh fine.
+     */
+    private function checkOAuth(): DoctorCheck
+    {
+        $accounts = array_filter($this->em->getRepository(Account::class)->findAll(), fn(Account $a) => $a->isOAuth());
+        if (!$accounts) {
+            return DoctorCheck::skip('oauth', 'No IMAP accounts with OAuth login.');
+        }
+        $settings = new OAuthSettings($this->config, $this->crypto);
+        $fail = [];
+        $warn = [];
+        foreach (OAuthSettings::PROVIDERS as $provider) {
+            $used = array_filter($accounts, fn(Account $a) => $a->getOAuthProvider() === $provider);
+            if (!$used) {
+                continue;
+            }
+            $label = OAuthSettings::LABELS[$provider];
+            if (!$settings->isConfigured($provider)) {
+                $fail[] = $label . ' app not configured (client id / secret missing) but used by ' . count($used) . ' account(s)';
+                continue;
+            }
+            try {
+                $settings->clientSecret($provider);
+            } catch (\RuntimeException) {
+                $fail[] = $label . ' client secret cannot be decrypted (APP_SECRET changed?)';
+            }
+        }
+        foreach ($accounts as $a) {
+            if (!$a->isOAuthConnected()) {
+                $fail[] = $a->getEmail() . ': not connected (Połącz on the account page)';
+            } elseif ($a->getOAuthError()) {
+                $fail[] = $a->getEmail() . ': token refresh failing - ' . mb_substr((string)$a->getOAuthError(), 0, 160);
+            } elseif ($a->isOAuthAppOnly() && !OAuthSettings::isSpecificTenant($a->getOAuthTenant() ?: $settings->microsoftTenant())) {
+                $warn[] = $a->getEmail() . ': app-only login needs a specific tenant (GUID or domain), not common';
+            }
+        }
+        if ($fail) {
+            return DoctorCheck::fail('oauth', 'OAuth problems: ' . self::listSome($fail) . '.',
+                'Fix the provider app in Ustawienia → Logowanie OAuth and reconnect the accounts (docs/oauth.md, Troubleshooting).');
+        }
+        if ($warn) {
+            return DoctorCheck::warn('oauth', 'OAuth: ' . self::listSome($warn) . '.', 'Set the tenant on the account or in Ustawienia → Logowanie OAuth.');
+        }
+        return DoctorCheck::ok('oauth', count($accounts) . ' OAuth account(s) connected, tokens refresh fine.');
     }
 
     private function checkStoredPasswords(): DoctorCheck

@@ -26,6 +26,20 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   plugin check and the SSH agent 3.2 (token table synced with the rules).
   Hashed tokens only. New tables `antispam_bayes_token`,
   `antispam_bayes_message` (migration `Version20261028180826`). See `docs/bayes.md`.
+- OAuth2 (SASL XOAUTH2) IMAP login for **Microsoft 365 / Outlook.com** (delegated
+  authorization code + PKCE, or app-only client credentials) and **Gmail / Google
+  Workspace** (authorization code + PKCE): *Sposób logowania* on the account form,
+  **Połącz / Rozłącz** on the edit page, provider apps under **Ustawienia →
+  Logowanie OAuth** (`/config/oauth/`), callback `/account/oauth/callback`.
+  OAuth accounts use a new socket IMAP client (`src/AntispamBundle/Imap/`,
+  ddeboer interfaces) - scan, quarantine / SPAM release, retroactive blacklist,
+  test and health work as for password accounts; password accounts keep ext-imap.
+  Tokens encrypted, renewed under a per-account lock; failures in the account
+  list, Stan systemu, `antispam:doctor` (`oauth`) and the audit log
+  (`account.oauth_*`). Backups carry the login method, and with secrets the
+  client secrets and refresh tokens. New dependency `symfony/http-client`; new
+  nullable columns on `antispam_account` (migration `VERSION_OAUTH`). Thunderbird plugin
+  1.2.1 / Outlook add-in show the server's login error message. See `docs/oauth.md`.
 - Per-mailbox settings (**Konta → Edytuj → Ustawienia skrzynki**, empty =
   inherit the global value): spam / quarantine threshold, scoring on/off,
   quarantine digest on/off, digest recipient and send hour. Honoured by the
@@ -52,7 +66,7 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   setup page `/plugin/setup`, GitHub workflow `thunderbird-plugin.yml` (build, lint,
   optional ATN submission with `ATN_API_KEY` / `ATN_API_SECRET`), Apple Mail
   `scripts/build-and-notarize.sh` (Developer ID + notarytool).
-- Thunderbird plugin 1.2.0: first-run setup when the package has no server address
+- Thunderbird plugin 1.2.0 (1.2.1 with the OAuth login message): first-run setup when the package has no server address
   (settings open on install, *Pierwsze uruchomienie* box, pasted setup / panel links are
   cut to the base URL), connection test shows the build kind. Apple Mail app: same URL
   normalisation.

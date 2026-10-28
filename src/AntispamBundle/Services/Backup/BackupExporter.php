@@ -181,6 +181,9 @@ class BackupExporter
                 'digest_enabled' => $a->getDigestEnabled(),
                 'digest_recipient' => $a->getDigestRecipient(),
                 'digest_hour' => $a->getDigestHour(),
+                // IMAP login method (password / oauth_*) and the Microsoft tenant; no tokens here.
+                'imap_auth_method' => $a->getImapAuthMethod(),
+                'oauth_tenant' => $a->getOAuthTenant(),
             ];
             if ($includeSecrets) {
                 // A path, not key material - the key file itself is copied with var/data (docs/backup.md).
@@ -188,6 +191,12 @@ class BackupExporter
                 $label = 'account ' . $a->getEmail();
                 $item['imap_password'] = (string)$a->getImapPassword() !== '' ? $this->seal((string)$a->getImapPassword(), $label . ' (IMAP password)') : null;
                 $item['plugin_password_hash'] = (string)$a->getPluginPasswordHash() !== '' ? $this->seal((string)$a->getPluginPasswordHash(), $label . ' (plugin password)') : null;
+                // OAuth tokens (stored encrypted): the refresh token moves the consent
+                // to the new server; the access token is short-lived and not exported.
+                if ($a->isOAuth() && !$a->isOAuthAppOnly()) {
+                    $item['oauth_refresh_token'] = (string)$a->getOAuthRefreshToken() !== '' ? $this->seal((string)$a->getOAuthRefreshToken(), $label . ' (OAuth refresh token)') : null;
+                    $item['oauth_username'] = $a->getOAuthUsername();
+                }
             }
             $out[] = $item;
         }

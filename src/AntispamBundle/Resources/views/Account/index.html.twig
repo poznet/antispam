@@ -37,6 +37,16 @@
                         <span class="label label-info">SSH+Maildir</span>
                     {% else %}
                         <span class="label label-default">IMAP</span>
+                        {% if account.isOAuth() %}
+                            {% set oauth_label = constant('AntispamBundle\\Services\\OAuth\\OAuthSettings::LABELS')[account.getOAuthProvider()] %}
+                            {% if account.getOAuthError() %}
+                                <a href="{{ path('antispam_account_edit', {id: account.id}) }}#oauth" class="label label-danger" title="{{ account.getOAuthError() }}">OAuth {{ oauth_label }}: błąd tokenu</a>
+                            {% elseif account.isOAuthConnected() %}
+                                <span class="label label-success" title="{{ account.isOAuthAppOnly() ? 'logowanie aplikacji (client credentials)' : 'połączono ' ~ (account.getOAuthConnectedAt() ? account.getOAuthConnectedAt()|date('Y-m-d H:i') : '') }}">OAuth {{ oauth_label }}</span>
+                            {% else %}
+                                <a href="{{ path('antispam_account_edit', {id: account.id}) }}#oauth" class="label label-warning">OAuth {{ oauth_label }}: niepołączone</a>
+                            {% endif %}
+                        {% endif %}
                     {% endif %}
                 </td>
                 <td class="pp-mono">

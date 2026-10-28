@@ -230,6 +230,22 @@ class HealthServiceTest extends TestCase
         $this->assertSame('degraded', $report['status']);
     }
 
+    public function testOAuthTokenProblemsFailTheAccountCheck()
+    {
+        $this->accounts = [
+            $this->account(1, Account::CONNECTION_IMAP, 3)->setImapAuthMethod(Account::AUTH_OAUTH_GOOGLE),
+            $this->account(2, Account::CONNECTION_IMAP, 3)->setImapAuthMethod(Account::AUTH_OAUTH_MICROSOFT)->setOAuthRefreshToken('x')->setOAuthError('OAuth: invalid_grant'),
+            $this->account(3, Account::CONNECTION_IMAP, 3)->setImapAuthMethod(Account::AUTH_OAUTH_MICROSOFT)->setOAuthRefreshToken('x'),
+        ];
+        $report = $this->service()->run();
+        $this->assertSame('fail', $this->check($report, 'account:1')['status']);
+        $this->assertStringContainsString('nie jest połączone', $this->check($report, 'account:1')['message']);
+        $this->assertSame('fail', $this->check($report, 'account:2')['status']);
+        $this->assertStringContainsString('invalid_grant', $this->check($report, 'account:2')['message']);
+        $this->assertSame('ok', $this->check($report, 'account:3')['status']);
+        $this->assertTrue($this->check($report, 'account:3')['details']['oauth_connected']);
+    }
+
     public function testNeverScannedOrUndeployedAccountWarns()
     {
         $this->accounts = [

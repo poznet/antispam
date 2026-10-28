@@ -33,9 +33,11 @@
         <div id="imapFields" class="panel panel-default">
             <div class="panel-heading"><span class="glyphicon glyphicon-cloud"></span> Ustawienia IMAP</div>
             <div class="panel-body">
+                {% include '@Antispam/Account/_imap_auth.html.twig' with {account: null} %}
                 <div class="form-group">
                     <label for="imapHost">Host IMAP</label>
                     <input type="text" class="form-control" id="imapHost" name="account[imap_host]" placeholder="mail.example.com">
+                    <p class="help-block" data-auth-show="oauth">Dla OAuth puste pole = serwer dostawcy (<code>outlook.office365.com</code> / <code>imap.gmail.com</code>, port 993, SSL/TLS). Po zapisaniu otwórz edycję konta i kliknij <strong>Połącz</strong>.</p>
                 </div>
                 <div class="form-group">
                     <label for="imapPort">Port IMAP</label>
@@ -45,7 +47,7 @@
                     <label for="imapLogin">Login</label>
                     <input type="text" class="form-control" id="imapLogin" name="account[imap_login]">
                 </div>
-                <div class="form-group">
+                <div class="form-group" data-auth-show="password">
                     <label for="imapPassword">Hasło</label>
                     <input type="password" class="form-control" id="imapPassword" name="account[imap_password]">
                 </div>

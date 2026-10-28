@@ -208,6 +208,37 @@ class DoctorServiceTest extends TestCase
         $this->assertSame(DoctorCheck::FAIL, $this->checks()['stored_passwords']->status);
     }
 
+    public function testOAuthAccounts()
+    {
+        $this->assertSame(DoctorCheck::SKIP, $this->checks()['oauth']->status);
+
+        $crypto = new CryptoService(self::GOOD_SECRET);
+        $jan = (new Account())->setName('Jan')->setEmail('jan@firma.pl')->setConnectionType(Account::CONNECTION_IMAP)
+            ->setImapAuthMethod(Account::AUTH_OAUTH_MICROSOFT)->setOAuthRefreshToken($crypto->encrypt('rt'));
+        $this->em->persist($jan);
+        $this->em->flush();
+        $check = $this->checks()['oauth'];
+        $this->assertSame(DoctorCheck::FAIL, $check->status);
+        $this->assertStringContainsString('Microsoft 365 app not configured', $check->message);
+
+        $this->config->set('oauth.microsoft.client_id', 'id');
+        $this->config->set('oauth.microsoft.client_secret', $crypto->encrypt('secret'));
+        $this->assertSame(DoctorCheck::OK, $this->checks()['oauth']->status);
+
+        $jan->setOAuthError('OAuth: invalid_grant');
+        $this->em->flush();
+        $check = $this->checks()['oauth'];
+        $this->assertSame(DoctorCheck::FAIL, $check->status);
+        $this->assertStringContainsString('jan@firma.pl: token refresh failing', $check->message);
+
+        $jan->setOAuthError(null)->setImapAuthMethod(Account::AUTH_OAUTH_MICROSOFT_APP);
+        $this->em->flush();
+        $this->assertSame(DoctorCheck::WARN, $this->checks()['oauth']->status, 'app-only with the "common" tenant');
+
+        $this->config->set('oauth.microsoft.client_secret', (new CryptoService('another-secret-entirely-1234567'))->encrypt('secret'));
+        $this->assertStringContainsString('cannot be decrypted', $this->checks()['oauth']->message);
+    }
+
     public function testRulesOfDeletedMailbox()
     {
         $this->config->set('email', 'biuro@firma.pl');

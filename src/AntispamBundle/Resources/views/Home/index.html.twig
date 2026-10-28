@@ -50,7 +50,7 @@
             { "@type": "Question", "name": "Czy poczta firmy trafia do zewnętrznej chmury?", "acceptedAnswer": { "@type": "Answer", "text": "Nie. Antispam Pancernapanda działa na Twoim serwerze lub VPS i tam analizuje treść oraz załączniki. Na zewnątrz mogą wyjść tylko dane z opcjonalnych sprawdzeń: adres IP serwera nadawcy i domeny z linków (zapytania DNS), skrót SHA-256 załącznika (VirusTotal), adresy linków (Google Safe Browsing) i skróty SHA-256 spamu (wspólna baza, do wskazanego huba). Lista CERT Polska jest tylko pobierana. Każde z tych sprawdzeń można wyłączyć." } },
             { "@type": "Question", "name": "Czy trzeba zmieniać rekordy MX albo serwer poczty?", "acceptedAnswer": { "@type": "Answer", "text": "Nie. Antispam nie jest bramką SMTP. Łączy się z istniejącymi skrzynkami przez IMAP albo działa jako agent na serwerze poczty (SSH + Maildir) i porządkuje skrzynki po dostarczeniu wiadomości." } },
             { "@type": "Question", "name": "Jaki serwer jest potrzebny do instalacji?", "acceptedAnswer": { "@type": "Answer", "text": "Serwer lub VPS z Linuksem i Dockerem (Docker Compose albo Coolify). Stos składa się z aplikacji (PHP 8.2 + Apache), bazy MariaDB, harmonogramu zadań i skanera ClamAV, który sam potrzebuje około 1,5–2 GB RAM. Agent Maildir na serwerze poczty wymaga PHP 7.1+ z SQLite3." } },
-            { "@type": "Question", "name": "Czy filtr działa z Microsoft 365 i Gmailem?", "acceptedAnswer": { "@type": "Answer", "text": "Tryb IMAP działa z serwerami, które pozwalają logować się do IMAP hasłem. W Gmailu wystarczy hasło aplikacji. Dostawcy wymagający wyłącznie logowania OAuth, na przykład Microsoft 365, nie są obecnie obsługiwani." } },
+            { "@type": "Question", "name": "Czy filtr działa z Microsoft 365 i Gmailem?", "acceptedAnswer": { "@type": "Answer", "text": "Tak. Skrzynki Microsoft 365 (także Outlook.com) i Gmail / Google Workspace są skanowane przez IMAP z logowaniem OAuth2, bez zapisywania hasła. Administrator raz rejestruje aplikację w Microsoft Entra lub Google Cloud i łączy każdą skrzynkę przyciskiem Połącz; w Microsoft 365 można też użyć logowania aplikacji dla wielu skrzynek naraz. W organizacji musi być włączony dostęp IMAP. Filtr działa na skrzynce po dostarczeniu poczty (przenosi spam do folderu SPAM) i nie zastępuje filtrów Microsoftu ani Google. Inne serwery działają z loginem i hasłem IMAP." } },
             { "@type": "Question", "name": "Do czego służy lista ostrzeżeń CERT Polska?", "acceptedAnswer": { "@type": "Answer", "text": "Korzystamy z publicznej Listy Ostrzeżeń CERT Polska (hole.cert.pl), czyli domen phishingowych i wyłudzających. Lista jest pobierana do lokalnej bazy, a domena nadawcy i domeny linków są z nią porównywane na Twoim serwerze. Do CERT Polska nie są wysyłane żadne dane o wiadomościach." } },
             { "@type": "Question", "name": "Ile kosztuje wdrożenie?", "acceptedAnswer": { "@type": "Answer", "text": "Wycena jest indywidualna i zależy od liczby skrzynek, trybu pracy i zakresu opieki. Wyślij zapytanie, a przygotujemy ofertę." } }
         ]
@@ -265,7 +265,7 @@
                 </div>
                 <p>Antyspam na Twoim serwerze łączy się ze skrzynką jak zwykły klient poczty, ocenia nowe wiadomości i przenosi je do folderów SPAM albo QUARANTINE.</p>
                 <ul class="checklist">
-                    <li>Działa z serwerami, które pozwalają logować się do IMAP hasłem (np. hosting, własny Dovecot, Gmail z hasłem aplikacji)</li>
+                    <li>Działa z serwerami IMAP logowanymi hasłem (hosting, własny Dovecot) oraz z Microsoft 365 i Gmail / Google Workspace przez OAuth2</li>
                     <li>Nic nie instalujesz na serwerze poczty</li>
                     <li>Hasła IMAP zapisane w bazie w postaci zaszyfrowanej</li>
                     <li>Pełny zestaw sprawdzeń, w tym wspólna baza spamu i lokalny ClamAV</li>
@@ -730,7 +730,7 @@
             </details>
             <details>
                 <summary>Czy filtr działa z Microsoft 365 i Gmailem?</summary>
-                <p>Tryb IMAP działa z serwerami, które pozwalają logować się do IMAP hasłem. W Gmailu wystarczy hasło aplikacji. Dostawcy wymagający wyłącznie logowania OAuth, na przykład Microsoft 365, nie są obecnie obsługiwani.</p>
+                <p>Tak. Skrzynki Microsoft 365 (także Outlook.com) i Gmail / Google Workspace są skanowane przez IMAP z logowaniem OAuth2, bez zapisywania hasła. Administrator raz rejestruje aplikację w Microsoft Entra lub Google Cloud i łączy każdą skrzynkę przyciskiem „Połącz”; w Microsoft 365 można też użyć logowania aplikacji dla wielu skrzynek naraz. W organizacji musi być włączony dostęp IMAP. Filtr działa na skrzynce po dostarczeniu poczty (przenosi spam do folderu SPAM) i nie zastępuje filtrów Microsoftu ani Google. Inne serwery działają z loginem i hasłem IMAP.</p>
             </details>
             <details>
                 <summary>Co jeśli ważna wiadomość zostanie uznana za spam?</summary>

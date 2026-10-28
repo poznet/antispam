@@ -25,6 +25,24 @@ class PluginServiceTest extends TestCase
         );
     }
 
+    /** OAuth mailboxes (Microsoft 365 / Google): only the plugin password, never a stored IMAP password. */
+    public function testOAuthAccountsLogInWithThePluginPasswordOnly()
+    {
+        $crypto = new \AntispamBundle\Services\CryptoService('x');
+        $account = (new \AntispamBundle\Entity\Account())->setEmail('jan@firma.pl')->setConnectionType('imap')
+            ->setImapPassword($crypto->encrypt('old-imap-pass'));
+        $service = $this->getMockBuilder(PluginService::class)
+            ->setConstructorArgs([$this->createMock(EntityManagerInterface::class), $this->createMock(CacheItemPoolInterface::class), $this->createMock(SpamSignalService::class), 'secret', null, $crypto])
+            ->onlyMethods(['findAccount'])->getMock();
+        $service->method('findAccount')->willReturn($account);
+
+        $this->assertSame($account, $service->authenticate('jan@firma.pl', 'old-imap-pass'), 'password account: IMAP password works');
+        $account->setImapAuthMethod(\AntispamBundle\Entity\Account::AUTH_OAUTH_MICROSOFT);
+        $this->assertNull($service->authenticate('jan@firma.pl', 'old-imap-pass'));
+        $account->setPluginPassword('plugin-pass');
+        $this->assertSame($account, $service->authenticate('jan@firma.pl', 'plugin-pass'));
+    }
+
     public function testMaxUploadDefaultsTo700KiB()
     {
         // Base64 + JSON of 700 KiB stays under nginx's default 1 MiB body limit.

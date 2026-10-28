@@ -1,0 +1,109 @@
+{% extends '@Antispam/main.html.twig' %}
+{% block title %}Logowanie OAuth{% endblock %}
+{% block page_title %}Logowanie OAuth (Microsoft 365, Google){% endblock %}
+
+{% block body %}
+    <p class="text-muted">
+        Skrzynki Microsoft 365 / Outlook.com i Gmail / Google Workspace nie przyjmują już zwykłego hasła przez IMAP -
+        antyspam loguje się do nich tokenem OAuth2 (SASL XOAUTH2). Wystarczy jedna rejestracja aplikacji u każdego
+        dostawcy; potem na stronie edycji konta wybierasz sposób logowania i klikasz <strong>Połącz</strong>.
+        Szczegółowa instrukcja krok po kroku: <code>docs/oauth.md</code>.
+    </p>
+
+    <div class="panel panel-{{ redirect_https ? 'info' : 'warning' }}">
+        <div class="panel-heading"><span class="glyphicon glyphicon-link"></span> Adres przekierowania (Redirect URI)</div>
+        <div class="panel-body">
+            <p>Zarejestruj u obu dostawców dokładnie ten adres (typ platformy: <strong>Web</strong>):</p>
+            <p><code class="pp-mono" style="font-size:1.05em">{{ redirect_uri }}</code></p>
+            {% if not redirect_https %}
+                <p class="text-danger"><span class="glyphicon glyphicon-warning-sign"></span> Microsoft i Google wymagają adresu https:// (wyjątek: localhost).
+                    Ustaw „Publiczny adres” w <a href="{{ path('antispam_plugin_config') }}">Ustawienia → Wtyczki pocztowe</a> albo <code>SYMFONY_TRUSTED_PROXIES</code>.</p>
+            {% elseif not public_url %}
+                <p class="help-block">Adres wynika z bieżącego żądania. Żeby nie zależał od tego, pod jakim adresem otworzysz panel, ustaw „Publiczny adres” w <a href="{{ path('antispam_plugin_config') }}">Wtyczki pocztowe</a>.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <form method="post" action="{{ path('antispam_oauth_config') }}" autocomplete="off">
+        <input type="hidden" name="_token" value="{{ csrf_token('oauth_config') }}">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="panel panel-default">
+                    <div class="panel-heading"><span class="glyphicon glyphicon-cloud"></span> Microsoft 365 (Entra ID)</div>
+                    <div class="panel-body">
+                        <ol class="small">
+                            <li>Entra admin center → <em>App registrations</em> → <em>New registration</em>; typ kont wg potrzeb (jeden tenant albo „Accounts in any organizational directory”).</li>
+                            <li><em>Authentication</em> → <em>Add a platform</em> → <strong>Web</strong> → Redirect URI jak wyżej.</li>
+                            <li><em>Certificates &amp; secrets</em> → <em>New client secret</em> (zapisz wartość, nie ID; zanotuj datę wygaśnięcia).</li>
+                            <li><em>API permissions</em> → <em>Add</em> → Microsoft Graph → Delegated: <code>offline_access</code>, <code>openid</code>, <code>email</code>, <code>profile</code>, <code>IMAP.AccessAsUser.All</code>; opcjonalnie <em>Grant admin consent</em>.</li>
+                            <li>Logowanie aplikacji bez użytkownika (wiele skrzynek): <em>APIs my organization uses</em> → Office 365 Exchange Online → Application: <code>IMAP.AccessAsApp</code>, zgoda administratora, <code>New-ServicePrincipal</code> + <code>Add-MailboxPermission</code> (docs/oauth.md).</li>
+                        </ol>
+                        <div class="form-group">
+                            <label for="msClientId">Application (client) ID</label>
+                            <input type="text" class="form-control pp-mono" id="msClientId" name="oauth[microsoft_client_id]" value="{{ ms_client_id }}" placeholder="00000000-0000-0000-0000-000000000000">
+                        </div>
+                        <div class="form-group">
+                            <label for="msSecret">Client secret (wartość)</label>
+                            <input type="password" class="form-control" id="msSecret" name="oauth[microsoft_client_secret]" value="" placeholder="{{ ms_secret_set ? '(zapisany - zostaw puste, aby nie zmieniać)' : '' }}" autocomplete="new-password">
+                            {% if ms_secret_set %}<div class="checkbox"><label><input type="checkbox" name="oauth[microsoft_client_secret_clear]" value="1"> Usuń zapisany sekret</label></div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="msTenant">Tenant</label>
+                            <input type="text" class="form-control pp-mono" id="msTenant" name="oauth[microsoft_tenant]" value="{{ ms_tenant }}" placeholder="common">
+                            <p class="help-block">Directory (tenant) ID lub domena (np. <code>firma.onmicrosoft.com</code>) dla aplikacji jednego tenanta; puste = <code>common</code> (aplikacja wielotenantowa, też konta Outlook.com). Logowanie aplikacji wymaga konkretnego tenanta - można go też podać w koncie.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="panel panel-default">
+                    <div class="panel-heading"><span class="glyphicon glyphicon-envelope"></span> Google (Gmail, Workspace)</div>
+                    <div class="panel-body">
+                        <ol class="small">
+                            <li>Google Cloud Console → nowy projekt → <em>APIs &amp; Services</em> → włącz <strong>Gmail API</strong>.</li>
+                            <li><em>OAuth consent screen</em>: dla Workspace typ <strong>Internal</strong> (bez weryfikacji Google); typ External w trybie „Testing” wydaje tokeny ważne 7 dni.</li>
+                            <li>Zakres: <code>https://mail.google.com/</code> (+ <code>openid</code>, <code>email</code>).</li>
+                            <li><em>Credentials</em> → <em>Create OAuth client ID</em> → <strong>Web application</strong> → Authorized redirect URI jak wyżej.</li>
+                            <li>W Gmailu musi być włączony IMAP (Workspace: konsola administratora → Gmail → Dostęp użytkowników).</li>
+                        </ol>
+                        <div class="form-group">
+                            <label for="gClientId">Client ID</label>
+                            <input type="text" class="form-control pp-mono" id="gClientId" name="oauth[google_client_id]" value="{{ google_client_id }}" placeholder="123456789-abc.apps.googleusercontent.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="gSecret">Client secret</label>
+                            <input type="password" class="form-control" id="gSecret" name="oauth[google_client_secret]" value="" placeholder="{{ google_secret_set ? '(zapisany - zostaw puste, aby nie zmieniać)' : '' }}" autocomplete="new-password">
+                            {% if google_secret_set %}<div class="checkbox"><label><input type="checkbox" name="oauth[google_client_secret_clear]" value="1"> Usuń zapisany sekret</label></div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <p class="help-block">Sekrety są szyfrowane kluczem z <code>APP_SECRET</code>. Kopia zapasowa zawiera je (zaszyfrowane) tylko z opcją „z sekretami”.</p>
+        <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-floppy-disk"></span> Zapisz</button>
+    </form>
+
+    {% if accounts %}
+        <h3>Konta z logowaniem OAuth</h3>
+        <div class="table-responsive">
+        <table class="table table-bordered">
+            <thead><tr><th>Konto</th><th>Sposób</th><th>Połączone jako</th><th>Token ważny do</th><th>Stan</th></tr></thead>
+            <tbody>
+            {% for a in accounts %}
+                <tr>
+                    <td><a href="{{ path('antispam_account_edit', {id: a.id}) }}#oauth">{{ a.name }}</a> <span class="text-muted">{{ a.email }}</span></td>
+                    <td>{{ constant('AntispamBundle\\Services\\OAuth\\OAuthSettings::LABELS')[a.getOAuthProvider()] }}{{ a.isOAuthAppOnly() ? ' (aplikacja)' : '' }}</td>
+                    <td class="pp-mono">{{ a.getOAuthUsername() ?: '-' }}</td>
+                    <td class="pp-mono">{{ a.getOAuthTokenExpiresAt() ? a.getOAuthTokenExpiresAt()|date('Y-m-d H:i') : '-' }}</td>
+                    <td>
+                        {% if a.getOAuthError() %}<span class="label label-danger">błąd</span> <small>{{ a.getOAuthError() }}</small>
+                        {% elseif a.isOAuthConnected() %}<span class="label label-success">połączone</span>
+                        {% else %}<span class="label label-warning">niepołączone</span>{% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    {% endif %}
+{% endblock %}

@@ -1,0 +1,35 @@
+{# OAuth connection state of an IMAP account + Połącz / Rozłącz (outside the main form: forms cannot be nested). #}
+{% set provider = account.getOAuthProvider() %}
+{% set label = constant('AntispamBundle\\Services\\OAuth\\OAuthSettings::LABELS')[provider] %}
+<div class="panel panel-{{ account.getOAuthError() ? 'danger' : (account.isOAuthConnected() ? 'success' : 'warning') }}" id="oauth" style="margin-top:15px">
+    <div class="panel-heading"><span class="glyphicon glyphicon-lock"></span> Logowanie OAuth - {{ label }}{{ account.isOAuthAppOnly() ? ' (aplikacja)' : '' }}</div>
+    <div class="panel-body">
+        {% if oauth_configured is defined and not oauth_configured[provider] %}
+            <p class="text-danger"><span class="glyphicon glyphicon-warning-sign"></span> Aplikacja {{ label }} nie jest skonfigurowana - uzupełnij <a href="{{ path('antispam_oauth_config') }}">Ustawienia → Logowanie OAuth</a>.</p>
+        {% endif %}
+        <dl class="dl-horizontal" style="margin-bottom:10px">
+            <dt>Użytkownik IMAP</dt><dd class="pp-mono">{{ account.getOAuthImapUser() }}</dd>
+            {% if not account.isOAuthAppOnly() %}
+                <dt>Połączono jako</dt><dd class="pp-mono">{{ account.getOAuthUsername() ?: (account.isOAuthConnected() ? '(adres nieznany)' : 'niepołączone') }}</dd>
+                <dt>Połączono</dt><dd>{{ account.getOAuthConnectedAt() ? account.getOAuthConnectedAt()|date('Y-m-d H:i') : '-' }}</dd>
+            {% endif %}
+            <dt>Token dostępu do</dt><dd>{{ account.getOAuthTokenExpiresAt() ? account.getOAuthTokenExpiresAt()|date('Y-m-d H:i') ~ ' (odnawiany automatycznie)' : '-' }}</dd>
+            {% if account.getOAuthError() %}
+                <dt>Błąd</dt><dd class="text-danger">{{ account.getOAuthError() }} <span class="text-muted">({{ account.getOAuthErrorAt() ? account.getOAuthErrorAt()|date('Y-m-d H:i') : '' }})</span></dd>
+            {% endif %}
+        </dl>
+        {% if account.isOAuthAppOnly() %}
+            <p class="text-muted">Logowanie aplikacji nie wymaga zgody użytkownika: aplikacja musi mieć uprawnienie <code>IMAP.AccessAsApp</code> ze zgodą administratora, zarejestrowany service principal w Exchange i <code>FullAccess</code> do tej skrzynki (docs/oauth.md). Sprawdź przyciskiem „Test” na liście kont.</p>
+        {% else %}
+            <a href="{{ path('antispam_oauth_connect', {id: account.id, _token: csrf_token('account_action_' ~ account.id)}) }}" class="btn btn-primary">
+                <span class="glyphicon glyphicon-log-in"></span> {{ account.isOAuthConnected() ? 'Połącz ponownie' : 'Połącz' }} z {{ label }}
+            </a>
+        {% endif %}
+        {% if account.isOAuthConnected() or account.getOAuthAccessToken() or account.getOAuthError() %}
+            <form method="post" action="{{ path('antispam_oauth_disconnect', {id: account.id}) }}" style="display:inline">
+                <input type="hidden" name="_token" value="{{ csrf_token('account_action_' ~ account.id) }}">
+                <button type="submit" class="btn btn-default" data-confirm="Usunąć tokeny OAuth tego konta? Skanowanie przestanie działać do ponownego połączenia."><span class="glyphicon glyphicon-remove"></span> Rozłącz</button>
+            </form>
+        {% endif %}
+    </div>
+</div>

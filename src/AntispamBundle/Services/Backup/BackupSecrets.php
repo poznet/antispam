@@ -16,10 +16,12 @@ final class BackupSecrets
         'url.gsb_api_key',
         'feed.server_key',
         'feed.remote_key',
+        'oauth.microsoft.client_secret',
+        'oauth.google.client_secret',
     ];
 
     /** Secrets kept encrypted (CryptoService) in the database, also after an import. */
-    public const STORED_ENCRYPTED = ['password'];
+    public const STORED_ENCRYPTED = ['password', 'oauth.microsoft.client_secret', 'oauth.google.client_secret'];
 
     /**
      * Runtime state, not configuration (sync markers, cursors, last-sent

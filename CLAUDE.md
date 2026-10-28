@@ -39,6 +39,7 @@ See `docs/` directory for detailed documentation:
 - `docs/feed.md` - shared spam feed (centralized spam DB): fingerprints, API, sync
 - `docs/feed-api.md` - shared spam feed HTTP API reference (endpoints, auth, examples)
 - `docs/phishing.md` - phishing reports from the plugins: full message storage, `/phishing` analysis page, blocking, .eml export, forwarding to CERT Polska (cert@cert.pl) / SOC
+- `docs/oauth.md` - OAuth2 (XOAUTH2) IMAP login for Microsoft 365 / Gmail: Entra / Google app registration, flows, socket IMAP client (`src/AntispamBundle/Imap/`), token refresh, limits, troubleshooting
 - `docs/thunderbird.md` - Thunderbird plugin: spam reports, on-arrival checks, login, `/api/plugin`
 - `docs/outlook.md` - Outlook add-in: hosting (HTTPS), sideload / admin deploy, task pane features and limits
 - `docs/apple-mail.md` - Apple Mail MailKit extension: why source-only, layout, build/sign notes

@@ -1,0 +1,26 @@
+{# Login method of an IMAP account (password / OAuth2). Fields with data-auth-show="password|oauth|microsoft" are toggled by form-toggles.js. #}
+{% set method = account is defined and account ? account.getImapAuthMethod() : 'password' %}
+<div class="form-group">
+    <label for="imapAuthMethod">Sposób logowania</label>
+    <select class="form-control" id="imapAuthMethod" name="account[imap_auth_method]">
+        <option value="password" {% if method == 'password' %}selected{% endif %}>Login i hasło IMAP</option>
+        <option value="oauth_microsoft" {% if method == 'oauth_microsoft' %}selected{% endif %}>Microsoft 365 / Outlook.com - OAuth (zgoda użytkownika)</option>
+        <option value="oauth_microsoft_app" {% if method == 'oauth_microsoft_app' %}selected{% endif %}>Microsoft 365 - OAuth aplikacji (client credentials, administrator)</option>
+        <option value="oauth_google" {% if method == 'oauth_google' %}selected{% endif %}>Google (Gmail, Workspace) - OAuth</option>
+    </select>
+    <p class="help-block" data-auth-show="oauth">
+        OAuth: antyspam nie przechowuje hasła, tylko token wydany przez dostawcę. Po zapisaniu użyj przycisku
+        <strong>Połącz</strong> pod formularzem. Login = adres skrzynki (puste = adres, którym się zalogujesz;
+        w Microsoft 365 można podać skrzynkę współdzieloną).
+        {% if oauth_configured is defined %}
+            {% if not oauth_configured.microsoft %}<br><span class="text-warning">Microsoft 365 nie jest jeszcze skonfigurowany</span>{% endif %}
+            {% if not oauth_configured.google %}<br><span class="text-warning">Google nie jest jeszcze skonfigurowany</span>{% endif %}
+            {% if not oauth_configured.microsoft or not oauth_configured.google %} - <a href="{{ path('antispam_oauth_config') }}">Ustawienia → Logowanie OAuth</a>.{% endif %}
+        {% endif %}
+    </p>
+</div>
+<div class="form-group" data-auth-show="microsoft">
+    <label for="oauthTenant">Tenant Microsoft (opcjonalnie)</label>
+    <input type="text" class="form-control pp-mono" id="oauthTenant" name="account[oauth_tenant]" value="{{ account is defined and account ? account.getOAuthTenant() : '' }}" placeholder="globalny z Ustawienia → Logowanie OAuth">
+    <p class="help-block">Directory (tenant) ID albo domena organizacji tej skrzynki. Wymagany dla OAuth aplikacji, jeśli globalny tenant to <code>common</code>.</p>
+</div>

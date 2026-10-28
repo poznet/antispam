@@ -420,6 +420,9 @@ class BackupImporter
                 'ssh_key_path' => (string)($item['ssh_key_path'] ?? ''),
                 'maildir_path' => (string)($item['maildir_path'] ?? ''),
                 'agent_path' => (string)($item['agent_path'] ?? ''),
+                'imap_auth_method' => (string)($item['imap_auth_method'] ?? ''),
+                'oauth_tenant' => (string)($item['oauth_tenant'] ?? ''),
+                'imap_flags' => (string)($item['imap_flags'] ?? ''),
             ];
             $errors = AccountController::validateAccountData($data);
             if ($errors) {
@@ -467,6 +470,15 @@ class BackupImporter
                     $fields[str_replace('_', '', ucwords($field, '_'))] = $overrides[$field];
                 }
             }
+            // Login method: only when the key is in the file (older backups = password).
+            // Applied before the tokens below, since a method change forgets the tokens.
+            if (array_key_exists('imap_auth_method', $item)) {
+                $method = (string)$item['imap_auth_method'];
+                $fields = ['ImapAuthMethod' => in_array($method, Account::AUTH_METHODS, true) ? $method : Account::AUTH_PASSWORD] + $fields;
+            }
+            if (array_key_exists('oauth_tenant', $item)) {
+                $fields['OAuthTenant'] = self::nullable($item['oauth_tenant'] ?? null);
+            }
             // Present only in exports with secrets; an empty value keeps the current path.
             if (self::nullable($item['ssh_key_path'] ?? null) !== null) {
                 $fields['SshKeyPath'] = (string)$item['ssh_key_path'];
@@ -496,6 +508,16 @@ class BackupImporter
                 $changes['PluginPasswordHash'] = $pluginHash;
             }
 
+            $refresh = $this->openSecret($item['oauth_refresh_token'] ?? null, 'account ' . $email . ' (OAuth refresh token)');
+            $methodAfter = $changes['ImapAuthMethod'] ?? $account->getImapAuthMethod();
+            if ($refresh !== null && $methodAfter !== Account::AUTH_PASSWORD && $methodAfter !== Account::AUTH_OAUTH_MICROSOFT_APP
+                && ($creating || $this->storedPlain($account->getOAuthRefreshToken()) !== $refresh)) {
+                $changes['OAuthRefreshToken'] = $this->crypto->encrypt($refresh);
+                // No access token yet: the first connection refreshes it.
+                $changes['OAuthConnectedAt'] = new \DateTime();
+                $changes['OAuthUsername'] = self::nullable($item['oauth_username'] ?? null);
+            }
+
             $apply = function () use ($account, $changes) {
                 foreach ($changes as $prop => $value) {
                     $account->{'set' . $prop}($value);
@@ -507,7 +529,7 @@ class BackupImporter
                 }
                 $this->persist($account, 'accounts');
                 $this->accountsByEmail[$key] = $this->dry ? null : $account;
-                if ($type === Account::CONNECTION_IMAP && $password === null) {
+                if ($type === Account::CONNECTION_IMAP && $password === null && ($changes['ImapAuthMethod'] ?? Account::AUTH_PASSWORD) === Account::AUTH_PASSWORD) {
                     $this->report->warn('Account ' . $email . ': created without an IMAP password - enter it in the panel.');
                 }
             } elseif ($changes) {

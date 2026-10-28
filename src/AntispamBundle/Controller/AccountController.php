@@ -11,6 +11,7 @@ use AntispamBundle\Services\ImapFlags;
 use AntispamBundle\Services\ImapScanService;
 use AntispamBundle\Services\ImapTlsProbe;
 use AntispamBundle\Services\MailboxSettingsResolver;
+use AntispamBundle\Services\OAuth\OAuthSettings;
 use AntispamBundle\Services\SshService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
@@ -36,6 +37,7 @@ class AccountController extends AbstractController
         private ImapTlsProbe $tlsProbe,
         private ConfigService $config,
         private MailboxSettingsResolver $mailboxSettings,
+        private ?OAuthSettings $oauthSettings = null,
     ) {
     }
 
@@ -81,7 +83,7 @@ class AccountController extends AbstractController
             $this->audit('account.add', targetType: 'account', targetId: $account->getId(), label: $account->getName(), mailbox: $account->getEmail(), details: ['connection_type' => $account->getConnectionType()]);
             return $this->redirectToRoute('antispam_account_index');
         }
-        return ['imap_tls' => ImapFlags::defaultOptions(), 'imap_flags' => ImapFlags::DEFAULT_FLAGS];
+        return ['imap_tls' => ImapFlags::defaultOptions(), 'imap_flags' => ImapFlags::DEFAULT_FLAGS, 'oauth_configured' => $this->oauthConfigured()];
     }
 
     #[Route('/edit/{id}', name: 'antispam_account_edit')]
@@ -121,7 +123,18 @@ class AccountController extends AbstractController
             'account' => $account,
             'imap_tls' => ImapFlags::parse($account->getImapFlags()),
             'imap_flags' => $account->getImapFlags() ?: ImapFlags::DEFAULT_FLAGS,
+            'oauth_configured' => $this->oauthConfigured(),
         ];
+    }
+
+    /** @return array<string, bool> provider => client id + secret set */
+    private function oauthConfigured(): array
+    {
+        $out = [];
+        foreach (OAuthSettings::PROVIDERS as $provider) {
+            $out[$provider] = $this->oauthSettings !== null && $this->oauthSettings->isConfigured($provider);
+        }
+        return $out;
     }
 
     /**
@@ -222,15 +235,12 @@ class AccountController extends AbstractController
             $result = $sshService->testConnection($account);
         } else {
             try {
-                \AntispamBundle\Services\ImapScanService::applyImapTimeouts();
-                $server = new \Ddeboer\Imap\Server(
-                    $account->getImapHost(),
-                    $account->getImapPort(),
-                    $account->getImapFlags()
-                );
-                $connection = $server->authenticate($account->getImapLogin(), (string)$this->crypto->decrypt($account->getImapPassword()));
+                // Password (ext-imap) or OAuth2 XOAUTH2 (socket client), see ImapScanService::connect().
+                $connection = $this->imapScan->connect($account);
                 $result['success'] = true;
-                $result['messages'][] = 'Połączenie IMAP działa';
+                $result['messages'][] = $account->isOAuth()
+                    ? 'Połączenie IMAP działa (OAuth2, ' . OAuthSettings::LABELS[$account->getOAuthProvider()] . ', użytkownik ' . $account->getOAuthImapUser() . ')'
+                    : 'Połączenie IMAP działa';
                 $mailboxes = $connection->getMailboxes();
                 $result['messages'][] = 'Znalezione foldery: ' . count($mailboxes);
                 $connection->close();
@@ -407,8 +417,22 @@ class AccountController extends AbstractController
         $isHost = static fn ($h) => strlen($h) <= 253 && preg_match('/^[A-Za-z0-9](?:[A-Za-z0-9.\-]*[A-Za-z0-9])?$|^\[[0-9A-Fa-f:.]+\]$/', $h);
 
         if ($type === Account::CONNECTION_IMAP) {
+            $method = (string)($data['imap_auth_method'] ?? '');
+            $method = $method === '' ? Account::AUTH_PASSWORD : $method;
+            if (!in_array($method, Account::AUTH_METHODS, true)) {
+                $errors[] = 'Nieznany sposób logowania IMAP.';
+            }
+            $oauth = $method !== Account::AUTH_PASSWORD;
+            $tenant = trim((string)($data['oauth_tenant'] ?? ''));
+            if ($tenant !== '' && !OAuthSettings::isValidTenant($tenant)) {
+                $errors[] = 'Nieprawidłowy tenant Microsoft (GUID lub domena).';
+            }
+            if ($oauth && ImapFlags::parse(ImapFlags::fromFormData($data))['encryption'] === ImapFlags::ENCRYPTION_NONE) {
+                $errors[] = 'Logowanie OAuth wymaga szyfrowania (SSL/TLS lub STARTTLS).';
+            }
             $host = trim((string)($data['imap_host'] ?? ''));
-            if ($host === '' || !$isHost($host)) {
+            // OAuth accounts may leave the host empty: the provider's server is used.
+            if (($host === '' && !$oauth) || ($host !== '' && !$isHost($host))) {
                 $errors[] = 'Nieprawidłowy serwer IMAP (nazwa hosta lub adres IP).';
             }
             $p = $port($data['imap_port'] ?? null, 993);
@@ -456,8 +480,14 @@ class AccountController extends AbstractController
         // Per-mailbox overrides; empty fields = inherit (validated by validateForm()).
         MailboxSettingsResolver::apply($account, $this->mailboxSettings->parseOverrides($data)[0]);
 
-        // IMAP fields
-        $account->setImapHost($data['imap_host'] ?? null);
+        // IMAP fields. Changing the login method forgets the stored OAuth tokens.
+        $account->setImapAuthMethod((string)($data['imap_auth_method'] ?? Account::AUTH_PASSWORD));
+        $account->setOAuthTenant($data['oauth_tenant'] ?? null);
+        $host = trim((string)($data['imap_host'] ?? ''));
+        if ($host === '' && $account->isOAuth()) {
+            $host = OAuthSettings::DEFAULT_IMAP_HOST[$account->getOAuthProvider()];
+        }
+        $account->setImapHost($host !== '' ? $host : null);
         $account->setImapPort((int)($data['imap_port'] ?? 993));
         $account->setImapLogin($data['imap_login'] ?? null);
         // Stored encrypted; an empty field on edit keeps the current password.

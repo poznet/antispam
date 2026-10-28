@@ -14,6 +14,25 @@
         });
     }
 
+    // IMAP login method: password fields vs. OAuth hints / Microsoft tenant.
+    var auth = document.getElementById('imapAuthMethod');
+    if (auth) {
+        var applyAuth = function () {
+            var v = auth.value;
+            var show = {
+                password: v === 'password',
+                oauth: v !== 'password',
+                microsoft: v === 'oauth_microsoft' || v === 'oauth_microsoft_app'
+            };
+            var nodes = document.querySelectorAll('[data-auth-show]');
+            for (var i = 0; i < nodes.length; i++) {
+                nodes[i].style.display = show[nodes[i].getAttribute('data-auth-show')] ? '' : 'none';
+            }
+        };
+        auth.addEventListener('change', applyAuth);
+        applyAuth();
+    }
+
     var role = document.getElementById('userRole');
     var panel = document.getElementById('accountsPanel');
     if (role && panel) {

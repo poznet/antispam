@@ -15,7 +15,8 @@ services:
         resource: '../src/AntispamBundle/'
         exclude:
             - '../src/AntispamBundle/AntispamBundle.php'
-            - '../src/AntispamBundle/{Entity,Event,Resources,Tests}/'
+            - '../src/AntispamBundle/{Entity,Event,Imap,Resources,Tests}/'
+            - '../src/AntispamBundle/Services/OAuth/OAuthException.php'
             - '../src/AntispamBundle/EventListener/Message/AttachmentExtractorTrait.php'
             - '../src/AntispamBundle/Services/{DomainHelper,MailboxSettings,PatternMatcher,RawMessageParser}.php'
 

@@ -95,7 +95,7 @@ async function api(path, { method = "GET", body = null, auth = true } = {}) {
     render();
   }
   if (!res.ok) {
-    const err = new Error(data.error || ("HTTP " + res.status));
+    const err = new Error(data.message || data.error || ("HTTP " + res.status));
     err.status = res.status;
     throw err;
   }

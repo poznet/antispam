@@ -119,7 +119,9 @@ class PluginService
     /**
      * Check plugin credentials for a mailbox. Accepted passwords: the
      * account's dedicated plugin password (set in the panel) or, for IMAP
-     * accounts, the IMAP password stored for that mailbox.
+     * accounts with password login, the IMAP password stored for that
+     * mailbox. OAuth accounts (Microsoft 365 / Google) have no mail password
+     * here - only the plugin password works for them.
      *
      * @return Account|null
      */
@@ -133,7 +135,7 @@ class PluginService
         if ($hash && password_verify((string)$password, $hash)) {
             return $account;
         }
-        if ($account->isImap() && (string)$account->getImapPassword() !== '') {
+        if ($account->isImap() && !$account->isOAuth() && (string)$account->getImapPassword() !== '') {
             try {
                 $imapPassword = $this->crypto ? $this->crypto->decrypt($account->getImapPassword()) : $account->getImapPassword();
             } catch (\RuntimeException $e) {

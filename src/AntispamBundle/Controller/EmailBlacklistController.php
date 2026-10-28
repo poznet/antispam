@@ -4,6 +4,7 @@ namespace AntispamBundle\Controller;
 
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Services\ConfigService;
+use AntispamBundle\Services\RetroactiveSpamService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -16,6 +17,7 @@ class EmailBlacklistController extends AbstractController
     public function __construct(
         private EntityManagerInterface $em,
         private ConfigService $config,
+        private RetroactiveSpamService $retroactive,
     ) {
     }
 
@@ -48,6 +50,12 @@ class EmailBlacklistController extends AbstractController
             $entry->setScore(max(1, $score));
             $this->em->persist($entry);
             $this->em->flush();
+
+            // Mail from this sender that is already in INBOX goes to SPAM too.
+            $summary = RetroactiveSpamService::describe($this->retroactive->applyRule($entry));
+            if ($summary) {
+                $this->addFlash('info', $summary);
+            }
         }
         return $this->redirectToRoute('antispam_emailblacklist_index');
     }

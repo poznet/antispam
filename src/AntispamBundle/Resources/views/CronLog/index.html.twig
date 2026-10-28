@@ -1,0 +1,78 @@
+{% extends '@Antispam/main.html.twig' %}
+
+{% block title %}Logi crona{% endblock %}
+
+{% block page_title %}Logi crona{% endblock %}
+
+{% block body %}
+
+    <p class="text-muted">Uruchomienia zadań okresowych (skan skrzynek, synchronizacja wspólnej bazy, raport kwarantanny) z ostatnich {{ retention }} dni.
+    Zapisywane są zadania uruchamiane przez <code>antispam:cron:run</code> - robi to scheduler w Dockerze; w crontabie hosta użyj np.
+    <code>php bin/console antispam:cron:run antispam:agent:scan-all</code>.</p>
+
+    <form method="get" class="form-inline" style="margin-bottom:15px;">
+        <select name="command" class="form-control input-sm">
+            <option value="">Wszystkie zadania</option>
+            {% for c in commands %}
+                <option value="{{ c }}" {% if c == command %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+        </select>
+        <label class="checkbox-inline" style="margin:0 10px;"><input type="checkbox" name="failed" value="1" {% if failed %}checked{% endif %}> Tylko błędy</label>
+        <button type="submit" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-filter"></span> Filtruj</button>
+    </form>
+
+    {% if runs|length > 0 %}
+
+    <div class="panel panel-default">
+        <table class="table table-striped" style="margin-bottom:0;">
+            <thead><tr><th>Start</th><th>Zadanie</th><th>Czas</th><th>Status</th><th>Wynik</th></tr></thead>
+            <tbody>
+
+            {% for run in runs %}
+
+                <tr>
+                    <td style="white-space:nowrap;">{{ run.startedAt|date('Y-m-d H:i:s') }}</td>
+                    <td><code>{{ run.command }}</code></td>
+                    <td>{{ run.duration is not null ? run.duration ~ ' s' : '—' }}</td>
+                    <td>
+                        {% if run.running %}
+                            {% if run.startedAt < stale_before %}
+                                <span class="label label-danger">przerwane</span>
+                            {% else %}
+                                <span class="label label-info">w toku</span>
+                            {% endif %}
+                        {% elseif run.success %}
+                            <span class="label label-success">OK</span>
+                        {% else %}
+                            <span class="label label-danger">błąd ({{ run.exitCode }})</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if run.output %}
+                            <details>
+                                <summary><small>{{ run.output|split("\n")|first[:120] }}</small></summary>
+                                <pre style="max-height:400px; overflow:auto; margin-top:8px; white-space:pre-wrap;">{{ run.output }}</pre>
+                            </details>
+                        {% else %}
+                            <small class="text-muted">brak</small>
+                        {% endif %}
+                    </td>
+                </tr>
+
+            {% endfor %}
+
+            </tbody>
+        </table>
+    </div>
+
+    {% else %}
+
+    <div class="empty-state">
+        <span class="glyphicon glyphicon-time"></span>
+        <p>Brak zapisanych uruchomień</p>
+        <p class="text-muted">Pierwszy wpis pojawi się po najbliższym uruchomieniu zadania przez scheduler.</p>
+    </div>
+
+    {% endif %}
+
+{% endblock %}

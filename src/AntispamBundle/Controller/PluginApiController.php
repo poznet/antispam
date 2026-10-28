@@ -2,8 +2,11 @@
 
 namespace AntispamBundle\Controller;
 
+use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Services\PluginService;
 use AntispamBundle\Services\RawMessageScanner;
+use AntispamBundle\Services\RetroactiveSpamService;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -28,6 +31,8 @@ class PluginApiController extends AbstractController
     public function __construct(
         private RawMessageScanner $rawScanner,
         private PluginService $plugin,
+        private RetroactiveSpamService $retroactive,
+        private EntityManagerInterface $em,
     ) {
     }
 
@@ -142,6 +147,16 @@ class PluginApiController extends AbstractController
 
         $result = $this->plugin->learn($raw, $verdict, $account, $this->clientIp($request));
         $result['authenticated'] = $account !== null;
+
+        // A newly blacklisted sender: older mail from them leaves INBOX too.
+        if ($account && in_array('email_blacklist_added:' . $result['sender'], $result['rules'], true)) {
+            $rule = $this->em->getRepository(EmailBlacklist::class)->findOneBy([
+                'email' => $account->getEmail(), 'blacklistemail' => $result['sender'], 'patternType' => 'exact',
+            ]);
+            if ($rule) {
+                $result['moved_existing'] = $this->retroactive->applyRule($rule)['moved'];
+            }
+        }
         return new JsonResponse($result);
     }
 

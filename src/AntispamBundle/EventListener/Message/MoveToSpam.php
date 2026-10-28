@@ -7,7 +7,9 @@ use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\InboxService;
 
 /**
- * Moves spam to the SPAM folder (unless the "delete" setting is on).
+ * Moves spam to the SPAM folder of the mailbox it came from, or flags it for
+ * deletion when the account (or the global "delete" setting) says so. Either
+ * way the message leaves INBOX on the next expunge.
  */
 class MoveToSpam
 {
@@ -22,10 +24,17 @@ class MoveToSpam
 
     public function move(MessageEvent $event)
     {
-        if ($this->config->get('delete') == false && $event->isSpam()) {
-            $event->getMessage()->move($this->inbox->getSpamFolder());
-            $event->setDelete(true);
-            $event->stopPropagation();
+        if (!$event->isSpam()) {
+            return;
         }
+
+        $delete = $event->getDeleteSpam() ?? (bool)$this->config->get('delete');
+        if ($delete) {
+            $event->getMessage()->delete();
+        } else {
+            $event->getMessage()->move($this->inbox->getSpamFolder($event->getConnection()));
+        }
+        $event->setDelete(true);
+        $event->stopPropagation();
     }
 }

@@ -3,6 +3,7 @@
 namespace AntispamBundle\Command;
 
 use AntispamBundle\Entity\Account;
+use AntispamBundle\Services\ImapScanService;
 use AntispamBundle\Services\SshService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -16,12 +17,14 @@ class AgentScanCommand extends Command
 {
     private $em;
     private $ssh;
+    private $imapScan;
 
-    public function __construct(EntityManagerInterface $em, SshService $ssh)
+    public function __construct(EntityManagerInterface $em, SshService $ssh, ImapScanService $imapScan)
     {
         parent::__construct();
         $this->em = $em;
         $this->ssh = $ssh;
+        $this->imapScan = $imapScan;
     }
 
     protected function configure(): void
@@ -43,8 +46,7 @@ class AgentScanCommand extends Command
             if ($account->isSsh()) {
                 $result = $this->ssh->runScan($account);
             } else {
-                $output->writeln('<comment>IMAP scan - use antispam:go for legacy IMAP scanning</comment>');
-                return 0;
+                $result = $this->imapScan->scanAccount($account);
             }
 
             $account->setLastScanAt(new \DateTime());
@@ -58,7 +60,8 @@ class AgentScanCommand extends Command
             $output->writeln('  Whitelisted: ' . ($result['whitelisted'] ?? 0));
             $output->writeln('  Blacklisted: ' . ($result['blacklisted'] ?? 0));
             $output->writeln('  Moved to spam: ' . ($result['moved_to_spam'] ?? 0));
-        } catch (\Exception $e) {
+            $output->writeln('  Quarantined: ' . ($result['quarantined'] ?? 0));
+        } catch (\Throwable $e) {
             $output->writeln('<error>Scan failed: ' . $e->getMessage() . '</error>');
             return 1;
         }

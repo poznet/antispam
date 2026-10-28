@@ -16,6 +16,10 @@
  *   9. Attachment scanning (ClamAV malware + VirusTotal reputation)
  *  10. Threshold decision -> move to .SPAM or .QUARANTINE
  *
+ * `apply-blacklist` re-checks recent INBOX mail (already scanned or not)
+ * against the blacklists only, so a newly added rule also clears messages
+ * that arrived before it. Only headers are read, which keeps it cheap.
+ *
  * It also manages the quarantine for the end-user digest: list, release (with
  * optional sender whitelisting) and delete quarantined messages.
  *
@@ -79,6 +83,9 @@ switch ($command) {
     case 'scan':
         echo json_encode(runScan($maildirPath, $dbPath, $options), JSON_PRETTY_PRINT) . "\n";
         break;
+    case 'apply-blacklist':
+        echo json_encode(applyBlacklist($maildirPath, $dbPath, $options), JSON_PRETTY_PRINT) . "\n";
+        break;
     case 'health':
         echo json_encode(runHealth($maildirPath, $dbPath), JSON_PRETTY_PRINT) . "\n";
         break;
@@ -97,6 +104,7 @@ switch ($command) {
         echo "  php antispam-agent.php test\n";
         echo "  php antispam-agent.php import-rules < rules.json\n";
         echo "  php antispam-agent.php scan [--maildir=path] [--db=path] [--spam-threshold=N] [--quarantine-threshold=N] [--no-dnsbl] [--no-headers] [--no-impersonation] [--no-urls] [--no-attachment-policy] [--no-clamav] [--no-virustotal]\n";
+        echo "  php antispam-agent.php apply-blacklist [--maildir=path] [--db=path] [--spam-threshold=N] [--days=30] [--limit=5000]\n";
         echo "  php antispam-agent.php health [--maildir=path] [--db=path]\n";
         echo "  php antispam-agent.php quarantine-list [--maildir=path] [--db=path] [--since=unix-ts] [--limit=N]\n";
         echo "  php antispam-agent.php quarantine-release --id=ID [--whitelist] [--maildir=path] [--db=path]\n";
@@ -491,6 +499,65 @@ function runScan($maildirPath, $dbPath, $options = [])
     if (count($stats['decisions']) > 200) {
         $stats['decisions'] = array_slice($stats['decisions'], 0, 200);
         $stats['decisions_truncated'] = true;
+    }
+
+    return $stats;
+}
+
+/**
+ * Moves INBOX messages delivered in the last --days whose sender matches a
+ * blacklist rule worth at least --spam-threshold points to .SPAM. Whitelisted
+ * senders are left alone, like in the scan.
+ */
+function applyBlacklist($maildirPath, $dbPath, $options = [])
+{
+    $spamThreshold = isset($options['spam-threshold']) ? (int)$options['spam-threshold'] : 10;
+    $since = time() - 86400 * max(1, (int)($options['days'] ?? 30));
+    $limit = max(1, (int)($options['limit'] ?? 5000));
+
+    $db = getDb($dbPath);
+    $whitelist = loadListRules($db, 'SELECT host, pattern_type FROM whitelist', 'host');
+    $emailWhitelist = loadListRules($db, 'SELECT whitelistemail, pattern_type FROM email_whitelist', 'whitelistemail');
+    $blacklist = loadListRules($db, 'SELECT host, pattern_type, score FROM blacklist', 'host');
+    $emailBlacklist = loadListRules($db, 'SELECT blacklistemail, pattern_type, score FROM email_blacklist', 'blacklistemail');
+
+    $stats = ['success' => true, 'examined' => 0, 'moved_to_spam' => 0, 'truncated' => false];
+    ensureFolder($maildirPath . '/.SPAM');
+
+    foreach (['new', 'cur'] as $subdir) {
+        $dir = $maildirPath . '/' . $subdir;
+        if (!is_dir($dir)) continue;
+
+        foreach (scandir($dir) as $file) {
+            if ($file === '.' || $file === '..') continue;
+            $filePath = $dir . '/' . $file;
+            if (!is_file($filePath) || filemtime($filePath) < $since) continue;
+            if ($stats['examined']++ >= $limit) {
+                $stats['truncated'] = true;
+                break 2;
+            }
+
+            $parsed = parseHeaders(readHeaderBlock($filePath));
+            $senderEmail = $parsed['sender_email'];
+            $senderHost = $parsed['sender_host'];
+            if (!$senderEmail) continue;
+            if (($senderHost && matchList($whitelist, $senderHost)) || matchList($emailWhitelist, $senderEmail)) continue;
+
+            $hit = $senderHost ? matchListReturning($blacklist, $senderHost) : null;
+            $rule = $hit ? 'blacklist:' . $hit['value'] : null;
+            if (!$hit || (int)$hit['score'] < $spamThreshold) {
+                $hit = matchListReturning($emailBlacklist, $senderEmail);
+                $rule = $hit ? 'email_blacklist:' . $hit['value'] : null;
+            }
+            if (!$hit || (int)$hit['score'] < $spamThreshold) continue;
+
+            if (@rename($filePath, $maildirPath . '/.SPAM/' . $subdir . '/' . $file)) {
+                $baseId = preg_replace('/:2,[A-Z]*$/', '', $file);
+                $stats['moved_to_spam']++;
+                logDecision($db, $senderEmail, $parsed['subject'], (int)$hit['score'], 'spam', [['rule' => 'retroactive ' . $rule, 'score' => (int)$hit['score']]], $baseId);
+                markChecked($db, $baseId);
+            }
+        }
     }
 
     return $stats;

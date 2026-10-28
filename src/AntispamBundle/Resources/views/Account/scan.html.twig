@@ -15,7 +15,14 @@
             <tr><th>Z whitelisty</th><td>{{ result.scan_result.whitelisted|default(0) }}</td></tr>
             <tr><th>Z blacklisty</th><td>{{ result.scan_result.blacklisted|default(0) }}</td></tr>
             <tr><th>Przeniesione do spamu</th><td>{{ result.scan_result.moved_to_spam|default(0) }}</td></tr>
+            <tr><th>Przeniesione do kwarantanny</th><td>{{ result.scan_result.quarantined|default(0) }}</td></tr>
         </table>
+        {% if result.scan_result.errors|default([])|length > 0 %}
+        <div class="alert alert-warning">
+            <strong>Nie udało się przetworzyć części wiadomości:</strong>
+            <ul>{% for e in result.scan_result.errors %}<li><small>{{ e }}</small></li>{% endfor %}</ul>
+        </div>
+        {% endif %}
         {% endif %}
     {% else %}
         <div class="alert alert-danger"><strong>Skanowanie nie powiodło się</strong></div>

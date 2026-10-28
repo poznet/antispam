@@ -1,0 +1,128 @@
+{#
+    Branded error page for every HTTP error (Symfony picks errorXXX.html.twig
+    first, then this one). Standalone on purpose: it must render even when
+    the error happened before the firewall / panel layout could run (404 is
+    raised by routing, before security), so no main.html.twig, no is_granted.
+#}
+{% set code = status_code|default(500) %}
+{% set pages = {
+    400: {title: 'Nieprawidłowe żądanie', text: 'Serwer nie zrozumiał tego żądania. Odśwież stronę i spróbuj ponownie.'},
+    401: {title: 'Wymagane logowanie', text: 'Ta strona jest dostępna po zalogowaniu.'},
+    403: {title: 'Brak dostępu', text: 'Nie masz uprawnień do tej strony. Jeśli uważasz, że to pomyłka, poproś administratora o dostęp.'},
+    404: {title: 'Nie ma takiej strony', text: 'Adres jest nieprawidłowy albo strona została przeniesiona.'},
+    405: {title: 'Niedozwolona operacja', text: 'Tej strony nie można otworzyć w ten sposób. Wróć i użyj przycisku w panelu.'},
+    413: {title: 'Za duże dane', text: 'Wysłana treść przekracza limit serwera.'},
+    419: {title: 'Sesja wygasła', text: 'Odśwież stronę i spróbuj ponownie.'},
+    429: {title: 'Za dużo prób', text: 'Odczekaj chwilę i spróbuj ponownie.'},
+    500: {title: 'Coś poszło nie tak', text: 'Wystąpił błąd po stronie serwera. Spróbuj ponownie za chwilę, a jeśli błąd się powtarza, daj znać administratorowi.'},
+    502: {title: 'Serwer chwilowo niedostępny', text: 'Spróbuj ponownie za chwilę.'},
+    503: {title: 'Trwają prace serwisowe', text: 'Antyspam za chwilę wróci. Spróbuj ponownie za kilka minut.'},
+    504: {title: 'Serwer nie odpowiedział na czas', text: 'Spróbuj ponownie za chwilę.'},
+} %}
+{% set page = pages[code] ?? (code >= 500 ? pages[500] : {title: 'Nie udało się otworzyć strony', text: 'Wróć na stronę główną albo do panelu.'}) %}
+{% set user = app.user ?? null %}
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#060735">
+    <title>{{ code }} · {{ page.title }} · Antispam Pancernapanda</title>
+    <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}">
+    <link rel="stylesheet" href="{{ asset('bundles/antispam/vendor/fonts/fonts.css') }}">
+    <script>
+        (function () {
+            var t = null;
+            try { t = localStorage.getItem('pp-theme'); } catch (e) {}
+            if (t) { document.documentElement.setAttribute('data-theme', t); }
+        })();
+    </script>
+    <style>
+        :root {
+            --bg: #f4f7fc; --surface: #ffffff; --border: #e3e8f0;
+            --text: #060735; --muted: #636a8a; --accent: #005bba;
+            --grad: linear-gradient(135deg, #1fd7fd 0%, #00adef 50%, #005bba 100%);
+            --btn: linear-gradient(135deg, #0a72d6 0%, #005bba 100%);
+            --glow: rgba(31, 215, 253, .14);
+            color-scheme: light;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) {
+                --bg: #04052a; --surface: #0b0d40; --border: #1d2163;
+                --text: #e8ecfa; --muted: #8b93bd; --accent: #1fd7fd; --glow: rgba(0, 173, 239, .18);
+                color-scheme: dark;
+            }
+        }
+        :root[data-theme="dark"] {
+            --bg: #04052a; --surface: #0b0d40; --border: #1d2163;
+            --text: #e8ecfa; --muted: #8b93bd; --accent: #1fd7fd; --glow: rgba(0, 173, 239, .18);
+            color-scheme: dark;
+        }
+        * { box-sizing: border-box; }
+        html, body { margin: 0; min-height: 100%; }
+        body {
+            min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 32px 16px; background: var(--bg);
+            background-image: radial-gradient(1100px 560px at 100% -10%, var(--glow), transparent 60%),
+                              radial-gradient(800px 480px at -10% 110%, rgba(0, 91, 186, .08), transparent 60%);
+            color: var(--text); font: 16px/1.6 'Open Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+        }
+        .card {
+            width: 100%; max-width: 560px; background: var(--surface); border: 1px solid var(--border);
+            border-radius: 18px; padding: 40px 32px 32px; text-align: center;
+            box-shadow: 0 1px 3px rgba(6, 7, 53, .06), 0 24px 60px -28px rgba(6, 7, 53, .35);
+        }
+        .brand { display: inline-flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; margin-bottom: 28px; }
+        .brand img { width: 40px; height: 40px; }
+        .brand span { font: 700 15px/1.2 Montserrat, sans-serif; text-align: left; }
+        .brand small { display: block; font: 600 12px/1.2 'Open Sans', sans-serif; color: var(--muted); }
+        .code {
+            font: 800 clamp(64px, 18vw, 104px)/1 Montserrat, sans-serif; letter-spacing: -2px; margin: 0 0 8px;
+            background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent;
+        }
+        h1 { font: 700 clamp(20px, 5vw, 26px)/1.3 Montserrat, sans-serif; margin: 0 0 12px; }
+        p { margin: 0 auto 28px; max-width: 420px; color: var(--muted); }
+        .actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 20px;
+            border-radius: 10px; font: 600 15px/1 'Open Sans', sans-serif; text-decoration: none; cursor: pointer;
+            border: 1px solid var(--border); color: var(--text); background: transparent;
+        }
+        .btn-primary { background: var(--btn); border-color: transparent; color: #fff; }
+        .btn:hover { filter: brightness(1.08); }
+        .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .foot { margin-top: 24px; font-size: 13px; color: var(--muted); }
+        @media (max-width: 420px) { .card { padding: 32px 20px 24px; } .btn { flex: 1 1 100%; } }
+    </style>
+</head>
+<body>
+    <main class="card" role="main">
+        <a class="brand" href="{{ path('antispam_home') }}">
+            <img src="{{ asset('bundles/antispam/img/pp-shield.png') }}" alt="" width="40" height="40">
+            <span>Antispam<small>Pancernapanda</small></span>
+        </a>
+        <div class="code" aria-hidden="true">{{ code }}</div>
+        <h1>{{ page.title }}</h1>
+        <p>{{ page.text }}</p>
+        <div class="actions">
+            {% if user %}
+                <a class="btn btn-primary" href="{{ path('antispam_start') }}">Przejdź do panelu</a>
+                {% if code == 403 %}
+                    <a class="btn" href="{{ path('logout') }}">Zaloguj na inne konto</a>
+                {% else %}
+                    <a class="btn" href="javascript:history.back()">Wróć</a>
+                {% endif %}
+            {% elseif code == 401 or code == 403 %}
+                <a class="btn btn-primary" href="{{ path('antispam_home') }}#logowanie">Zaloguj się</a>
+                <a class="btn" href="{{ path('antispam_home') }}">Strona główna</a>
+            {% else %}
+                <a class="btn btn-primary" href="{{ path('antispam_home') }}">Strona główna</a>
+                <a class="btn" href="javascript:history.back()">Wróć</a>
+            {% endif %}
+        </div>
+        <div class="foot">Kod błędu {{ code }}{% if code >= 500 %} · {{ "now"|date("Y-m-d H:i") }}{% endif %}</div>
+    </main>
+</body>
+</html>

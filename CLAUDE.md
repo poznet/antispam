@@ -5,6 +5,7 @@ Symfony 7.4 LTS application for email spam filtering via IMAP or SSH+Maildir age
 ## Project structure
 - `src/AntispamBundle/` - main bundle (entities, controllers, services, commands, event listeners)
 - `src/Kernel.php` - MicroKernel; `config/` - bundles, packages (`*.yaml`), routes, `services.yaml` (autowiring + listener priorities)
+- `templates/bundles/TwigBundle/Exception/error.html.twig` - branded error page for every HTTP error (403/404/500...), standalone (no panel layout, renders before the firewall too)
 - `public/` - web root (`index.php` front controller); `var/` - cache, logs, `var/data` (checked-message markers)
 - `.env` - default env vars (override in `.env.local`; Docker freezes them into `.env.local.php`)
 - `src/AntispamBundle/Resources/agent/` - standalone Maildir agent PHP script

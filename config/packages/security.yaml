@@ -38,10 +38,11 @@ security:
         - { path: ^/api/feed, roles: PUBLIC_ACCESS }
         # Quarantine digest links: the signed token in the URL is the credential.
         - { path: ^/q/, roles: PUBLIC_ACCESS }
-        # Thunderbird plugin: bearer-token API and the public .xpi download
-        # (offered on the home page).
+        # Mail client plugins: bearer-token API, the public Thunderbird .xpi
+        # download (offered on the home page), the Outlook add-in (manifest +
+        # task pane loaded by Outlook) and the Apple Mail extension source.
         - { path: ^/api/plugin, roles: PUBLIC_ACCESS }
-        - { path: ^/plugin/download, roles: PUBLIC_ACCESS }
+        - { path: ^/plugin/(download|outlook/|apple-mail/), roles: PUBLIC_ACCESS }
         - { path: ^/, roles: ROLE_ADMIN }
 
 when@test:

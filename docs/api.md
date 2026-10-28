@@ -51,7 +51,7 @@
 | GET/POST | `/config/feed/` | Shared spam feed settings |
 | GET/POST | `/config/digest/` | Quarantine digest settings, mailbox list, "send now" |
 | GET | `/config/digest/preview/{key}` | Render the digest a mailbox would get (last 7 days) |
-| GET/POST | `/config/plugin/` | Thunderbird plugin settings |
+| GET/POST | `/config/plugin/` | Mail client plugin settings + downloads (Thunderbird, Outlook, Apple Mail) |
 | GET | `/config/uncheck-all/` | Reset all checked messages |
 | GET | `/config/reset/countes/` | Reset all rule counters |
 
@@ -78,10 +78,12 @@ examples: **[feed-api.md](feed-api.md)** (concepts: [feed.md](feed.md)).
 No login. The signed, expiring token is the credential. Invalid or expired tokens
 get `410`, a failed action `409`. See [quarantine-digest.md](quarantine-digest.md).
 
-## Thunderbird Plugin API (`/api/plugin`)
+## Mail Client Plugin API (`/api/plugin`)
 
-Used by the Thunderbird plugin. Bearer-token auth (token from `/api/plugin/login`),
-exempt from form login. Full reference: **[thunderbird.md](thunderbird.md)**.
+Used by the Thunderbird plugin, the Outlook add-in and the Apple Mail extension.
+Bearer-token auth (token from `/api/plugin/login`), exempt from form login.
+Full reference: **[thunderbird.md](thunderbird.md)**, clients:
+[outlook.md](outlook.md), [apple-mail.md](apple-mail.md).
 
 | Method | URL | Description |
 |--------|-----|-------------|
@@ -90,6 +92,9 @@ exempt from form login. Full reference: **[thunderbird.md](thunderbird.md)**.
 | POST | `/api/plugin/report` | User verdict (`spam` anonymous or logged in, `ham` logged in) |
 | POST | `/api/plugin/check` | Score a raw message (logged in) |
 | GET | `/plugin/download` | Download the `.xpi` (public) |
+| GET | `/plugin/outlook/manifest.xml` | Outlook add-in manifest (public; `409` when the server URL is not HTTPS) |
+| GET | `/plugin/outlook/{file}` | Outlook task pane files (`taskpane.html/js/css`, `commands.html`, `icons/icon-*.png`; public) |
+| GET | `/plugin/apple-mail/source.zip` | Apple Mail extension source with the server URL set (public) |
 
 ## Whitelists
 

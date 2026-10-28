@@ -1,0 +1,64 @@
+# XcodeGen spec (https://github.com/yonaskolb/XcodeGen): `xcodegen generate`
+# creates AntispamMail.xcodeproj. Set DEVELOPMENT_TEAM below (or in Xcode).
+name: AntispamMail
+options:
+  bundleIdPrefix: pl.pancernapanda
+  deploymentTarget:
+    macOS: "13.0"
+settings:
+  base:
+    DEVELOPMENT_TEAM: ""            # your Apple Developer Team ID
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_HARDENED_RUNTIME: YES
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  AntispamMail:
+    type: application
+    platform: macOS
+    sources:
+      - App
+      - Shared
+    dependencies:
+      - target: AntispamMailExtension
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: pl.pancernapanda.antispam
+        PRODUCT_NAME: "Antispam Pancernapanda"
+        CODE_SIGN_ENTITLEMENTS: App/AntispamMail.entitlements
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: "Antispam Pancernapanda"
+        LSApplicationCategoryType: public.app-category.utilities
+        NSHumanReadableCopyright: "Pancernapanda"
+        AntispamAppGroup: $(TeamIdentifierPrefix)pl.pancernapanda.antispam
+
+  AntispamMailExtension:
+    type: app-extension
+    platform: macOS
+    sources:
+      - MailExtension
+      - Shared
+    dependencies:
+      - sdk: MailKit.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: pl.pancernapanda.antispam.mailextension
+        PRODUCT_NAME: AntispamMailExtension
+        CODE_SIGN_ENTITLEMENTS: MailExtension/MailExtension.entitlements
+    info:
+      path: MailExtension/Info.plist
+      properties:
+        CFBundleDisplayName: "Antispam Pancernapanda"
+        AntispamAppGroup: $(TeamIdentifierPrefix)pl.pancernapanda.antispam
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.email.extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).MailExtension
+          NSExtensionAttributes:
+            MEExtensionCapabilities:
+              - MEMessageActionHandler
+            MEMessageActionDescription: "Sprawdza nową pocztę w Antispam Pancernapanda i przenosi spam do Wiadomości-śmieci."

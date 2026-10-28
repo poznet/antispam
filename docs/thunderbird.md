@@ -44,7 +44,7 @@ the first 1 MiB of each message.
 ## Distribution
 
 The `.xpi` is built on the fly by `GET /plugin/download` (public; linked from the
-home page (Thunderbird section), the account form and *Configuration → Thunderbird Plugin*). The build
+home page (Thunderbird section), the account form and *Konfiguracja → Wtyczki pocztowe*). The build
 bakes the server URL into `config.json` and adds its origin to the manifest's host
 permissions, so users only install and (optionally) log in. Set **Public URL**
 in the plugin settings when antispam runs behind a TLS-terminating proxy,
@@ -96,7 +96,10 @@ built behind a TLS-terminating proxy that Symfony did not trust: set
 download the plugin again, or change the address in the plugin settings to
 `https://…` and save (Thunderbird asks for the host permission).
 
-## Settings (`plugin.*`, *Configuration → Thunderbird Plugin*)
+## Settings (`plugin.*`, *Konfiguracja → Wtyczki pocztowe*)
+
+Shared by all mail client plugins: Thunderbird, the Outlook add-in
+([outlook.md](outlook.md)) and the Apple Mail extension ([apple-mail.md](apple-mail.md)).
 
 | Key | Default | Meaning |
 |-----|---------|---------|

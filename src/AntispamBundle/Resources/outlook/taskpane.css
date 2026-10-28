@@ -1,0 +1,74 @@
+/* Antispam Pancernapanda - Outlook task pane (Pancerna Panda brand colours). */
+:root {
+    --pp-navy: #060735;
+    --pp-blue: #005bba;
+    --pp-red: #c62828;
+    --pp-green: #2e7d32;
+    --pp-amber: #b26a00;
+    --pp-text: #1d2433;
+    --pp-muted: #5b6577;
+    --pp-line: #e2e9f4;
+    --pp-bg: #ffffff;
+    --pp-soft: #f4f7fc;
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --pp-text: #e8ecf4;
+        --pp-muted: #a3adbf;
+        --pp-line: #2c3446;
+        --pp-bg: #1b1f2a;
+        --pp-soft: #232938;
+        --pp-blue: #5aa2ff;
+    }
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    font: 14px/1.45 "Segoe UI", -apple-system, "Open Sans", Arial, sans-serif;
+    color: var(--pp-text);
+    background: var(--pp-bg);
+}
+main { padding: 12px 14px 20px; }
+.as-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    background: var(--pp-navy); color: #fff;
+}
+.as-head small { display: block; font-size: 11px; opacity: .8; word-break: break-all; }
+.as-label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--pp-muted); margin-bottom: 4px; }
+.as-msg { margin-bottom: 12px; }
+.as-from { font-weight: 600; word-break: break-all; }
+.as-subject { color: var(--pp-muted); }
+.as-muted { color: var(--pp-muted); font-size: 12px; margin: 0 0 8px; }
+.as-actions { display: grid; gap: 8px; margin-bottom: 12px; }
+.as-btn {
+    display: block; width: 100%;
+    padding: 9px 12px;
+    font: inherit; font-weight: 600;
+    color: var(--pp-text); background: var(--pp-soft);
+    border: 1px solid var(--pp-line); border-radius: 8px;
+    cursor: pointer;
+}
+.as-btn:hover:not(:disabled) { border-color: var(--pp-blue); }
+.as-btn:disabled { opacity: .5; cursor: not-allowed; }
+.as-btn-spam { background: var(--pp-red); border-color: var(--pp-red); color: #fff; }
+.as-btn-primary { background: var(--pp-blue); border-color: var(--pp-blue); color: #fff; }
+.as-result {
+    padding: 10px 12px; margin-bottom: 12px;
+    border-radius: 8px; border-left: 4px solid var(--pp-blue);
+    background: var(--pp-soft);
+}
+.as-result.ok { border-left-color: var(--pp-green); }
+.as-result.err { border-left-color: var(--pp-red); }
+.as-result.warn { border-left-color: var(--pp-amber); }
+.as-result ul { margin: 6px 0 0; padding-left: 18px; font-size: 12px; color: var(--pp-muted); }
+.as-hint { font-size: 12px; color: var(--pp-muted); margin: 0 0 12px; }
+.as-box { border-top: 1px solid var(--pp-line); padding-top: 12px; margin-top: 4px; }
+.as-box form { display: grid; gap: 8px; }
+.as-box input[type=email], .as-box input[type=password] {
+    width: 100%; padding: 8px 10px; font: inherit;
+    color: var(--pp-text); background: var(--pp-bg);
+    border: 1px solid var(--pp-line); border-radius: 8px;
+}
+.as-check { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; margin: 8px 0; }
+.as-link { background: none; border: 0; padding: 0; color: var(--pp-blue); cursor: pointer; font: inherit; text-decoration: underline; }

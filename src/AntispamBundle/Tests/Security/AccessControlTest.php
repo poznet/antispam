@@ -14,7 +14,7 @@ class AccessControlTest extends KernelTestCase
 {
     public static function publicPaths(): array
     {
-        return [['/logout'], ['/login'], ['/'], ['/api/plugin/status'], ['/plugin/download'], ['/q/abc']];
+        return [['/logout'], ['/login'], ['/'], ['/api/plugin/status'], ['/plugin/download'], ['/q/abc'], ['/health'], ['/metrics']];
     }
 
     #[DataProvider('publicPaths')]
@@ -23,6 +23,15 @@ class AccessControlTest extends KernelTestCase
         self::bootKernel();
         [$attributes] = self::getContainer()->get('security.access_map')->getPatterns(Request::create($path));
         $this->assertSame(['PUBLIC_ACCESS'], $attributes, $path);
+    }
+
+    public function testSystemStatusPageIsAdminOnly()
+    {
+        self::bootKernel();
+        foreach (['/system/status', '/healthz', '/health/x', '/metrics/x'] as $path) {
+            [$attributes] = self::getContainer()->get('security.access_map')->getPatterns(Request::create($path));
+            $this->assertSame(['ROLE_ADMIN'], $attributes, $path);
+        }
     }
 
     public function testAdminAreaStaysAdmin()

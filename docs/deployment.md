@@ -193,6 +193,10 @@ Before exposing the instance publicly, make sure:
       the home page `/`, `/login` and `/api/feed`. Set `MAILER_DSN` and either use
       `docker-compose.prod.yml` (the scheduler sends it) or schedule
       `antispam:digest:send` in cron.
+- [ ] Monitoring: point an uptime monitor at `/health` (public, only
+      `ok|degraded|fail`, HTTP 503 on failure), set an alert recipient or
+      webhook in *Przegląd → Stan systemu* and click **Wyślij testowy alert**.
+      See [health.md](health.md).
 
 IMAP passwords in the `account` table and the password of the legacy
 single-account settings (*Konfiguracja → E-mail*) are encrypted with a key

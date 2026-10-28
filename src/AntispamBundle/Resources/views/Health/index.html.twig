@@ -1,0 +1,143 @@
+{% extends '@Antispam/main.html.twig' %}
+
+{% block title %}Stan systemu{% endblock %}
+
+{% block page_title %}Stan systemu{% endblock %}
+
+{% block body %}
+
+    {% set status_labels = {ok: ['success', 'OK'], warn: ['warning', 'ostrzeżenie'], fail: ['danger', 'błąd'], skip: ['default', 'pominięte']} %}
+    {% set overall_labels = {ok: ['success', 'Wszystko działa'], degraded: ['warning', 'Częściowe problemy'], fail: ['danger', 'Awaria']} %}
+    {% set overall = overall_labels[report.status] ?? ['default', report.status] %}
+
+    <div class="row">
+        <div class="col-sm-4">
+            <div class="panel panel-{{ overall[0] }}"><div class="panel-body text-center">
+                <h3 style="margin:0;"><span class="label label-{{ overall[0] }}">{{ overall[1] }}</span></h3>
+                <small class="text-muted">stan ogólny ({{ report.full ? 'pełne sprawdzenie' : 'szybkie sprawdzenie' }}, {{ report.checked_at|date('Y-m-d H:i:s') }})</small>
+            </div></div>
+        </div>
+        <div class="col-sm-4">
+            <div class="panel panel-default"><div class="panel-body text-center">
+                <h3 style="margin:0;">{{ alert_state.last_run_at is defined ? alert_state.last_run_at|date('Y-m-d H:i') : '—' }}</h3>
+                <small class="text-muted">ostatnia kontrola z alertami (antispam:health:check)</small>
+            </div></div>
+        </div>
+        <div class="col-sm-4">
+            <div class="panel panel-default"><div class="panel-body text-center">
+                <h3 style="margin:0;">{{ alert_state.last_notification_at is defined ? alert_state.last_notification_at|date('Y-m-d H:i') : '—' }}</h3>
+                <small class="text-muted">ostatni wysłany alert</small>
+            </div></div>
+        </div>
+    </div>
+
+    {% if alert_state.last_errors is defined and alert_state.last_errors|length > 0 %}
+        <div class="alert alert-danger">
+            <strong>Ostatnia wysyłka alertu nie powiodła się:</strong>
+            {% for error in alert_state.last_errors %}<br>{{ error }}{% endfor %}
+        </div>
+    {% endif %}
+
+    <form method="post" action="{{ path('antispam_system_status_check') }}" style="margin-bottom:15px;">
+        <input type="hidden" name="_token" value="{{ csrf_token('health_check') }}">
+        <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-refresh"></span> Sprawdź teraz</button>
+        <small class="text-muted">Pełne sprawdzenie: logowanie do każdego konta IMAP, zapytanie każdego agenta SSH i porównanie schematu bazy - może potrwać kilkadziesiąt sekund.</small>
+    </form>
+
+    {% for group, checks in groups %}
+        <div class="panel panel-default">
+            <div class="panel-heading">{{ group_labels[group] ?? group }}</div>
+            <div class="table-responsive">
+            <table class="table table-striped" style="margin-bottom:0;">
+                <tbody>
+                {% for check in checks %}
+                    {% set s = status_labels[check.status] ?? ['default', check.status] %}
+                    {% set alert = alert_state.checks[check.key] ?? null %}
+                    <tr>
+                        <td style="width:110px;"><span class="label label-{{ s[0] }}">{{ s[1] }}</span></td>
+                        <td style="width:28%;"><strong>{{ check.label }}</strong>{% if check.critical %} <small class="text-muted">(krytyczne)</small>{% endif %}</td>
+                        <td class="pp-cell-wrap">
+                            {{ check.message }}
+                            {% if alert and alert.fails > 0 %}
+                                <br><small class="text-muted">Nie przechodzi od {{ alert.since|date('Y-m-d H:i') }} ({{ alert.fails }}× z rzędu){% if alert.alerted %}, alert wysłany{% endif %}</small>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+    {% endfor %}
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-bell"></span> Alerty</div>
+        <div class="panel-body">
+            <p class="text-muted">
+                <code>antispam:health:check</code> (scheduler, co <code>HEALTH_CHECK_INTERVAL</code> minut, domyślnie 15) wysyła alert,
+                gdy kontrola nie przechodzi kilka razy z rzędu, i jedną wiadomość po powrocie do normy. Ten sam problem nie jest zgłaszany ponownie.
+            </p>
+            {% if not has_channels %}
+                <div class="alert alert-warning">Nie ustawiono odbiorcy: podaj e-mail lub webhook (albo adres nadawcy w Raporcie kwarantanny).</div>
+            {% endif %}
+            <form method="post" action="{{ path('antispam_system_status_settings') }}">
+                <input type="hidden" name="_token" value="{{ csrf_token('health_settings') }}">
+                <div class="checkbox"><label>
+                    <input type="checkbox" name="health[alert_enabled]" value="1" {% if settings.isAlertEnabled() %}checked{% endif %}>
+                    <strong>Wysyłaj alerty</strong>
+                </label></div>
+                <div class="checkbox"><label>
+                    <input type="checkbox" name="health[alert_on_warn]" value="1" {% if settings.isAlertOnWarn() %}checked{% endif %}>
+                    Alarmuj także przy ostrzeżeniach (nie tylko przy błędach)
+                </label></div>
+                <div class="row">
+                    <div class="col-sm-6 form-group">
+                        <label for="healthEmail">E-mail odbiorcy</label>
+                        <input type="text" name="health[alert_email]" id="healthEmail" class="form-control" value="{{ settings.getAlertEmails()|join(', ') }}" placeholder="{{ settings.getEffectiveAlertEmails()|join(', ') ?: 'admin@firma.pl' }}">
+                        <small class="text-muted">Kilka adresów rozdziel przecinkiem. Puste = adres nadawcy raportu kwarantanny. Wysyłka przez <code>MAILER_DSN</code>.</small>
+                    </div>
+                    <div class="col-sm-6 form-group">
+                        <label for="healthWebhook">Webhook (JSON POST)</label>
+                        <input type="url" name="health[webhook_url]" id="healthWebhook" class="form-control" value="{{ settings.getWebhookUrl() }}" placeholder="https://hooks.slack.com/services/...">
+                        <small class="text-muted">Pole <code>text</code> czytają webhooki Slack, Mattermost i Teams; reszta pól dla własnych odbiorców.</small>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-sm-3 form-group">
+                        <label for="healthThreshold">Próg (kolejne błędy)</label>
+                        <input type="number" name="health[fail_threshold]" id="healthThreshold" class="form-control" min="1" max="100" value="{{ settings.getFailThreshold() }}">
+                    </div>
+                    <div class="col-sm-3 form-group">
+                        <label for="healthScanAge">Maks. wiek skanu (min)</label>
+                        <input type="number" name="health[scan_max_age]" id="healthScanAge" class="form-control" min="5" max="10080" value="{{ settings.getScanMaxAge() }}">
+                    </div>
+                    <div class="col-sm-6 form-group">
+                        <label for="healthToken">Token szczegółów (/health?token=, /metrics)</label>
+                        {% if settings.isTokenFromEnv() %}
+                            <input type="text" id="healthToken" class="form-control" value="(ustawiony w HEALTH_TOKEN)" disabled>
+                        {% else %}
+                            <input type="text" name="health[token]" id="healthToken" class="form-control" value="{{ settings.getToken() }}" autocomplete="off" placeholder="np. wynik: openssl rand -hex 24">
+                        {% endif %}
+                        <small class="text-muted">Min. 16 znaków. Puste = szczegóły i metryki wyłączone.</small>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">Zapisz</button>
+            </form>
+            <form method="post" action="{{ path('antispam_system_status_test') }}" style="margin-top:10px;">
+                <input type="hidden" name="_token" value="{{ csrf_token('health_settings') }}">
+                <button type="submit" class="btn btn-default"><span class="glyphicon glyphicon-send"></span> Wyślij testowy alert</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-link"></span> Monitoring zewnętrzny</div>
+        <div class="panel-body">
+            <p>Publiczny stan dla monitora uptime (bez szczegółów, HTTP 503 przy awarii): <code>{{ health_url }}</code></p>
+            <p>Szczegóły (JSON): <code>{{ health_url }}?token=…</code> &middot; metryki Prometheus: <code>{{ metrics_url }}?token=…</code>
+                (lub nagłówek <code>Authorization: Bearer …</code>).</p>
+            <small class="text-muted">Opis: docs/health.md.</small>
+        </div>
+    </div>
+
+{% endblock %}

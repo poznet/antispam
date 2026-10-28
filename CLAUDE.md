@@ -29,6 +29,7 @@ See `docs/` directory for detailed documentation:
 - `docs/scoring.md` - scoring pipeline, DNSBL, regex/wildcard patterns, rule ownership (per-mailbox vs global `*` rules)
 - `docs/protection.md` - impersonation/BEC, link protection, attachment policy (web + agent)
 - `docs/spam-handling.md` - where spam goes (move vs delete), quarantine semantics, retroactive blacklist, cron log (`antispam:cron:run`, `/cron/logs`)
+- `docs/health.md` - health checks, public `/health` for uptime monitors, token-protected details + Prometheus `/metrics`, "Stan systemu" page, `antispam:health:check` alerts (e-mail/webhook)
 - `docs/users.md` - users and roles (ROLE_ADMIN / ROLE_USER), mailbox ownership, legacy ADMIN_PASSWORD admin, `/my` area
 - `docs/quarantine-digest.md` - end-user quarantine digest e-mail, signed `/q/` links, `antispam:digest:send`
 - `docs/feed.md` - shared spam feed (centralized spam DB): fingerprints, API, sync

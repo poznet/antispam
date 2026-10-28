@@ -22,6 +22,8 @@ services:
       # np. smtp://user:pass@smtp.example.com:587 (puste = wysylka wylaczona)
       - MAILER_DSN=${MAILER_DSN:-}
       - RUN_MIGRATIONS=true
+      # token szczegolow /health?token= i /metrics (docs/health.md); puste = ustawiany w panelu
+      - HEALTH_TOKEN=${HEALTH_TOKEN:-}
       # Traefik Coolify siedzi w prywatnej sieci Dockera - ufamy jego X-Forwarded-*
       - SYMFONY_TRUSTED_PROXIES=${SYMFONY_TRUSTED_PROXIES:-127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
     # Apache startuje dopiero po migracjach, wiec "healthy" = schemat gotowy

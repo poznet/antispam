@@ -97,5 +97,8 @@ class AgentScanAllCommand extends Command
         foreach ((array)($result['errors'] ?? []) as $error) {
             $output->writeln('  <comment>' . $error . '</comment>');
         }
+        if (!empty($result['agent_warning'])) {
+            $output->writeln('  <comment>' . $result['agent_warning'] . '</comment>');
+        }
     }
 }

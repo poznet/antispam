@@ -86,7 +86,12 @@ class AccountController extends AbstractController
                 $this->addFlash('danger', implode(' ', $errors));
                 return $this->redirectToRoute('antispam_account_edit', ['id' => $account->getId()]);
             }
+            $pinnedFor = [$account->getSshHost(), (int)$account->getSshPort()];
             $account = $this->fillAccountFromRequest($account, $request);
+            // A pinned SSH host key belongs to the old host:port.
+            if ($pinnedFor !== [$account->getSshHost(), (int)$account->getSshPort()]) {
+                $account->setSshHostKey(null);
+            }
             $this->em->flush();
             return $this->redirectToRoute('antispam_account_index');
         }
@@ -228,18 +233,45 @@ class AccountController extends AbstractController
         }
 
         try {
-            $sshService = $this->ssh;
-            $deployResult = $sshService->deployAgent($account);
-            $account->setAgentDeployed(true);
-            $this->em->flush();
-            $result['success'] = true;
-            $result['messages'][] = 'Agent został wdrożony';
+            $deployResult = $this->ssh->deployAgent($account);
             $result['deploy_result'] = $deployResult;
+            if (($deployResult['success'] ?? null) === true) {
+                $account->setAgentDeployed(true);
+                $this->em->flush();
+                $result['success'] = true;
+                $result['messages'][] = 'Agent został wdrożony (' . ($deployResult['remote_path'] ?? '') . ', wersja ' . ($deployResult['agent_version'] ?? '?') . ')';
+                // Settings (thresholds, switches) and rules live in the agent's
+                // per-account database: push them right away.
+                $sync = $this->ssh->syncRules($account, json_encode($this->rulesExporter->export($account->getEmail())));
+                $result['messages'][] = ($sync['success'] ?? false) === true
+                    ? 'Reguły i ustawienia zostały zsynchronizowane'
+                    : 'Synchronizacja reguł nie powiodła się: ' . ($sync['error'] ?? 'nieznany błąd') . ' - użyj przycisku Synchronizuj.';
+            } else {
+                $result['messages'][] = 'Wdrożenie nie powiodło się: ' . ($deployResult['error'] ?? 'test agenta nie przeszedł');
+            }
         } catch (\Exception $e) {
             $result['messages'][] = 'Wdrożenie nie powiodło się: ' . $e->getMessage();
         }
 
         return ['account' => $account, 'result' => $result];
+    }
+
+    /**
+     * Forget the pinned SSH host key; the next connection pins the key the
+     * server presents then.
+     */
+    #[Route('/reset-host-key/{id}', name: 'antispam_account_reset_host_key', methods: ['POST'])]
+    public function resetHostKeyAction($id, Request $request)
+    {
+        $this->checkActionToken($request, 'account_action_' . $id);
+        $account = $this->em->getRepository(Account::class)->find($id);
+        if (!$account) {
+            return $this->redirectToRoute('antispam_account_index');
+        }
+        $account->setSshHostKey(null);
+        $this->em->flush();
+        $this->addFlash('success', 'Zapisany klucz hosta SSH został usunięty. Przy następnym połączeniu zostanie zapamiętany klucz, który przedstawi serwer.');
+        return $this->redirectToRoute('antispam_account_edit', ['id' => $account->getId()]);
     }
 
     #[Route('/sync/{id}', name: 'antispam_account_sync', methods: ['POST'])]
@@ -259,9 +291,16 @@ class AccountController extends AbstractController
             $rules = $this->rulesExporter->export($account->getEmail());
             $sshService = $this->ssh;
             $syncResult = $sshService->syncRules($account, json_encode($rules));
-            $result['success'] = true;
-            $result['messages'][] = 'Reguły zostały zsynchronizowane';
             $result['sync_result'] = $syncResult;
+            if (($syncResult['success'] ?? null) === true) {
+                $result['success'] = true;
+                $result['messages'][] = 'Reguły zostały zsynchronizowane';
+            } else {
+                $result['messages'][] = 'Synchronizacja nie powiodła się: ' . ($syncResult['error'] ?? 'nieznany błąd');
+            }
+            if (!empty($syncResult['agent_warning'])) {
+                $result['messages'][] = $syncResult['agent_warning'];
+            }
         } catch (\Exception $e) {
             $result['messages'][] = 'Synchronizacja nie powiodła się: ' . $e->getMessage();
         }
@@ -284,8 +323,14 @@ class AccountController extends AbstractController
 
         try {
             if ($account->isSsh()) {
-                $sshService = $this->ssh;
-                $scanResult = $sshService->runScan($account);
+                $scanResult = $this->ssh->runScan($account);
+                // An error answer (timeout, old agent, lock) is not a scan.
+                if (!isset($scanResult['total'])) {
+                    throw new \RuntimeException((string)($scanResult['error'] ?? 'nieprawidłowa odpowiedź agenta'));
+                }
+                if (!empty($scanResult['agent_warning'])) {
+                    $scanResult['errors'][] = $scanResult['agent_warning'];
+                }
             } else {
                 $scanResult = $this->imapScan->scanAccount($account);
             }
@@ -424,8 +469,13 @@ class AccountController extends AbstractController
         }
         try {
             $health = $this->ssh->runHealth($account);
-            $result['success'] = true;
+            $result['success'] = !isset($health['success']) || $health['success'] !== false;
             $result['health'] = $health;
+            foreach (['error', 'agent_warning'] as $k) {
+                if (!empty($health[$k])) {
+                    $result['messages'][] = $health[$k];
+                }
+            }
         } catch (\Exception $e) {
             $result['messages'][] = 'Sprawdzenie stanu agenta nie powiodło się: ' . $e->getMessage();
         }

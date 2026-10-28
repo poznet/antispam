@@ -23,16 +23,24 @@
  * It also manages the quarantine for the end-user digest: list, release (with
  * optional sender whitelisting) and delete quarantined messages.
  *
- * Requirements: PHP 7.1+, SQLite3 extension, DNS resolution for DNSBL lookups.
- * Optional: a reachable clamd for ClamAV scanning, the curl extension for
- * VirusTotal lookups. Both are off unless enabled in the synced settings.
+ * Requirements: PHP 7.1+, SQLite3 and mbstring extensions, DNS resolution for
+ * DNSBL lookups. Optional: a reachable clamd for ClamAV scanning, the curl
+ * extension for VirusTotal / Safe Browsing lookups and the CERT list. All of
+ * them are off unless enabled in the synced settings.
+ *
+ * Output protocol: every command prints exactly one JSON document on STDOUT.
+ * PHP warnings never reach STDOUT; they are collected into "warnings".
  */
 
+const AGENT_VERSION = '3.0';
 const CERT_DEFAULT_URL = 'https://hole.cert.pl/domains/v2/domains.txt';
 const CERT_MAX_BYTES = 52428800;
 const CERT_MIN_ROWS = 100;
 const CERT_REFRESH_SECONDS = 86400;
 const CERT_RETRY_SECONDS = 3600;
+const AGENT_DEFAULT_SPAM_THRESHOLD = 10;
+const AGENT_DEFAULT_QUARANTINE_THRESHOLD = 5;
+const AGENT_COMMIT_EVERY = 50;
 
 // Test suites include this file to check it against the web application's
 // analyzers; top-level functions stay defined after this early return.
@@ -40,8 +48,27 @@ if (defined('ANTISPAM_AGENT_LIBRARY')) {
     return;
 }
 
+// Keep STDOUT a clean JSON channel: warnings are collected, not printed.
+ini_set('display_errors', '0');
+ini_set('log_errors', '0');
+$GLOBALS['agentWarnings'] = [];
+set_error_handler(function ($no, $str, $file, $line) {
+    if (!(error_reporting() & $no)) {
+        return false; // silenced with @: standard handler keeps error_get_last(), prints nothing
+    }
+    if (count($GLOBALS['agentWarnings']) < 50) {
+        $GLOBALS['agentWarnings'][] = $str . ' (line ' . $line . ')';
+    }
+    return true;
+});
+register_shutdown_function(function () {
+    $e = error_get_last();
+    if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true) && empty($GLOBALS['agentPrinted'])) {
+        agentPrint(['success' => false, 'error' => 'Fatal error: ' . $e['message'] . ' (line ' . $e['line'] . ')']);
+    }
+});
+
 $defaultMaildir = getenv('HOME') . '/Maildir';
-$defaultDb = __DIR__ . '/rules.sqlite';
 
 // Manually parse CLI options - getopt() stops at the first positional argument,
 // which breaks `agent.php scan --maildir=...`.
@@ -59,7 +86,60 @@ for ($i = 2; $i < count($argv); $i++) {
     }
 }
 $maildirPath = agentPath($options['maildir'] ?? $defaultMaildir, 'maildir');
-$dbPath = agentPath($options['db'] ?? $defaultDb, 'db');
+$dbPath = isset($options['db']) ? agentPath($options['db'], 'db') : agentDefaultDb(__DIR__, $options['account'] ?? null);
+
+try {
+    switch ($command) {
+        case 'test':
+            agentPrint(runTest($maildirPath));
+            break;
+        case 'import-rules':
+            agentPrint(importRules($dbPath, file_get_contents('php://stdin')));
+            break;
+        case 'scan':
+            agentPrint(agentLocked($dbPath, function () use ($maildirPath, $dbPath, $options) {
+                return runScan($maildirPath, $dbPath, $options);
+            }));
+            break;
+        case 'apply-blacklist':
+            agentPrint(agentLocked($dbPath, function () use ($maildirPath, $dbPath, $options) {
+                return applyBlacklist($maildirPath, $dbPath, $options);
+            }));
+            break;
+        case 'health':
+            agentPrint(runHealth($maildirPath, $dbPath));
+            break;
+        case 'quarantine-list':
+            agentPrint(quarantineList($maildirPath, $dbPath, $options));
+            break;
+        case 'quarantine-release':
+            agentPrint(quarantineRelease($maildirPath, $dbPath, $options));
+            break;
+        case 'quarantine-delete':
+            agentPrint(quarantineDelete($maildirPath, $dbPath, $options));
+            break;
+        case 'version':
+            agentPrint(['success' => true, 'php' => PHP_VERSION]);
+            break;
+        default:
+            $GLOBALS['agentPrinted'] = true;
+            echo "Antispam Maildir Agent " . AGENT_VERSION . "\n";
+            echo "Usage:\n";
+            echo "  php antispam-agent.php test [--maildir=path]\n";
+            echo "  php antispam-agent.php version\n";
+            echo "  php antispam-agent.php import-rules [--account=ID] [--db=path] < rules.json\n";
+            echo "  php antispam-agent.php scan [--maildir=path] [--account=ID] [--db=path] [--spam-threshold=N] [--quarantine-threshold=N] [--no-dnsbl] [--no-headers] [--no-impersonation] [--no-urls] [--no-cert] [--no-attachment-policy] [--no-clamav] [--no-virustotal]\n";
+            echo "  php antispam-agent.php apply-blacklist [--maildir=path] [--account=ID] [--db=path] [--spam-threshold=N] [--days=30] [--limit=5000]\n";
+            echo "  php antispam-agent.php health [--maildir=path] [--account=ID] [--db=path]\n";
+            echo "  php antispam-agent.php quarantine-list [--maildir=path] [--account=ID] [--db=path] [--since=unix-ts] [--limit=N]\n";
+            echo "  php antispam-agent.php quarantine-release --id=ID [--whitelist] [--maildir=path] [--account=ID] [--db=path]\n";
+            echo "  php antispam-agent.php quarantine-delete --id=ID [--maildir=path] [--account=ID] [--db=path]\n";
+            break;
+    }
+} catch (\Throwable $e) {
+    agentPrint(['success' => false, 'error' => get_class($e) . ': ' . $e->getMessage()]);
+    exit(1);
+}
 
 /**
  * Validates a --maildir / --db path: no empty value, NUL byte or ".."
@@ -73,49 +153,114 @@ function agentPath($path, $label)
         $path = getenv('HOME') . substr($path, 1);
     }
     if ($path === '' || strpos($path, "\0") !== false || in_array('..', preg_split('#[/\\\\]+#', $path), true)) {
-        fwrite(STDERR, "Invalid --{$label} path\n");
+        agentPrint(['success' => false, 'error' => "Invalid --{$label} path"]);
         exit(2);
     }
     return $path;
 }
 
-switch ($command) {
-    case 'test':
-        echo json_encode(runTest($maildirPath), JSON_PRETTY_PRINT) . "\n";
-        break;
-    case 'import-rules':
-        echo json_encode(importRules($dbPath), JSON_PRETTY_PRINT) . "\n";
-        break;
-    case 'scan':
-        echo json_encode(runScan($maildirPath, $dbPath, $options), JSON_PRETTY_PRINT) . "\n";
-        break;
-    case 'apply-blacklist':
-        echo json_encode(applyBlacklist($maildirPath, $dbPath, $options), JSON_PRETTY_PRINT) . "\n";
-        break;
-    case 'health':
-        echo json_encode(runHealth($maildirPath, $dbPath), JSON_PRETTY_PRINT) . "\n";
-        break;
-    case 'quarantine-list':
-        echo json_encode(quarantineList($maildirPath, $dbPath, $options), JSON_PRETTY_PRINT) . "\n";
-        break;
-    case 'quarantine-release':
-        echo json_encode(quarantineRelease($maildirPath, $dbPath, $options), JSON_PRETTY_PRINT) . "\n";
-        break;
-    case 'quarantine-delete':
-        echo json_encode(quarantineDelete($maildirPath, $dbPath, $options), JSON_PRETTY_PRINT) . "\n";
-        break;
-    default:
-        echo "Antispam Maildir Agent\n";
-        echo "Usage:\n";
-        echo "  php antispam-agent.php test\n";
-        echo "  php antispam-agent.php import-rules < rules.json\n";
-        echo "  php antispam-agent.php scan [--maildir=path] [--db=path] [--spam-threshold=N] [--quarantine-threshold=N] [--no-dnsbl] [--no-headers] [--no-impersonation] [--no-urls] [--no-cert] [--no-attachment-policy] [--no-clamav] [--no-virustotal]\n";
-        echo "  php antispam-agent.php apply-blacklist [--maildir=path] [--db=path] [--spam-threshold=N] [--days=30] [--limit=5000]\n";
-        echo "  php antispam-agent.php health [--maildir=path] [--db=path]\n";
-        echo "  php antispam-agent.php quarantine-list [--maildir=path] [--db=path] [--since=unix-ts] [--limit=N]\n";
-        echo "  php antispam-agent.php quarantine-release --id=ID [--whitelist] [--maildir=path] [--db=path]\n";
-        echo "  php antispam-agent.php quarantine-delete --id=ID [--maildir=path] [--db=path]\n";
-        break;
+/**
+ * rules-<account>.sqlite next to the agent: one database per mailbox, so two
+ * accounts on one host share neither rules nor dedup state. Without
+ * --account the legacy shared rules.sqlite is used. A new per-account
+ * database is seeded from the legacy one, so the "already checked" history
+ * survives the upgrade and old mail is not re-scanned.
+ */
+function agentDefaultDb($dir, $account)
+{
+    $legacy = $dir . '/rules.sqlite';
+    if ($account === null || $account === true || $account === '') {
+        return $legacy;
+    }
+    if (!preg_match('/^[0-9]{1,10}$/', (string)$account)) {
+        agentPrint(['success' => false, 'error' => 'Invalid --account value']);
+        exit(2);
+    }
+    $path = $dir . '/rules-' . $account . '.sqlite';
+    if (!file_exists($path) && is_file($legacy) && @copy($legacy, $path)) {
+        @chmod($path, 0600);
+    }
+    return $path;
+}
+
+/** Prints the single JSON document of this run, with collected warnings. */
+function agentPrint($data)
+{
+    if (is_array($data)) {
+        if (!empty($GLOBALS['agentWarnings'])) {
+            $data['warnings'] = $GLOBALS['agentWarnings'];
+        }
+        if (!isset($data['agent_version'])) {
+            $data['agent_version'] = AGENT_VERSION;
+        }
+    }
+    $GLOBALS['agentPrinted'] = true;
+    echo agentJson($data) . "\n";
+}
+
+/**
+ * json_encode that never fails on raw 8-bit header bytes: invalid UTF-8 is
+ * replaced first (JSON_INVALID_UTF8_SUBSTITUTE needs PHP 7.2).
+ */
+function agentJson($data)
+{
+    $json = json_encode(agentScrub($data), JSON_PRETTY_PRINT | JSON_PARTIAL_OUTPUT_ON_ERROR);
+    if ($json === false) {
+        $json = json_encode(['success' => false, 'error' => 'JSON encoding failed: ' . json_last_error_msg()]);
+    }
+    return $json;
+}
+
+function agentScrub($v)
+{
+    if (is_array($v)) {
+        foreach ($v as $k => $item) {
+            $v[$k] = agentScrub($item);
+        }
+        return $v;
+    }
+    return is_string($v) ? agentUtf8($v) : $v;
+}
+
+/** Valid UTF-8 copy of $s (invalid bytes become "?"). */
+function agentUtf8($s)
+{
+    $s = (string)$s;
+    if (preg_match('//u', $s)) {
+        return $s;
+    }
+    if (function_exists('mb_convert_encoding')) {
+        $prev = mb_substitute_character();
+        mb_substitute_character(0x3F);
+        $out = mb_convert_encoding($s, 'UTF-8', 'UTF-8');
+        mb_substitute_character($prev);
+        if (is_string($out) && preg_match('//u', $out)) {
+            return $out;
+        }
+    }
+    return preg_replace('/[\x80-\xFF]/', '?', $s);
+}
+
+/**
+ * Runs $fn holding an exclusive lock next to the database, so a cron scan and
+ * a scan started from the panel never move the same files at once.
+ */
+function agentLocked($dbPath, $fn)
+{
+    $lock = @fopen($dbPath . '.lock', 'c');
+    if (!$lock) {
+        return $fn(); // unwritable directory: run unlocked rather than not at all
+    }
+    if (!flock($lock, LOCK_EX | LOCK_NB)) {
+        fclose($lock);
+        return ['success' => false, 'locked' => true, 'error' => 'Another scan is already running for this mailbox'];
+    }
+    try {
+        return $fn();
+    } finally {
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -126,25 +271,42 @@ function runTest($maildirPath)
 {
     $result = ['success' => true, 'checks' => []];
     $result['checks']['php_version'] = PHP_VERSION;
-    $result['checks']['sqlite3'] = extension_loaded('sqlite3') ? 'available' : 'NOT available';
-    if (!extension_loaded('sqlite3')) { $result['success'] = false; }
+    if (PHP_VERSION_ID < 70100) {
+        $result['success'] = false;
+        $result['errors'][] = 'PHP 7.1 or newer is required';
+    }
+    foreach (['sqlite3' => 'SQLite3', 'mbstring' => 'mbstring'] as $ext => $label) {
+        $result['checks'][$ext] = extension_loaded($ext) ? 'available' : 'NOT available';
+        if (!extension_loaded($ext)) {
+            $result['success'] = false;
+            $result['errors'][] = 'PHP extension ' . $label . ' is required';
+        }
+    }
     $result['checks']['dns_get_record'] = function_exists('dns_get_record') ? 'available' : 'missing (DNSBL will use gethostbyname fallback)';
-    $result['checks']['curl'] = function_exists('curl_init') ? 'available' : 'missing (VirusTotal lookup disabled)';
+    $result['checks']['curl'] = function_exists('curl_init') ? 'available' : 'missing (VirusTotal, Safe Browsing and CERT list disabled)';
 
     $result['checks']['maildir_path'] = $maildirPath;
     $result['checks']['maildir_exists'] = is_dir($maildirPath) ? 'yes' : 'no';
     $result['checks']['maildir_new'] = is_dir($maildirPath . '/new') ? 'yes' : 'no';
     $result['checks']['maildir_cur'] = is_dir($maildirPath . '/cur') ? 'yes' : 'no';
     $result['checks']['maildir_writable'] = is_writable($maildirPath) ? 'yes' : 'no';
-    if (!is_dir($maildirPath)) { $result['success'] = false; }
+    if (!is_dir($maildirPath)) {
+        $result['success'] = false;
+        $result['errors'][] = 'Maildir not found: ' . $maildirPath;
+    }
     $result['checks']['agent_dir_writable'] = is_writable(__DIR__) ? 'yes' : 'no';
+    if (!is_writable(__DIR__)) {
+        $result['success'] = false;
+        $result['errors'][] = 'Agent directory is not writable (the rules database lives there)';
+    }
     return $result;
 }
 
 function runHealth($maildirPath, $dbPath)
 {
     $out = [
-        'agent_version' => '2.2',
+        'success' => true,
+        'agent_version' => AGENT_VERSION,
         'php' => PHP_VERSION,
         'time' => date('c'),
         'maildir' => $maildirPath,
@@ -201,13 +363,46 @@ function countMessages($base, array $subdirs)
 /* Rule import                                                            */
 /* ---------------------------------------------------------------------- */
 
-function importRules($dbPath)
+/**
+ * Replaces all rules with the pushed set in one transaction: a malformed
+ * payload or a failed write leaves the previous rules untouched.
+ */
+function importRules($dbPath, $input)
 {
-    $input = file_get_contents('php://stdin');
-    $data = json_decode($input, true);
-    if (!$data) { return ['success' => false, 'error' => 'Invalid JSON input']; }
+    $data = json_decode((string)$input, true);
+    if (!is_array($data) || !$data) {
+        return ['success' => false, 'error' => 'Invalid JSON input (' . json_last_error_msg() . ', ' . strlen((string)$input) . ' bytes)'];
+    }
+    foreach (['whitelist', 'email_whitelist', 'blacklist', 'email_blacklist', 'dnsbl', 'settings'] as $section) {
+        if (isset($data[$section]) && !is_array($data[$section])) {
+            return ['success' => false, 'error' => 'Invalid JSON input: "' . $section . '" must be a list'];
+        }
+    }
 
     $db = getDb($dbPath);
+    $db->enableExceptions(true);
+    $db->exec('BEGIN IMMEDIATE');
+    try {
+        $counts = importRulesInto($db, $data);
+        $db->exec('COMMIT');
+    } catch (\Throwable $e) {
+        @$db->exec('ROLLBACK');
+        return ['success' => false, 'error' => 'Import failed, previous rules kept: ' . $e->getMessage()];
+    }
+
+    return ['success' => true, 'imported' => $counts, 'db' => basename($dbPath)];
+}
+
+function importRulesInto($db, array $data)
+{
+    $required = ['whitelist' => 'host', 'email_whitelist' => 'whitelistemail', 'blacklist' => 'host', 'email_blacklist' => 'blacklistemail', 'dnsbl' => 'zone'];
+    foreach ($required as $section => $key) {
+        foreach ((array)($data[$section] ?? []) as $i => $row) {
+            if (!is_array($row) || !isset($row[$key]) || !is_scalar($row[$key])) {
+                throw new \InvalidArgumentException($section . '[' . $i . '] has no "' . $key . '"');
+            }
+        }
+    }
 
     $db->exec('DELETE FROM whitelist');
     $db->exec('DELETE FROM email_whitelist');
@@ -277,7 +472,9 @@ function importRules($dbPath)
     }
     // Attachment-scanning settings (ClamAV / VirusTotal) pushed from the web UI.
     // Stored as key/value strings; booleans are normalised to '1'/'0'.
+    // The pushed set is complete: settings no longer sent fall back to defaults.
     if (isset($data['settings']) && is_array($data['settings'])) {
+        $db->exec('DELETE FROM settings');
         $stmt = $db->prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (:k, :v)');
         foreach ($data['settings'] as $k => $v) {
             if (is_bool($v)) { $v = $v ? '1' : '0'; }
@@ -288,58 +485,109 @@ function importRules($dbPath)
         }
     }
 
-    return ['success' => true, 'imported' => $counts];
+    return $counts;
 }
 
 /* ---------------------------------------------------------------------- */
 /* Scan pipeline                                                          */
 /* ---------------------------------------------------------------------- */
 
+/**
+ * Effective scan configuration. Precedence: CLI flag, then the settings
+ * synced from the web panel, then the defaults (which match the web side).
+ * With scoring switched off (scoring_enabled = 0) only the lists apply and a
+ * blacklist hit is spam, like the web pipeline.
+ */
+function scanConfig(array $settings, array $options)
+{
+    $scoring = settingBool($settings, 'scoring_enabled', true);
+    $on = function ($flag, $key, $default) use ($options, $settings, $scoring) {
+        return $scoring && !isset($options[$flag]) && settingBool($settings, $key, $default);
+    };
+    $spam = isset($options['spam-threshold']) ? (int)$options['spam-threshold']
+        : settingInt($settings, 'spam_threshold', AGENT_DEFAULT_SPAM_THRESHOLD);
+    $quarantine = isset($options['quarantine-threshold']) ? (int)$options['quarantine-threshold']
+        : settingInt($settings, 'quarantine_threshold', AGENT_DEFAULT_QUARANTINE_THRESHOLD);
+
+    return [
+        'scoring' => $scoring,
+        'spam_threshold' => $spam,
+        'quarantine_threshold' => $quarantine,
+        'headers' => $on('no-headers', 'header_check_enabled', true),
+        'dnsbl' => $on('no-dnsbl', 'dnsbl_enabled', true),
+        'impersonation' => $on('no-impersonation', 'impersonation_enabled', true),
+        'urls' => $on('no-urls', 'url_enabled', true),
+        'cert' => $on('no-cert', 'cert_enabled', false),
+        'policy' => $on('no-attachment-policy', 'attachment_policy_enabled', true),
+        'clamav' => $on('no-clamav', 'clamav_enabled', false),
+        'vt' => $on('no-virustotal', 'vt_enabled', false) && trim((string)($settings['vt_api_key'] ?? '')) !== '',
+    ];
+}
+
+/** ham / quarantine / spam for a score, like ScoringService::classify(). */
+function agentClassify($score, $forcedSpam, array $cfg)
+{
+    if ($forcedSpam || $score >= $cfg['spam_threshold']) {
+        return 'spam';
+    }
+    if ($score >= $cfg['quarantine_threshold']) {
+        return 'quarantine';
+    }
+    return 'ham';
+}
+
+/**
+ * Maildir file name without the ":2,FLAGS" info suffix. Cut at the first
+ * colon: Dovecot keyword flags are lower-case letters (":2,Sab").
+ */
+function agentBaseId($file)
+{
+    $file = basename((string)$file);
+    $p = strpos($file, ':');
+    return $p === false ? $file : substr($file, 0, $p);
+}
+
+/** The id older agents stored (only upper-case flags were stripped). */
+function agentLegacyId($file)
+{
+    return preg_replace('/:2,[A-Z]*$/', '', basename((string)$file));
+}
+
 function runScan($maildirPath, $dbPath, $options = [])
 {
-    $spamThreshold = isset($options['spam-threshold']) ? (int)$options['spam-threshold'] : 10;
-    $quarantineThreshold = isset($options['quarantine-threshold']) ? (int)$options['quarantine-threshold'] : 5;
-    $dnsblEnabled = !isset($options['no-dnsbl']);
-    $headerCheckEnabled = !isset($options['no-headers']);
-
     $db = getDb($dbPath);
     $settings = loadSettings($db);
+    $cfg = scanConfig($settings, $options);
 
-    // Attachment scanning is driven by synced settings; CLI flags can force it off.
-    $clamavEnabled = !isset($options['no-clamav']) && !empty($settings['clamav_enabled']);
-    $vtEnabled = !isset($options['no-virustotal'])
-        && !empty($settings['vt_enabled'])
-        && trim((string)($settings['vt_api_key'] ?? '')) !== '';
-    $impersonationEnabled = !isset($options['no-impersonation']) && settingBool($settings, 'impersonation_enabled', true);
-    $urlEnabled = !isset($options['no-urls']) && settingBool($settings, 'url_enabled', true);
-    $certEnabled = !isset($options['no-cert']) && settingBool($settings, 'cert_enabled', false);
-    $certScore = max(1, settingInt($settings, 'cert_score', $spamThreshold));
-    if ($certEnabled) {
-        certRefreshIfStale($db); // daily, fail-safe: keeps the old list on any error
+    $certScore = max(1, settingInt($settings, 'cert_score', $cfg['spam_threshold']));
+    if ($cfg['cert']) {
+        certRefreshIfStale($db, false, certUrlFromSettings($settings)); // daily, keeps the old list on any error
     }
-    $policyEnabled = !isset($options['no-attachment-policy']) && settingBool($settings, 'attachment_policy_enabled', true);
 
     $protectedDomains = array_values(array_filter(preg_split('/\s+/', strtolower((string)($settings['impersonation_protected_domains'] ?? '')))));
     $vips = parseVips((string)($settings['impersonation_vips'] ?? ''));
     $urlConfig = urlConfigFromSettings($settings);
     $policyConfig = policyConfigFromSettings($settings);
+    $headerConfig = headerConfigFromSettings($settings, $cfg['quarantine_threshold'], $cfg['spam_threshold']);
     $dblCache = [];
 
     $stats = [
+        'success' => true,
         'total' => 0, 'checked' => 0, 'skipped' => 0,
         'whitelisted' => 0, 'blacklisted' => 0,
         'quarantined' => 0, 'moved_to_spam' => 0,
+        'move_failed' => 0,
         'attachments_flagged' => 0,
         'score_total' => 0,
+        'spam_threshold' => $cfg['spam_threshold'],
+        'quarantine_threshold' => $cfg['quarantine_threshold'],
         'decisions' => [],
+        'errors' => [],
     ];
 
-    $whitelist = loadListRules($db, 'SELECT host, pattern_type FROM whitelist', 'host');
-    $emailWhitelist = loadListRules($db, 'SELECT whitelistemail, pattern_type FROM email_whitelist', 'whitelistemail');
-    $blacklist = loadListRules($db, 'SELECT host, pattern_type, score FROM blacklist', 'host');
-    $emailBlacklist = loadListRules($db, 'SELECT blacklistemail, pattern_type, score FROM email_blacklist', 'blacklistemail');
+    $lists = loadAllLists($db);
     $dnsblProviders = [];
-    if ($dnsblEnabled) {
+    if ($cfg['dnsbl']) {
         $res = $db->query('SELECT id, zone, score, cache_ttl FROM dnsbl_providers WHERE enabled = 1');
         while ($row = $res->fetchArray(SQLITE3_ASSOC)) { $dnsblProviders[] = $row; }
     }
@@ -347,165 +595,88 @@ function runScan($maildirPath, $dbPath, $options = [])
     ensureFolder($maildirPath . '/.SPAM');
     ensureFolder($maildirPath . '/.QUARANTINE');
 
+    $checkedStmt = $db->prepare('SELECT message_id FROM checked WHERE message_id = :id OR message_id = :legacy');
+    $seen = [];
+    $complete = true;
+    $tx = agentTxBegin($db);
+
     foreach (['new', 'cur'] as $subdir) {
         $dir = $maildirPath . '/' . $subdir;
-        if (!is_dir($dir)) continue;
+        $files = is_dir($dir) ? @scandir($dir) : false;
+        if ($files === false) {
+            $complete = false;
+            continue;
+        }
 
-        foreach (scandir($dir) as $file) {
-            if ($file === '.' || $file === '..') continue;
+        foreach ($files as $file) {
+            if ($file === '.' || $file === '..' || $file[0] === '.') continue;
             $filePath = $dir . '/' . $file;
             if (!is_file($filePath)) continue;
 
             $stats['total']++;
-            $baseId = preg_replace('/:2,[A-Z]*$/', '', basename($file));
+            $baseId = agentBaseId($file);
+            $legacyId = agentLegacyId($file);
+            $seen[$baseId] = true;
 
-            $stmt = $db->prepare('SELECT 1 FROM checked WHERE message_id = :id');
-            $stmt->bindValue(':id', $baseId);
-            if ($stmt->execute()->fetchArray()) { $stats['skipped']++; continue; }
-
-            $stats['checked']++;
+            $checkedStmt->bindValue(':id', $baseId);
+            $checkedStmt->bindValue(':legacy', $legacyId);
+            $hit = $checkedStmt->execute()->fetchArray(SQLITE3_NUM);
+            if ($hit) {
+                if ($hit[0] !== $baseId) {
+                    markChecked($db, $baseId); // migrate an id stored by an older agent
+                }
+                $stats['skipped']++;
+                continue;
+            }
 
             $headers = readHeaderBlock($filePath);
-            $parsed = parseHeaders($headers);
-            $senderEmail = $parsed['sender_email'];
-            $senderHost = $parsed['sender_host'];
+            if ($headers === false) {
+                continue; // vanished (expunged or moved to cur/) - seen again next run
+            }
+            $stats['checked']++;
 
-            // Whitelist short-circuit
-            if ($senderHost && matchList($whitelist, $senderHost)) {
+            try {
+                $verdict = scoreMessage($filePath, $headers, $cfg, $lists, $dnsblProviders, $db, [
+                    'settings' => $settings,
+                    'protected_domains' => $protectedDomains,
+                    'vips' => $vips,
+                    'url' => $urlConfig,
+                    'policy' => $policyConfig,
+                    'header' => $headerConfig,
+                    'cert_score' => $certScore,
+                ], $dblCache);
+            } catch (\Throwable $e) {
+                $stats['errors'][] = $file . ': ' . $e->getMessage();
+                continue; // not marked checked: retried next run
+            }
+
+            $decision = $verdict['decision'];
+            if ($verdict['attachments_flagged']) { $stats['attachments_flagged']++; }
+
+            if ($decision === 'spam' || $decision === 'quarantine') {
+                $move = agentMoveMessage($maildirPath, $subdir, $file, $decision === 'spam' ? '.SPAM' : '.QUARANTINE');
+                if (!$move['ok']) {
+                    // Not marked checked, so the next run retries the move.
+                    $stats['move_failed']++;
+                    $stats['errors'][] = $file . ': move to ' . $decision . ' failed: ' . $move['error'];
+                    $stats['decisions'][] = ['file' => $file, 'decision' => 'move_failed', 'score' => $verdict['score']];
+                    continue;
+                }
+                if ($decision === 'spam') {
+                    $stats['blacklisted']++;
+                    $stats['moved_to_spam']++;
+                } else {
+                    $stats['quarantined']++;
+                }
+            } elseif ($decision === 'whitelisted') {
                 $stats['whitelisted']++;
-                $stats['decisions'][] = ['file' => $file, 'decision' => 'whitelisted', 'score' => 0];
-                markChecked($db, $baseId);
-                logDecision($db, $senderEmail, $parsed['subject'], 0, 'whitelisted', [], $baseId);
-                continue;
-            }
-            if ($senderEmail && matchList($emailWhitelist, $senderEmail)) {
-                $stats['whitelisted']++;
-                $stats['decisions'][] = ['file' => $file, 'decision' => 'whitelisted', 'score' => 0];
-                markChecked($db, $baseId);
-                logDecision($db, $senderEmail, $parsed['subject'], 0, 'whitelisted', [], $baseId);
-                continue;
             }
 
-            $score = 0;
-            $reasons = [];
-            $forceSpam = false;
-
-            // Blacklist domain / email
-            if ($senderHost) {
-                $hit = matchListReturning($blacklist, $senderHost);
-                if ($hit) {
-                    $score += (int)$hit['score'];
-                    $reasons[] = ['rule' => 'blacklist:' . $hit['value'], 'score' => (int)$hit['score']];
-                }
-            }
-            if ($senderEmail) {
-                $hit = matchListReturning($emailBlacklist, $senderEmail);
-                if ($hit) {
-                    $score += (int)$hit['score'];
-                    $reasons[] = ['rule' => 'email_blacklist:' . $hit['value'], 'score' => (int)$hit['score']];
-                }
-            }
-
-            // Header heuristics
-            if ($headerCheckEnabled) {
-                $hr = analyzeHeaders($headers);
-                $score += $hr['score'];
-                foreach ($hr['reasons'] as $r) { $reasons[] = $r; }
-            }
-
-            // Impersonation / BEC
-            if ($impersonationEnabled) {
-                $from = parseFromHeader(grabHeaderFolded($headers, 'From'));
-                $ir = analyzeImpersonation([
-                    'from_name' => $from['name'],
-                    'from_email' => $from['email'],
-                    'auth_results' => grabHeaderFolded($headers, 'Authentication-Results'),
-                ], $protectedDomains, $vips, $settings);
-                $score += $ir['score'];
-                foreach ($ir['reasons'] as $r) { $reasons[] = $r; }
-            }
-
-            // DNSBL
-            if ($dnsblProviders) {
-                $ip = extractConnectingIp($headers);
-                if ($ip) {
-                    foreach ($dnsblProviders as $prov) {
-                        if (dnsblLookup($db, $ip, $prov)) {
-                            $score += (int)$prov['score'];
-                            $reasons[] = ['rule' => 'dnsbl:' . $prov['zone'], 'score' => (int)$prov['score']];
-                        }
-                    }
-                }
-            }
-
-            // Body + attachments are parsed once, only when a step needs them.
-            $parts = null;
-            if ($urlEnabled || $certEnabled || $policyEnabled || $clamavEnabled || $vtEnabled) {
-                $parts = parseMessageParts($filePath);
-            }
-
-            // Link protection
-            if ($urlEnabled && ($parts['html'] !== '' || $parts['text'] !== '')) {
-                $ur = analyzeUrls($parts['html'], $parts['text'], $urlConfig, $db, $dblCache);
-                $score += $ur['score'];
-                foreach ($ur['reasons'] as $r) { $reasons[] = $r; }
-            }
-
-            // CERT Polska list of dangerous domains (sender + links)
-            if ($certEnabled) {
-                $senders = array_merge(
-                    [$senderHost],
-                    certHostsFromAddressHeader(grabHeaderFolded($headers, 'Reply-To')),
-                    certHostsFromAddressHeader(grabHeaderFolded($headers, 'Return-Path'))
-                );
-                $cr = certAnalyze($db, array_values(array_filter($senders)), certLinkHosts($parts['html'], $parts['text']), $certScore);
-                $score += $cr['score'];
-                foreach ($cr['reasons'] as $r) { $reasons[] = $r; }
-            }
-
-            // Attachment policy (no daemon / API needed)
-            if ($policyEnabled && $parts['attachments']) {
-                $pr = analyzeAttachmentPolicy($parts['attachments'], $policyConfig);
-                $score += $pr['score'];
-                foreach ($pr['reasons'] as $r) { $reasons[] = $r; }
-                if ($pr['score'] > 0) { $stats['attachments_flagged']++; }
-            }
-
-            // Attachment scanning (ClamAV malware + VirusTotal reputation).
-            // A hit adds the configured score and forces a spam decision. A
-            // single flagged attachment is enough to condemn the message.
-            if (($clamavEnabled || $vtEnabled) && $parts['attachments']) {
-                $hit = scanAttachments($parts['attachments'], $settings, $clamavEnabled, $vtEnabled);
-                if ($hit) {
-                    $score += (int)$hit['score'];
-                    $reasons[] = $hit['reason'];
-                    $forceSpam = true;
-                    $stats['attachments_flagged']++;
-                }
-            }
-
-            $decision = 'ham';
-            $targetDir = null;
-            if ($forceSpam || $score >= $spamThreshold) {
-                $decision = 'spam';
-                $stats['blacklisted']++;
-                $stats['moved_to_spam']++;
-                $targetDir = $maildirPath . '/.SPAM/' . $subdir;
-            } elseif ($score >= $quarantineThreshold) {
-                $decision = 'quarantine';
-                $stats['quarantined']++;
-                $targetDir = $maildirPath . '/.QUARANTINE/' . $subdir;
-            }
-
-            if ($targetDir) {
-                if (!is_dir($targetDir)) { mkdir($targetDir, 0755, true); }
-                @rename($filePath, $targetDir . '/' . $file);
-            }
-
-            $stats['score_total'] += $score;
-            $stats['decisions'][] = ['file' => $file, 'decision' => $decision, 'score' => $score];
-            logDecision($db, $senderEmail, $parsed['subject'], $score, $decision, $reasons, $baseId);
+            $stats['score_total'] += $verdict['score'];
+            $stats['decisions'][] = ['file' => $file, 'decision' => $decision, 'score' => $verdict['score']];
+            logDecision($db, $verdict['sender'], $verdict['subject'], $verdict['score'], $decision, $verdict['reasons'], $baseId);
             markChecked($db, $baseId);
+            agentTxTick($db, $tx);
         }
     }
 
@@ -517,42 +688,286 @@ function runScan($maildirPath, $dbPath, $options = [])
     $stmt->bindValue(':sp', $stats['moved_to_spam']);
     $stmt->bindValue(':q', $stats['quarantined']);
     $stmt->execute();
+    agentTxEnd($db);
+
+    if ($complete) {
+        $pruned = agentPrune($db, $seen, max(30, settingInt($settings, 'agent_retention_days', 180)));
+        if ($pruned) { $stats['pruned'] = $pruned; }
+    }
 
     // keep response small - don't return per-message decisions when huge
     if (count($stats['decisions']) > 200) {
         $stats['decisions'] = array_slice($stats['decisions'], 0, 200);
         $stats['decisions_truncated'] = true;
     }
+    if (count($stats['errors']) > 50) {
+        $stats['errors'] = array_slice($stats['errors'], 0, 50);
+    }
 
     return $stats;
 }
 
+function loadAllLists($db)
+{
+    return [
+        'whitelist' => loadListRules($db, 'SELECT host, pattern_type FROM whitelist', 'host'),
+        'email_whitelist' => loadListRules($db, 'SELECT whitelistemail, pattern_type FROM email_whitelist', 'whitelistemail'),
+        'blacklist' => loadListRules($db, 'SELECT host, pattern_type, score FROM blacklist', 'host'),
+        'email_blacklist' => loadListRules($db, 'SELECT blacklistemail, pattern_type, score FROM email_blacklist', 'blacklistemail'),
+    ];
+}
+
+/**
+ * Scores one message. Mirrors the web pipeline order: whitelists short-circuit,
+ * blacklists, header heuristics, impersonation, DNSBL, links, CERT list,
+ * attachment policy, attachment scanning.
+ *
+ * @return array{decision:string, score:int, reasons:array, sender:string, subject:string, attachments_flagged:bool}
+ */
+function scoreMessage($filePath, $headers, array $cfg, array $lists, array $dnsblProviders, $db, array $ctx, array &$dblCache)
+{
+    $parsed = parseHeaders($headers);
+    $senderEmail = $parsed['sender_email'];
+    $senderHost = $parsed['sender_host'];
+    $out = ['decision' => 'ham', 'score' => 0, 'reasons' => [], 'sender' => $senderEmail, 'subject' => $parsed['subject'], 'attachments_flagged' => false];
+
+    // Whitelist short-circuit
+    if ($senderHost && ($hit = matchListReturning($lists['whitelist'], $senderHost))) {
+        $out['decision'] = 'whitelisted';
+        $out['reasons'][] = ['rule' => 'whitelist:' . $hit['pattern'], 'score' => 0];
+        return $out;
+    }
+    if ($senderEmail && ($hit = matchListReturning($lists['email_whitelist'], $senderEmail))) {
+        $out['decision'] = 'whitelisted';
+        $out['reasons'][] = ['rule' => 'email_whitelist:' . $hit['pattern'], 'score' => 0];
+        return $out;
+    }
+
+    $score = 0;
+    $reasons = [];
+    $forceSpam = false;
+
+    // Blacklist domain / email (rule names as in CheckBlacklist / CheckEmailBlacklist)
+    if ($senderHost && ($hit = matchListReturning($lists['blacklist'], $senderHost))) {
+        $score += (int)$hit['score'];
+        $reasons[] = ['rule' => 'blacklist:' . $hit['pattern'] . ' (' . $hit['pattern_type'] . ')', 'score' => (int)$hit['score']];
+        $forceSpam = $forceSpam || !$cfg['scoring'];
+    }
+    if ($senderEmail && ($hit = matchListReturning($lists['email_blacklist'], $senderEmail))) {
+        $score += (int)$hit['score'];
+        $reasons[] = ['rule' => 'email_blacklist:' . $hit['pattern'] . ' (' . $hit['pattern_type'] . ')', 'score' => (int)$hit['score']];
+        $forceSpam = $forceSpam || !$cfg['scoring'];
+    }
+
+    $add = function (array $r) use (&$score, &$reasons) {
+        $score += $r['score'];
+        foreach ($r['reasons'] as $reason) { $reasons[] = $reason; }
+    };
+
+    if ($cfg['headers']) {
+        $add(analyzeHeaders($headers, $ctx['header']));
+    }
+
+    if ($cfg['impersonation']) {
+        $from = parseFromHeader(grabHeader($headers, 'From'));
+        $add(analyzeImpersonation([
+            'from_name' => $from['name'],
+            'from_email' => $from['email'],
+            'auth_results' => grabHeader($headers, 'Authentication-Results'), // topmost only
+        ], $ctx['protected_domains'], $ctx['vips'], $ctx['settings']));
+    }
+
+    if ($dnsblProviders && ($ip = extractConnectingIp($headers))) {
+        foreach ($dnsblProviders as $prov) {
+            if (dnsblLookup($db, $ip, $prov)) {
+                $score += (int)$prov['score'];
+                $reasons[] = ['rule' => 'dnsbl:' . $prov['zone'], 'score' => (int)$prov['score']];
+            }
+        }
+    }
+
+    // Body + attachments are parsed once, only when a step needs them.
+    $parts = ['attachments' => [], 'html' => '', 'text' => ''];
+    if ($cfg['urls'] || $cfg['cert'] || $cfg['policy'] || $cfg['clamav'] || $cfg['vt']) {
+        $parts = parseMessageParts($filePath);
+    }
+
+    if ($cfg['urls'] && ($parts['html'] !== '' || $parts['text'] !== '')) {
+        $add(analyzeUrls($parts['html'], $parts['text'], $ctx['url'], $db, $dblCache));
+    }
+
+    // CERT Polska list of dangerous domains (sender + links)
+    if ($cfg['cert']) {
+        $senders = array_merge(
+            [$senderHost],
+            certHostsFromAddressHeader(grabHeader($headers, 'Reply-To')),
+            certHostsFromAddressHeader(grabHeader($headers, 'Return-Path'))
+        );
+        $add(certAnalyze($db, array_values(array_filter($senders)), certLinkHosts($parts['html'], $parts['text']), $ctx['cert_score']));
+    }
+
+    // Attachment policy (no daemon / API needed)
+    if ($cfg['policy'] && $parts['attachments']) {
+        $pr = analyzeAttachmentPolicy($parts['attachments'], $ctx['policy']);
+        $add($pr);
+        if ($pr['score'] > 0) { $out['attachments_flagged'] = true; }
+    }
+
+    // Attachment scanning (ClamAV malware + VirusTotal reputation): a hit
+    // adds the configured score and forces a spam decision.
+    if (($cfg['clamav'] || $cfg['vt']) && $parts['attachments']) {
+        $hit = scanAttachments($parts['attachments'], $ctx['settings'], $cfg['clamav'], $cfg['vt']);
+        if ($hit) {
+            $score += (int)$hit['score'];
+            $reasons[] = $hit['reason'];
+            $forceSpam = true;
+            $out['attachments_flagged'] = true;
+        }
+    }
+
+    $out['score'] = $score;
+    $out['reasons'] = $reasons;
+    $out['decision'] = agentClassify($score, $forceSpam, $cfg);
+    return $out;
+}
+
+/**
+ * Moves INBOX/<subdir>/<file> into <folder>/<subdir>/. When the file left
+ * new/ in the meantime (the IMAP server moved it to cur/ and appended
+ * ":2,FLAGS"), the cur/ copy is moved instead.
+ *
+ * @return array{ok:bool, error:?string}
+ */
+function agentMoveMessage($maildirPath, $subdir, $file, $folder)
+{
+    $src = $maildirPath . '/' . $subdir . '/' . $file;
+    if (!is_file($src) && $subdir === 'new') {
+        $base = agentBaseId($file);
+        foreach ((array)@scandir($maildirPath . '/cur') as $cand) {
+            if (is_string($cand) && strpos($cand, $base . ':') === 0) {
+                $subdir = 'cur';
+                $file = $cand;
+                $src = $maildirPath . '/cur/' . $cand;
+                break;
+            }
+        }
+    }
+    if (!is_file($src)) {
+        return ['ok' => false, 'error' => 'message no longer in INBOX'];
+    }
+    $targetDir = $maildirPath . '/' . $folder . '/' . $subdir;
+    if (!is_dir($targetDir) && !@mkdir($targetDir, 0700, true) && !is_dir($targetDir)) {
+        return ['ok' => false, 'error' => 'cannot create ' . $folder . '/' . $subdir];
+    }
+    error_clear_last();
+    if (!@rename($src, $targetDir . '/' . $file)) {
+        $last = error_get_last();
+        return ['ok' => false, 'error' => $last ? preg_replace('/^rename\([^)]*\):\s*/', 'rename: ', $last['message']) : 'rename failed'];
+    }
+    return ['ok' => true, 'error' => null];
+}
+
+/* Batched writes: one transaction per AGENT_COMMIT_EVERY messages / 2 s. */
+function agentTxBegin($db)
+{
+    @$db->exec('BEGIN');
+    return ['n' => 0, 't' => microtime(true)];
+}
+
+function agentTxTick($db, array &$tx)
+{
+    $tx['n']++;
+    if ($tx['n'] >= AGENT_COMMIT_EVERY || microtime(true) - $tx['t'] > 2) {
+        @$db->exec('COMMIT');
+        $tx = agentTxBegin($db);
+    }
+}
+
+function agentTxEnd($db)
+{
+    @$db->exec('COMMIT');
+}
+
+/**
+ * Daily housekeeping: score_log and dnsbl_cache rows past retention,
+ * scan_log beyond the last 1000 runs, and "checked" markers of files that are
+ * no longer in INBOX and older than the retention period. Runs only after a
+ * scan that could read both INBOX directories.
+ */
+function agentPrune($db, array $seen, $retentionDays)
+{
+    $now = time();
+    if ((int)agentMeta($db, 'last_prune_ts', 0) > $now - 86400) {
+        return null;
+    }
+    agentSetMeta($db, 'last_prune_ts', $now);
+    $cut = $now - 86400 * (int)$retentionDays;
+    $out = [];
+
+    $db->exec('BEGIN');
+    $db->exec('CREATE TEMP TABLE IF NOT EXISTS seen_ids (id TEXT PRIMARY KEY)');
+    $db->exec('DELETE FROM seen_ids');
+    $ins = $db->prepare('INSERT OR IGNORE INTO seen_ids (id) VALUES (:id)');
+    foreach (array_keys($seen) as $id) {
+        $ins->bindValue(':id', (string)$id);
+        $ins->execute();
+        $ins->reset();
+    }
+    $db->exec('DELETE FROM checked WHERE (checked_ts IS NULL OR checked_ts < ' . (int)$cut . ') AND message_id NOT IN (SELECT id FROM seen_ids)');
+    $out['checked'] = $db->changes();
+    $db->exec("DELETE FROM score_log WHERE datetime(scored_at) < datetime(" . (int)$cut . ", 'unixepoch')");
+    $out['score_log'] = $db->changes();
+    $db->exec("DELETE FROM dnsbl_cache WHERE datetime(checked_at) < datetime(" . (int)($now - 7 * 86400) . ", 'unixepoch')");
+    $out['dnsbl_cache'] = $db->changes();
+    $db->exec('DELETE FROM scan_log WHERE id <= (SELECT MAX(id) - 1000 FROM scan_log)');
+    $out['scan_log'] = $db->changes();
+    $db->exec('COMMIT');
+
+    return $out;
+}
+
+function agentMeta($db, $key, $default = null)
+{
+    $stmt = $db->prepare('SELECT value FROM agent_meta WHERE key = :k');
+    $stmt->bindValue(':k', $key);
+    $row = $stmt->execute()->fetchArray(SQLITE3_NUM);
+    return $row ? $row[0] : $default;
+}
+
+function agentSetMeta($db, $key, $value)
+{
+    $stmt = $db->prepare('INSERT OR REPLACE INTO agent_meta (key, value) VALUES (:k, :v)');
+    $stmt->bindValue(':k', $key);
+    $stmt->bindValue(':v', (string)$value);
+    $stmt->execute();
+}
+
 /**
  * Moves INBOX messages delivered in the last --days whose sender matches a
- * blacklist rule worth at least --spam-threshold points to .SPAM. Whitelisted
- * senders are left alone, like in the scan.
+ * blacklist rule worth at least the spam threshold to .SPAM (any blacklist
+ * hit when scoring is off, like RetroactiveSpamService). Whitelisted senders
+ * are left alone, like in the scan.
  */
 function applyBlacklist($maildirPath, $dbPath, $options = [])
 {
-    $spamThreshold = isset($options['spam-threshold']) ? (int)$options['spam-threshold'] : 10;
     $since = time() - 86400 * max(1, (int)($options['days'] ?? 30));
     $limit = max(1, (int)($options['limit'] ?? 5000));
 
     $db = getDb($dbPath);
-    $whitelist = loadListRules($db, 'SELECT host, pattern_type FROM whitelist', 'host');
-    $emailWhitelist = loadListRules($db, 'SELECT whitelistemail, pattern_type FROM email_whitelist', 'whitelistemail');
-    $blacklist = loadListRules($db, 'SELECT host, pattern_type, score FROM blacklist', 'host');
-    $emailBlacklist = loadListRules($db, 'SELECT blacklistemail, pattern_type, score FROM email_blacklist', 'blacklistemail');
+    $cfg = scanConfig(loadSettings($db), $options);
+    $spamThreshold = $cfg['scoring'] ? $cfg['spam_threshold'] : PHP_INT_MIN;
+    $lists = loadAllLists($db);
 
-    $stats = ['success' => true, 'examined' => 0, 'moved_to_spam' => 0, 'truncated' => false];
+    $stats = ['success' => true, 'examined' => 0, 'moved_to_spam' => 0, 'move_failed' => 0, 'truncated' => false, 'errors' => []];
     ensureFolder($maildirPath . '/.SPAM');
+    $tx = agentTxBegin($db);
 
     foreach (['new', 'cur'] as $subdir) {
         $dir = $maildirPath . '/' . $subdir;
         if (!is_dir($dir)) continue;
 
-        foreach (scandir($dir) as $file) {
-            if ($file === '.' || $file === '..') continue;
+        foreach ((array)@scandir($dir) as $file) {
+            if (!is_string($file) || $file === '.' || $file === '..' || $file[0] === '.') continue;
             $filePath = $dir . '/' . $file;
             if (!is_file($filePath) || filemtime($filePath) < $since) continue;
             if ($stats['examined']++ >= $limit) {
@@ -560,44 +975,57 @@ function applyBlacklist($maildirPath, $dbPath, $options = [])
                 break 2;
             }
 
-            $parsed = parseHeaders(readHeaderBlock($filePath));
+            $headers = readHeaderBlock($filePath);
+            if ($headers === false) continue;
+            $parsed = parseHeaders($headers);
             $senderEmail = $parsed['sender_email'];
             $senderHost = $parsed['sender_host'];
             if (!$senderEmail) continue;
-            if (($senderHost && matchList($whitelist, $senderHost)) || matchList($emailWhitelist, $senderEmail)) continue;
+            if (($senderHost && matchList($lists['whitelist'], $senderHost)) || matchList($lists['email_whitelist'], $senderEmail)) continue;
 
-            $hit = $senderHost ? matchListReturning($blacklist, $senderHost) : null;
-            $rule = $hit ? 'blacklist:' . $hit['value'] : null;
+            $hit = $senderHost ? matchListReturning($lists['blacklist'], $senderHost) : null;
+            $rule = $hit ? 'blacklist:' . $hit['pattern'] . ' (' . $hit['pattern_type'] . ')' : null;
             if (!$hit || (int)$hit['score'] < $spamThreshold) {
-                $hit = matchListReturning($emailBlacklist, $senderEmail);
-                $rule = $hit ? 'email_blacklist:' . $hit['value'] : null;
+                $hit = matchListReturning($lists['email_blacklist'], $senderEmail);
+                $rule = $hit ? 'email_blacklist:' . $hit['pattern'] . ' (' . $hit['pattern_type'] . ')' : null;
             }
             if (!$hit || (int)$hit['score'] < $spamThreshold) continue;
 
-            if (@rename($filePath, $maildirPath . '/.SPAM/' . $subdir . '/' . $file)) {
-                $baseId = preg_replace('/:2,[A-Z]*$/', '', $file);
-                $stats['moved_to_spam']++;
-                logDecision($db, $senderEmail, $parsed['subject'], (int)$hit['score'], 'spam', [['rule' => 'retroactive ' . $rule, 'score' => (int)$hit['score']]], $baseId);
-                markChecked($db, $baseId);
+            $move = agentMoveMessage($maildirPath, $subdir, $file, '.SPAM');
+            if (!$move['ok']) {
+                $stats['move_failed']++;
+                $stats['errors'][] = $file . ': ' . $move['error'];
+                continue;
             }
+            $baseId = agentBaseId($file);
+            $stats['moved_to_spam']++;
+            logDecision($db, $senderEmail, $parsed['subject'], (int)$hit['score'], 'spam', [['rule' => 'retroactive ' . $rule, 'score' => (int)$hit['score']]], $baseId);
+            markChecked($db, $baseId);
+            agentTxTick($db, $tx);
         }
     }
+    agentTxEnd($db);
+    $stats['errors'] = array_slice($stats['errors'], 0, 50);
 
     return $stats;
 }
 
 /* ---------------------------------------------------------------------- */
-/* Pattern matching                                                       */
+/* Pattern matching (mirror AntispamBundle\Services\PatternMatcher)       */
 /* ---------------------------------------------------------------------- */
 
+/**
+ * The pattern is kept as stored: regex rules must not be lower-cased
+ * (\D, \S, \W would change meaning); matching is case-insensitive anyway.
+ */
 function loadListRules($db, $query, $valueCol)
 {
     $rules = [];
     $res = $db->query($query);
     while ($row = $res->fetchArray(SQLITE3_ASSOC)) {
         $rules[] = [
-            'value' => strtolower($row[$valueCol]),
-            'pattern_type' => $row['pattern_type'] ?? 'exact',
+            'pattern' => (string)$row[$valueCol],
+            'pattern_type' => ($row['pattern_type'] ?? '') !== '' ? $row['pattern_type'] : 'exact',
             'score' => isset($row['score']) ? (int)$row['score'] : 0,
         ];
     }
@@ -611,9 +1039,8 @@ function matchList(array $rules, $value)
 
 function matchListReturning(array $rules, $value)
 {
-    $value = strtolower((string)$value);
     foreach ($rules as $r) {
-        if (patternMatch($r['value'], $value, $r['pattern_type'])) {
+        if (patternMatch($r['pattern'], $value, $r['pattern_type'])) {
             return $r;
         }
     }
@@ -622,17 +1049,21 @@ function matchListReturning(array $rules, $value)
 
 function patternMatch($pattern, $value, $type)
 {
+    if ($pattern === null || $pattern === '' || $value === null || $value === '') {
+        return false;
+    }
+    $value = strtolower((string)$value);
+    $pattern = (string)$pattern;
     switch ($type) {
         case 'regex':
             $regex = '~' . str_replace('~', '\~', $pattern) . '~i';
-            $ok = @preg_match($regex, $value);
-            return $ok === 1;
+            return @preg_match($regex, $value) === 1;
         case 'wildcard':
-            $regex = '~^' . globToRegex($pattern) . '$~i';
+            $regex = '~^' . globToRegex(strtolower($pattern)) . '$~i';
             return @preg_match($regex, $value) === 1;
         case 'exact':
         default:
-            return $pattern === $value;
+            return strtolower($pattern) === $value;
     }
 }
 
@@ -660,96 +1091,191 @@ function globToRegex($glob)
 /* Header analysis                                                        */
 /* ---------------------------------------------------------------------- */
 
+/**
+ * Header block of a message file, unfolded (RFC 5322 continuation lines
+ * joined), or false when the file can no longer be opened.
+ */
 function readHeaderBlock($filePath)
 {
     $handle = @fopen($filePath, 'r');
-    if (!$handle) return '';
+    if (!$handle) return false;
     $block = '';
     while (($line = fgets($handle)) !== false) {
-        if (trim($line) === '') break;
+        if (trim($line) === '' || strlen($block) > 262144) break;
         $block .= $line;
     }
     fclose($handle);
-    return $block;
+    return unfoldHeaders($block);
 }
 
+/** Same as readHeaderBlock() for a message held in memory. */
+function readHeaderBlockFromString($raw)
+{
+    $parts = preg_split('/\r?\n[ \t]*\r?\n/', (string)$raw, 2);
+    return unfoldHeaders(substr($parts[0], 0, 262144) . "\n");
+}
+
+function unfoldHeaders($block)
+{
+    return preg_replace('/\r?\n[ \t]+/', ' ', (string)$block);
+}
+
+/**
+ * Sender = the From: address, like the web pipeline (Sender: is ignored, so
+ * a Sender: of a whitelisted domain cannot whitelist the message).
+ */
 function parseHeaders($block)
 {
+    $block = unfoldHeaders($block);
     $result = ['sender_email' => '', 'sender_host' => '', 'subject' => ''];
-    if (preg_match('/^From:\s*.*?([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/mi', $block, $m)) {
-        $result['sender_email'] = strtolower($m[1]);
-    } elseif (preg_match('/^Sender:\s*.*?([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/mi', $block, $m)) {
-        $result['sender_email'] = strtolower($m[1]);
-    }
+    $result['sender_email'] = extractEmail(grabHeader($block, 'From'));
     if ($result['sender_email']) {
-        $parts = explode('@', $result['sender_email']);
-        $result['sender_host'] = $parts[1] ?? '';
+        $result['sender_host'] = domainOf($result['sender_email']);
     }
-    if (preg_match('/^Subject:\s*(.+)$/mi', $block, $m)) {
-        $result['subject'] = trim($m[1]);
-    }
+    $result['subject'] = decodeHeaderValue(grabHeader($block, 'Subject'));
     return $result;
 }
 
-function analyzeHeaders($block)
+/** Header scores; keep in sync with HeaderAnalyzer (AgentParityTest). */
+function agentHeaderDefaults()
 {
+    return [
+        'spf_fail' => 6,
+        'dkim_fail' => 4,
+        'dkim_none' => 1,
+        'dmarc_fail' => 6,
+        'dmarc_none' => 1,
+        'from_reply_mismatch' => 3,
+        'suspicious_subject' => 3,
+        'missing_message_id' => 2,
+        'many_received_hops' => 2,
+    ];
+}
+
+/**
+ * Header scores from the synced settings (header_<rule>_score) and the caps,
+ * the same as HeaderAnalyzer on the web side: the soft signals together stay
+ * below the quarantine threshold (header_soft_cap) and the whole header score
+ * below the spam threshold (header_score_cap) - headers alone can quarantine
+ * a message (hard SPF/DKIM/DMARC failures) but never send it to SPAM.
+ */
+function headerConfigFromSettings(array $settings, $quarantineThreshold = AGENT_DEFAULT_QUARANTINE_THRESHOLD, $spamThreshold = AGENT_DEFAULT_SPAM_THRESHOLD)
+{
+    $cfg = [];
+    foreach (agentHeaderDefaults() as $k => $default) {
+        $cfg[$k] = settingInt($settings, 'header_' . $k . '_score', $default);
+    }
+    $cfg['soft_cap'] = settingInt($settings, 'header_soft_cap', max(0, (int)$quarantineThreshold - 1));
+    $cfg['cap'] = settingInt($settings, 'header_score_cap', max(0, (int)$spamThreshold - 1));
+    return $cfg;
+}
+
+/**
+ * Only the topmost Authentication-Results / Received-SPF header counts: it is
+ * the one added by the receiving server; lower ones can be forged by the
+ * sender or be stale results of a forwarding hop.
+ */
+function analyzeHeaders($block, $config = null)
+{
+    $config = $config ?: headerConfigFromSettings([]);
     $score = 0;
     $reasons = [];
-    $block = (string)$block;
+    $block = unfoldHeaders($block);
+    $add = function ($rule) use (&$score, &$reasons, $config) {
+        $points = (int)$config[$rule];
+        if ($points > 0) {
+            $score += $points;
+            $reasons[] = ['rule' => $rule, 'score' => $points];
+        }
+    };
 
     $auth = strtolower(grabHeader($block, 'Authentication-Results'));
     $spf = strtolower(grabHeader($block, 'Received-SPF'));
 
-    if (preg_match('/spf=(fail|softfail)/', $auth) || strpos($spf, 'fail') === 0) {
-        $score += 6; $reasons[] = ['rule' => 'spf_fail', 'score' => 6];
+    if (preg_match('/\bspf=(fail|softfail)\b/', $auth) || preg_match('/^(fail|softfail)\b/', ltrim($spf))) {
+        $add('spf_fail');
     }
-    if (preg_match('/dkim=(fail|none)/', $auth)) {
-        $score += 4; $reasons[] = ['rule' => 'dkim_fail', 'score' => 4];
+    // One good signature is enough: lists often break a second one.
+    if (preg_match('/\bdkim=fail\b/', $auth) && !preg_match('/\bdkim=pass\b/', $auth)) {
+        $add('dkim_fail');
+    } elseif (preg_match('/\bdkim=none\b/', $auth) && !preg_match('/\bdkim=pass\b/', $auth)) {
+        $add('dkim_none');
     }
-    if (preg_match('/dmarc=(fail|none)/', $auth)) {
-        $score += 6; $reasons[] = ['rule' => 'dmarc_fail', 'score' => 6];
+    if (preg_match('/\bdmarc=fail\b/', $auth)) {
+        $add('dmarc_fail');
+    } elseif (preg_match('/\bdmarc=none\b/', $auth)) {
+        $add('dmarc_none');
     }
 
     $from = extractEmail(grabHeader($block, 'From'));
     $reply = extractEmail(grabHeader($block, 'Reply-To'));
     if ($from && $reply && domainOf($from) !== domainOf($reply)) {
-        $score += 3; $reasons[] = ['rule' => 'from_reply_mismatch', 'score' => 3];
+        $add('from_reply_mismatch');
     }
 
-    $subject = grabHeader($block, 'Subject');
-    if ($subject) {
-        if (strlen($subject) > 8 && mb_strtoupper($subject, 'UTF-8') === $subject) {
-            $score += 3; $reasons[] = ['rule' => 'all_caps_subject', 'score' => 3];
-        } elseif (preg_match('/\${2,}|!{3,}|\?{3,}/', $subject)) {
-            $score += 3; $reasons[] = ['rule' => 'suspicious_subject', 'score' => 3];
-        } elseif (preg_match('/\b(viagra|cialis|lottery|winner|bitcoin|crypto airdrop|nigerian prince)\b/i', $subject)) {
-            $score += 3; $reasons[] = ['rule' => 'suspicious_subject', 'score' => 3];
-        }
+    $subject = decodeHeaderValue(grabHeader($block, 'Subject'));
+    if ($subject !== '' && isSuspiciousSubject($subject)) {
+        $add('suspicious_subject');
     }
 
     if (!grabHeader($block, 'Message-ID')) {
-        $score += 2; $reasons[] = ['rule' => 'missing_message_id', 'score' => 2];
+        $add('missing_message_id');
     }
 
-    $receivedCount = preg_match_all('/^Received:/mi', $block);
-    if ($receivedCount > 10) {
-        $score += 2; $reasons[] = ['rule' => 'many_received_hops', 'score' => 2];
+    if (preg_match_all('/^Received:/mi', $block) > 10) {
+        $add('many_received_hops');
+    }
+
+    $cap = isset($config['cap']) ? (int)$config['cap'] : -1;
+    if ($cap >= 0 && $score > 0) {
+        $hard = 0;
+        $soft = 0;
+        foreach ($reasons as $r) {
+            if (in_array($r['rule'], ['spf_fail', 'dkim_fail', 'dmarc_fail'], true)) {
+                $hard += $r['score'];
+            } else {
+                $soft += $r['score'];
+            }
+        }
+        $softCap = isset($config['soft_cap']) ? max(0, (int)$config['soft_cap']) : $soft;
+        $capped = min($hard + min($soft, $softCap), $cap);
+        if ($capped < $score) {
+            $reasons[] = ['rule' => 'header_cap', 'score' => $capped - $score];
+            $score = $capped;
+        }
     }
 
     return ['score' => $score, 'reasons' => $reasons];
 }
 
-function grabHeader($block, $name)
+function isSuspiciousSubject($subject)
 {
-    if (preg_match('/^' . preg_quote($name, '/') . ':\s*(.+)$/mi', $block, $m)) {
-        return trim($m[1]);
-    }
-    return '';
+    $subject = (string)$subject;
+    if (strlen($subject) > 8 && mb_strtoupper($subject, 'UTF-8') === $subject) return true;
+    if (preg_match('/\${2,}|!{3,}|\?{3,}/', $subject)) return true;
+    if (preg_match('/\b(viagra|cialis|lottery|winner|bitcoin|crypto airdrop|nigerian prince)\b/i', $subject)) return true;
+    return false;
 }
 
+/** First (= topmost) value of a header, unfolded. */
+function grabHeader($block, $name)
+{
+    return grabHeaderFolded($block, $name);
+}
+
+/**
+ * The addr-spec of an address header: the last <...> group outside quoted
+ * strings and comments, so `"ceo@firma.pl" <attacker@evil.com>` yields
+ * attacker@evil.com. Without angle brackets the first address-like token.
+ */
 function extractEmail($line)
 {
-    if (preg_match('/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/', (string)$line, $m)) {
+    $line = (string)$line;
+    $bare = preg_replace('/"(?:[^"\\\\]|\\\\.)*"|\((?:[^()\\\\]|\\\\.)*\)/', ' ', $line);
+    if (preg_match_all('/<\s*([^<>\s]+@[^<>\s]+?)\s*>/', $bare, $m)) {
+        return strtolower(end($m[1]));
+    }
+    if (preg_match('/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/', $bare, $m)) {
         return strtolower($m[0]);
     }
     return '';
@@ -757,32 +1283,85 @@ function extractEmail($line)
 
 function domainOf($email)
 {
-    $p = explode('@', strtolower((string)$email));
-    return $p[1] ?? '';
+    $email = strtolower((string)$email);
+    $p = strrpos($email, '@');
+    return $p === false ? '' : substr($email, $p + 1);
 }
 
 /* ---------------------------------------------------------------------- */
 /* DNSBL                                                                  */
 /* ---------------------------------------------------------------------- */
 
+/**
+ * First public IPv4 address in the Received headers, topmost first, like
+ * RawMessageParser::getConnectingIp() (private / reserved hops are skipped).
+ */
 function extractConnectingIp($headerBlock)
 {
-    if (preg_match_all('/^Received:.+$/mi', $headerBlock, $m)) {
-        foreach ($m[0] as $line) {
-            if (preg_match('/\[(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\]/', $line, $ipm)) {
-                return $ipm[1];
+    // Same rule as RawMessageParser::connectingIpFromReceived(): top-down, the
+    // first public IPv4 in the "from" clause (bracketed form preferred); the
+    // "by" part is the receiving server and is ignored.
+    if (preg_match_all('/^Received:(.*)$/mi', unfoldHeaders($headerBlock), $m)) {
+        foreach (array_slice($m[1], 0, 30) as $line) {
+            $parts = preg_split('/\sby\s/i', ' ' . $line, 2);
+            $from = $parts[0];
+            $candidates = [];
+            if (preg_match_all('/\[(?:IPv6:[0-9a-f:]*:)?(\d{1,3}(?:\.\d{1,3}){3})\]/i', $from, $ipm)) {
+                $candidates = $ipm[1];
             }
-        }
-        foreach ($m[0] as $line) {
-            if (preg_match('/\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/', $line, $ipm)) {
-                return $ipm[1];
+            if (preg_match_all('/(?<![\d.])(\d{1,3}(?:\.\d{1,3}){3})(?![\d.])/', $from, $ipm)) {
+                $candidates = array_merge($candidates, $ipm[1]);
+            }
+            foreach ($candidates as $ip) {
+                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                    return $ip;
+                }
             }
         }
     }
     return null;
 }
 
-function dnsblLookup($db, $ip, $provider)
+/**
+ * Classifies DNSBL answers: "listed" only for 127.0.0.0/8 minus 127.0.0.1
+ * (query refused) and 127.255.255.0/24 (Spamhaus error codes, e.g. for
+ * public resolvers); no answer is "clean"; anything else (NXDOMAIN hijack by
+ * an ISP resolver, error codes only) is "error".
+ *
+ * @param string[] $ips
+ * @return string listed | clean | error
+ */
+function dnsblClassify(array $ips)
+{
+    if (!$ips) {
+        return 'clean';
+    }
+    foreach ($ips as $ip) {
+        if (strpos($ip, '127.') === 0 && $ip !== '127.0.0.1' && strpos($ip, '127.255.255.') !== 0) {
+            return 'listed';
+        }
+    }
+    return 'error';
+}
+
+/** A records of $fqdn, [] for NXDOMAIN / no data, null on resolver error. */
+function dnsResolveA($fqdn)
+{
+    if (function_exists('dns_get_record')) {
+        $records = @dns_get_record($fqdn, DNS_A);
+        if ($records === false) {
+            return null;
+        }
+        return array_values(array_filter(array_column((array)$records, 'ip')));
+    }
+    $ip = @gethostbyname($fqdn);
+    return ($ip && $ip !== $fqdn) ? [$ip] : [];
+}
+
+/**
+ * @param callable|null $resolver test seam: fn(string $fqdn): ?string[]
+ */
+function dnsblLookup($db, $ip, $provider, $resolver = null)
 {
     if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) return false;
     $zone = $provider['zone'];
@@ -796,17 +1375,13 @@ function dnsblLookup($db, $ip, $provider)
         return (bool)$row['listed'];
     }
 
-    $reverse = implode('.', array_reverse(explode('.', $ip)));
-    $query = $reverse . '.' . $zone;
-
-    $listed = false;
-    if (function_exists('dns_get_record')) {
-        $records = @dns_get_record($query, DNS_A);
-        $listed = is_array($records) && count($records) > 0;
-    } else {
-        $resolved = @gethostbyname($query);
-        $listed = $resolved && $resolved !== $query && filter_var($resolved, FILTER_VALIDATE_IP);
+    $query = implode('.', array_reverse(explode('.', $ip))) . '.' . $zone;
+    $ips = $resolver ? $resolver($query) : dnsResolveA($query);
+    $class = $ips === null ? 'error' : dnsblClassify($ips);
+    if ($class === 'error') {
+        return false; // not cached: a resolver problem must not stick for a TTL
     }
+    $listed = $class === 'listed';
 
     $upsert = $db->prepare('INSERT OR REPLACE INTO dnsbl_cache (ip, zone, listed, checked_at) VALUES (:ip, :zone, :listed, :t)');
     $upsert->bindValue(':ip', $ip);
@@ -846,6 +1421,9 @@ function scanAttachments(array $attachments, array $settings, $clamavEnabled, $v
     }
 
     $clamavMaxSize = (int)($settings['clamav_max_size'] ?? 26214400);
+    if (!isset($GLOBALS['agentClamavDown'])) {
+        $GLOBALS['agentClamavDown'] = false;
+    }
 
     foreach ($attachments as $att) {
         $data = $att['data'];
@@ -853,12 +1431,17 @@ function scanAttachments(array $attachments, array $settings, $clamavEnabled, $v
             continue;
         }
 
-        if ($clamavEnabled && ($clamavMaxSize <= 0 || strlen($data) <= $clamavMaxSize)) {
+        if ($clamavEnabled && !$GLOBALS['agentClamavDown'] && ($clamavMaxSize <= 0 || strlen($data) <= $clamavMaxSize)) {
             $res = clamavScan(
                 $data,
                 $settings['clamav_dsn'] ?? 'tcp://127.0.0.1:3310',
                 (int)($settings['clamav_timeout'] ?? 30)
             );
+            // clamd unreachable: skip it for the rest of the run instead of
+            // waiting the full timeout again for every attachment.
+            if (!empty($res['error']) && strpos($res['error'], 'connect failed') === 0) {
+                $GLOBALS['agentClamavDown'] = true;
+            }
             if (!empty($res['infected'])) {
                 $score = (int)($settings['clamav_score'] ?? 15);
                 return ['score' => $score, 'reason' => [
@@ -1015,7 +1598,8 @@ function isBinaryContentType($ct)
  */
 function grabHeaderFolded($block, $name)
 {
-    if (preg_match('/^' . preg_quote($name, '/') . ':\s*(.*(?:\r?\n[ \t].*)*)/mi', $block, $m)) {
+    // [ \t]* (not \s*): an empty header must not swallow the next line.
+    if (preg_match('/^' . preg_quote($name, '/') . ':[ \t]*(.*(?:\r?\n[ \t].*)*)/mi', (string)$block, $m)) {
         return trim(preg_replace('/\r?\n[ \t]+/', ' ', $m[1]));
     }
     return '';
@@ -1277,10 +1861,12 @@ function domDistance($a, $b)
 
 function parseFromHeader($value)
 {
-    $value = trim((string)$value);
+    $value = trim(unfoldHeaders($value));
     $email = extractEmail($value);
     $name = '';
-    if (($p = strpos($value, '<')) !== false) {
+    // Display name = text before the last <...> outside quoted strings.
+    $masked = preg_replace_callback('/"(?:[^"\\\\]|\\\\.)*"/', function ($m) { return str_repeat('x', strlen($m[0])); }, $value);
+    if (($p = strrpos($masked, '<')) !== false) {
         $name = trim(substr($value, 0, $p));
     }
     if (strpos($name, '=?') !== false && function_exists('mb_decode_mimeheader')) {
@@ -1526,7 +2112,7 @@ function domainInLinkText($text)
  * URI block list lookup, cached in dnsbl_cache (ip column holds the domain)
  * for an hour, plus an in-run cache.
  */
-function dblListed($db, $domain, $zone, array &$runCache)
+function dblListed($db, $domain, $zone, array &$runCache, $resolver = null)
 {
     $key = $domain . '|' . $zone;
     if (array_key_exists($key, $runCache)) {
@@ -1541,22 +2127,12 @@ function dblListed($db, $domain, $zone, array &$runCache)
     }
 
     $fqdn = $domain . '.' . $zone;
-    $ips = [];
-    if (function_exists('dns_get_record')) {
-        $records = @dns_get_record($fqdn, DNS_A);
-        $ips = is_array($records) ? array_filter(array_column($records, 'ip')) : [];
-    } else {
-        $ip = @gethostbyname($fqdn);
-        $ips = ($ip && $ip !== $fqdn) ? [$ip] : [];
+    $ips = $resolver ? $resolver($fqdn) : dnsResolveA($fqdn);
+    $class = $ips === null ? 'error' : dnsblClassify($ips);
+    if ($class === 'error') {
+        return $runCache[$key] = false; // resolver problem / error code: not cached in the DB
     }
-    $listed = false;
-    foreach ($ips as $ip) {
-        // 127.0.0.1 = query refused, 127.255.255.x = error code: not "listed"
-        if (strpos($ip, '127.') === 0 && $ip !== '127.0.0.1' && strpos($ip, '127.255.255.') !== 0) {
-            $listed = true;
-            break;
-        }
-    }
+    $listed = $class === 'listed';
 
     $upsert = $db->prepare('INSERT OR REPLACE INTO dnsbl_cache (ip, zone, listed, checked_at) VALUES (:ip, :zone, :listed, :t)');
     $upsert->bindValue(':ip', $domain);
@@ -1882,7 +2458,8 @@ function decodeHeaderValue($value)
 {
     $value = trim((string)$value);
     if (strpos($value, '=?') !== false && function_exists('mb_decode_mimeheader')) {
-        $value = mb_decode_mimeheader($value);
+        // RFC 2047: whitespace between adjacent encoded words is not content.
+        $value = mb_decode_mimeheader(preg_replace('/(\?=)\s+(?==\?)/', '$1', $value));
     }
     return $value;
 }
@@ -1895,45 +2472,58 @@ function quarantineList($maildirPath, $dbPath, array $options)
     $scoreStmt = $db->prepare('SELECT score, reasons FROM score_log WHERE file = :f ORDER BY id DESC LIMIT 1');
 
     $items = [];
+    $errors = [];
     foreach (['new', 'cur'] as $subdir) {
         $dir = $maildirPath . '/.QUARANTINE/' . $subdir;
         if (!is_dir($dir)) {
             continue;
         }
-        foreach (scandir($dir) as $file) {
+        foreach ((array)@scandir($dir) as $file) {
             $path = $dir . '/' . $file;
-            if ($file === '.' || $file === '..' || !is_file($path)) {
+            if (!is_string($file) || $file === '.' || $file === '..' || !is_file($path)) {
                 continue;
             }
-            $headers = readHeaderBlock($path);
-            $dateHeader = grabHeaderFolded($headers, 'Date');
-            $ts = $dateHeader !== '' ? strtotime($dateHeader) : false;
-            $mtime = (int)filemtime($path);
-            if ($since > 0 && $mtime < $since) {
-                continue; // delivered before the last digest
+            // One unreadable or odd message must not hide the whole list.
+            try {
+                $mtime = (int)@filemtime($path);
+                if ($since > 0 && $mtime < $since) {
+                    continue; // delivered before the last digest
+                }
+                $headers = readHeaderBlock($path);
+                if ($headers === false) {
+                    continue;
+                }
+                $dateHeader = grabHeader($headers, 'Date');
+                $ts = $dateHeader !== '' ? strtotime($dateHeader) : false;
+                $id = agentBaseId($file);
+                $from = parseFromHeader(grabHeader($headers, 'From'));
+
+                $scoreStmt->bindValue(':f', $id);
+                $row = $scoreStmt->execute()->fetchArray(SQLITE3_ASSOC);
+
+                $items[] = [
+                    'id' => $id,
+                    'from' => agentUtf8($from['email']),
+                    'from_name' => agentUtf8($from['name']),
+                    'subject' => mb_substr(agentUtf8(decodeHeaderValue(grabHeader($headers, 'Subject'))), 0, 200, 'UTF-8'),
+                    'date' => $ts ? date('c', $ts) : date('c', $mtime),
+                    'received_at' => date('c', $mtime),
+                    'size' => (int)@filesize($path),
+                    'score' => $row ? (int)$row['score'] : null,
+                    'reasons' => $row ? (json_decode($row['reasons'], true) ?: []) : [],
+                ];
+            } catch (\Throwable $e) {
+                $errors[] = $file . ': ' . $e->getMessage();
             }
-            $id = preg_replace('/:2,[A-Za-z]*$/', '', $file);
-            $from = parseFromHeader(grabHeaderFolded($headers, 'From'));
-
-            $scoreStmt->bindValue(':f', $id);
-            $row = $scoreStmt->execute()->fetchArray(SQLITE3_ASSOC);
-
-            $items[] = [
-                'id' => $id,
-                'from' => $from['email'],
-                'from_name' => $from['name'],
-                'subject' => mb_substr(decodeHeaderValue(grabHeaderFolded($headers, 'Subject')), 0, 200, 'UTF-8'),
-                'date' => $ts ? date('c', $ts) : date('c', $mtime),
-                'received_at' => date('c', $mtime),
-                'size' => (int)filesize($path),
-                'score' => $row ? (int)$row['score'] : null,
-                'reasons' => $row ? (json_decode($row['reasons'], true) ?: []) : [],
-            ];
         }
     }
     usort($items, function ($a, $b) { return strcmp($b['received_at'], $a['received_at']); });
 
-    return ['success' => true, 'total' => count($items), 'items' => array_slice($items, 0, $limit)];
+    $out = ['success' => true, 'total' => count($items), 'items' => array_slice($items, 0, $limit)];
+    if ($errors) {
+        $out['errors'] = array_slice($errors, 0, 20);
+    }
+    return $out;
 }
 
 function quarantineRelease($maildirPath, $dbPath, array $options)
@@ -1999,8 +2589,9 @@ function quarantineDelete($maildirPath, $dbPath, array $options)
 
 function markChecked($db, $messageId)
 {
-    $stmt = $db->prepare('INSERT OR IGNORE INTO checked (message_id) VALUES (:id)');
+    $stmt = $db->prepare('INSERT OR IGNORE INTO checked (message_id, checked_ts) VALUES (:id, :ts)');
     $stmt->bindValue(':id', $messageId);
+    $stmt->bindValue(':ts', time());
     $stmt->execute();
 }
 
@@ -2008,20 +2599,24 @@ function logDecision($db, $sender, $subject, $score, $decision, $reasons, $file 
 {
     $stmt = $db->prepare('INSERT INTO score_log (sender, subject, score, decision, reasons, scored_at, file) VALUES (:s, :sub, :sc, :d, :r, :t, :f)');
     $stmt->bindValue(':f', $file);
-    $stmt->bindValue(':s', (string)$sender);
-    $stmt->bindValue(':sub', substr((string)$subject, 0, 500));
+    $stmt->bindValue(':s', mb_substr(agentUtf8($sender), 0, 255, 'UTF-8'));
+    $stmt->bindValue(':sub', mb_substr(agentUtf8($subject), 0, 500, 'UTF-8'));
     $stmt->bindValue(':sc', (int)$score);
     $stmt->bindValue(':d', $decision);
-    $stmt->bindValue(':r', json_encode($reasons));
+    $stmt->bindValue(':r', agentJson($reasons));
     $stmt->bindValue(':t', date('c'));
     $stmt->execute();
 }
 
+/** Creates a Maildir++ subfolder (new/cur/tmp + the maildirfolder marker). */
 function ensureFolder($path)
 {
     foreach (['new', 'cur', 'tmp'] as $sub) {
         $dir = $path . '/' . $sub;
-        if (!is_dir($dir)) { @mkdir($dir, 0755, true); }
+        if (!is_dir($dir)) { @mkdir($dir, 0700, true); }
+    }
+    if (is_dir($path) && !file_exists($path . '/maildirfolder')) {
+        @touch($path . '/maildirfolder');
     }
 }
 
@@ -2148,7 +2743,14 @@ function certDownload($url, &$error)
  * attempts are retried after an hour). Never throws: on any problem the
  * previous list stays in place.
  */
-function certRefreshIfStale($db, $force = false)
+/** cert_url from the synced settings (HTTPS only), like CertHoleService::getUrl(). */
+function certUrlFromSettings(array $settings)
+{
+    $url = trim((string)($settings['cert_url'] ?? ''));
+    return stripos($url, 'https://') === 0 ? $url : CERT_DEFAULT_URL;
+}
+
+function certRefreshIfStale($db, $force = false, $url = CERT_DEFAULT_URL)
 {
     $now = time();
     $lastOk = (int)certMeta($db, 'last_sync_ts', 0);
@@ -2160,7 +2762,7 @@ function certRefreshIfStale($db, $force = false)
     certSetMeta($db, 'last_attempt_ts', $now);
 
     $error = '';
-    $body = certDownload(CERT_DEFAULT_URL, $error);
+    $body = certDownload($url, $error);
     if ($body === null) {
         certSetMeta($db, 'last_error', $error);
         return false;
@@ -2230,14 +2832,23 @@ function certLinkHosts($html, $text)
 function getDb($dbPath)
 {
     $isNew = !file_exists($dbPath);
-    $db = new \SQLite3($dbPath);
-    $db->busyTimeout(5000);
+    $umask = umask(0077); // the database holds API keys: owner-only from the start
+    try {
+        $db = new \SQLite3($dbPath);
+    } finally {
+        umask($umask);
+    }
+    if (is_file($dbPath) && (fileperms($dbPath) & 0077)) {
+        @chmod($dbPath, 0600); // databases created by agents before 3.0 were 0644
+    }
+    $db->busyTimeout(10000);
 
     $db->exec('CREATE TABLE IF NOT EXISTS whitelist (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT, host TEXT, pattern_type TEXT DEFAULT "exact")');
     $db->exec('CREATE TABLE IF NOT EXISTS email_whitelist (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT, whitelistemail TEXT, pattern_type TEXT DEFAULT "exact")');
     $db->exec('CREATE TABLE IF NOT EXISTS blacklist (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT, host TEXT, pattern_type TEXT DEFAULT "exact", score INTEGER DEFAULT 10)');
     $db->exec('CREATE TABLE IF NOT EXISTS email_blacklist (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT, blacklistemail TEXT, pattern_type TEXT DEFAULT "exact", score INTEGER DEFAULT 10)');
-    $db->exec('CREATE TABLE IF NOT EXISTS checked (id INTEGER PRIMARY KEY AUTOINCREMENT, message_id TEXT UNIQUE)');
+    $db->exec('CREATE TABLE IF NOT EXISTS checked (id INTEGER PRIMARY KEY AUTOINCREMENT, message_id TEXT UNIQUE, checked_ts INTEGER)');
+    $db->exec('CREATE TABLE IF NOT EXISTS agent_meta (key TEXT PRIMARY KEY, value TEXT)');
     $db->exec('CREATE TABLE IF NOT EXISTS dnsbl_providers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, zone TEXT UNIQUE, score INTEGER DEFAULT 5, enabled INTEGER DEFAULT 1, cache_ttl INTEGER DEFAULT 3600)');
     $db->exec('CREATE TABLE IF NOT EXISTS dnsbl_cache (id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT, zone TEXT, listed INTEGER, checked_at TEXT, UNIQUE(ip, zone))');
     $db->exec('CREATE TABLE IF NOT EXISTS score_log (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, subject TEXT, score INTEGER, decision TEXT, reasons TEXT, scored_at TEXT, file TEXT)');
@@ -2265,6 +2876,13 @@ function getDb($dbPath)
         while ($row = $res->fetchArray(SQLITE3_ASSOC)) { $cols[] = $row['name']; }
         if (!in_array('file', $cols, true)) {
             @$db->exec('ALTER TABLE score_log ADD COLUMN file TEXT');
+        }
+        // checked.checked_ts (agent 3.0) drives pruning; NULL for older rows.
+        $cols = [];
+        $res = $db->query('PRAGMA table_info(checked)');
+        while ($row = $res->fetchArray(SQLITE3_ASSOC)) { $cols[] = $row['name']; }
+        if (!in_array('checked_ts', $cols, true)) {
+            @$db->exec('ALTER TABLE checked ADD COLUMN checked_ts INTEGER');
         }
     }
     $db->exec('CREATE INDEX IF NOT EXISTS idx_score_log_file ON score_log (file)');

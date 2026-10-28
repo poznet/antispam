@@ -54,7 +54,22 @@ Direct access to Maildir on hosting server via SSH.
 - **SSH User** - SSH username
 - **SSH Key Path** - private key file in the keys directory on the Symfony server: a file name (e.g. `id_ed25519`) or an absolute path inside that directory
 - **Maildir Path** - path to Maildir on hosting (default: `~/Maildir`)
-- **Agent Path** - where to deploy agent (default: `~/antispam-agent`)
+- **Agent Path** - where to deploy agent (default: `~/antispam-agent`; `~/` is the SSH user's home both for SFTP uploads and for commands)
+- **SSH host key** (read-only) - SHA256 fingerprint pinned on the first successful connection, see below
+
+## SSH host key (trust on first use)
+
+The first successful login stores the server's host key fingerprint
+(`SHA256:...`, same format as `ssh-keygen -lf`) in `antispam_account.ssh_host_key`.
+Every later connection (test, deploy, sync, scan, health, quarantine, digest)
+compares the key **before** authenticating; a different key aborts with
+"Klucz hosta SSH serwera ... zmienił się" and both fingerprints. If the change
+is expected (server reinstalled, new key), compare the new fingerprint with
+the hosting provider / `ssh-keyscan HOST | ssh-keygen -lf -` and use
+**Resetuj klucz hosta SSH** on the account edit page (POST, CSRF-protected);
+the next connection pins the key the server presents. Changing the SSH host or
+port on the form also clears the pinned key. Accounts that existed before this
+feature pin their key on the next connection.
 
 ## SSH Key Setup
 
@@ -75,18 +90,41 @@ quoted; a leading `~/` still expands to the SSH user's home.
 ## Operations (SSH mode)
 
 ### Test Connection
-Verifies SSH connectivity and checks remote environment (PHP, SQLite3, Maildir).
+Verifies SSH connectivity, shows the pinned host key and checks the remote
+environment (PHP, SQLite3, mbstring, curl, Maildir).
 
 ### Deploy Agent
-Uploads `antispam-agent.php` to the hosting server and runs environment test.
+Uploads `antispam-agent.php` over SFTP (`~/` resolved against the SFTP home,
+directory created `0700`, file `0600`, size verified), runs the agent's `test`
+against the account's Maildir and only then marks the agent deployed. A failed
+upload or self-test (e.g. missing mbstring) is shown as a failure. After a
+successful deploy the rules and settings are synced right away.
 
 ### Sync Rules
-Exports the account's blacklist/whitelist rules plus the global ones (owner **Wszystkie skrzynki**, `email = '*'`, see [scoring.md](scoring.md#rule-ownership)) and imports them into the agent's SQLite on the remote server. Rules added in the panel reach an agent only after a sync (or, for a blacklist rule at or above the spam threshold, the retroactive pass, which syncs first).
+Exports the account's whitelist / blacklist rules plus the global ones (owner **Wszystkie skrzynki**, `email = '*'`, see [scoring.md](scoring.md#rule-ownership)), DNSBL providers and the
+scanning settings (thresholds, switches, impersonation, links, attachments,
+CERT) and imports them into the agent's per-account SQLite database. The JSON
+is uploaded as a temporary `0600` file and fed to `import-rules` on stdin
+(works with older agents too); the import is all-or-nothing.
 
 Panel rules are per mailbox: pick the account's e-mail (or **Wszystkie skrzynki**) in the mailbox selector of the white/blacklist forms - before this was added every panel rule belonged to the legacy mailbox and never reached any account.
 
 ### Scan
-Triggers remote scan and retrieves results as JSON.
+Triggers a remote scan with the panel's current thresholds and switches passed
+as flags, and retrieves results as JSON. A timeout, an old agent, a locked
+(already running) scan or a non-JSON answer is reported as a failed scan and
+does not overwrite the account's last scan result.
+
+### Timeouts and error messages
+Each agent command has its own read timeout (`SshService::TIMEOUTS`: scan
+3600 s, apply-blacklist 1800 s, import-rules 300 s, quarantine-list 180 s,
+others 60 s; connect 15 s, keep-alive every 30 s). Stderr is kept apart from
+the JSON on stdout. Typical messages: "Agent nie odpowiedział w ciągu N s",
+"Agent na serwerze nie obsługuje polecenia ... - wdróż go ponownie",
+"Nie znaleziono agenta na serwerze - wdróż go", "Brak PHP CLI". Answers from
+an agent older than the bundled one carry `agent_warning` ("wdróż go
+ponownie"), shown on the Sync / Scan / Health pages and in the console
+commands. See [agent.md](agent.md) for the agent side.
 
 ## Cron Setup
 

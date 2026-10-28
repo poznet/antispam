@@ -63,6 +63,13 @@ class Account
     #[ORM\Column(name: 'agent_path', type: 'string', length: 500, nullable: true)]
     private $agentPath = '~/antispam-agent';
 
+    /**
+     * SHA256 fingerprint of the SSH server's host key, pinned on the first
+     * successful connection (trust on first use). null = not pinned yet.
+     */
+    #[ORM\Column(name: 'ssh_host_key', type: 'string', length: 255, nullable: true)]
+    private $sshHostKey;
+
     // Common fields
 
     #[ORM\Column(name: 'delete_spam', type: 'boolean')]
@@ -141,6 +148,9 @@ class Account
 
     public function getAgentPath() { return $this->agentPath; }
     public function setAgentPath($agentPath) { $this->agentPath = $agentPath; return $this; }
+
+    public function getSshHostKey() { return $this->sshHostKey; }
+    public function setSshHostKey($sshHostKey) { $this->sshHostKey = $sshHostKey; return $this; }
 
     public function getDeleteSpam() { return $this->deleteSpam; }
     public function setDeleteSpam($deleteSpam) { $this->deleteSpam = $deleteSpam; return $this; }

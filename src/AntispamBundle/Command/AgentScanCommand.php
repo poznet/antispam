@@ -45,6 +45,12 @@ class AgentScanCommand extends Command
         try {
             if ($account->isSsh()) {
                 $result = $this->ssh->runScan($account);
+                if (!isset($result['total'])) {
+                    throw new \RuntimeException((string)($result['error'] ?? 'invalid agent response'));
+                }
+                if (!empty($result['agent_warning'])) {
+                    $output->writeln('<comment>' . $result['agent_warning'] . '</comment>');
+                }
             } else {
                 $result = $this->imapScan->scanAccount($account);
             }

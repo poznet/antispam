@@ -18,13 +18,17 @@ php bin/console antispam:go
 ## Agent Commands
 
 ### antispam:agent:deploy
-Deploys the agent script to a hosting server via SSH.
+Deploys the agent script to a hosting server via SSH and runs its self-test;
+exits 1 (and leaves the account "not deployed") when the upload or the test
+fails. Run `antispam:agent:sync` afterwards to push rules and settings.
 ```bash
 php bin/console antispam:agent:deploy {accountId}
 ```
 
 ### antispam:agent:sync
-Syncs blacklist/whitelist rules to the remote agent's SQLite database.
+Syncs blacklist/whitelist rules, DNSBL providers and scanning settings to the
+remote agent's per-account SQLite database; exits 1 when the agent rejects the
+import.
 ```bash
 php bin/console antispam:agent:sync {accountId}
 ```

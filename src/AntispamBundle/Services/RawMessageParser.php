@@ -336,10 +336,14 @@ class RawMessageParser
 
     private static function extractEmail($line)
     {
-        if (preg_match('/<([^<>\s]+@[^<>\s]+)>/', (string)$line, $m)) {
-            return strtolower($m[1]);
+        // Quoted display names and comments may contain addresses of their own
+        // ("ceo@firma.pl" <x@evil.com>, "a <ceo@firma.pl>" <x@evil.com>): drop
+        // them and take the last <addr-spec>, like the agent does.
+        $line = preg_replace('/"(?:[^"\\\\]|\\\\.)*"|\((?:[^()\\\\]|\\\\.)*\)/', ' ', (string)$line);
+        if (preg_match_all('/<([^<>\s]+@[^<>\s]+)>/', $line, $m)) {
+            return strtolower(end($m[1]));
         }
-        if (preg_match('/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/', (string)$line, $m)) {
+        if (preg_match('/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/', $line, $m)) {
             return strtolower($m[0]);
         }
         return '';

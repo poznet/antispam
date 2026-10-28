@@ -51,7 +51,7 @@ php bin/console doctrine:schema:update --force
 
 ## Configuration
 
-**Settings → Shared Spam Feed** (`feed.*` config keys):
+**Ustawienia → Wspólna baza spamu** (`feed.*` config keys):
 
 | Field             | Key                | Meaning |
 |-------------------|--------------------|---------|

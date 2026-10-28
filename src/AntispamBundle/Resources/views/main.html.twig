@@ -33,7 +33,7 @@
     {label: 'Folder spamu',         icon: 'inbox',        path: 'antispam_spambox_index',        match: ['antispam_spambox_index']},
     {label: 'Kwarantanna',          icon: 'warning-sign', path: 'antispam_spambox_quarantine',   match: ['antispam_spambox_quarantine']},
     {label: 'Dziennik ocen',        icon: 'list-alt',     path: 'antispam_spambox_scorelog',     match: ['antispam_spambox_scorelog']},
-    {label: 'Zgłoszenia z wtyczki', icon: 'flag',         path: 'antispam_spambox_pluginreports', match: ['antispam_spambox_pluginreports']},
+    {label: 'Zgłoszenia z wtyczek', icon: 'flag',         path: 'antispam_spambox_pluginreports', match: ['antispam_spambox_pluginreports']},
     {label: 'Zgłoszenia phishingu', icon: 'alert',        path: 'antispam_phishing_index',       match: ['antispam_phishing_index', 'antispam_phishing_show']},
     {section: 'Whitelisty'},
     {label: 'Whitelista domen',     icon: 'ok-circle',    path: 'antispam_whitelist_index',      match: ['antispam_whitelist_index']},
@@ -54,11 +54,13 @@
 ] %}
 {# ROLE_USER sees only their own mailbox views (access is enforced server-side too). #}
 {% if not is_granted('ROLE_ADMIN') %}
+    {# "Spam" and "Dziennik ocen" are the same route; the decision=spam filter tells them apart. #}
+    {% set spam_view = app.request.query.get('decision') == 'spam' %}
     {% set nav = [
         {section: 'Moja poczta'},
         {label: 'Kwarantanna',   icon: 'warning-sign', path: 'antispam_my_quarantine', match: ['antispam_my_quarantine']},
-        {label: 'Spam',          icon: 'inbox',        path: 'antispam_my_scorelog', params: {decision: 'spam'},  match: []},
-        {label: 'Dziennik ocen', icon: 'list-alt',     path: 'antispam_my_scorelog', match: ['antispam_my_scorelog']},
+        {label: 'Spam',          icon: 'inbox',        path: 'antispam_my_scorelog', params: {decision: 'spam'},  match: spam_view ? ['antispam_my_scorelog'] : []},
+        {label: 'Dziennik ocen', icon: 'list-alt',     path: 'antispam_my_scorelog', match: spam_view ? [] : ['antispam_my_scorelog']},
         {section: 'Konto'},
         {label: 'Zmiana hasła',  icon: 'lock',         path: 'antispam_my_password', match: ['antispam_my_password']}
     ] %}

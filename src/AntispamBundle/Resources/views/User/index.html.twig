@@ -8,7 +8,7 @@
         <a href="{{ path('antispam_user_add') }}" class="btn btn-primary"><span class="glyphicon glyphicon-plus"></span> Dodaj użytkownika</a>
     </div>
 
-    <p class="text-muted">Administrator widzi wszystko. Użytkownik widzi wyłącznie kwarantannę, spam i dziennik ocen przypisanych mu skrzynek i może wyciągać z nich wiadomości.
+    <p class="text-muted">Administrator widzi wszystko. Użytkownik widzi wyłącznie kwarantannę, spam i dziennik ocen przypisanych mu skrzynek i może przywracać wiadomości z kwarantanny do skrzynki odbiorczej.
     {% if env_admin %}Konto <strong>{{ env_admin }}</strong> pochodzi z konfiguracji serwera (ADMIN_USER) i nie jest tu edytowalne.{% endif %}</p>
 
     <div class="table-responsive">
@@ -36,7 +36,7 @@
                         <input type="hidden" name="_token" value="{{ csrf_token('user_action_' ~ u.id) }}">
                         <div class="btn-group btn-group-xs">
                             <a href="{{ path('antispam_user_edit', {id: u.id}) }}" class="btn btn-default"><span class="glyphicon glyphicon-pencil"></span> Edytuj</a>
-                            <button type="submit" class="btn btn-danger" title="Usuń" onclick="return confirm('Usunąć tego użytkownika?')"><span class="glyphicon glyphicon-trash"></span></button>
+                            <button type="submit" class="btn btn-danger" title="Usuń" aria-label="Usuń użytkownika" data-confirm="Usunąć tego użytkownika?"><span class="glyphicon glyphicon-trash" aria-hidden="true"></span></button>
                         </div>
                     </form>
                 </td>
@@ -47,4 +47,8 @@
         </tbody>
     </table>
     </div>
+{% endblock %}
+
+{% block javascripts %}
+    <script src="{{ asset('bundles/antispam/js/data-confirm.js') }}"></script>
 {% endblock %}

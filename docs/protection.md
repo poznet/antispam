@@ -3,7 +3,7 @@
 Three scoring steps inspired by Barracuda Email Protection. They need no external
 daemon (Safe Browsing and URI block lists are optional), run in both the web
 pipeline (IMAP) and the Maildir agent (SSH), and are configured under
-**Settings → Spam Filter Settings**. Each adds points to the message score like any
+**Ustawienia → Filtr spamu**. Each adds points to the message score like any
 other signal (see [scoring.md](scoring.md)); none forces a decision on its own.
 
 | Step | Web listener | Priority | Agent flag to disable |
@@ -15,7 +15,9 @@ other signal (see [scoring.md](scoring.md)); none forces a decision on its own.
 All three are **on by default**. Pure logic lives in
 `Services/ImpersonationAnalyzer`, `Services/UrlAnalyzer` and
 `Services/AttachmentPolicyAnalyzer`; the agent carries a copy of the same rules
-(`AgentParityTest` checks that both give identical results).
+(`AgentParityTest` runs the same sample messages through both and compares
+the results; it covers only these three analyzers, not header checks, lists or
+DNSBL).
 
 ## Impersonation protection (BEC)
 

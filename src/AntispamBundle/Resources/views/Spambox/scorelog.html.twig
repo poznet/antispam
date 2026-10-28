@@ -1,9 +1,9 @@
 {% extends '@Antispam/main.html.twig' %}
 {% block title %}Dziennik ocen{% endblock %}
-{% block page_title %}Dziennik ocen (score log){% endblock %}
+{% block page_title %}Dziennik ocen{% endblock %}
 
 {% block body %}
-    {% set decisionLabels = {ham: 'Ham', quarantine: 'Kwarantanna', spam: 'Spam', whitelisted: 'Whitelista'} %}
+    {% set decisionLabels = {ham: 'Czyste', quarantine: 'Kwarantanna', spam: 'Spam', whitelisted: 'Whitelista'} %}
     {% set sourceLabels = {scan: 'skan', plugin: 'wtyczka', retro: 'wstecz'} %}
     {% set outcomeLabels = {quarantined: 'do kwarantanny', spam_folder: 'do SPAM', deleted: 'usunięta', move_failed: 'nie przeniesiono'} %}
     {% set scoreRoute = scorelog_route|default('antispam_spambox_scorelog') %}
@@ -64,16 +64,16 @@
             <tbody>
             {% for l in logs %}
                 <tr>
-                    <td>{{ l.scoredAt|date('m-d H:i') }}</td>
-                    <td>{{ l.accountEmail }}</td>
-                    <td>{{ l.sender }}</td>
-                    <td>{{ l.subject[:60] }}</td>
+                    <td class="pp-cell-nowrap">{{ l.scoredAt|date('Y-m-d H:i') }}</td>
+                    <td class="pp-cell-wrap">{{ l.accountEmail }}</td>
+                    <td class="pp-cell-wrap">{{ l.sender }}</td>
+                    <td class="pp-cell-wrap" title="{{ l.subject }}">{{ l.subject|length > 60 ? l.subject[:60] ~ '…' : l.subject }}</td>
                     <td><strong>{{ l.score }}</strong></td>
                     <td>
                         {% if l.decision == 'spam' %}<span class="label label-danger">spam</span>
                         {% elseif l.decision == 'quarantine' %}<span class="label label-warning">kwarantanna</span>
                         {% elseif l.decision == 'whitelisted' %}<span class="label label-info">whitelista</span>
-                        {% else %}<span class="label label-success">ham</span>{% endif %}
+                        {% else %}<span class="label label-success">czysta</span>{% endif %}
                         {% if l.source %}<br><small class="text-muted">{{ sourceLabels[l.source]|default(l.source) }}{% if l.outcome and l.outcome != 'none' %}, {{ outcomeLabels[l.outcome]|default(l.outcome) }}{% endif %}{% if l.initialScan %}, pierwszy skan (poza statystyką){% endif %}</small>{% endif %}
                     </td>
                     <td>

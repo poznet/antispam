@@ -11,7 +11,7 @@ per message, then makes a final decision:
 | whitelist hit        | whitelisted  | short-circuit, never scored           |
 
 Defaults: `quarantine_threshold = 5`, `spam_threshold = 10`. Configure under
-**Settings → Spam Filter Settings**.
+**Ustawienia → Filtr spamu**.
 
 ## Scoring signals
 
@@ -63,8 +63,8 @@ infected attachment is caught regardless of the other signals. Scanning runs
 after DNSBL and before the final decision.
 
 Scanning is **disabled by default** because it depends on a reachable `clamd`
-instance. Configure it under **Settings → Spam Filter Settings → Attachment
-Scanning**:
+instance. Configure it under **Ustawienia → Filtr spamu → Skanowanie
+załączników (ClamAV)**:
 
 | Config key (`config` table)   | Default                 | Meaning                                   |
 |-------------------------------|-------------------------|-------------------------------------------|
@@ -98,7 +98,7 @@ before the final decision.
 A file VirusTotal has never seen (HTTP 404) is simply treated as "no opinion".
 
 Scanning is **disabled by default** and requires an API key. Configure it under
-**Settings → Spam Filter Settings → Attachment Reputation**:
+**Ustawienia → Filtr spamu → Reputacja załączników (VirusTotal)**:
 
 | Config key (`config` table) | Default | Meaning                                            |
 |-----------------------------|---------|----------------------------------------------------|
@@ -177,13 +177,15 @@ utf8mb4 key would also exceed the 767-byte limit of legacy row formats.
 
 ## DNSBL integration
 
-Configure DNS block lists under **Blacklists → DNSBL Providers**. Each zone
+Configure DNS block lists under **Blacklisty → Dostawcy DNSBL**. Each zone
 has its own score and per-IP cache TTL. Presets include Spamhaus, SORBS,
 Barracuda, SpamCop, PSBL and UCEPROTECT — click "Add" to enable them. You can
 also add any custom zone.
 
-The listener reads the sender IP from the last `Received` header and queries
-each enabled zone. Results are cached (`antispam_dnsbl_cache`) to avoid
+The listener takes the first `[a.b.c.d]` IPv4 address found in the `Received`
+headers (falling back to the first bare IPv4) - normally the connecting host
+recorded in the topmost header, the one added by your own mail server - and
+queries each enabled zone. Results are cached (`antispam_dnsbl_cache`) to avoid
 hammering DNS.
 
 The same configuration is synced down to the Maildir agent during

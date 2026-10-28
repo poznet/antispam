@@ -10,8 +10,8 @@
 <div class="pp-imap-security" id="imapSecurity" data-check-url="{{ path('antispam_account_imap_check') }}"
      data-check-token="{{ csrf_token('imap_check') }}" data-account-id="{{ account_id|default('') }}">
     <div class="form-group">
-        <label>Szyfrowanie połączenia</label>
-        <div class="pp-choice-grid" role="radiogroup">
+        <label id="imapEncLabel">Szyfrowanie połączenia</label>
+        <div class="pp-choice-grid" role="radiogroup" aria-labelledby="imapEncLabel">
             {% for opt in [
                 {value: 'ssl', title: 'SSL/TLS', badge: 'zalecane', badgeClass: 'success', port: 993, flag: '/ssl',
                  desc: 'Szyfrowanie od pierwszego bajtu (IMAPS). Standard na większości hostingów.'},
@@ -35,8 +35,8 @@
     </div>
 
     <div class="form-group" id="imapCertGroup">
-        <label>Certyfikat serwera</label>
-        <div class="pp-choice-grid pp-choice-grid-2" role="radiogroup">
+        <label id="imapCertLabel">Certyfikat serwera</label>
+        <div class="pp-choice-grid pp-choice-grid-2" role="radiogroup" aria-labelledby="imapCertLabel">
             <label class="pp-choice{% if imap_tls.validate_cert %} is-active{% endif %}">
                 <input type="radio" name="{{ prefix }}[imap_tls][validate_cert]" data-imap-opt="validate_cert" value="1" {% if imap_tls.validate_cert %}checked{% endif %}>
                 <span class="pp-choice-body">
@@ -76,7 +76,7 @@
                 <span><strong>Własne flagi</strong><br><span class="text-muted">Wpisz flagi c-client ręcznie (np. <code>/imap/ssl/readonly</code>, <code>/authuser=admin</code>). Zastępuje opcje powyżej.</span></span>
             </label></div>
             <div class="form-group" id="imapFlagsCustomGroup"{% if not imap_tls.custom %} style="display:none;"{% endif %}>
-                <input type="text" class="form-control" name="{{ prefix }}[imap_flags]" id="imapFlags" value="{{ imap_flags }}" spellcheck="false">
+                <input type="text" class="form-control" name="{{ prefix }}[imap_flags]" id="imapFlags" aria-label="Własne flagi c-client" value="{{ imap_flags }}" spellcheck="false">
             </div>
         </div>
     </div>

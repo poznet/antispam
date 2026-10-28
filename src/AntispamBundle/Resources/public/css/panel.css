@@ -373,6 +373,18 @@ small, .small { color: var(--muted); }
 .table > tbody > tr.warning > td { background: var(--warning-soft); }
 .table > tbody > tr.info > td { background: var(--info-soft); }
 .table td.pp-subrow { background: var(--surface-2) !important; color: var(--muted); font-size: 12px; }
+/* Long sender / subject / URL cells: break instead of stretching the table; dates and buttons stay on one line. */
+.table td.pp-cell-wrap,
+.table-responsive > .table > tbody > tr > td.pp-cell-wrap { min-width: 160px; max-width: 320px; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+.table td.pp-cell-nowrap { white-space: nowrap; }
+
+/* Account list: below 1200 px the action buttons drop their text and keep the icon (title + aria-label stay). */
+.table .pp-row-actions .btn-group { min-width: 230px; }
+@media (max-width: 1199px) {
+    .table .pp-row-actions .btn-group { flex-wrap: nowrap; min-width: 0; }
+    .pp-row-actions .pp-btn-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .table .pp-row-actions .btn-group > .btn { padding: 5px 9px; }
+}
 
 /* ---------- Buttons ---------- */
 .btn {
@@ -774,6 +786,12 @@ a.pp-kpi:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); bord
     width: 120px; height: 120px; border-radius: 50%;
     background: var(--kpi-c, var(--accent)); opacity: .08;
 }
+/* Tile tone from the theme tokens (follows light/dark): <div class="pp-kpi" data-kpi="success"> */
+.pp-kpi[data-kpi="accent"]  { --kpi-c: var(--accent); }
+.pp-kpi[data-kpi="success"] { --kpi-c: var(--success); }
+.pp-kpi[data-kpi="warning"] { --kpi-c: var(--warning); }
+.pp-kpi[data-kpi="danger"]  { --kpi-c: var(--danger); }
+.pp-kpi[data-kpi="info"]    { --kpi-c: var(--info); }
 .pp-kpi-head { display: flex; align-items: center; justify-content: space-between; }
 .pp-kpi-label { font-size: 12.5px; font-weight: 600; color: var(--muted); }
 .pp-kpi-icon {

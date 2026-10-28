@@ -21,7 +21,7 @@ deleted only when deletion is switched on:
 | Mailbox | Setting |
 |---------|---------|
 | IMAP account (Konta) | *Usuwaj spam (zamiast przenosić do folderu SPAM)* on the account form (`delete_spam`) |
-| Legacy mailbox (Ustawienia → E-mail) | *Usuwaj spam na stałe* in Ustawienia → Filtr spamu (config `delete`) |
+| Legacy mailbox (Ustawienia → Konfiguracja (stara)) | *Usuwaj spam na stałe* in Ustawienia → Filtr spamu (config `delete`) |
 | SSH+Maildir account | always moved to `~/Maildir/.SPAM` (the agent never deletes spam) |
 
 The `SPAM` and `QUARANTINE` folders are created on first use. In IMAP the
@@ -41,7 +41,7 @@ until someone acts on it. Nothing removes quarantined mail automatically.
 
 Every quarantined message can be released:
 
-- in the panel: **Skrzynki → Kwarantanna** - *Dostarcz* (back to INBOX),
+- in the panel: **Skrzynki → Kwarantanna** - *Przywróć* (back to INBOX),
   *Zawsze akceptuj* (back to INBOX + sender on the e-mail whitelist, hidden for
   high-risk messages), *Usuń* (permanent);
 - from the [quarantine digest](quarantine-digest.md) e-mail (signed one-click

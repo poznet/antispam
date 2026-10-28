@@ -48,8 +48,8 @@
                 </label></div>
                 <div class="row" style="margin-top:10px;">
                     <div class="col-sm-6">
-                        <label>Punkty za trafienie</label>
-                        <input type="number" name="config[score]" class="form-control" value="{{ score }}" min="1" max="200" placeholder="{{ default_score }}">
+                        <label for="certScore">Punkty za trafienie</label>
+                        <input type="number" name="config[score]" id="certScore" class="form-control" value="{{ score }}" min="1" max="200" placeholder="{{ default_score }}">
                         <small class="text-muted">Puste = próg spamu ({{ default_score }}), czyli jedno trafienie wystarcza do uznania wiadomości za spam.</small>
                     </div>
                 </div>
@@ -67,7 +67,8 @@
         <div class="panel-heading"><span class="glyphicon glyphicon-search"></span> Sprawdź domenę</div>
         <div class="panel-body">
             <form method="get" class="form-inline">
-                <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="np. przyklad.pl lub https://przyklad.pl/login" style="min-width:300px;">
+                <label for="certLookup" class="sr-only">Domena lub adres</label>
+                <input type="text" name="q" id="certLookup" value="{{ query }}" class="form-control" placeholder="np. przyklad.pl lub https://przyklad.pl/login" style="min-width:min(300px, 100%);">
                 <button type="submit" class="btn btn-default">Sprawdź</button>
             </form>
             {% if lookup %}
@@ -89,11 +90,13 @@
     <div class="panel panel-default">
         <div class="panel-heading"><span class="glyphicon glyphicon-th-list"></span> Przegląd listy (alfabetycznie, strona {{ page }} z {{ pages }})</div>
         {% if sample|length > 0 %}
+            <div class="table-responsive">
             <table class="table table-striped" style="margin-bottom:0;">
                 <tbody>
-                {% for d in sample %}<tr><td><code>{{ d }}</code></td></tr>{% endfor %}
+                {% for d in sample %}<tr><td class="pp-cell-wrap"><code>{{ d }}</code></td></tr>{% endfor %}
                 </tbody>
             </table>
+            </div>
             <div class="panel-footer">
                 {% if page > 1 %}<a class="btn btn-xs btn-default" href="{{ path('antispam_cert_index', {page: page - 1}) }}">&laquo; Poprzednia</a>{% endif %}
                 {% if page < pages %}<a class="btn btn-xs btn-default" href="{{ path('antispam_cert_index', {page: page + 1}) }}">Następna &raquo;</a>{% endif %}

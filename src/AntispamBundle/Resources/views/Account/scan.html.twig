@@ -8,6 +8,7 @@
         <div class="alert alert-success"><strong>Skanowanie zakończone!</strong></div>
 
         {% if result.scan_result is defined %}
+        <div class="table-responsive">
         <table class="table table-bordered">
             <tr><th>Wszystkie wiadomości</th><td>{{ result.scan_result.total|default(0) }}</td></tr>
             <tr><th>Sprawdzone</th><td>{{ result.scan_result.checked|default(0) }}</td></tr>
@@ -17,6 +18,7 @@
             <tr><th>Przeniesione do spamu</th><td>{{ result.scan_result.moved_to_spam|default(0) }}</td></tr>
             <tr><th>Przeniesione do kwarantanny</th><td>{{ result.scan_result.quarantined|default(0) }}</td></tr>
         </table>
+        </div>
         {% if result.scan_result.errors|default([])|length > 0 %}
         <div class="alert alert-warning">
             <strong>Nie udało się przetworzyć części wiadomości:</strong>

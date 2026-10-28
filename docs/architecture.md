@@ -21,7 +21,7 @@ Antispam is a Symfony 7.4 web application for filtering spam from email accounts
 - Uses `ddeboer/imap` library
 - Fetches messages, checks headers, moves spam to SPAM folder
 - `ImapScanService` runs the pipeline for IMAP accounts and the legacy mailbox
-  (Ustawienia → E-mail); `MessageEvent` carries the message's own connection
+  (Ustawienia → Konfiguracja (stara)); `MessageEvent` carries the message's own connection
 - All processing happens on the Symfony server
 
 ### SSH+Maildir Mode

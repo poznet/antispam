@@ -5,35 +5,83 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
     <meta name="referrer" content="no-referrer">
-    <title>Kwarantanna &middot; Pancernapanda antispam</title>
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#060735">
+    <title>Kwarantanna &middot; Antispam Pancernapanda</title>
+    <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}">
+    <link rel="stylesheet" href="{{ asset('bundles/antispam/vendor/fonts/fonts.css') }}">
+    <script src="{{ asset('bundles/antispam/js/theme-init.js') }}"></script>
+    {# Same tokens as the error page (templates/bundles/TwigBundle/Exception/error.html.twig). #}
     <style>
-        * { box-sizing: border-box; }
-        body {
-            margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: linear-gradient(135deg, #0b2a52 0%, #1e4a8a 55%, #3b82f6 100%);
-            color: #1f2a44;
-            display: flex; min-height: 100vh; align-items: center; justify-content: center; padding: 20px;
+        :root {
+            --bg: #f4f7fc; --surface: #ffffff; --surface-2: #f8fafc; --border: #e3e8f0;
+            --text: #060735; --muted: #636a8a; --accent: #005bba;
+            --ok: #0f8a5f; --err: #c02626;
+            --btn-release: #0f8a5f; --btn-whitelist: linear-gradient(135deg, #0a72d6 0%, #005bba 100%); --btn-delete: #c02626;
+            --glow: rgba(31, 215, 253, .14);
+            color-scheme: light;
         }
-        .box { width: 100%; max-width: 480px; padding: 32px 28px; background: #fff; border: 1px solid #d5e1f2; border-radius: 10px; box-shadow: 0 14px 40px rgba(11, 42, 82, .25); }
-        h1 { margin: 0 0 14px; font-size: 20px; }
-        .meta { background: #f4f7fc; border: 1px solid #e3eaf5; border-radius: 6px; padding: 10px 12px; font-size: 14px; margin-bottom: 18px; word-break: break-word; }
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) {
+                --bg: #04052a; --surface: #0b0d40; --surface-2: #10134a; --border: #1d2163;
+                --text: #e8ecfa; --muted: #8b93bd; --accent: #1fd7fd;
+                --ok: #34d399; --err: #f87171;
+                --glow: rgba(0, 173, 239, .18);
+                color-scheme: dark;
+            }
+        }
+        :root[data-theme="dark"] {
+            --bg: #04052a; --surface: #0b0d40; --surface-2: #10134a; --border: #1d2163;
+            --text: #e8ecfa; --muted: #8b93bd; --accent: #1fd7fd;
+            --ok: #34d399; --err: #f87171;
+            --glow: rgba(0, 173, 239, .18);
+            color-scheme: dark;
+        }
+        * { box-sizing: border-box; }
+        html, body { margin: 0; min-height: 100%; }
+        body {
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            padding: 32px 16px; background: var(--bg);
+            background-image: radial-gradient(1100px 560px at 100% -10%, var(--glow), transparent 60%),
+                              radial-gradient(800px 480px at -10% 110%, rgba(0, 91, 186, .08), transparent 60%);
+            color: var(--text); font: 15px/1.6 'Open Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+        }
+        .box {
+            width: 100%; max-width: 480px; padding: 32px 28px 28px; background: var(--surface);
+            border: 1px solid var(--border); border-radius: 18px;
+            box-shadow: 0 1px 3px rgba(6, 7, 53, .06), 0 24px 60px -28px rgba(6, 7, 53, .35);
+        }
+        .brand { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+        .brand img { width: 36px; height: 36px; }
+        .brand span { font: 700 15px/1.2 Montserrat, sans-serif; }
+        .brand small { display: block; font: 600 12px/1.2 'Open Sans', sans-serif; color: var(--muted); }
+        h1 { margin: 0 0 14px; font: 700 20px/1.3 Montserrat, sans-serif; }
+        .meta { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: 14px; margin-bottom: 18px; overflow-wrap: anywhere; }
         .meta div + div { margin-top: 4px; }
-        .muted { color: #5b6b85; font-size: 13px; }
-        button { width: 100%; padding: 11px; font-size: 15px; font-weight: 600; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
-        .release { background: #1e7e34; } .whitelist { background: #1e4a8a; } .delete { background: #b42318; }
-        .ok { color: #1e7e34; } .err { color: #b42318; }
+        .muted { color: var(--muted); font-size: 13px; }
+        button {
+            width: 100%; min-height: 44px; padding: 11px; font: 600 15px/1.2 'Open Sans', sans-serif;
+            color: #fff; border: 0; border-radius: 10px; cursor: pointer;
+        }
+        button:hover { filter: brightness(1.08); }
+        button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .release { background: var(--btn-release); } .whitelist { background: var(--btn-whitelist); } .delete { background: var(--btn-delete); }
+        .ok { color: var(--ok); } .err { color: var(--err); }
     </style>
 </head>
 <body>
-<div class="box">
+<main class="box">
+    <div class="brand">
+        <img src="{{ asset('bundles/antispam/img/pp-shield.png') }}" alt="" width="36" height="36">
+        <span>Antispam<small>Pancernapanda &middot; kwarantanna</small></span>
+    </div>
     {% if state == 'invalid' %}
         <h1 class="err">Link wygasł lub jest nieprawidłowy</h1>
         <p class="muted">Linki z raportu kwarantanny są ważne przez ograniczony czas. Poczekaj na kolejny raport albo skontaktuj się z administratorem.</p>
     {% else %}
         {% set labels = {
-            'release': ['Dostarczyć wiadomość?', 'Dostarcz do skrzynki'],
-            'whitelist': ['Dostarczyć i zawsze akceptować tego nadawcę?', 'Dostarcz i dodaj do białej listy'],
+            'release': ['Przywrócić wiadomość do skrzynki odbiorczej?', 'Przywróć do skrzynki'],
+            'whitelist': ['Przywrócić wiadomość i zawsze akceptować tego nadawcę?', 'Przywróć i zawsze akceptuj'],
             'delete': ['Usunąć wiadomość?', 'Usuń na stałe']
         } %}
         {% if state == 'confirm' %}
@@ -62,6 +110,6 @@
             <p>{{ result.message }}</p>
         {% endif %}
     {% endif %}
-</div>
+</main>
 </body>
 </html>

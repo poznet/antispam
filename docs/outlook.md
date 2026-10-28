@@ -48,7 +48,7 @@ antispam instances are deployed for the same Microsoft 365 tenant, change the
 ## Installing
 
 - **User (sideload):** download *antispam-outlook.xml* (home page, Thunderbird /
-  Outlook section, or *Konfiguracja → Wtyczki pocztowe*). In Outlook: *Get
+  Outlook section, or *Ustawienia → Wtyczki pocztowe*). In Outlook: *Get
   Add-ins* (*Pobierz dodatki*) → *My add-ins* → *Custom add-ins* → *Add a custom
   add-in* → *Add from file…*. On the web the same dialog is at
   <https://aka.ms/olksideload>. Sideloading must be allowed by the tenant
@@ -102,7 +102,7 @@ Results are also shown as a short notification bar on the message
   decision and asks the user to use Outlook's own *Junk* / *Report* button.
 - **Outlook's Junk button is not hooked.** Unlike Thunderbird, marking a message
   as junk with Outlook's own button does not report it to antispam.
-- Reports are logged as plugin reports (*Skrzynki → Zgłoszenia z wtyczki*) like
+- Reports are logged as plugin reports (*Skrzynki → Zgłoszenia z wtyczek*) like
   Thunderbird ones; checks are logged with `source:thunderbird_plugin` (the API is
   shared and does not distinguish clients).
 

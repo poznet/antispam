@@ -60,7 +60,7 @@ a foreign mailbox key gives 403, see [users.md](users.md).
 | GET | `/spambox/quarantine` | Quarantine of every mailbox (legacy IMAP `QUARANTINE`, each IMAP account, each SSH account with a deployed agent) and the last 30 days of `quarantine` decisions from the score log (what the dashboard tile counts) |
 | POST | `/spambox/quarantine/action` | `mailbox` (`imap` / `imap-<id>` / `ssh-<id>`), `id`, `action` (`release` / `whitelist` / `delete`); CSRF token `quarantine_action` |
 | GET | `/spambox/scorelog` | Score log ("Dziennik ocen"), 50 per page. Query filters: `decision` (`ham`/`quarantine`/`spam`/`whitelisted`), `account`, `q` (sender/subject substring), `from`/`to` (`Y-m-d`), `min_score`, `page`. The decision tiles link to the matching `decision` filter |
-| GET | `/spambox/plugin-reports` | Thunderbird plugin reports (anonymous + logged in), filters `?verdict=spam\|ham`, `?who=anonymous\|account` |
+| GET | `/spambox/plugin-reports` | Mail plugin reports - Thunderbird and Outlook (anonymous + logged in), filters `?verdict=spam\|ham`, `?who=anonymous\|account` |
 
 ## Phishing reports (`/phishing`)
 

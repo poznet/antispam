@@ -5,7 +5,7 @@ The panel supports several logins with two roles:
 | Role | Sees | Can do |
 |------|------|--------|
 | `ROLE_ADMIN` | everything | everything (accounts, lists, DNSBL, feed, phishing, cron logs, plugin config, users) |
-| `ROLE_USER` | only the mailboxes (accounts) assigned to them | see their own quarantine, spam and score log; release ("Wyciągnij"), "Zawsze akceptuj" (release + whitelist the sender) and delete quarantined messages; change their own password |
+| `ROLE_USER` | only the mailboxes (accounts) assigned to them | see their own quarantine, spam and score log; release ("Przywróć"), "Zawsze akceptuj" (release + whitelist the sender) and delete quarantined messages; change their own password |
 
 ## Login sources
 
@@ -19,7 +19,7 @@ The panel supports several logins with two roles:
    reserved (a database user cannot use it). Its password is changed through the
    environment, as before.
 2. **Database users** - `Entity\User`, table `antispam_user`, managed under
-   **Ustawienia -> Użytkownicy** (`/users`). Passwords are hashed with Symfony's `auto`
+   **Ustawienia → Użytkownicy** (`/users`). Passwords are hashed with Symfony's `auto`
    hasher. Changing a password invalidates that user's sessions.
 
 `role_hierarchy`: `ROLE_ADMIN` includes `ROLE_USER`.

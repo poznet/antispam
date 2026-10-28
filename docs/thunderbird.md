@@ -33,7 +33,7 @@ the plugin never waits for the mailbox. See
 Every accepted report (anonymous or logged in) is also logged in
 `antispam_plugin_report` — verdict, account (empty = anonymous), sender,
 subject, client IP, fingerprints recorded and rule changes — and listed in the
-panel under *Skrzynki → Zgłoszenia z wtyczki* (`/spambox/plugin-reports`), with
+panel under *Skrzynki → Zgłoszenia z wtyczek* (`/spambox/plugin-reports`), with
 30-day counters and the most reported senders. Entries older than 180 days are
 purged automatically.
 
@@ -48,7 +48,7 @@ the first 700 KiB of each message (or less, see `max_upload_bytes` below).
 ## Distribution
 
 The `.xpi` is built on the fly by `GET /plugin/download` (public; linked from the
-home page (Thunderbird section), the account form and *Konfiguracja → Wtyczki pocztowe*). The build
+home page (Thunderbird section), the account form and *Ustawienia → Wtyczki pocztowe*). The build
 bakes the server URL into `config.json` and adds its origin to the manifest's host
 permissions, so users only install and (optionally) log in. Set **Public URL**
 in the plugin settings when antispam runs behind a TLS-terminating proxy,
@@ -126,7 +126,7 @@ built behind a TLS-terminating proxy that Symfony did not trust: set
 download the plugin again, or change the address in the plugin settings to
 `https://…` and save (Thunderbird asks for the host permission).
 
-## Settings (`plugin.*`, *Konfiguracja → Wtyczki pocztowe*)
+## Settings (`plugin.*`, *Ustawienia → Wtyczki pocztowe*)
 
 Shared by all mail client plugins: Thunderbird, the Outlook add-in
 ([outlook.md](outlook.md)) and the Apple Mail extension ([apple-mail.md](apple-mail.md)).
@@ -171,7 +171,7 @@ flagged `truncated: true` beyond it. Base64 + JSON make the request ~1.34× the
 source, so the default 700 KiB fits nginx's default `client_max_body_size 1m`.
 To accept whole phishing messages with attachments, raise the proxy's body
 limit first (e.g. `client_max_body_size 16m;`; antispam itself accepts 32 MiB,
-`docker/php.ini`), then **Maks. wysyłana wiadomość** in *Konfiguracja →
+`docker/php.ini`), then **Maks. wysyłana wiadomość** in *Ustawienia →
 Wtyczki pocztowe* (e.g. 10240 KiB for 16 MiB). If the proxy still answers
 `413`, the plugin resends the first 700 KiB (`truncated: true`), so the report
 still reaches the panel. The plugin reads `/status` for this at most every 10

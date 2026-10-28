@@ -11,21 +11,21 @@
             <div class="panel-heading"><span class="glyphicon glyphicon-user"></span> Dane logowania</div>
             <div class="panel-body">
                 <div class="form-group">
-                    <label>Login</label>
-                    <input type="text" class="form-control" name="user[username]" value="{{ form.username }}" placeholder="np. jan.kowalski lub jan@example.com" autocomplete="off" required>
+                    <label for="userUsername">Login</label>
+                    <input type="text" class="form-control" id="userUsername" name="user[username]" value="{{ form.username }}" placeholder="np. jan.kowalski lub jan@example.com" autocomplete="off" required>
                 </div>
                 <div class="form-group">
-                    <label>Hasło{% if editing %} <small class="text-muted">(zostaw puste, aby nie zmieniać)</small>{% endif %}</label>
-                    <input type="password" class="form-control" name="user[password]" autocomplete="new-password" minlength="{{ min_password }}"{{ editing ? '' : ' required' }}>
+                    <label for="userPassword">Hasło{% if editing %} <small class="text-muted">(zostaw puste, aby nie zmieniać)</small>{% endif %}</label>
+                    <input type="password" class="form-control" id="userPassword" name="user[password]" autocomplete="new-password" minlength="{{ min_password }}"{{ editing ? '' : ' required' }}>
                     <p class="help-block">Co najmniej {{ min_password }} znaków.</p>
                 </div>
                 <div class="form-group">
-                    <label>Powtórz hasło</label>
-                    <input type="password" class="form-control" name="user[password_repeat]" autocomplete="new-password">
+                    <label for="userPasswordRepeat">Powtórz hasło</label>
+                    <input type="password" class="form-control" id="userPasswordRepeat" name="user[password_repeat]" autocomplete="new-password">
                 </div>
                 <div class="form-group">
-                    <label>Rola</label>
-                    <select class="form-control" name="user[role]" id="userRole" onchange="toggleAccounts()"{{ is_self ? ' title="Nie możesz zmienić własnej roli"' }}>
+                    <label for="userRole">Rola</label>
+                    <select class="form-control" name="user[role]" id="userRole"{{ is_self ? ' title="Nie możesz zmienić własnej roli"' }}>
                         <option value="ROLE_USER"{{ form.role == 'ROLE_USER' ? ' selected' }}{{ is_self ? ' disabled' }}>Użytkownik - tylko własne skrzynki</option>
                         <option value="ROLE_ADMIN"{{ form.role == 'ROLE_ADMIN' ? ' selected' }}>Administrator - pełny dostęp</option>
                     </select>
@@ -56,10 +56,5 @@
 {% endblock %}
 
 {% block javascripts %}
-<script>
-    function toggleAccounts() {
-        document.getElementById('accountsPanel').style.opacity = document.getElementById('userRole').value === 'ROLE_ADMIN' ? '0.5' : '1';
-    }
-    toggleAccounts();
-</script>
+    <script src="{{ asset('bundles/antispam/js/form-toggles.js') }}"></script>
 {% endblock %}

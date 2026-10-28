@@ -27,7 +27,7 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   list, overrides in the `account.edit` audit entry and in backups.
   `antispam:digest:send --scheduled-only` (hourly in the Docker scheduler) and
   arguments after `--` for `antispam:cron:run`. New nullable columns on
-  `antispam_account` (migration `Version20261028140000`).
+  `antispam_account` (migration `Version20261028134625`).
 
 ### Changed
 - Database schema is versioned with Doctrine Migrations (`migrations/`, baseline =

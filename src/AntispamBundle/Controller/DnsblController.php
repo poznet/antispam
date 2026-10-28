@@ -13,6 +13,8 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/dnsbl')]
 class DnsblController extends AbstractController
 {
+    use AuditTrait;
+
     public function __construct(
         private EntityManagerInterface $em,
         private DnsblService $dnsbl,
@@ -83,6 +85,7 @@ class DnsblController extends AbstractController
         $p->setName($name)->setZone($zone)->setScore($score)->setCacheTtl($ttl)->setEnabled(true);
         $this->em->persist($p);
         $this->em->flush();
+        $this->audit('dnsbl.add', targetType: 'dnsbl', targetId: $p->getId(), label: $zone, details: ['name' => $name, 'score' => $score, 'ttl' => $ttl]);
         $this->addFlash('success', 'Dodano dostawcę DNSBL');
         return $this->redirectToRoute('antispam_dnsbl_index');
     }
@@ -107,6 +110,7 @@ class DnsblController extends AbstractController
         $p->setName($preset['name'])->setZone($preset['zone'])->setScore($preset['score'])->setEnabled(true);
         $this->em->persist($p);
         $this->em->flush();
+        $this->audit('dnsbl.add', targetType: 'dnsbl', targetId: $p->getId(), label: $preset['zone'], details: ['name' => $preset['name'], 'score' => $preset['score'], 'preset' => true]);
         $this->addFlash('success', 'Dodano preset: ' . $preset['name']);
         return $this->redirectToRoute('antispam_dnsbl_index');
     }
@@ -121,6 +125,7 @@ class DnsblController extends AbstractController
         if ($p) {
             $p->setEnabled(!$p->isEnabled());
             $this->em->flush();
+            $this->audit('dnsbl.toggle', targetType: 'dnsbl', targetId: $id, label: $p->getZone(), details: ['enabled' => $p->isEnabled()]);
         }
         return $this->redirectToRoute('antispam_dnsbl_index');
     }
@@ -135,6 +140,7 @@ class DnsblController extends AbstractController
         if ($p) {
             $this->em->remove($p);
             $this->em->flush();
+            $this->audit('dnsbl.delete', targetType: 'dnsbl', targetId: $id, label: $p->getZone(), details: ['name' => $p->getName()]);
             $this->addFlash('success', 'Usunięto dostawcę');
         }
         return $this->redirectToRoute('antispam_dnsbl_index');

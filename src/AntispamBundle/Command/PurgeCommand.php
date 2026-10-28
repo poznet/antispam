@@ -2,9 +2,11 @@
 
 namespace AntispamBundle\Command;
 
+use AntispamBundle\Entity\AuditLog;
 use AntispamBundle\Entity\DnsblCache;
 use AntispamBundle\Entity\DnsblProvider;
 use AntispamBundle\Entity\SpamScoreLog;
+use AntispamBundle\Services\AuditLogger;
 use AntispamBundle\Services\ConfigService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -20,6 +22,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  *     (default 180, 0 = keep forever)
  *   - antispam_dnsbl_cache: entries no provider would still use (older than
  *     the longest provider cache TTL, at least one day)
+ *   - antispam_audit_log: rows older than `audit.retention_days` (default 365)
  *
  * Run daily, e.g. through the cron log wrapper (the Docker scheduler does):
  *
@@ -78,7 +81,26 @@ class PurgeCommand extends Command
         $n = $dryRun ? $this->countDnsblBefore($before) : $this->em->getRepository(DnsblCache::class)->purgeExpired($before);
         $output->writeln(sprintf('DNSBL cache: %s %d expired entr%s (checked before %s).', $dryRun ? 'would delete' : 'deleted', $n, $n === 1 ? 'y' : 'ies', $before->format('Y-m-d H:i')));
 
+        // --- Audit log (antispam_audit_log): own retention, not affected by --days.
+        $this->purgeAuditLog($dryRun, $output);
+        // --- end audit log
+
         return Command::SUCCESS;
+    }
+
+    /** Audit log rows older than `audit.retention_days` (default 365, 0 = keep forever). */
+    private function purgeAuditLog(bool $dryRun, OutputInterface $output): void
+    {
+        $v = $this->config->get(AuditLogger::CONFIG_RETENTION);
+        $days = $v === null || $v === '' || !is_numeric($v) ? AuditLogger::DEFAULT_RETENTION_DAYS : max(0, (int)$v);
+        if ($days === 0) {
+            $output->writeln('Audit log: retention 0 (keep forever), nothing deleted.');
+            return;
+        }
+        $before = new \DateTime('-' . $days . ' days');
+        $repo = $this->em->getRepository(AuditLog::class);
+        $n = $dryRun ? $repo->countOlderThan($before) : $repo->purgeOlderThan($before);
+        $output->writeln(sprintf('Audit log: %s %d row(s) older than %d days (before %s).', $dryRun ? 'would delete' : 'deleted', $n, $days, $before->format('Y-m-d H:i')));
     }
 
     private function maxDnsblTtl(): int

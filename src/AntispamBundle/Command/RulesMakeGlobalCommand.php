@@ -6,6 +6,7 @@ use AntispamBundle\Entity\Blacklist;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Entity\EmailWhitelist;
 use AntispamBundle\Entity\Whitelist;
+use AntispamBundle\Services\AuditLogger;
 use AntispamBundle\Services\RuleOwnership;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -40,6 +41,7 @@ class RulesMakeGlobalCommand extends Command
     public function __construct(
         private EntityManagerInterface $em,
         private RuleOwnership $ownership,
+        private ?AuditLogger $audit = null,
     ) {
         parent::__construct();
     }
@@ -89,6 +91,7 @@ class RulesMakeGlobalCommand extends Command
         }
         if (!$dryRun) {
             $this->em->flush();
+            $this->audit?->log('rules.make_global', targetType: 'rules', label: sprintf('%d przeniesionych, %d scalonych', $moved, $merged), mailbox: $owner, details: ['moved' => $moved, 'merged' => $merged]);
         }
 
         $output->writeln(sprintf('<info>%s%d rule(s) of %s made global, %d duplicate(s) merged into existing global rules.</info>',

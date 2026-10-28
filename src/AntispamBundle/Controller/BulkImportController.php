@@ -18,6 +18,8 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/bulk')]
 class BulkImportController extends AbstractController
 {
+    use AuditTrait;
+
     public const CSRF_ID = 'bulk_import';
     private const PATTERN_TYPES = ['exact', 'wildcard', 'regex'];
 
@@ -98,6 +100,7 @@ class BulkImportController extends AbstractController
             $added++;
         }
         $this->em->flush();
+        $this->audit('rule.import', targetType: $type, label: sprintf('%d dodanych, %d pominiętych', $added, $skipped), mailbox: $owner, details: ['added' => $added, 'skipped' => $skipped, 'pattern_type' => $patternType]);
 
         $this->addFlash('success', sprintf('Zaimportowano wpisy: %d (pominięte duplikaty: %d)', $added, $skipped));
         return $this->redirectToRoute('antispam_bulk_index');

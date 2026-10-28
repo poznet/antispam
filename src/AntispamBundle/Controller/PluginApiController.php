@@ -4,6 +4,7 @@ namespace AntispamBundle\Controller;
 
 use AntispamBundle\AppVersion;
 use AntispamBundle\Entity\Account;
+use AntispamBundle\Entity\AuditLog;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Services\DeferredRetroactivePass;
 use AntispamBundle\Services\PhishingReportService;
@@ -31,6 +32,8 @@ use Symfony\Component\Routing\Attribute\Route;
  */
 class PluginApiController extends AbstractController
 {
+    use AuditTrait;
+
     public function __construct(
         private RawMessageScanner $rawScanner,
         private PluginService $plugin,
@@ -122,10 +125,12 @@ class PluginApiController extends AbstractController
         $data = json_decode($request->getContent(), true);
         $account = $this->plugin->authenticate($data['email'] ?? '', $data['password'] ?? '');
         if (!$account) {
+            $this->audit('plugin.login_failed', targetType: 'account', mailbox: $typed = mb_substr(is_scalar($data['email'] ?? null) ? (string)$data['email'] : '', 0, 180), actor: $typed !== '' ? $typed : 'wtyczka', actorType: AuditLog::ACTOR_ANONYMOUS);
             return new JsonResponse(['error' => 'invalid e-mail or password'], 401);
         }
 
         $token = $this->plugin->issueToken($account);
+        $this->audit('plugin.login', targetType: 'account', targetId: $account->getId(), mailbox: $account->getEmail(), actor: $account->getEmail(), actorType: AuditLog::ACTOR_PLUGIN);
         return new JsonResponse([
             'token' => $token['token'],
             'email' => $account->getEmail(),
@@ -166,6 +171,8 @@ class PluginApiController extends AbstractController
 
         $result = $this->plugin->learn($raw, $verdict, $account, $this->clientIp($request));
         $result['authenticated'] = $account !== null;
+        $this->audit('plugin.report', targetType: 'message', label: (string)($result['sender'] ?? ''), mailbox: $account?->getEmail(), details: ['verdict' => $verdict, 'rules' => $result['rules'] ?? []],
+            actor: $account ? $account->getEmail() : 'wtyczka (anonim)', actorType: $account ? AuditLog::ACTOR_PLUGIN : AuditLog::ACTOR_ANONYMOUS);
         if ($account) {
             $this->applyRetroactive($account, $result);
         }
@@ -209,6 +216,8 @@ class PluginApiController extends AbstractController
         $result = $this->plugin->learn($raw, PluginService::VERDICT_SPAM, $account, $this->clientIp($request));
         $result['authenticated'] = true;
         $result['phishing_id'] = $stored['id'];
+        $this->audit('plugin.phishing', targetType: 'phishing', targetId: $stored['id'], label: (string)($result['sender'] ?? ''), mailbox: $account->getEmail(), details: ['duplicate' => (bool)$stored['duplicate'], 'client' => is_scalar($data['client'] ?? null) ? mb_substr((string)$data['client'], 0, 20) : ''],
+            actor: $account->getEmail(), actorType: AuditLog::ACTOR_PLUGIN);
         $result['duplicate'] = $stored['duplicate'];
         $this->applyRetroactive($account, $result);
         return new JsonResponse($result);

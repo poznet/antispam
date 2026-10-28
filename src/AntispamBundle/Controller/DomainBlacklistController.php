@@ -14,6 +14,8 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/domainblacklst')]
 class DomainBlacklistController extends AbstractController
 {
+    use AuditTrait;
+
     public function __construct(
         private EntityManagerInterface $em,
         private RuleOwnership $ownership,
@@ -71,6 +73,7 @@ class DomainBlacklistController extends AbstractController
         $entry->setScore(max(1, $score));
         $this->em->persist($entry);
         $this->em->flush();
+        $this->audit('rule.add', targetType: 'blacklist', targetId: $entry->getId(), label: $host, mailbox: $owner, details: ['pattern_type' => $patternType, 'score' => $entry->getScore()]);
 
         // Mail from this domain that is already in INBOX goes to SPAM too.
         $summary = RetroactiveSpamService::describe($this->retroactive->applyRule($entry));
@@ -88,6 +91,7 @@ class DomainBlacklistController extends AbstractController
         if ($entry) {
             $this->em->remove($entry);
             $this->em->flush();
+            $this->audit('rule.delete', targetType: 'blacklist', targetId: $id, label: $entry->getHost(), mailbox: $entry->getEmail(), details: ['pattern_type' => $entry->getPatternType()]);
         }
         return $this->redirectToRoute('antispam_blacklist_index');
     }

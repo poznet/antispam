@@ -25,6 +25,8 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/phishing')]
 class PhishingController extends AbstractController
 {
+    use AuditTrait;
+
     private const PER_PAGE = 50;
 
     public function __construct(
@@ -91,11 +93,13 @@ class PhishingController extends AbstractController
         $this->checkToken($request);
         $report = $this->find($id);
         $status = (string)$request->request->get('status');
+        $before = $report->getStatus();
         if (array_key_exists($status, PhishingReport::STATUSES)) {
             $report->setStatus($status);
         }
         $report->setNote(mb_substr((string)$request->request->get('note'), 0, 5000));
         $this->em->flush();
+        $this->audit('phishing.update', targetType: 'phishing', targetId: $id, label: $report->getSender(), mailbox: $report->getAccountEmail(), details: ['status_from' => $before, 'status_to' => $report->getStatus()]);
         $this->addFlash('success', 'Zapisano.');
         return $this->redirectToRoute('antispam_phishing_show', ['id' => $id]);
     }
@@ -140,6 +144,7 @@ class PhishingController extends AbstractController
         } else {
             $this->em->persist($rule);
             $this->em->flush();
+            $this->audit('phishing.block', targetType: 'phishing', targetId: $id, label: $rule instanceof Blacklist ? $rule->getHost() : $rule->getBlacklistemail(), mailbox: $owner, details: ['what' => $what, 'rule_id' => $rule->getId(), 'score' => $score]);
             $this->addFlash('success', 'Dodano regułę blacklisty dla ' . $owner . '.');
             $summary = RetroactiveSpamService::describe($this->retroactive->applyRule($rule));
             if ($summary) {
@@ -154,6 +159,7 @@ class PhishingController extends AbstractController
     public function emlAction(int $id)
     {
         $report = $this->find($id);
+        $this->audit('phishing.eml_download', targetType: 'phishing', targetId: $id, label: $report->getSender(), mailbox: $report->getAccountEmail());
         $response = new Response($report->getRaw());
         $response->headers->set('Content-Type', 'message/rfc822');
         $response->headers->set('X-Content-Type-Options', 'nosniff');
@@ -271,8 +277,10 @@ class PhishingController extends AbstractController
     public function deleteAction(int $id, Request $request)
     {
         $this->checkToken($request);
-        $this->em->remove($this->find($id));
+        $report = $this->find($id);
+        $this->em->remove($report);
         $this->em->flush();
+        $this->audit('phishing.delete', targetType: 'phishing', targetId: $id, label: $report->getSender(), mailbox: $report->getAccountEmail(), details: ['status' => $report->getStatus()]);
         $this->addFlash('success', 'Usunięto zgłoszenie.');
         return $this->redirectToRoute('antispam_phishing_index');
     }

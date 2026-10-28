@@ -80,6 +80,15 @@ See [phishing.md](phishing.md). CSRF token id `phishing` for all POSTs.
 | GET/POST | `/phishing/forward-settings` | Forward settings: recipients, sender, CC, note, reporter address, size limit, automatic mode (CSRF id `phishing_forward_settings`) |
 | POST | `/phishing/{id}/delete` | Delete the report and its content |
 
+## Audit log (`/audit`, ROLE_ADMIN)
+
+See [audit.md](audit.md).
+
+| Method | URL | Description |
+|--------|-----|-------------|
+| GET | `/audit` | "Dziennik audytu", 50 per page; filters `from`/`to` (`Y-m-d`), `actor`, `action` (key or group `rule.`), `mailbox`, `page` |
+| GET | `/audit/export.csv` | Same filters as CSV (UTF-8 BOM, `;`), newest 50 000 rows |
+
 ## Cron log (`/cron`)
 
 | Method | URL | Description |

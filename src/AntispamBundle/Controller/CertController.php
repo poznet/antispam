@@ -15,6 +15,8 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/cert')]
 class CertController extends AbstractController
 {
+    use AuditTrait;
+
     const PER_PAGE = 50;
 
     public function __construct(
@@ -37,6 +39,7 @@ class CertController extends AbstractController
             $this->config->set('cert.enabled', array_key_exists('enabled', $post) ? '1' : '0');
             $score = trim((string)($post['score'] ?? ''));
             $this->config->set('cert.score', $score === '' ? '' : (string)max(1, (int)$score));
+            $this->audit('settings.save', targetType: 'settings', targetId: 'cert', label: 'Lista CERT', details: ['enabled' => array_key_exists('enabled', $post), 'score' => $this->config->get('cert.score')]);
             $this->addFlash('success', 'Ustawienia listy CERT zapisane');
             return $this->redirectToRoute('antispam_cert_index');
         }
@@ -92,6 +95,7 @@ class CertController extends AbstractController
         }
         @set_time_limit(300);
         $result = $this->cert->sync();
+        $this->audit('cert.sync', targetType: 'cert', label: mb_substr((string)$result['message'], 0, 200), details: ['ok' => (bool)$result['ok']]);
         if ($result['ok']) {
             $this->addFlash('success', $result['message']);
         } else {

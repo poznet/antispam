@@ -13,6 +13,8 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/whitelist')]
 class WhitelistController extends AbstractController
 {
+    use AuditTrait;
+
     public function __construct(
         private EntityManagerInterface $em,
         private RuleOwnership $ownership,
@@ -65,6 +67,7 @@ class WhitelistController extends AbstractController
         $entry->setPatternType($patternType);
         $this->em->persist($entry);
         $this->em->flush();
+        $this->audit('rule.add', targetType: 'whitelist', targetId: $entry->getId(), label: $host, mailbox: $owner, details: ['pattern_type' => $patternType]);
         return $this->redirectToRoute('antispam_whitelist_index');
     }
 
@@ -76,6 +79,7 @@ class WhitelistController extends AbstractController
         if ($entry) {
             $this->em->remove($entry);
             $this->em->flush();
+            $this->audit('rule.delete', targetType: 'whitelist', targetId: $id, label: $entry->getHost(), mailbox: $entry->getEmail(), details: ['pattern_type' => $entry->getPatternType()]);
         }
         return $this->redirectToRoute('antispam_whitelist_index');
     }

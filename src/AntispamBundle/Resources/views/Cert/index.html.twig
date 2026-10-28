@@ -1,0 +1,105 @@
+{% extends '@Antispam/main.html.twig' %}
+{% block title %}Lista CERT{% endblock %}
+{% block page_title %}Lista Ostrzeżeń CERT Polska{% endblock %}
+
+{% block body %}
+    {% set token = csrf_token('cert_config') %}
+    <p class="text-muted">
+        CERT Polska prowadzi publiczną listę niebezpiecznych (phishingowych) domen, które polscy dostawcy internetu blokują
+        (<a href="https://hole.cert.pl" target="_blank" rel="noopener">hole.cert.pl</a>).
+        Gdy filtr jest włączony, wiadomość dostaje punkty, jeśli domena nadawcy (From, Reply-To, Return-Path)
+        lub dowolny link w treści wskazuje na domenę z listy albo jej subdomenę.
+        Lista jest pobierana z <code>{{ url }}</code> przez <code>antispam:cert:sync</code> (scheduler: co kilka godzin).
+        Agenci SSH pobierają listę samodzielnie raz na dobę.
+    </p>
+
+    <div class="row">
+        <div class="col-sm-4">
+            <div class="panel panel-info"><div class="panel-body text-center">
+                <h3 style="margin:0;">{{ total }}</h3><small class="text-muted">domen na liście</small>
+            </div></div>
+        </div>
+        <div class="col-sm-4">
+            <div class="panel panel-default"><div class="panel-body text-center">
+                <h3 style="margin:0;">{{ status.last_sync_at ? status.last_sync_at|date('Y-m-d H:i') : '—' }}</h3>
+                <small class="text-muted">ostatnia udana synchronizacja</small>
+            </div></div>
+        </div>
+        <div class="col-sm-4">
+            <div class="panel panel-default"><div class="panel-body text-center">
+                <h3 style="margin:0;">{% if enabled %}<span class="label label-success">włączony</span>{% else %}<span class="label label-default">wyłączony</span>{% endif %}</h3>
+                <small class="text-muted">filtr</small>
+            </div></div>
+        </div>
+    </div>
+
+    {% if status.last_error %}
+        <div class="alert alert-danger"><strong>Ostatni błąd:</strong> {{ status.last_error }}</div>
+    {% endif %}
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-cog"></span> Ustawienia</div>
+        <div class="panel-body">
+            <form method="post" action="{{ path('antispam_cert_index') }}">
+                <input type="hidden" name="_token" value="{{ token }}">
+                <div class="checkbox"><label>
+                    <input type="checkbox" name="config[enabled]" {% if enabled %}checked{% endif %}>
+                    <strong>Włącz filtr listy CERT</strong>
+                </label></div>
+                <div class="row" style="margin-top:10px;">
+                    <div class="col-sm-6">
+                        <label>Punkty za trafienie</label>
+                        <input type="number" name="config[score]" class="form-control" value="{{ score }}" min="1" max="200" placeholder="{{ default_score }}">
+                        <small class="text-muted">Puste = próg spamu ({{ default_score }}), czyli jedno trafienie wystarcza do uznania wiadomości za spam.</small>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" style="margin-top:10px;">Zapisz</button>
+            </form>
+            <form method="post" action="{{ path('antispam_cert_sync') }}" style="margin-top:10px;">
+                <input type="hidden" name="_token" value="{{ token }}">
+                <button type="submit" class="btn btn-default"><span class="glyphicon glyphicon-refresh"></span> Synchronizuj teraz</button>
+                <small class="text-muted">Pobranie trwa zwykle kilka sekund.</small>
+            </form>
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-search"></span> Sprawdź domenę</div>
+        <div class="panel-body">
+            <form method="get" class="form-inline">
+                <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="np. przyklad.pl lub https://przyklad.pl/login" style="min-width:300px;">
+                <button type="submit" class="btn btn-default">Sprawdź</button>
+            </form>
+            {% if lookup %}
+                <div style="margin-top:10px;">
+                    {% if not lookup.valid %}
+                        <span class="text-muted">To nie wygląda na poprawną domenę.</span>
+                    {% elseif lookup.match %}
+                        <span class="label label-danger">na liście</span>
+                        <code>{{ lookup.host }}</code>
+                        {% if lookup.match != lookup.host %}(subdomena <code>{{ lookup.match }}</code>){% endif %}
+                    {% else %}
+                        <span class="label label-success">brak na liście</span> <code>{{ lookup.host }}</code>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-th-list"></span> Przegląd listy (alfabetycznie, strona {{ page }} z {{ pages }})</div>
+        {% if sample|length > 0 %}
+            <table class="table table-striped" style="margin-bottom:0;">
+                <tbody>
+                {% for d in sample %}<tr><td><code>{{ d }}</code></td></tr>{% endfor %}
+                </tbody>
+            </table>
+            <div class="panel-footer">
+                {% if page > 1 %}<a class="btn btn-xs btn-default" href="{{ path('antispam_cert_index', {page: page - 1}) }}">&laquo; Poprzednia</a>{% endif %}
+                {% if page < pages %}<a class="btn btn-xs btn-default" href="{{ path('antispam_cert_index', {page: page + 1}) }}">Następna &raquo;</a>{% endif %}
+            </div>
+        {% else %}
+            <div class="panel-body text-muted">Lista jest pusta. Kliknij „Synchronizuj teraz”.</div>
+        {% endif %}
+    </div>
+{% endblock %}

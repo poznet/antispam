@@ -28,6 +28,12 @@
  * VirusTotal lookups. Both are off unless enabled in the synced settings.
  */
 
+const CERT_DEFAULT_URL = 'https://hole.cert.pl/domains/v2/domains.txt';
+const CERT_MAX_BYTES = 52428800;
+const CERT_MIN_ROWS = 100;
+const CERT_REFRESH_SECONDS = 86400;
+const CERT_RETRY_SECONDS = 3600;
+
 // Test suites include this file to check it against the web application's
 // analyzers; top-level functions stay defined after this early return.
 if (defined('ANTISPAM_AGENT_LIBRARY')) {
@@ -103,7 +109,7 @@ switch ($command) {
         echo "Usage:\n";
         echo "  php antispam-agent.php test\n";
         echo "  php antispam-agent.php import-rules < rules.json\n";
-        echo "  php antispam-agent.php scan [--maildir=path] [--db=path] [--spam-threshold=N] [--quarantine-threshold=N] [--no-dnsbl] [--no-headers] [--no-impersonation] [--no-urls] [--no-attachment-policy] [--no-clamav] [--no-virustotal]\n";
+        echo "  php antispam-agent.php scan [--maildir=path] [--db=path] [--spam-threshold=N] [--quarantine-threshold=N] [--no-dnsbl] [--no-headers] [--no-impersonation] [--no-urls] [--no-cert] [--no-attachment-policy] [--no-clamav] [--no-virustotal]\n";
         echo "  php antispam-agent.php apply-blacklist [--maildir=path] [--db=path] [--spam-threshold=N] [--days=30] [--limit=5000]\n";
         echo "  php antispam-agent.php health [--maildir=path] [--db=path]\n";
         echo "  php antispam-agent.php quarantine-list [--maildir=path] [--db=path] [--since=unix-ts] [--limit=N]\n";
@@ -306,6 +312,11 @@ function runScan($maildirPath, $dbPath, $options = [])
         && trim((string)($settings['vt_api_key'] ?? '')) !== '';
     $impersonationEnabled = !isset($options['no-impersonation']) && settingBool($settings, 'impersonation_enabled', true);
     $urlEnabled = !isset($options['no-urls']) && settingBool($settings, 'url_enabled', true);
+    $certEnabled = !isset($options['no-cert']) && settingBool($settings, 'cert_enabled', false);
+    $certScore = max(1, settingInt($settings, 'cert_score', $spamThreshold));
+    if ($certEnabled) {
+        certRefreshIfStale($db); // daily, fail-safe: keeps the old list on any error
+    }
     $policyEnabled = !isset($options['no-attachment-policy']) && settingBool($settings, 'attachment_policy_enabled', true);
 
     $protectedDomains = array_values(array_filter(preg_split('/\s+/', strtolower((string)($settings['impersonation_protected_domains'] ?? '')))));
@@ -429,7 +440,7 @@ function runScan($maildirPath, $dbPath, $options = [])
 
             // Body + attachments are parsed once, only when a step needs them.
             $parts = null;
-            if ($urlEnabled || $policyEnabled || $clamavEnabled || $vtEnabled) {
+            if ($urlEnabled || $certEnabled || $policyEnabled || $clamavEnabled || $vtEnabled) {
                 $parts = parseMessageParts($filePath);
             }
 
@@ -438,6 +449,18 @@ function runScan($maildirPath, $dbPath, $options = [])
                 $ur = analyzeUrls($parts['html'], $parts['text'], $urlConfig, $db, $dblCache);
                 $score += $ur['score'];
                 foreach ($ur['reasons'] as $r) { $reasons[] = $r; }
+            }
+
+            // CERT Polska list of dangerous domains (sender + links)
+            if ($certEnabled) {
+                $senders = array_merge(
+                    [$senderHost],
+                    certHostsFromAddressHeader(grabHeaderFolded($headers, 'Reply-To')),
+                    certHostsFromAddressHeader(grabHeaderFolded($headers, 'Return-Path'))
+                );
+                $cr = certAnalyze($db, array_values(array_filter($senders)), certLinkHosts($parts['html'], $parts['text']), $certScore);
+                $score += $cr['score'];
+                foreach ($cr['reasons'] as $r) { $reasons[] = $r; }
             }
 
             // Attachment policy (no daemon / API needed)
@@ -2002,6 +2025,208 @@ function ensureFolder($path)
     }
 }
 
+/* ---------------------------------------------------------------------- */
+/* CERT Polska "Lista Ostrzezen" (hole.cert.pl) - mirrors CertHoleService  */
+/* ---------------------------------------------------------------------- */
+
+function certNormalize($line)
+{
+    $d = trim((string)$line);
+    if ($d === '' || $d[0] === '#') {
+        return '';
+    }
+    $d = preg_replace('~^\*\.~', '', function_exists('mb_strtolower') ? mb_strtolower($d, 'UTF-8') : strtolower($d));
+    $d = rtrim($d, '.');
+    if (preg_match('/[^\x00-\x7F]/', $d)) {
+        if (!function_exists('idn_to_ascii')) {
+            return '';
+        }
+        $variant = defined('INTL_IDNA_VARIANT_UTS46') ? INTL_IDNA_VARIANT_UTS46 : 0;
+        $ascii = @idn_to_ascii($d, 0, $variant);
+        $d = $ascii ? strtolower($ascii) : '';
+    }
+    if ($d === '' || strlen($d) > 253 || strpos($d, '.') === false || domIsIp($d)) {
+        return '';
+    }
+    if (!preg_match('/^[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?(\.[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?)+$/', $d)) {
+        return '';
+    }
+    return $d;
+}
+
+function certCandidates($host)
+{
+    $host = certNormalize($host);
+    if ($host === '') {
+        return [];
+    }
+    $labels = explode('.', $host);
+    $out = [];
+    for ($i = 0, $n = count($labels); $i <= $n - 2; $i++) {
+        $out[] = implode('.', array_slice($labels, $i));
+    }
+    return $out;
+}
+
+function certParseList($text)
+{
+    $set = [];
+    foreach (preg_split('/\R/', (string)$text) as $line) {
+        if (($d = certNormalize($line)) !== '') {
+            $set[$d] = true;
+        }
+    }
+    return array_keys($set);
+}
+
+function certSanityError($newCount, $currentCount)
+{
+    if ($newCount < CERT_MIN_ROWS) {
+        return 'list empty or suspiciously short (' . $newCount . ' domains)';
+    }
+    if ($currentCount > 0 && $newCount < $currentCount * 0.5) {
+        return 'list (' . $newCount . ') is less than half of the current one (' . $currentCount . ')';
+    }
+    return null;
+}
+
+function certMeta($db, $key, $default = null)
+{
+    $stmt = $db->prepare('SELECT value FROM cert_meta WHERE key = :k');
+    $stmt->bindValue(':k', $key);
+    $row = $stmt->execute()->fetchArray(SQLITE3_NUM);
+    return $row ? $row[0] : $default;
+}
+
+function certSetMeta($db, $key, $value)
+{
+    $stmt = $db->prepare('INSERT OR REPLACE INTO cert_meta (key, value) VALUES (:k, :v)');
+    $stmt->bindValue(':k', $key);
+    $stmt->bindValue(':v', (string)$value);
+    $stmt->execute();
+}
+
+function certDownload($url, &$error)
+{
+    if (!function_exists('curl_init')) {
+        $error = 'curl extension missing';
+        return null;
+    }
+    $body = '';
+    $tooBig = false;
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS => 3,
+        CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+        CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS,
+        CURLOPT_CONNECTTIMEOUT => 15,
+        CURLOPT_TIMEOUT => 120,
+        CURLOPT_ENCODING => '',
+        CURLOPT_USERAGENT => 'pancernapanda-antispam-agent/1.0',
+        CURLOPT_WRITEFUNCTION => function ($ch, $chunk) use (&$body, &$tooBig) {
+            $body .= $chunk;
+            if (strlen($body) > CERT_MAX_BYTES) {
+                $tooBig = true;
+                return 0;
+            }
+            return strlen($chunk);
+        },
+    ]);
+    $ok = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $err = curl_error($ch);
+    curl_close($ch);
+    if ($tooBig) { $error = 'response too large'; return null; }
+    if ($ok === false) { $error = $err; return null; }
+    if ($status !== 200) { $error = 'HTTP ' . $status; return null; }
+    return $body;
+}
+
+/**
+ * Refresh the local copy of the CERT list when it is older than a day (failed
+ * attempts are retried after an hour). Never throws: on any problem the
+ * previous list stays in place.
+ */
+function certRefreshIfStale($db, $force = false)
+{
+    $now = time();
+    $lastOk = (int)certMeta($db, 'last_sync_ts', 0);
+    $lastTry = (int)certMeta($db, 'last_attempt_ts', 0);
+    if (!$force) {
+        if ($lastOk > 0 && $now - $lastOk < CERT_REFRESH_SECONDS) { return null; }
+        if ($lastTry > 0 && $lastTry > $lastOk && $now - $lastTry < CERT_RETRY_SECONDS) { return null; }
+    }
+    certSetMeta($db, 'last_attempt_ts', $now);
+
+    $error = '';
+    $body = certDownload(CERT_DEFAULT_URL, $error);
+    if ($body === null) {
+        certSetMeta($db, 'last_error', $error);
+        return false;
+    }
+    $domains = certParseList($body);
+    unset($body);
+    $current = (int)$db->querySingle('SELECT COUNT(*) FROM cert_domains');
+    if (($err = certSanityError(count($domains), $current)) !== null) {
+        certSetMeta($db, 'last_error', $err);
+        return false;
+    }
+    $db->exec('BEGIN');
+    $db->exec('DELETE FROM cert_domains');
+    $stmt = $db->prepare('INSERT OR IGNORE INTO cert_domains (domain) VALUES (:d)');
+    foreach ($domains as $d) {
+        $stmt->bindValue(':d', $d);
+        $stmt->execute();
+        $stmt->reset();
+    }
+    $db->exec('COMMIT');
+    certSetMeta($db, 'last_sync_ts', $now);
+    certSetMeta($db, 'last_error', '');
+    certSetMeta($db, 'count', count($domains));
+    return true;
+}
+
+/** @return array ['score' => int, 'reasons' => [...]] */
+function certAnalyze($db, array $senderHosts, array $linkHosts, $score)
+{
+    $hosts = array_merge($senderHosts, array_slice(array_values(array_unique($linkHosts)), 0, 100));
+    $stmt = $db->prepare('SELECT 1 FROM cert_domains WHERE domain = :d');
+    $seen = [];
+    foreach ($hosts as $host) {
+        foreach (certCandidates($host) as $c) {
+            if (isset($seen[$c])) { continue; }
+            $seen[$c] = true;
+            $stmt->bindValue(':d', $c);
+            $hit = $stmt->execute()->fetchArray();
+            $stmt->reset();
+            if ($hit) {
+                return ['score' => $score, 'reasons' => [['rule' => 'cert_hole:' . $c, 'score' => $score]]];
+            }
+        }
+    }
+    return ['score' => 0, 'reasons' => []];
+}
+
+function certHostsFromAddressHeader($value)
+{
+    $hosts = [];
+    if (preg_match_all('/@([a-z0-9.\-]+\.[a-z]{2,})/i', (string)$value, $m)) {
+        foreach ($m[1] as $h) { $hosts[] = domNormalize($h); }
+    }
+    return $hosts;
+}
+
+function certLinkHosts($html, $text)
+{
+    $hosts = [];
+    foreach (extractLinks($html, $text) as $link) {
+        $h = urlHost($link['href']);
+        if ($h !== '' && !domIsIp($h)) { $hosts[$h] = true; }
+    }
+    return array_keys($hosts);
+}
+
 function getDb($dbPath)
 {
     $isNew = !file_exists($dbPath);
@@ -2018,6 +2243,8 @@ function getDb($dbPath)
     $db->exec('CREATE TABLE IF NOT EXISTS score_log (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, subject TEXT, score INTEGER, decision TEXT, reasons TEXT, scored_at TEXT, file TEXT)');
     $db->exec('CREATE TABLE IF NOT EXISTS scan_log (id INTEGER PRIMARY KEY AUTOINCREMENT, scanned_at TEXT, total INTEGER, checked INTEGER, moved_to_spam INTEGER, quarantined INTEGER)');
     $db->exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)');
+    $db->exec('CREATE TABLE IF NOT EXISTS cert_domains (domain TEXT PRIMARY KEY)');
+    $db->exec('CREATE TABLE IF NOT EXISTS cert_meta (key TEXT PRIMARY KEY, value TEXT)');
 
     // pattern_type column may not exist on old agent databases; ALTER if needed.
     if (!$isNew) {

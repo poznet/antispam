@@ -30,6 +30,7 @@ Defaults: `quarantine_threshold = 5`, `spam_threshold = 10`. Configure under
 | Infected attachment (ClamAV) | `CheckAttachments` | clamav_score (def. 15) + forced spam |
 | Flagged attachment (VirusTotal) | `CheckAttachmentsVirusTotal` | vt_score (def. 15) + forced spam |
 | Shared feed match (sender/body) | `CheckSharedFeed`     | feed.score (def. 6)  |
+| Sender/link domain on the CERT Polska list (`cert_hole:<domain>`, off by default) | `CheckCertHole` | cert.score (def. = spam threshold); see [protection.md](protection.md#cert-polska-warning-list-cert_hole) |
 | VIP display-name spoofing | `CheckImpersonation` | 8 |
 | Lookalike sender domain | `CheckImpersonation` | 6 |
 | Own-domain spoof (SPF/DMARC fail) | `CheckImpersonation` | 6 |

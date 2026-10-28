@@ -69,6 +69,22 @@ php bin/console antispam:digest:send --since="-3 days"    # ignore the last-sent
 php bin/console antispam:digest:send --force              # send even if disabled in settings
 ```
 
+## CERT Polska List
+
+### antispam:cert:sync
+
+Downloads the CERT Polska "Lista Ostrzeżeń" (`https://hole.cert.pl/domains/v2/domains.txt`)
+into `antispam_cert_domain` and records the status (see
+[protection.md](protection.md#cert-polska-warning-list-cert_hole)). Does nothing (exit 0)
+while the filter is disabled in the panel; `--force` syncs anyway. Refuses to replace
+the table when the download is empty or less than half of the current list (exit 1,
+error saved in `cert.last_error`). Run by the scheduler every `CERT_SYNC_INTERVAL` hours.
+
+```bash
+php bin/console antispam:cert:sync
+php bin/console antispam:cert:sync --force
+```
+
 ## Shared Feed Commands
 
 ### antispam:feed:sync

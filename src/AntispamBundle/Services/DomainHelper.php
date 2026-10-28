@@ -100,6 +100,24 @@ class DomainHelper
     }
 
     /**
+     * Punycode (ASCII) form of a domain: pure-ASCII input is returned as is,
+     * Unicode needs the intl extension ('' when it cannot be converted).
+     */
+    public static function toAscii($domain)
+    {
+        $domain = self::normalize($domain);
+        if ($domain === '' || !preg_match('/[^\x00-\x7F]/', $domain)) {
+            return $domain;
+        }
+        if (!function_exists('idn_to_ascii')) {
+            return '';
+        }
+        $variant = defined('INTL_IDNA_VARIANT_UTS46') ? INTL_IDNA_VARIANT_UTS46 : 0;
+        $ascii = @idn_to_ascii($domain, 0, $variant);
+        return $ascii ? strtolower($ascii) : '';
+    }
+
+    /**
      * Decode punycode labels ("xn--...") to Unicode when the intl extension is
      * available; otherwise return the input unchanged.
      */

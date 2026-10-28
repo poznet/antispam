@@ -42,3 +42,11 @@ button.secondary { background: #fff; color: #005bba; }
   button.secondary { background: transparent; color: #1fd7fd; border-color: #1fd7fd; }
   .muted { color: #9aa8c7; }
 }
+
+#diag h3 { font-size: 14px; margin: 18px 0 4px; }
+.steps, .events { list-style: none; padding: 0; margin: 10px 0 0; }
+.steps li, .events li { padding: 6px 8px; border-radius: 6px; margin-bottom: 4px; font-size: 13px; word-break: break-word; }
+.steps li.ok, .events li.ok { background: rgba(46, 125, 50, .10); }
+.steps li.err, .events li.err { background: rgba(198, 40, 40, .12); }
+.events { max-height: 320px; overflow: auto; }
+#diag button + button { margin-left: 6px; }

@@ -109,6 +109,20 @@ to another.
 
 ## Troubleshooting
 
+**Diagnostyka (1.1.3+)** at the bottom of the plugin settings:
+
+- *Testuj połączenie* checks step by step: plugin and Thunderbird version,
+  server address, Thunderbird's permission to talk to that host, `GET
+  /api/plugin/status` (latency, server and plugin version, login state) and
+  `POST /api/plugin/ping`, which the server writes to *Dziennik audytu* as
+  `plugin.ping` - so the admin sees the plugin reached the server.
+- *Ostatnie zdarzenia wtyczki* (last 40, stored locally): every click on the
+  toolbar button / context menu, every junk / not-junk mark Thunderbird
+  reports, and the result of every request (method, path, HTTP status or
+  network error). If a click in Thunderbird adds nothing here, the click never
+  reached the plugin (typically an add-on updated while Thunderbird was
+  running - restart Thunderbird).
+
 The settings page (*Add-ons and Themes → Antispam Pancernapanda → Preferences*,
 or the plugin opening it for a missing login) opens **in its own tab** since
 1.1.2 (`options_ui.open_in_tab`). The inline page inside the add-on manager
@@ -158,6 +172,7 @@ plugin version the server bundles) and `server_version` (the antispam release,
 | POST | `/api/plugin/login` | — | `{email, password}` → `{token, email, expires_at}` |
 | POST | `/api/plugin/report` | optional for `spam`, required for `ham` | `{raw_base64, verdict: "spam"\|"ham"}` → `{verdict, sender, signals, rules[], authenticated, retroactive?: "scheduled"}` |
 | POST | `/api/plugin/phishing` | required | `{raw_base64 (max 10 MiB decoded), client: "thunderbird"\|"outlook", truncated: bool}` → report fields + `{phishing_id, duplicate}`. 30/h per account. See [phishing.md](phishing.md) |
+| POST | `/api/plugin/ping` | optional | Connection test from the settings page: `{client, client_version, app}` → `{ok, enabled, server_version, plugin_version, authenticated, email, client_ip, received_at}`. Nothing is learned; written to the audit log as `plugin.ping`. 60/h per IP |
 | POST | `/api/plugin/check` | required | `{raw_base64}` → `{decision, spam, score, spam_threshold, quarantine_threshold, reasons[], sender, subject}` |
 | GET | `/plugin/download` | — | The `.xpi` |
 

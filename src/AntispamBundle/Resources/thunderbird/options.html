@@ -65,6 +65,21 @@
   <button type="button" id="save" disabled>Zapisz ustawienia</button>
   <span id="saveMsg" class="msg" hidden></span>
 
+  <section id="diag">
+    <h2>Diagnostyka</h2>
+    <p class="muted">Sprawdza adres, zgodę Thunderbirda na połączenie, odpowiedź serwera i zapisuje test
+      na serwerze - administrator zobaczy go w panelu (Dziennik audytu, akcja <code>plugin.ping</code>).</p>
+    <button type="button" id="test" class="secondary">Testuj połączenie</button>
+    <ul id="testResult" class="steps" hidden></ul>
+
+    <h3>Ostatnie zdarzenia wtyczki</h3>
+    <p class="muted">Kliknięcia, oznaczanie śmieci i wyniki zapytań do serwera. Jeśli po kliknięciu
+      w Thunderbirdzie nic tu nie przybywa, wtyczka nie dostaje kliknięcia - uruchom Thunderbirda ponownie.</p>
+    <button type="button" id="eventsRefresh" class="secondary">Odśwież</button>
+    <button type="button" id="eventsClear" class="secondary">Wyczyść</button>
+    <ul id="events" class="events"></ul>
+  </section>
+
   <script src="options.js"></script>
 </body>
 </html>

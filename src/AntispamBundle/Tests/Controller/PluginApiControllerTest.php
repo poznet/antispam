@@ -157,6 +157,41 @@ class PluginApiControllerTest extends TestCase
         $this->assertFalse($data['authenticated']);
     }
 
+    public function testPingAnswersAndIsWrittenToTheAuditLog()
+    {
+        $this->loggedIn();
+        $audit = new \AntispamBundle\Tests\Support\RecordingAuditLogger();
+        $controller = $this->controller();
+        $controller->setContainer(new \Symfony\Component\DependencyInjection\ServiceLocator([
+            \AntispamBundle\Services\AuditLogger::class => fn() => $audit,
+        ]));
+
+        $request = Request::create('/api/plugin/ping', 'POST', [], [], [], ['REMOTE_ADDR' => '203.0.113.5'],
+            json_encode(['client' => 'thunderbird', 'client_version' => '1.1.3', 'app' => 'Thunderbird 153.6.0']));
+        $request->headers->set('Authorization', 'Bearer good');
+        $data = json_decode($controller->pingAction($request)->getContent(), true);
+
+        $this->assertTrue($data['ok']);
+        $this->assertTrue($data['authenticated']);
+        $this->assertSame('jan@example.com', $data['email']);
+        $this->assertSame('203.0.113.5', $data['client_ip']);
+        $this->assertSame(PluginApiController::PLUGIN_VERSION, $data['plugin_version']);
+        $this->assertContains('ping', $this->hits);
+
+        $this->assertCount(1, $audit->entries);
+        $this->assertSame('plugin.ping', $audit->entries[0]['action']);
+        $this->assertSame('jan@example.com', $audit->entries[0]['mailbox']);
+        $this->assertSame('1.1.3', $audit->entries[0]['details']['client_version']);
+    }
+
+    public function testPingWithoutTokenIsAnonymousAndRateLimited()
+    {
+        $this->plugin = $this->createMock(PluginService::class);
+        $this->plugin->method('hit')->willReturn(false);
+        $res = $this->controller()->pingAction(Request::create('/api/plugin/ping', 'POST', [], [], [], [], '{}'));
+        $this->assertSame(429, $res->getStatusCode());
+    }
+
     public function testManifestVersionMatchesPluginVersion()
     {
         $manifest = json_decode(file_get_contents(__DIR__ . '/../../Resources/thunderbird/manifest.json'), true);

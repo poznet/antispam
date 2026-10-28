@@ -138,4 +138,63 @@ $("save").addEventListener("click", () => {
   });
 });
 
+function stepItem(ok, title, text) {
+  const li = document.createElement("li");
+  li.className = ok ? "ok" : "err";
+  const b = document.createElement("strong");
+  b.textContent = (ok ? "✓ " : "✗ ") + title;
+  li.appendChild(b);
+  if (text) li.appendChild(document.createTextNode(" — " + text));
+  return li;
+}
+
+$("test").addEventListener("click", async () => {
+  const list = $("testResult");
+  list.hidden = false;
+  list.textContent = "";
+  list.appendChild(stepItem(true, "Testowanie…", ""));
+  $("test").disabled = true;
+  try {
+    const res = await send({ cmd: "test" });
+    list.textContent = "";
+    for (const st of (res && res.steps) || []) list.appendChild(stepItem(st.ok, st.name, st.text));
+    if (!res || !res.steps) list.appendChild(stepItem(false, "Brak odpowiedzi skryptu wtyczki", "uruchom ponownie Thunderbirda"));
+  } catch (e) {
+    list.textContent = "";
+    list.appendChild(stepItem(false, "Test nie wykonał się", errorText(e) + " — uruchom ponownie Thunderbirda"));
+  } finally {
+    $("test").disabled = false;
+    loadEvents();
+  }
+});
+
+async function loadEvents() {
+  const list = $("events");
+  list.textContent = "";
+  let events = [];
+  try {
+    events = (await send({ cmd: "events" })) || [];
+  } catch (e) {
+    list.appendChild(stepItem(false, "Nie udało się wczytać zdarzeń", errorText(e)));
+    return;
+  }
+  if (!events.length) {
+    const li = document.createElement("li");
+    li.className = "muted";
+    li.textContent = "Brak zdarzeń.";
+    list.appendChild(li);
+  }
+  for (const ev of events) {
+    const d = new Date(ev.t);
+    list.appendChild(stepItem(ev.ok, d.toLocaleString("pl-PL"), ev.text));
+  }
+}
+
+$("eventsRefresh").addEventListener("click", loadEvents);
+$("eventsClear").addEventListener("click", async () => {
+  try { await send({ cmd: "clearEvents" }); } catch (e) { /* ignore */ }
+  loadEvents();
+});
+
 refresh();
+loadEvents();

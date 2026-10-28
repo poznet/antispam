@@ -48,7 +48,7 @@ class PluginApiController extends AbstractController
     /** Phishing reports (full messages up to 10 MiB each) per account and hour. */
     const PHISHING_RATE_LIMIT = 30;
 
-    const PLUGIN_VERSION = '1.1.2';
+    const PLUGIN_VERSION = '1.1.3';
 
     #[Route('/plugin/download', name: 'antispam_plugin_download', methods: ['GET'])]
     public function downloadAction(Request $request)
@@ -108,6 +108,39 @@ class PluginApiController extends AbstractController
             'max_upload_bytes' => $this->plugin->getMaxUploadBytes(),
             'authenticated' => $account !== null,
             'email' => $account ? $account->getEmail() : null,
+        ]);
+    }
+
+    /**
+     * Connection test from the plugin settings ("Testuj połączenie"). POST
+     * {"client": "thunderbird", "client_version": "...", "app": "Thunderbird 153"}.
+     * Nothing is learned; the call is written to the audit log (plugin.ping),
+     * so the admin sees in the panel that the plugin reached this server.
+     */
+    #[Route('/api/plugin/ping', name: 'antispam_plugin_api_ping', methods: ['POST'])]
+    public function pingAction(Request $request)
+    {
+        if (!$this->plugin->hit('ping', $this->clientIp($request), 60, 3600)) {
+            return new JsonResponse(['error' => 'rate limit exceeded'], 429);
+        }
+        $account = $this->plugin->accountForToken($this->bearer($request));
+        $data = json_decode($request->getContent(), true);
+        $data = is_array($data) ? $data : [];
+        $clip = static fn($v) => mb_substr(is_scalar($v) ? (string)$v : '', 0, 80);
+        $details = ['client' => $clip($data['client'] ?? ''), 'client_version' => $clip($data['client_version'] ?? ''), 'app' => $clip($data['app'] ?? ''), 'authenticated' => $account !== null];
+
+        $this->audit('plugin.ping', targetType: 'plugin', label: trim($details['client'] . ' ' . $details['client_version']), mailbox: $account?->getEmail(), details: $details,
+            actor: $account ? $account->getEmail() : 'wtyczka (anonim)', actorType: $account ? AuditLog::ACTOR_PLUGIN : AuditLog::ACTOR_ANONYMOUS);
+
+        return new JsonResponse([
+            'ok' => true,
+            'enabled' => $this->plugin->isEnabled(),
+            'server_version' => AppVersion::VERSION,
+            'plugin_version' => self::PLUGIN_VERSION,
+            'authenticated' => $account !== null,
+            'email' => $account ? $account->getEmail() : null,
+            'client_ip' => $this->clientIp($request),
+            'received_at' => (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM),
         ]);
     }
 

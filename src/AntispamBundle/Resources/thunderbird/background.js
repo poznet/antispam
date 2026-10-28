@@ -64,6 +64,22 @@ const movedTo = new Map();      // old message id → { id, t } after a move (on
 
 // --- settings / API ---------------------------------------------------------
 
+// --- event log (shown on the settings page, "Diagnostyka") -----------------
+
+const EVENT_LOG_MAX = 40;
+let eventWrite = Promise.resolve();
+
+/** Remember what the plugin did (clicks, requests, errors) - readable on the settings page. */
+function logEvent(kind, ok, text) {
+  const entry = { t: Date.now(), kind, ok: !!ok, text: String(text || "").slice(0, 300) };
+  eventWrite = eventWrite.then(async () => {
+    const { eventLog = [] } = await messenger.storage.local.get("eventLog");
+    eventLog.unshift(entry);
+    await messenger.storage.local.set({ eventLog: eventLog.slice(0, EVENT_LOG_MAX) });
+  }).catch(e => console.warn("antispam: event log", e));
+  return eventWrite;
+}
+
 async function settings() {
   const s = Object.assign({}, DEFAULTS, await messenger.storage.local.get(Object.keys(DEFAULTS)));
   if (!s.server) s.server = await bundledServer;
@@ -93,8 +109,10 @@ async function api(path, { method = "GET", body = null, auth = true, timeout = R
     if (e.name === "AbortError") {
       const err = new Error("serwer nie odpowiedział w " + Math.round(timeout / 1000) + " s");
       err.timeout = true;
+      logEvent("api", false, method + " " + path + ": " + err.message);
       throw err;
     }
+    logEvent("api", false, method + " " + path + ": " + e.message + " (brak połączenia, uprawnienia lub certyfikat)");
     throw new Error(e.message);
   } finally {
     clearTimeout(timer);
@@ -109,8 +127,10 @@ async function api(path, { method = "GET", body = null, auth = true, timeout = R
     const err = new Error(data.error
       || (res.status === 413 ? "wiadomość za duża dla serwera (HTTP 413)" : "HTTP " + res.status));
     err.status = res.status;
+    logEvent("api", false, method + " " + path + ": " + (data.error ? "HTTP " + res.status + " " + data.error : err.message));
     throw err;
   }
+  if (path !== "/api/plugin/status") logEvent("api", true, method + " " + path + ": HTTP " + res.status);
   return data;
 }
 
@@ -542,9 +562,13 @@ if (messenger.messages.onUpdated) {
     // the Junk folder next, and the id stops working once it is moved.
     const rawData = messenger.messages.getRaw(message.id);
     rawData.catch(() => {}); // handled in report(); avoids an unhandled rejection meanwhile
+    logEvent("junk", true, (changed.junk ? "Oznaczono jako śmieci" : "Oznaczono jako nie-śmieci") + " w Thunderbirdzie: " + (message.subject || "(bez tematu)"));
     enqueue(async () => {
       const s = await settings();
-      if (!s.reportOnJunk) return;
+      if (!s.reportOnJunk) {
+        logEvent("junk", false, "Zgłaszanie przy oznaczaniu śmieci jest wyłączone w ustawieniach");
+        return;
+      }
       if (changed.junk) await report(message, "spam", { rawData });
       else if (s.token) await report(message, "ham", { rawData });
     });
@@ -563,6 +587,7 @@ async function displayedMessages(tab) {
 }
 
 messenger.messageDisplayAction.onClicked.addListener(tab => {
+  logEvent("click", true, "Przycisk „Zgłoś spam” na pasku wiadomości");
   enqueueManual(async () => {
     for (const m of await displayedMessages(tab)) await reportSpamAndFile(m);
   });
@@ -588,6 +613,7 @@ async function selectedMessages(info) {
 
 messenger.menus.onClicked.addListener(info => {
   if (!MENU[info.menuItemId]) return;
+  logEvent("click", true, "Menu: " + MENU[info.menuItemId]);
   enqueueManual(async () => {
     for (const m of await selectedMessages(info)) {
       if (info.menuItemId === "antispam-spam") await reportSpamAndFile(m);
@@ -597,6 +623,61 @@ messenger.menus.onClicked.addListener(info => {
     }
   });
 });
+
+// --- connection test ("Testuj połączenie" on the settings page) --------------
+
+/**
+ * Step by step: server address, host permission, GET /status, POST /ping (which
+ * the server writes to its audit log as plugin.ping). Returns a list of
+ * {name, ok, text} for the settings page.
+ */
+async function connectionTest() {
+  const steps = [];
+  const step = (name, ok, text) => { steps.push({ name, ok, text }); return ok; };
+  const s = await settings();
+  const manifest = messenger.runtime.getManifest();
+  let app = "";
+  try { const i = await messenger.runtime.getBrowserInfo(); app = i.name + " " + i.version; } catch (e) { /* ignore */ }
+  step("Wtyczka", true, "wersja " + manifest.version + (app ? ", " + app : ""));
+
+  if (!step("Adres serwera", !!s.server, s.server || "nie ustawiono - wpisz adres w sekcji Serwer i zapisz")) {
+    return finishTest(steps);
+  }
+  let origin = null;
+  try { const u = new URL(s.server); origin = u.protocol + "//" + u.hostname + "/*"; } catch (e) { /* invalid */ }
+  if (!step("Poprawny adres", !!origin, origin ? s.server : "nieprawidłowy adres URL")) return finishTest(steps);
+  let allowed = false;
+  try { allowed = await messenger.permissions.contains({ origins: [origin] }); } catch (e) { /* older API */ }
+  step("Zgoda na połączenie z serwerem", allowed, allowed ? origin : "brak - kliknij „Zapisz ustawienia” i zaakceptuj prośbę Thunderbirda");
+
+  let st;
+  const t0 = Date.now();
+  try {
+    st = await api("/api/plugin/status", { timeout: 15000 });
+    step("Serwer odpowiada (GET /status)", true, (Date.now() - t0) + " ms, serwer " + (st.server_version || "?") + ", wtyczka na serwerze " + (st.version || "?")
+      + (st.version && st.version !== manifest.version ? " - pobierz nowszą wtyczkę" : ""));
+    step("Wtyczki włączone na serwerze", !!st.enabled, st.enabled ? "tak" : "administrator wyłączył wtyczki");
+    step("Logowanie", !!st.authenticated || !s.token, st.authenticated ? "zalogowano jako " + st.email
+      : (s.token ? "sesja wygasła - zaloguj się ponownie" : "niezalogowano (działa tylko zgłaszanie spamu" + (st.anonymous_reports ? ")" : " - wyłączone na serwerze)")));
+  } catch (e) {
+    step("Serwer odpowiada (GET /status)", false, e.message);
+    return finishTest(steps);
+  }
+
+  try {
+    const p = await api("/api/plugin/ping", { method: "POST", body: { client: "thunderbird", client_version: manifest.version, app } });
+    step("Zapis testu na serwerze (POST /ping)", !!p.ok, "przyjęto " + (p.received_at || "") + " z IP " + (p.client_ip || "?") + " - widoczne w panelu: Dziennik audytu, akcja plugin.ping");
+  } catch (e) {
+    step("Zapis testu na serwerze (POST /ping)", false, e.message + (e.status === 404 ? " - serwer nie ma jeszcze tej funkcji (zaktualizuj antyspam)" : ""));
+  }
+  return finishTest(steps);
+}
+
+async function finishTest(steps) {
+  const ok = steps.every(x => x.ok);
+  await logEvent("test", ok, "Test połączenia: " + (ok ? "OK" : steps.filter(x => !x.ok).map(x => x.name).join(", ")));
+  return { ok, steps };
+}
 
 // --- options page bridge ----------------------------------------------------
 
@@ -625,6 +706,15 @@ messenger.runtime.onMessage.addListener(async (msg) => {
     }
     case "logout":
       await messenger.storage.local.set({ token: "", email: "" });
+      return { ok: true };
+    case "test":
+      return connectionTest();
+    case "events": {
+      const { eventLog = [] } = await messenger.storage.local.get("eventLog");
+      return eventLog;
+    }
+    case "clearEvents":
+      await messenger.storage.local.set({ eventLog: [] });
       return { ok: true };
     default:
       return undefined;

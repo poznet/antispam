@@ -19,7 +19,7 @@ class CheckIfIsAlreadyChecked
 
     public function check(MessageEvent $event)
     {
-        if ($this->ms->isChecked($event->getMessage())) {
+        if ($this->ms->isChecked($event->getMessage(), $event->getEmail())) {
             $event->setCheckedbefore(true);
             $event->stopPropagation();
         }

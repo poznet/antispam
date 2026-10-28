@@ -47,9 +47,8 @@ class GlobalRulesConsumersTest extends TestCase
     {
         [$local, $host] = explode('@', $sender);
         $msg = $this->createMock(MessageInterface::class);
-        $msg->method('getHeaders')->willReturn(new Headers((object)[
-            'sender' => [(object)['mailbox' => $local, 'host' => $host]],
-        ]));
+        // The list listeners match the From: address (not Sender:).
+        $msg->method('getFrom')->willReturn(new \Ddeboer\Imap\Message\EmailAddress($local, $host));
         return new MessageEvent($msg, $mailbox);
     }
 

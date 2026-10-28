@@ -41,12 +41,14 @@ class UrlAnalyzer
         'qrco.de', 'tiny.one', 'urlz.fr', 'x.co',
     ];
 
-    /** @var callable|null fn(string $fqdn): string[] list of A records */
+    /** @var callable|null fn(string $fqdn): string[]|null list of A records (null = DNS error) */
     private $resolver;
     /** @var callable|null fn(array $urls, string $key, int $timeout): string[] flagged urls */
     private $safeBrowsing;
 
     private $dnsCache = [];
+    /** @var array<string, int> zone => failed or slow lookups (circuit breaker, see DnsblService) */
+    private $dnsFailures = [];
 
     public function __construct(?callable $resolver = null, ?callable $safeBrowsing = null)
     {
@@ -210,14 +212,21 @@ class UrlAnalyzer
     {
         $key = $domain . '|' . $zone;
         if (!array_key_exists($key, $this->dnsCache)) {
+            if (($this->dnsFailures[$zone] ?? 0) >= DnsblService::MAX_FAILURES) {
+                return false; // zone keeps failing: skip it for the rest of the run
+            }
+            $started = microtime(true);
             $records = $this->resolver
                 ? call_user_func($this->resolver, $domain . '.' . $zone)
-                : self::resolveA($domain . '.' . $zone);
+                : DnsblService::lookupA($domain . '.' . $zone);
+            if ($records === null || microtime(true) - $started > DnsblService::SLOW_LOOKUP_SECONDS) {
+                $this->dnsFailures[$zone] = ($this->dnsFailures[$zone] ?? 0) + 1;
+            }
             $listed = false;
             foreach ((array)$records as $ip) {
                 // 127.0.0.1 = query refused (URIBL), 127.255.255.x = error codes
                 // (Spamhaus via public resolvers) - neither means "listed".
-                if (strpos($ip, '127.') === 0 && $ip !== '127.0.0.1' && strpos($ip, '127.255.255.') !== 0) {
+                if (DnsblService::isListingAddress($ip)) {
                     $listed = true;
                     break;
                 }

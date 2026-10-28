@@ -19,13 +19,16 @@ Defaults: `quarantine_threshold = 5`, `spam_threshold = 10`. Configure under
 |-------------------|-----------------------|----------------------|
 | Domain blacklist  | `CheckBlacklist`      | rule.score (def. 10) |
 | Email blacklist   | `CheckEmailBlacklist` | rule.score (def. 10) |
-| SPF fail          | `CheckHeaders`        | 6                    |
-| DKIM fail/none    | `CheckHeaders`        | 4                    |
-| DMARC fail/none   | `CheckHeaders`        | 6                    |
+| SPF fail/softfail (`spf_fail`) | `CheckHeaders` | 6 (hard)        |
+| DKIM fail, no passing signature (`dkim_fail`) | `CheckHeaders` | 4 (hard) |
+| DMARC fail (`dmarc_fail`) | `CheckHeaders` | 6 (hard)             |
+| No DKIM signature (`dkim_none`) | `CheckHeaders` | 1               |
+| No DMARC policy (`dmarc_none`) | `CheckHeaders` | 1                |
 | From/Reply-To mismatch | `CheckHeaders`   | 3                    |
-| All-caps subject / money keywords / excess punctuation | `CheckHeaders` | 3 |
+| All-caps subject (≥ 10 letters, none lower-case) / money keywords / excess punctuation | `CheckHeaders` | 3 |
 | Missing Message-ID| `CheckHeaders`        | 2                    |
 | > 10 Received hops| `CheckHeaders`        | 2                    |
+| Header score cap (`header_cap`, negative) | `CheckHeaders` | see below |
 | DNSBL hit         | `CheckDnsbl`          | provider.score       |
 | Infected attachment (ClamAV) | `CheckAttachments` | clamav_score (def. 15) + forced spam |
 | Flagged attachment (VirusTotal) | `CheckAttachmentsVirusTotal` | vt_score (def. 15) + forced spam |
@@ -44,6 +47,30 @@ Defaults: `quarantine_threshold = 5`, `spam_threshold = 10`. Configure under
 | Double extension / bidi filename | `CheckAttachmentPolicy` | 8 |
 | Office macro / active PDF | `CheckAttachmentPolicy` | 6 |
 | Password-protected archive / document | `CheckAttachmentPolicy` | 5 |
+
+### Header checks (`HeaderAnalyzer`)
+
+- SPF/DKIM/DMARC are read from the **topmost** `Authentication-Results` (and
+  `Received-SPF`) header only - the one the receiving server added. Lower
+  ones come from earlier hops or from the sender (a spammer can add its own
+  `spf=pass`), and stale results of forwarded mail must not count.
+- Folded headers are unfolded and the subject is RFC 2047-decoded before the
+  heuristics. In IMAP mode the raw header block is fetched
+  (`imap_fetchheader`); `imap_headerinfo()` has no authentication headers.
+- `dkim=none` / `dmarc=none` (unsigned mail, no DMARC record - normal for
+  many small senders) are worth **1 point** each. Until this release they
+  were scored as failures (4 + 6 = 10 = the spam threshold), which made
+  unsigned legitimate mail spam in the plugin scanner and the agent.
+- **Cap:** the soft header signals together stay below the quarantine
+  threshold, and the whole header score stays below the spam threshold.
+  Headers alone can therefore quarantine a message (hard SPF/DKIM/DMARC
+  failures) but never send it to SPAM - that needs more evidence (blacklist,
+  DNSBL, links, attachments, feed...). The cut is logged as a negative
+  `header_cap` reason, so the reasons still add up. With the defaults (5/10):
+  soft ≤ 4, total ≤ 9.
+
+The Maildir agent has its own copy of these rules
+(`analyzeHeaders()` in `antispam-agent.php`) and must follow the same defaults.
 
 The impersonation, link and attachment-policy rules are described in
 [protection.md](protection.md). Quarantined messages can be released by their
@@ -113,6 +140,8 @@ network error is treated as "no opinion" and never penalises a message. The
 free VirusTotal key is rate-limited to ~4 requests/minute, so this is best
 suited to low-volume mailboxes or a paid key. The verdict and filename are
 recorded in the score log reasons as `virustotal:<malicious>/<total>`.
+Verdicts are kept per hash for the rest of the run (up to 1000 hashes, errors
+are not kept), so an attachment repeated in many messages costs one lookup.
 
 Requires the PHP `curl` extension. The standalone Maildir agent supports the
 same VirusTotal lookup; settings are pushed to it via the sync payload (see
@@ -127,7 +156,14 @@ Blacklist and whitelist rules support three pattern types:
 - `regex` — PHP PCRE without delimiters, e.g. `^mail\d+\.bad$`
 
 Invalid regex is logged to the error log and simply never matches — a bad rule
-won't crash the scan.
+won't crash the scan. Regex rules run with `pcre.backtrack_limit` lowered to
+100 000, so a catastrophic pattern such as `(a+)+$` stops matching instead of
+stalling the scan; `PatternMatcher::validate()` reports invalid and too
+expensive regexes for the rule forms. Wildcards escape every regex
+metacharacter, including the `~` delimiter.
+
+All rules are matched against the **From:** address (domain rules: its
+domain), never the `Sender:` header.
 
 ## Rule ownership
 
@@ -182,11 +218,21 @@ has its own score and per-IP cache TTL. Presets include Spamhaus, SORBS,
 Barracuda, SpamCop, PSBL and UCEPROTECT — click "Add" to enable them. You can
 also add any custom zone.
 
-The listener takes the first `[a.b.c.d]` IPv4 address found in the `Received`
-headers (falling back to the first bare IPv4) - normally the connecting host
-recorded in the topmost header, the one added by your own mail server - and
-queries each enabled zone. Results are cached (`antispam_dnsbl_cache`) to avoid
-hammering DNS.
+The listener takes the connecting IP from the raw `Received` headers: top-down,
+the first public IPv4 in a `from` clause (bracketed `[a.b.c.d]` preferred; the
+`by` part, private, loopback and reserved addresses are skipped). The plugin
+scanner uses the same extractor (`RawMessageParser::connectingIpFromReceived()`).
+
+Only an answer in `127.0.0.0/8` counts as **listed** - except `127.0.0.1`
+(URIBL & co.: query refused) and `127.255.255.0/24` (Spamhaus error codes,
+e.g. queries through a public resolver, typical in Docker). Any other answer
+(ISP resolvers answering NXDOMAIN with their own IP) and DNS errors mean "not
+listed" and are **not cached**; cache rows written as "listed" with a
+non-listing response by older versions are dropped and queried again. Real
+answers are cached (`antispam_dnsbl_cache`) for the provider's TTL. A zone
+whose lookups fail or take over 3 s three times is skipped for the rest of
+the run (circuit breaker; the URI DBL lookups in `CheckUrls` use the same
+rule). Provider hit counters are incremented in SQL.
 
 The same configuration is synced down to the Maildir agent during
 `antispam:agent:sync` — the standalone agent performs DNSBL lookups locally.

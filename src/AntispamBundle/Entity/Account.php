@@ -84,6 +84,17 @@ class Account
     #[ORM\Column(name: 'plugin_password_hash', type: 'string', length: 255, nullable: true)]
     private $pluginPasswordHash;
 
+    /**
+     * IMAP scan cursor: UIDVALIDITY of INBOX and the highest UID already run
+     * through the pipeline, so a scan only fetches newer mail. Both null =
+     * no cursor yet; 0/0 = full INBOX pass requested ("reset checked flags").
+     */
+    #[ORM\Column(name: 'imap_uid_validity', type: 'bigint', nullable: true)]
+    private $imapUidValidity;
+
+    #[ORM\Column(name: 'imap_last_uid', type: 'bigint', nullable: true)]
+    private $imapLastUid;
+
     public function getId() { return $this->id; }
 
     public function getName() { return $this->name; }
@@ -99,13 +110,13 @@ class Account
     public function isSsh() { return $this->connectionType === self::CONNECTION_SSH; }
 
     public function getImapHost() { return $this->imapHost; }
-    public function setImapHost($imapHost) { $this->imapHost = $imapHost; return $this; }
+    public function setImapHost($imapHost) { $this->forgetCursorIfChanged($this->imapHost, $imapHost); $this->imapHost = $imapHost; return $this; }
 
     public function getImapPort() { return $this->imapPort; }
-    public function setImapPort($imapPort) { $this->imapPort = $imapPort; return $this; }
+    public function setImapPort($imapPort) { $this->forgetCursorIfChanged($this->imapPort, $imapPort); $this->imapPort = $imapPort; return $this; }
 
     public function getImapLogin() { return $this->imapLogin; }
-    public function setImapLogin($imapLogin) { $this->imapLogin = $imapLogin; return $this; }
+    public function setImapLogin($imapLogin) { $this->forgetCursorIfChanged($this->imapLogin, $imapLogin); $this->imapLogin = $imapLogin; return $this; }
 
     public function getImapPassword() { return $this->imapPassword; }
     public function setImapPassword($imapPassword) { $this->imapPassword = $imapPassword; return $this; }
@@ -145,6 +156,38 @@ class Account
 
     public function getPluginPasswordHash() { return $this->pluginPasswordHash; }
     public function setPluginPasswordHash($hash) { $this->pluginPasswordHash = $hash; return $this; }
+
+    public function getImapUidValidity() { return $this->imapUidValidity === null ? null : (int)$this->imapUidValidity; }
+    public function getImapLastUid() { return $this->imapLastUid === null ? null : (int)$this->imapLastUid; }
+
+    /** @param array{uidvalidity:int, last_uid:int}|null $cursor */
+    public function setImapCursor(?array $cursor)
+    {
+        $this->imapUidValidity = $cursor === null ? null : (int)$cursor['uidvalidity'];
+        $this->imapLastUid = $cursor === null ? null : (int)$cursor['last_uid'];
+        return $this;
+    }
+
+    /**
+     * Another server or mailbox: its UIDs mean nothing for the old cursor.
+     * Without a cursor the next scan only looks at mail since the last scan.
+     */
+    private function forgetCursorIfChanged($old, $new)
+    {
+        if ($old !== null && (string)$old !== (string)$new) {
+            $this->imapUidValidity = null;
+            $this->imapLastUid = null;
+        }
+    }
+
+    /** @return array{uidvalidity:int, last_uid:int}|null */
+    public function getImapCursor()
+    {
+        if ($this->imapUidValidity === null || $this->imapLastUid === null) {
+            return null;
+        }
+        return ['uidvalidity' => (int)$this->imapUidValidity, 'last_uid' => (int)$this->imapLastUid];
+    }
 
     /** Set (or with null/'' clear) the Thunderbird plugin password. */
     public function setPluginPassword($plain)

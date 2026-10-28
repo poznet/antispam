@@ -10,6 +10,8 @@ use Doctrine\ORM\EntityManagerInterface;
 
 class CheckWhitelist
 {
+    use SenderRuleTrait;
+
     private $em;
     private $ms;
     /** @var array<string, array> rules cached per account email for the lifetime of this listener */
@@ -25,12 +27,11 @@ class CheckWhitelist
     {
         $msg = $event->getMessage();
 
-        try {
-            $host = strtolower((string)$msg->getHeaders()->get('sender')[0]->host);
-        } catch (\Throwable $e) {
+        $from = self::fromAddress($event);
+        if ($from === null) {
             return;
         }
-        if (!$host) return;
+        $host = $from[1];
 
         $cacheKey = (string)$event->getEmail();
         if (!isset($this->rulesCache[$cacheKey])) {
@@ -45,10 +46,9 @@ class CheckWhitelist
         }
 
         if (!$event->isInitialScan()) {
-            $match->setCounter($match->getCounter() + 1);
-            $this->em->flush();
+            self::incrementCounter($this->em, $match);
         }
-        $this->ms->setAsChecked($msg);
+        $this->ms->setAsChecked($msg, $event->getEmail());
         $event->setWhitelist(true);
         $event->stopPropagation();
     }

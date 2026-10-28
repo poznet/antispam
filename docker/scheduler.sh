@@ -12,6 +12,8 @@
 #   DIGEST_HOUR         hour (container time, UTC) for antispam:digest:send (default 7, "off" = off)
 #   PURGE_HOUR          hour (container time, UTC) for antispam:purge, at minute 41 (default 3, "off" = off) -
 #                       old score log rows (scorelog.retention_days) and expired DNSBL cache
+#   JOB_TIMEOUT         seconds after which a job is killed (default 3600) - a hung run
+#                       would otherwise hold its flock and every later tick would skip
 #
 # Feed sync, CERT sync and the digest are no-ops while disabled in the panel settings.
 set -e
@@ -20,6 +22,7 @@ APP_DIR=/var/www/html
 : "${SCAN_INTERVAL:=5}"
 : "${FEED_SYNC_INTERVAL:=15}"
 : "${CERT_SYNC_INTERVAL:=6}"
+: "${JOB_TIMEOUT:=3600}"
 DIGEST_HOUR=${DIGEST_HOUR-7}
 [ "$DIGEST_HOUR" = off ] && DIGEST_HOUR=
 PURGE_HOUR=${PURGE_HOUR-3}
@@ -31,7 +34,7 @@ run() {
     (
         flock -n 9 || { echo "[scheduler] $name still running, skipping"; exit 0; }
         echo "[scheduler] $(date '+%F %T') start $name"
-        runuser -u www-data -- php "${APP_DIR}/bin/console" antispam:cron:run "$1" --no-debug \
+        runuser -u www-data -- timeout -k 30 "$JOB_TIMEOUT" php "${APP_DIR}/bin/console" antispam:cron:run "$1" --no-debug \
             || echo "[scheduler] $name exited with $?"
         echo "[scheduler] $(date '+%F %T') done $name"
     ) 9>"/tmp/antispam-${name}.lock" &

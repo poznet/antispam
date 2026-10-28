@@ -76,8 +76,8 @@ check for local testing only.
    - Log in with the credentials you set in step 2; the dashboard is at `/panel`.
 
 5. **Persistence.** Coolify creates three named volumes automatically:
-   `db_data` (MariaDB), `app_data` (`var/data` - markers of already checked
-   IMAP messages) and `app_logs` (Symfony logs). They survive redeploys and
+   `db_data` (MariaDB), `app_data` (`var/data` - markers of already checked IMAP messages, scan locks
+   and SSH keys) and `app_logs` (Symfony logs). They survive redeploys and
    container restarts.
 
 ### Production compose with scheduler (`docker-compose.prod.yml`)
@@ -107,6 +107,7 @@ on **Przegląd → Logi crona** (see [spam-handling.md](spam-handling.md)).
 | `CERT_SYNC_INTERVAL` | `antispam:cert:sync` (CERT Polska domain list) every N hours at minute :17 (`0` = off) | `6` |
 | `DIGEST_HOUR` | `antispam:digest:send` daily at HH:00, container time = UTC (`off` = off) | `7` |
 | `PURGE_HOUR` | `antispam:purge` (score log retention, expired DNSBL cache) daily at HH:41, UTC (`off` = off) | `3` |
+| `JOB_TIMEOUT` | any job running longer is killed (`timeout -k 30`), so a hung run cannot hold its flock and block every later tick | `3600` s |
 
 The feed sync, the CERT list sync and the digest do nothing while they are disabled in the panel
 settings, so leaving them on is safe. The scheduler's output is in the

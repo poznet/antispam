@@ -52,8 +52,11 @@ class ApplyScoreDecision
                 $event->stopPropagation();
                 $this->scoring->recordOutcome($event->getScoreLog(), SpamScoreLog::OUTCOME_QUARANTINED);
             } catch (\Throwable $e) {
-                // quarantine failed, leave message in inbox
+                // Quarantine failed: the message stays in INBOX. Rethrow (like
+                // MoveToSpam) so it is not marked as checked and the scan keeps
+                // its cursor below it - the next run tries again.
                 $this->scoring->recordOutcome($event->getScoreLog(), SpamScoreLog::OUTCOME_MOVE_FAILED);
+                throw $e;
             }
         }
     }

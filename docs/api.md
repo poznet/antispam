@@ -102,7 +102,7 @@ See [phishing.md](phishing.md). CSRF token id `phishing` for all POSTs.
 | GET/POST | `/config/plugin/` | Mail client plugin settings + downloads (Thunderbird, Outlook, Apple Mail) (POST needs CSRF token `plugin_config`) |
 | POST | `/config/spam/clamav-test/` | Ping clamd at the stored address (CSRF token `spam_maintenance`) |
 | POST | `/config/spam/virustotal-test/` | Check the stored VirusTotal API key (CSRF token `spam_maintenance`) |
-| POST | `/config/uncheck-all/` | Reset all checked messages (CSRF token `spam_maintenance`) |
+| POST | `/config/uncheck-all/` | Reset all checked messages (markers) and the IMAP cursors - the next scan reads every INBOX in full (CSRF token `spam_maintenance`) |
 | POST | `/config/reset/countes/` | Reset all rule counters (CSRF token `spam_maintenance`) |
 
 Stored secrets (legacy IMAP password, VirusTotal / Safe Browsing API keys, feed

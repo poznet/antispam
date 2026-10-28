@@ -16,6 +16,8 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 class CheckBlacklist
 {
+    use SenderRuleTrait;
+
     private $em;
     private $ms;
     private $scoring;
@@ -33,12 +35,11 @@ class CheckBlacklist
     {
         $msg = $event->getMessage();
 
-        try {
-            $host = strtolower((string)$msg->getHeaders()->get('sender')[0]->host);
-        } catch (\Throwable $e) {
+        $from = self::fromAddress($event);
+        if ($from === null) {
             return;
         }
-        if (!$host) return;
+        $host = $from[1];
 
         $cacheKey = (string)$event->getEmail();
         if (!isset($this->rulesCache[$cacheKey])) {
@@ -53,8 +54,7 @@ class CheckBlacklist
         }
 
         if (!$event->isInitialScan()) {
-            $match->setCounter($match->getCounter() + 1);
-            $this->em->flush();
+            self::incrementCounter($this->em, $match);
         }
 
         if ($this->scoring && $this->scoring->isScoringEnabled()) {
@@ -67,7 +67,7 @@ class CheckBlacklist
             return;
         }
 
-        $this->ms->setAsChecked($msg);
+        $this->ms->setAsChecked($msg, $event->getEmail());
         $event->setBlacklist(true);
         $event->setSpam(true);
     }

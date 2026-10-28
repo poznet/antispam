@@ -55,6 +55,14 @@ See [phishing.md](phishing.md). CSRF token id `phishing` for all POSTs.
 |--------|-----|-------------|
 | GET | `/cron/logs` | Runs recorded by `antispam:cron:run` (last 200), filters `?command=…`, `?failed=1`. See [spam-handling.md](spam-handling.md) |
 
+## CERT list (`/cert`)
+
+| Method | URL | Description |
+|--------|-----|-------------|
+| GET | `/cert/` | Status, settings form, domain lookup `?q=domain-or-url` (subdomains of listed domains match), paginated view `?page=N` |
+| POST | `/cert/` | Save enabled/score (CSRF token `cert_config`) |
+| POST | `/cert/sync` | Download the list now (CSRF token `cert_config`) |
+
 ## Configuration (`/config`)
 
 | Method | URL | Description |

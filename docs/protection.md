@@ -120,6 +120,44 @@ only and never extracted.
 A blocked type (15) exceeds the default spam threshold (10) on its own. Set a score
 to 0 to disable a single rule.
 
+## CERT Polska warning list (`cert_hole`)
+
+CERT Polska publishes the "Lista Ostrzeżeń" ([hole.cert.pl](https://hole.cert.pl)), the
+phishing / malware domains that Polish ISPs block. A message scores when its sender
+domain (From, Reply-To or Return-Path) or the host of any link in the body (HTML
+`href` and plain-text URLs, via `UrlAnalyzer::extractLinks`) equals a listed domain
+**or is a subdomain of one** (`a.b.evil.pl` is checked as `a.b.evil.pl`, `b.evil.pl`,
+`evil.pl`). Reason rule: `cert_hole:<matched listed domain>`; the quarantine digest shows
+it as "Domena z Listy Ostrzeżeń CERT Polska (phishing)" and treats it as high-risk
+(no "always accept this sender"). Whitelisted senders skip the check.
+
+- **Off by default.** Enable it, set the score (empty = spam threshold, so one hit is
+  enough) and sync manually under **Blacklisty → Lista CERT** (`/cert/`).
+- **Source:** `https://hole.cert.pl/domains/v2/domains.txt`, plain text, one domain per
+  line, ~125k domains / ~2.5 MB, refreshed by CERT continuously. HTTPS only, 120 s
+  timeout, 50 MB cap.
+- **Storage:** table `antispam_cert_domain` (primary key = domain, lower-case punycode),
+  replaced in one transaction with batched multi-row `INSERT`s. Status (last sync,
+  count, last error) is in the `config` table (`cert.last_sync_at`, `cert.last_count`,
+  `cert.last_error`).
+- **Sanity check:** the table is only replaced when the download has at least 100 valid
+  domains and at least 50% of the current count; otherwise the old list is kept and the
+  error is recorded.
+- **Normalization:** trim, lower-case, strip `*.` and trailing dot, IDN to punycode
+  (`intl`), drop IPs, single labels, comments and invalid characters.
+- **Web pipeline:** listener `CheckCertHole` (priority 99977, before `ApplyScoreDecision`)
+  and `RawMessageScanner` (plugin checks) use `Services/CertHoleService`.
+- **Scheduler:** `antispam:cert:sync` runs every `CERT_SYNC_INTERVAL` hours (default 6)
+  and exits immediately while the filter is disabled.
+- **SSH Maildir agents:** supported without pushing the list. The list is far too large
+  for `syncRules` (argv / SSH command limits), so only the settings `cert_enabled` and
+  `cert_score` are pushed (in `settings`). With the filter enabled, the agent downloads
+  `domains.txt` itself at the start of a scan when its copy is older than 24 h (a failed
+  attempt is retried after 1 h; the old list stays on any error) into the SQLite tables
+  `cert_domains` / `cert_meta`, applying the same sanity check. The agent host therefore
+  needs outbound HTTPS to hole.cert.pl and the `curl` extension; without them the check
+  is simply a no-op. Disable per run with `--no-cert`.
+
 ## Settings storage
 
 Scores and switches live in the `config` table (`impersonation.*`, `url.*`,

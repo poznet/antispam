@@ -13,7 +13,7 @@ use Doctrine\ORM\EntityManagerInterface;
  * Scores a raw RFC 822 message (as submitted by the Thunderbird plugin) with
  * the same rules as the IMAP event pipeline: domain/e-mail whitelists and
  * blacklists of the account, header heuristics, impersonation, DNSBL, link
- * protection, the shared spam feed and the attachment policy. The result is logged to SpamScoreLog like any other scan, but the
+ * protection, the shared spam feed, the CERT Polska domain list and the attachment policy. The result is logged to SpamScoreLog like any other scan, but the
  * message itself is never moved here — the plugin acts on the decision
  * inside the user's mail client.
  */
@@ -27,6 +27,7 @@ class RawMessageScanner
     private $impersonation;
     private $urls;
     private $attachments;
+    private $cert;
 
     public function __construct(
         EntityManagerInterface $em,
@@ -36,7 +37,8 @@ class RawMessageScanner
         SpamSignalService $feed,
         ImpersonationAnalyzer $impersonation,
         UrlAnalyzer $urls,
-        AttachmentPolicyAnalyzer $attachments
+        AttachmentPolicyAnalyzer $attachments,
+        CertHoleService $cert
     ) {
         $this->em = $em;
         $this->headers = $headers;
@@ -46,6 +48,7 @@ class RawMessageScanner
         $this->impersonation = $impersonation;
         $this->urls = $urls;
         $this->attachments = $attachments;
+        $this->cert = $cert;
     }
 
     /**
@@ -137,6 +140,24 @@ class RawMessageScanner
                         $score += $result['score'];
                         $reasons = array_merge($reasons, $result['reasons']);
                     }
+                } catch (\Throwable $e) {}
+            }
+
+            if ($this->cert->isEnabled()) {
+                try {
+                    $parts = $parts ?: $msg->getParts();
+                    $senders = array_merge(
+                        [$host],
+                        CertHoleService::hostsFromAddressHeader($msg->getHeader('reply-to')),
+                        CertHoleService::hostsFromAddressHeader($msg->getHeader('return-path'))
+                    );
+                    $result = $this->cert->analyze(
+                        array_values(array_filter($senders)),
+                        CertHoleService::linkHosts($parts['html'], $parts['text']),
+                        $this->scoring->getSpamThreshold()
+                    );
+                    $score += $result['score'];
+                    $reasons = array_merge($reasons, $result['reasons']);
                 } catch (\Throwable $e) {}
             }
 

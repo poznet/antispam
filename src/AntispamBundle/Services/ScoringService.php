@@ -266,6 +266,8 @@ class ScoringService
             'impersonation_lookalike_score' => $imp['lookalike'],
             'impersonation_embedded_score' => $imp['embedded'],
             'impersonation_internal_score' => $imp['internal'],
+            'cert_enabled' => (bool)$this->readBool('cert.enabled', false),
+            'cert_score' => $this->readInt('cert.score', $this->getSpamThreshold()),
             'url_enabled' => $this->isUrlCheckEnabled(),
             'url_mismatch_score' => $url['mismatch_score'],
             'url_ip_score' => $url['ip_score'],

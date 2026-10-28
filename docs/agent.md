@@ -152,6 +152,8 @@ CREATE TABLE blacklist (id INTEGER PRIMARY KEY, email TEXT, host TEXT);
 CREATE TABLE email_blacklist (id INTEGER PRIMARY KEY, email TEXT, blacklistemail TEXT);
 CREATE TABLE checked (id INTEGER PRIMARY KEY, message_id TEXT UNIQUE);
 CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE cert_domains (domain TEXT PRIMARY KEY);   -- CERT Polska list, fetched by the agent itself
+CREATE TABLE cert_meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE score_log (id INTEGER PRIMARY KEY, sender TEXT, subject TEXT, score INTEGER,
                         decision TEXT, reasons TEXT, scored_at TEXT, file TEXT);
 ```
@@ -173,6 +175,8 @@ The `settings` table holds scanning configuration synced from the web app:
   `url_shortener_score`, `url_punycode_score`, `url_dbl_enabled`, `url_dbl_zones`
   (`zone score` per line), `url_max_domains`, `url_gsb_enabled`,
   `url_gsb_api_key`, `url_gsb_score`, `url_timeout`
+- CERT Polska list: `cert_enabled`, `cert_score` (the domain list itself is not pushed:
+  the agent downloads it daily, see [protection.md](protection.md#cert-polska-warning-list-cert_hole))
 - attachment policy: `attachment_policy_enabled`, `attachment_blocked_extensions`
   (comma-separated), `attachment_blocked_score`, `attachment_double_ext_score`,
   `attachment_mismatch_score`, `attachment_macro_score`,

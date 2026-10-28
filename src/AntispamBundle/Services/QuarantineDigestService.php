@@ -220,7 +220,7 @@ class QuarantineDigestService
     {
         foreach ($reasons as $r) {
             $rule = (string)($r['rule'] ?? '');
-            if (preg_match('/^(impersonation_|lookalike_domain|internal_domain_spoof|display_name_embedded_address|attachment_|clamav|virustotal|url_safebrowsing|url_dbl)/', $rule)) {
+            if (preg_match('/^(impersonation_|lookalike_domain|internal_domain_spoof|display_name_embedded_address|attachment_|clamav|virustotal|url_safebrowsing|url_dbl|cert_hole)/', $rule)) {
                 return true;
             }
         }
@@ -271,6 +271,7 @@ class QuarantineDigestService
             'blacklist' => 'Zablokowana domena nadawcy',
             'email_blacklist' => 'Zablokowany adres nadawcy',
             'shared_feed' => 'Znany spam',
+            'cert_hole' => 'Domena z Listy Ostrzeżeń CERT Polska (phishing)',
             'clamav' => 'Wykryto wirusa',
             'virustotal' => 'Złośliwy załącznik',
         ];

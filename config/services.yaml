@@ -59,6 +59,9 @@ services:
     AntispamBundle\EventListener\Message\CheckSharedFeed:
         tags: [{ name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99978 }]
 
+    AntispamBundle\EventListener\Message\CheckCertHole:
+        tags: [{ name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99977 }]
+
     AntispamBundle\EventListener\Message\CheckAttachmentPolicy:
         tags: [{ name: kernel.event_listener, event: antispam.check.message, method: check, priority: 99976 }]
 

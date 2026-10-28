@@ -268,6 +268,10 @@ await check("connection test per account pings with that account's token", async
   const bg = load(e);
   const res = await bg.connectionTest("account2");
   assert.ok(res.ok, JSON.stringify(res.steps));
+  // 1.3.0 regression: the test's own step() shadowed the timeout helper
+  assert.ok(!res.steps.some(x => /wersja Thunderbirda|permissions.contains/.test(x.name)), JSON.stringify(res.steps));
+  assert.match(res.steps.find(x => x.name === "Wtyczka").text, /Thunderbird 153/);
+  assert.equal(res.steps.find(x => x.name === "Zgoda na połączenie z serwerem").ok, true);
   const pings = e.calls.requests.filter(r => r.path === "/api/plugin/ping");
   assert.deepEqual(pings.map(p => p.auth), ["Bearer T2"]);
   e.calls.requests.length = 0;

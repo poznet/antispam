@@ -128,6 +128,10 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   migrations and warns on entity changes without a migration. See `docs/migrations.md`.
 
 ### Fixed
+- Thunderbird plugin 1.3.1: the connection test showed ✗ for "wersja Thunderbirda" and
+  "Zgoda na połączenie z serwerem" (and "undefined" next to the plugin version) although
+  both were fine - the test's own step() shadowed the new time-limit helper. Reports
+  were not affected.
 - Thunderbird plugin 1.3.0: after the first report following a restart, later
   clicks (spam, phishing) did nothing - only *Menu: …* was logged. Clicks ran
   in a strict queue and Thunderbird API calls were awaited without a time

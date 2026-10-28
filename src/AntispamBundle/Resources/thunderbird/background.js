@@ -1128,35 +1128,35 @@ if (messenger.menus.onShown && messenger.menus.update) {
  */
 async function connectionTest(target) {
   const steps = [];
-  const step = (name, ok, text) => { steps.push({ name, ok, text }); return ok; };
+  const addStep = (name, ok, text) => { steps.push({ name, ok, text }); return ok; };
   const s = await settings();
   const manifest = messenger.runtime.getManifest();
   let app = "";
   try { const i = await step("wersja Thunderbirda", () => messenger.runtime.getBrowserInfo()); app = i.name + " " + i.version; } catch (e) { /* ignore */ }
-  step("Wtyczka", true, "wersja " + manifest.version + (app ? ", " + app : "")
+  addStep("Wtyczka", true, "wersja " + manifest.version + (app ? ", " + app : "")
     + (s.bundledServer ? ", adres z pobranej wersji" : ", wersja ogólna (adres wpisany ręcznie)"));
 
-  if (!step("Adres serwera", !!s.server, s.server || "nie ustawiono - wpisz adres w sekcji Serwer i zapisz")) {
+  if (!addStep("Adres serwera", !!s.server, s.server || "nie ustawiono - wpisz adres w sekcji Serwer i zapisz")) {
     return finishTest(steps);
   }
   const origin = originPattern(s.server);
-  if (!step("Poprawny adres", !!origin, origin ? s.server : "nieprawidłowy adres URL")) return finishTest(steps);
+  if (!addStep("Poprawny adres", !!origin, origin ? s.server : "nieprawidłowy adres URL")) return finishTest(steps);
   let allowed = false;
   try { allowed = await step("sprawdzenie zgody (permissions.contains)", () => messenger.permissions.contains({ origins: [origin] })); } catch (e) { /* older API */ }
-  step("Zgoda na połączenie z serwerem", allowed, allowed ? origin : "brak - kliknij „Zapisz ustawienia” i zaakceptuj prośbę Thunderbirda");
+  addStep("Zgoda na połączenie z serwerem", allowed, allowed ? origin : "brak - kliknij „Zapisz ustawienia” i zaakceptuj prośbę Thunderbirda");
 
   let st;
   const t0 = Date.now();
   try {
     st = await api("/api/plugin/status", { timeout: 15000 });
-    step("Serwer odpowiada (GET /status)", true, (Date.now() - t0) + " ms, serwer " + (st.server_version || "?") + ", wtyczka na serwerze " + (st.version || "?")
+    addStep("Serwer odpowiada (GET /status)", true, (Date.now() - t0) + " ms, serwer " + (st.server_version || "?") + ", wtyczka na serwerze " + (st.version || "?")
       + (st.version && st.version !== manifest.version ? " - pobierz nowszą wtyczkę" : ""));
-    step("Wtyczki włączone na serwerze", !!st.enabled, st.enabled ? "tak" : "administrator wyłączył wtyczki");
+    addStep("Wtyczki włączone na serwerze", !!st.enabled, st.enabled ? "tak" : "administrator wyłączył wtyczki");
     const foreign = { report_only: "tylko do administratora", linked: "jak podpięta skrzynka", off: "wyłączone" }[s.foreignMode];
-    step("Konta bez logowania", s.foreignMode !== "report_only" || st.report_only === true,
+    addStep("Konta bez logowania", s.foreignMode !== "report_only" || st.report_only === true,
       foreign + (s.foreignMode === "report_only" && st.report_only !== true ? " - serwer tego nie obsługuje (zaktualizuj antyspam): spam z takich kont idzie anonimowo, phishing nie jest wysyłany" : ""));
   } catch (e) {
-    step("Serwer odpowiada (GET /status)", false, e.message);
+    addStep("Serwer odpowiada (GET /status)", false, e.message);
     return finishTest(steps);
   }
   limitsCache = null;
@@ -1167,11 +1167,11 @@ async function connectionTest(target) {
   let keys = Object.keys(logins);
   if (target && target !== "all") keys = keys.filter(k => k === target);
   if (target && target !== "all" && !keys.length) {
-    step("Logowanie – " + label(target), false, "to konto nie jest zalogowane we wtyczce");
+    addStep("Logowanie – " + label(target), false, "to konto nie jest zalogowane we wtyczce");
   }
   if (!keys.length) {
-    step("Logowanie", true, "niezalogowano (działa tylko zgłaszanie spamu" + (st.anonymous_reports ? ")" : " - wyłączone na serwerze)"));
-    await pingStep(step, null, "", manifest, app);
+    addStep("Logowanie", true, "niezalogowano (działa tylko zgłaszanie spamu" + (st.anonymous_reports ? ")" : " - wyłączone na serwerze)"));
+    await pingStep(addStep, null, "", manifest, app);
     return finishTest(steps);
   }
   for (const key of keys) {
@@ -1180,26 +1180,26 @@ async function connectionTest(target) {
     try {
       const ls = await api("/api/plugin/status", { timeout: 15000, login, quietOk: true });
       if (!ls.authenticated) {
-        step("Logowanie – " + name, false, (login.email || "") + ": sesja wygasła - zaloguj się ponownie");
+        addStep("Logowanie – " + name, false, (login.email || "") + ": sesja wygasła - zaloguj się ponownie");
         await dropLogin(key, "sesja wygasła (test połączenia)");
         continue;
       }
-      step("Logowanie – " + name, true, "zalogowano jako " + ls.email);
+      addStep("Logowanie – " + name, true, "zalogowano jako " + ls.email);
     } catch (e) {
-      step("Logowanie – " + name, false, e.message);
+      addStep("Logowanie – " + name, false, e.message);
       continue;
     }
-    await pingStep(step, login, " – " + name, manifest, app);
+    await pingStep(addStep, login, " – " + name, manifest, app);
   }
   return finishTest(steps);
 }
 
-async function pingStep(step, login, suffix, manifest, app) {
+async function pingStep(addStep, login, suffix, manifest, app) {
   try {
     const p = await api("/api/plugin/ping", { method: "POST", login, body: { client: "thunderbird", client_version: manifest.version, app } });
-    step("Zapis testu na serwerze (POST /ping)" + suffix, !!p.ok, "przyjęto " + (p.received_at || "") + " z IP " + (p.client_ip || "?") + " - widoczne w panelu: Dziennik audytu, akcja plugin.ping");
+    addStep("Zapis testu na serwerze (POST /ping)" + suffix, !!p.ok, "przyjęto " + (p.received_at || "") + " z IP " + (p.client_ip || "?") + " - widoczne w panelu: Dziennik audytu, akcja plugin.ping");
   } catch (e) {
-    step("Zapis testu na serwerze (POST /ping)" + suffix, false, e.message + (e.status === 404 ? " - serwer nie ma jeszcze tej funkcji (zaktualizuj antyspam)" : ""));
+    addStep("Zapis testu na serwerze (POST /ping)" + suffix, false, e.message + (e.status === 404 ? " - serwer nie ma jeszcze tej funkcji (zaktualizuj antyspam)" : ""));
   }
 }
 

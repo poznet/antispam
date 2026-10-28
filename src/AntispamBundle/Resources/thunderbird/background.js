@@ -31,11 +31,17 @@ const DEFAULTS = {
 };
 
 // Only the head of a message is needed for scoring (headers + text body);
-// attachments past this point are cut off.
-const MAX_UPLOAD_BYTES = 1024 * 1024;
+// attachments past this point are cut off. Kept so the base64 JSON body stays
+// under 1 MiB - the default request limit of an nginx reverse proxy.
+const MAX_UPLOAD_BYTES = 700 * 1024;
 // Phishing reports carry the whole message (attachments too) up to this size
-// (PhishingReportService::MAX_RAW_BYTES on the server).
+// (PhishingReportService::MAX_RAW_BYTES on the server). When a proxy in front
+// of antispam rejects the body (413), the report is resent cut to MAX_UPLOAD_BYTES.
 const MAX_PHISHING_BYTES = 10 * 1024 * 1024;
+// Requests run one after another (enqueue); a request that never answers would
+// stall every later click, so each one is aborted after this long.
+const REQUEST_TIMEOUT_MS = 30 * 1000;
+const UPLOAD_TIMEOUT_MS = 120 * 1000;
 // Thunderbird's own junk classifier flags messages right after they arrive;
 // junk changes within this window of arrival are not treated as user verdicts.
 const ARRIVAL_GRACE_MS = 2 * 60 * 1000;
@@ -58,19 +64,29 @@ async function settings() {
   return s;
 }
 
-async function api(path, { method = "GET", body = null, auth = true } = {}) {
+async function api(path, { method = "GET", body = null, auth = true, timeout = REQUEST_TIMEOUT_MS } = {}) {
   const s = await settings();
   if (!s.server) throw new Error("Nie ustawiono adresu serwera antyspamu (Ustawienia wtyczki).");
   const headers = { "Accept": "application/json" };
   if (body !== null) headers["Content-Type"] = "application/json";
   if (auth && s.token) headers["Authorization"] = "Bearer " + s.token;
 
-  const res = await fetch(s.server + path, {
-    method,
-    headers,
-    body: body === null ? null : JSON.stringify(body),
-    credentials: "omit",
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeout);
+  let res;
+  try {
+    res = await fetch(s.server + path, {
+      method,
+      headers,
+      body: body === null ? null : JSON.stringify(body),
+      credentials: "omit",
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    throw new Error(e.name === "AbortError" ? "serwer nie odpowiedział w " + Math.round(timeout / 1000) + " s" : e.message);
+  } finally {
+    clearTimeout(timer);
+  }
   let data = {};
   try { data = await res.json(); } catch (e) { /* non-JSON error page */ }
   if (res.status === 401 && s.token && auth) {
@@ -78,7 +94,8 @@ async function api(path, { method = "GET", body = null, auth = true } = {}) {
     await messenger.storage.local.set({ token: "", email: "" });
   }
   if (!res.ok) {
-    const err = new Error(data.error || ("HTTP " + res.status));
+    const err = new Error(data.error
+      || (res.status === 413 ? "wiadomość za duża dla serwera (HTTP 413)" : "HTTP " + res.status));
     err.status = res.status;
     throw err;
   }
@@ -210,7 +227,7 @@ async function moveToJunk(message) {
 // --- actions ----------------------------------------------------------------
 
 /** Send a user verdict ("spam" | "ham") to antispam. */
-async function report(message, verdict, { quiet = false, manual = false } = {}) {
+async function report(message, verdict, { quiet = false, manual = false, raw = null } = {}) {
   const s = await settings();
   if (verdict === "ham" && !s.token) {
     const text = "Zgłoszenie „to nie spam” wymaga zalogowania we wtyczce.";
@@ -227,7 +244,7 @@ async function report(message, verdict, { quiet = false, manual = false } = {}) 
   try {
     const res = await api("/api/plugin/report", {
       method: "POST",
-      body: { verdict, raw_base64: await rawBase64(message.id) },
+      body: { verdict, raw_base64: raw || await rawBase64(message.id) },
     });
     const who = message.author || res.sender || "";
     const text = verdict === "spam"
@@ -245,12 +262,21 @@ async function report(message, verdict, { quiet = false, manual = false } = {}) 
   }
 }
 
-/** Report as spam from the button / menu and handle the message locally. */
-async function reportSpamAndFile(message) {
-  await report(message, "spam", { manual: true });
+/** Mark as junk (and move, if set) right away - the user's click must not wait for the server. */
+async function fileAsJunk(message) {
   const s = await settings();
   await setJunk(message, true);
   if (s.moveOnReport) await moveToJunk(message);
+}
+
+/** Report as spam from the button / menu and handle the message locally. */
+async function reportSpamAndFile(message) {
+  // Read the source first: a moved message cannot be read under its old id.
+  let raw = null;
+  try { raw = await rawBase64(message.id); } catch (e) { console.warn("antispam: could not read message", e); }
+  await fileAsJunk(message);
+  if (raw) await report(message, "spam", { manual: true, raw });
+  else await feedback(false, "Nie udało się odczytać wiadomości do zgłoszenia.");
 }
 
 /**
@@ -264,12 +290,26 @@ async function reportPhishing(message) {
     await needsSetup("Zgłoszenie phishingu wymaga zalogowania we wtyczce (wiadomość trafia w całości do administratora).");
     return;
   }
+  let src, head = null;
   try {
-    const src = await rawSource(message.id, MAX_PHISHING_BYTES);
-    const res = await api("/api/plugin/phishing", {
-      method: "POST",
-      body: { raw_base64: src.base64, truncated: src.truncated, client: "thunderbird" },
-    });
+    src = await rawSource(message.id, MAX_PHISHING_BYTES);
+    // Fallback for a proxy that rejects big bodies; read now, the move below changes the id.
+    if (src.base64.length > MAX_UPLOAD_BYTES * 4 / 3) head = await rawSource(message.id, MAX_UPLOAD_BYTES);
+  } catch (e) {
+    await feedback(false, "Nie udało się odczytać wiadomości: " + e.message);
+    return;
+  }
+  await fileAsJunk(message);
+  const send = (body) => api("/api/plugin/phishing", { method: "POST", body, timeout: UPLOAD_TIMEOUT_MS });
+  try {
+    let res;
+    try {
+      res = await send({ raw_base64: src.base64, truncated: src.truncated, client: "thunderbird" });
+    } catch (e) {
+      if (e.status !== 413 || !head) throw e;
+      // A proxy in front of antispam limits the body size: send the head of the message.
+      res = await send({ raw_base64: head.base64, truncated: true, client: "thunderbird" });
+    }
     const text = "Zgłoszono próbę wyłudzenia: " + (message.author || res.sender || "")
       + (res.duplicate ? " (już była zgłoszona)" : "") + (res.rules && res.rules.length ? " – nadawca zablokowany" : "");
     await notify("Antyspam", text);
@@ -279,10 +319,7 @@ async function reportPhishing(message) {
     const text = "Nie udało się zgłosić phishingu do " + s.server + ": " + e.message;
     await notify("Antyspam — błąd", text);
     await feedback(false, text);
-    return;
   }
-  await setJunk(message, true);
-  if (s.moveOnReport) await moveToJunk(message);
 }
 
 async function reportHam(message) {
@@ -327,11 +364,20 @@ async function check(message, { manual = false } = {}) {
 
 // --- new mail ---------------------------------------------------------------
 
+// Automatic work (on-arrival checks, Thunderbird's junk button) runs one at a
+// time; the user's own clicks have a queue of their own so they never wait
+// behind a batch of new-mail checks.
 let queue = Promise.resolve();
+let manualQueue = Promise.resolve();
 
 function enqueue(fn) {
   queue = queue.then(fn).catch(e => console.warn("antispam:", e));
   return queue;
+}
+
+function enqueueManual(fn) {
+  manualQueue = manualQueue.then(fn).catch(e => console.warn("antispam:", e));
+  return manualQueue;
 }
 
 async function* listMessages(list) {
@@ -385,7 +431,7 @@ async function displayedMessages(tab) {
 }
 
 messenger.messageDisplayAction.onClicked.addListener(tab => {
-  enqueue(async () => {
+  enqueueManual(async () => {
     for (const m of await displayedMessages(tab)) await reportSpamAndFile(m);
   });
 });
@@ -410,7 +456,7 @@ async function selectedMessages(info) {
 
 messenger.menus.onClicked.addListener(info => {
   if (!MENU[info.menuItemId]) return;
-  enqueue(async () => {
+  enqueueManual(async () => {
     for (const m of await selectedMessages(info)) {
       if (info.menuItemId === "antispam-spam") await reportSpamAndFile(m);
       else if (info.menuItemId === "antispam-phishing") await reportPhishing(m);

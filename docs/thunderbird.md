@@ -134,6 +134,22 @@ Errors: `400` bad payload, `401` login required / bad credentials / expired toke
 `403` feature disabled, `413` message too large, `429` rate limit, `507`
 phishing storage quota of the mailbox used up.
 
+Behind a reverse proxy, raise its body limit (nginx defaults to
+`client_max_body_size 1m`; antispam itself accepts 32 MiB, `docker/php.ini`),
+e.g. `client_max_body_size 16m;`. Otherwise phishing reports with attachments
+get the proxy's `413`; since 1.1.1 the plugin then resends the first 700 KiB
+(`truncated: true`) so the report still reaches the panel. Spam reports and
+checks send at most 700 KiB of the source, which fits a 1 MiB limit.
+
+The plugin (1.1.1+) files the message as junk locally before talking to the
+server, and aborts a request after 30 s (phishing upload: 120 s), so a slow or
+unreachable server no longer stalls the following clicks. Clicks (button,
+context menu) have their own queue, separate from on-arrival checks, so they
+do not wait behind a batch of new mail. Filing locally first also avoids a
+race with the server: for a logged-in user a spam report blacklists the
+sender and the retroactive pass moves their mail out of INBOX on the server,
+which used to happen before Thunderbird tried to mark the same message.
+
 ```bash
 TOKEN=$(curl -s -X POST https://antispam.example.com/api/plugin/login \
   -H 'Content-Type: application/json' \

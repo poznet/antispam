@@ -44,7 +44,7 @@ class PluginApiController extends AbstractController
     /** Phishing reports (full messages up to 10 MiB each) per account and hour. */
     const PHISHING_RATE_LIMIT = 30;
 
-    const PLUGIN_VERSION = '1.1.0';
+    const PLUGIN_VERSION = '1.1.1';
 
     #[Route('/plugin/download', name: 'antispam_plugin_download', methods: ['GET'])]
     public function downloadAction(Request $request)

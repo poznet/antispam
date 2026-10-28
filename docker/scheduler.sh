@@ -69,5 +69,10 @@ while true; do
         run purge antispam:purge
     fi
 
+    # Health checks + alerts (docs/health.md). HEALTH_CHECK_INTERVAL minutes, default 15, 0 = off.
+    if [ "${HEALTH_CHECK_INTERVAL:-15}" -gt 0 ] && [ $(( TICK % ${HEALTH_CHECK_INTERVAL:-15} )) -eq 0 ]; then
+        run health antispam:health:check
+    fi
+
     sleep $(( 60 - $(date +%-S) ))
 done

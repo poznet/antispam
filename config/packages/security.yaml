@@ -66,6 +66,9 @@ security:
         - { path: ^/api/feed, roles: PUBLIC_ACCESS }
         # Quarantine digest links: the signed token in the URL is the credential.
         - { path: ^/q/, roles: PUBLIC_ACCESS }
+        # Uptime monitor / Prometheus: /health answers only ok|degraded|fail without
+        # a token; details and /metrics check HEALTH_TOKEN in the controller.
+        - { path: ^/(health|metrics)$, roles: PUBLIC_ACCESS }
         # Mail client plugins: bearer-token API, the public Thunderbird .xpi
         # download (offered on the home page), the Outlook add-in (manifest +
         # task pane loaded by Outlook) and the Apple Mail extension source.

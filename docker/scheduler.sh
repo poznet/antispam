@@ -10,6 +10,8 @@
 #   FEED_SYNC_INTERVAL  minutes between antispam:feed:sync      (default 15, 0 = off)
 #   CERT_SYNC_INTERVAL  hours between antispam:cert:sync     (default 6, 0 = off); runs at minute 17
 #   DIGEST_HOUR         hour (container time, UTC) for antispam:digest:send (default 7, "off" = off)
+#   PHISHING_FORWARD_INTERVAL minutes between antispam:phishing:forward (default 10, 0 = off) -
+#                       automatic phishing forward to CERT Polska; no-op while off in the panel
 #   PURGE_HOUR          hour (container time, UTC) for antispam:purge, at minute 41 (default 3, "off" = off) -
 #                       old score log rows (scorelog.retention_days) and expired DNSBL cache
 #   JOB_TIMEOUT         seconds after which a job is killed (default 3600) - a hung run
@@ -22,6 +24,7 @@ APP_DIR=/var/www/html
 : "${SCAN_INTERVAL:=5}"
 : "${FEED_SYNC_INTERVAL:=15}"
 : "${CERT_SYNC_INTERVAL:=6}"
+: "${PHISHING_FORWARD_INTERVAL:=10}"
 : "${JOB_TIMEOUT:=3600}"
 DIGEST_HOUR=${DIGEST_HOUR-7}
 [ "$DIGEST_HOUR" = off ] && DIGEST_HOUR=
@@ -55,6 +58,9 @@ while true; do
     fi
     if [ "$CERT_SYNC_INTERVAL" -gt 0 ] && [ "$MINUTE" -eq 17 ] && [ $(( HOUR % CERT_SYNC_INTERVAL )) -eq 0 ]; then
         run cert antispam:cert:sync
+    fi
+    if [ "$PHISHING_FORWARD_INTERVAL" -gt 0 ] && [ $(( TICK % PHISHING_FORWARD_INTERVAL )) -eq 0 ]; then
+        run phishing antispam:phishing:forward
     fi
     if [ -n "$DIGEST_HOUR" ] && [ "$HOUR" -eq "$DIGEST_HOUR" ] && [ "$MINUTE" -eq 0 ]; then
         run digest antispam:digest:send

@@ -5,6 +5,7 @@ namespace AntispamBundle\Controller;
 use AntispamBundle\Entity\Blacklist;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Entity\PhishingReport;
+use AntispamBundle\Services\PhishingForwardService;
 use AntispamBundle\Services\PhishingReportService;
 use AntispamBundle\Services\RetroactiveSpamService;
 use AntispamBundle\Services\ScoringService;
@@ -31,6 +32,7 @@ class PhishingController extends AbstractController
         private PhishingReportService $phishing,
         private RetroactiveSpamService $retroactive,
         private ScoringService $scoring,
+        private PhishingForwardService $forwarder,
     ) {
     }
 
@@ -58,6 +60,9 @@ class PhishingController extends AbstractController
             'accounts' => $accounts,
             'counts' => $repo->countByStatus(),
             'statuses' => PhishingReport::STATUSES,
+            'forward_errors' => $this->forwarder->configurationErrors(),
+            'forward_recipients' => $this->forwarder->getSettings()['recipients'],
+            'cert_form_url' => PhishingForwardService::CERT_FORM_URL,
         ];
     }
 
@@ -73,6 +78,10 @@ class PhishingController extends AbstractController
             'sender_blocked' => $report->getSender() && $this->em->getRepository(EmailBlacklist::class)->findOneBy([
                 'email' => $report->getAccountEmail(), 'blacklistemail' => $report->getSender(),
             ]) !== null,
+            'forwarded_before' => $this->forwarder->previouslyForwarded($report),
+            'forward_errors' => $this->forwarder->configurationErrors(),
+            'forward_settings' => $this->forwarder->getSettings(),
+            'cert_form_url' => PhishingForwardService::CERT_FORM_URL,
         ];
     }
 
@@ -151,6 +160,111 @@ class PhishingController extends AbstractController
         $response->headers->set('Content-Security-Policy', "default-src 'none'; sandbox");
         $response->headers->set('Content-Disposition', $response->headers->makeDisposition(ResponseHeaderBag::DISPOSITION_ATTACHMENT, 'phishing-' . $id . '.eml'));
         return $response;
+    }
+
+    /**
+     * Forward the original message to CERT Polska / the SOC address. A report
+     * (or another copy of the same message) that was already sent needs an
+     * explicit resend=1 - the button asks for confirmation first.
+     */
+    #[Route('/{id}/forward', name: 'antispam_phishing_forward', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function forwardAction(int $id, Request $request)
+    {
+        $this->checkToken($request);
+        $report = $this->find($id);
+        $resend = $request->request->get('resend') === '1';
+
+        $before = $this->forwarder->previouslyForwarded($report);
+        if ($before && !$resend) {
+            $this->addFlash('warning', sprintf('Ta wiadomość została już wysłana (%s do %s). Potwierdź ponowną wysyłkę.',
+                $before->getForwardedAt()->format('Y-m-d H:i'), $before->getForwardedTo()));
+            return $this->redirectToRoute('antispam_phishing_show', ['id' => $id]);
+        }
+
+        $result = $this->forwarder->forward($report, $resend);
+        if ($result['status'] === 'sent') {
+            $this->addFlash('success', 'Wysłano zgłoszenie do ' . $report->getForwardedTo() . '.');
+        } elseif ($result['status'] === 'failed') {
+            $this->addFlash('danger', 'Nie udało się wysłać: ' . $result['error']);
+        } else {
+            $this->addFlash('warning', 'Nie wysłano: ' . $result['error']);
+        }
+        return $this->redirectToRoute('antispam_phishing_show', ['id' => $id]);
+    }
+
+    /**
+     * Forward the reports selected on the list. Already forwarded messages
+     * (also copies reported by another mailbox) and false positives are
+     * skipped - resending is only possible one by one, with confirmation.
+     */
+    #[Route('/forward', name: 'antispam_phishing_forward_bulk', methods: ['POST'])]
+    public function forwardBulkAction(Request $request)
+    {
+        $this->checkToken($request);
+        $ids = array_slice(array_unique(array_filter(array_map('intval', (array)$request->request->all('ids')))), 0, self::PER_PAGE);
+        if (!$ids) {
+            $this->addFlash('warning', 'Nie zaznaczono żadnego zgłoszenia.');
+            return $this->redirectToRoute('antispam_phishing_index');
+        }
+
+        $counts = ['sent' => 0, 'failed' => 0, 'skipped' => 0];
+        $errors = [];
+        $sent = [];
+        foreach ($ids as $id) {
+            $report = $this->em->getRepository(PhishingReport::class)->find($id);
+            if (!$report) {
+                continue;
+            }
+            if (isset($sent[$report->getSha256()])) {
+                $counts['skipped']++;
+                continue;
+            }
+            $result = $this->forwarder->forward($report);
+            $counts[$result['status']]++;
+            if ($result['status'] === 'sent') {
+                $sent[$report->getSha256()] = true;
+            } elseif ($result['error']) {
+                $errors[$result['error']] = '#' . $id . ': ' . $result['error'];
+            }
+        }
+
+        $this->addFlash($counts['failed'] ? 'danger' : ($counts['sent'] ? 'success' : 'warning'), sprintf(
+            'Wysłano: %d, pominięto: %d, błędy: %d.', $counts['sent'], $counts['skipped'], $counts['failed']
+        ));
+        foreach (array_slice($errors, 0, 5) as $e) {
+            $this->addFlash('info', $e);
+        }
+        return $this->redirectToRoute('antispam_phishing_index');
+    }
+
+    #[Route('/forward-settings', name: 'antispam_phishing_forward_settings', methods: ['GET', 'POST'])]
+    #[Template('@Antispam/Phishing/forward_settings.html.twig')]
+    public function forwardSettingsAction(Request $request)
+    {
+        $settings = $this->forwarder->getSettings();
+        $errors = [];
+        if ($request->isMethod('POST')) {
+            if (!$this->isCsrfTokenValid('phishing_forward_settings', (string)$request->request->get('_token'))) {
+                throw $this->createAccessDeniedException('Nieprawidłowy token CSRF');
+            }
+            [$input, $errors] = $this->forwarder->validateSettings($request->request->all('config'));
+            if (!$errors) {
+                $this->forwarder->saveSettings($input);
+                $this->addFlash('success', 'Zapisano ustawienia przekazywania.');
+                return $this->redirectToRoute('antispam_phishing_forward_settings');
+            }
+            // Show what the admin typed, with the errors.
+            $settings = $input + $settings;
+        }
+
+        return [
+            'settings' => $settings,
+            'errors' => $errors,
+            'status_errors' => $errors ? [] : $this->forwarder->configurationErrors(),
+            'default_recipient' => PhishingForwardService::DEFAULT_RECIPIENT,
+            'default_note' => PhishingForwardService::DEFAULT_NOTE,
+            'cert_form_url' => PhishingForwardService::CERT_FORM_URL,
+        ];
     }
 
     #[Route('/{id}/delete', name: 'antispam_phishing_delete', requirements: ['id' => '\d+'], methods: ['POST'])]

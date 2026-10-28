@@ -8,7 +8,7 @@ use Doctrine\ORM\EntityRepository;
 class PhishingReportRepository extends EntityRepository
 {
     /** Columns for the list view - everything except the raw source. */
-    private const LIST_FIELDS = 'r.id, r.createdAt, r.lastReportedAt, r.reportCount, r.accountEmail, r.client, r.sender, r.senderName, r.replyTo, r.subject, r.size, r.truncated, r.status';
+    private const LIST_FIELDS = 'r.id, r.createdAt, r.lastReportedAt, r.reportCount, r.accountEmail, r.client, r.sender, r.senderName, r.replyTo, r.subject, r.size, r.truncated, r.status, r.sha256, r.forwardedAt, r.forwardedTo, r.forwardError';
 
     /**
      * Filters (all optional): status, account, q (sender / reply-to / subject substring).
@@ -64,6 +64,57 @@ class PhishingReportRepository extends EntityRepository
             $qb->where('r.accountEmail = :a')->setParameter('a', $accountEmail);
         }
         return (int)$qb->getQuery()->getSingleScalarResult();
+    }
+
+    /**
+     * Atomically mark a report as "being forwarded" so a double click or a
+     * parallel cron run cannot send it twice. Fails when it was already
+     * forwarded or another attempt started less than $stale ago and has not
+     * failed yet. $force skips the "already forwarded" check (confirmed resend).
+     */
+    public function claimForForward(int $id, \DateTime $now, \DateTime $stale, bool $force = false): bool
+    {
+        $qb = $this->getEntityManager()->createQueryBuilder()
+            ->update(PhishingReport::class, 'r')
+            ->set('r.forwardAttemptedAt', ':now')
+            ->set('r.forwardError', 'NULL')
+            ->where('r.id = :id')
+            ->andWhere('(r.forwardAttemptedAt IS NULL OR r.forwardAttemptedAt < :stale OR r.forwardError IS NOT NULL OR r.forwardedAt >= r.forwardAttemptedAt)')
+            ->setParameter('now', $now)
+            ->setParameter('stale', $stale)
+            ->setParameter('id', $id);
+        if (!$force) {
+            $qb->andWhere('r.forwardedAt IS NULL');
+        }
+        return $qb->getQuery()->execute() > 0;
+    }
+
+    /** Another report (any mailbox) of the very same message that was already forwarded. */
+    public function findForwardedCopy(PhishingReport $report): ?PhishingReport
+    {
+        return $this->createQueryBuilder('r')
+            ->where('r.sha256 = :sha')->andWhere('r.id != :id')->andWhere('r.forwardedAt IS NOT NULL')
+            ->setParameter('sha', $report->getSha256())->setParameter('id', (int)$report->getId())
+            ->orderBy('r.forwardedAt', 'DESC')->setMaxResults(1)
+            ->getQuery()->getOneOrNullResult();
+    }
+
+    /**
+     * Automatic mode: reports created between $since and $before that were
+     * never attempted and are not marked as false positive / already reported.
+     *
+     * @return PhishingReport[]
+     */
+    public function findAutoForwardCandidates(\DateTime $since, \DateTime $before, int $limit): array
+    {
+        return $this->createQueryBuilder('r')
+            ->where('r.createdAt >= :since')->andWhere('r.createdAt <= :before')
+            ->andWhere('r.forwardAttemptedAt IS NULL')->andWhere('r.forwardedAt IS NULL')
+            ->andWhere('r.status IN (:statuses)')
+            ->setParameter('since', $since)->setParameter('before', $before)
+            ->setParameter('statuses', [PhishingReport::STATUS_NEW, PhishingReport::STATUS_CONFIRMED])
+            ->orderBy('r.createdAt', 'ASC')->setMaxResults($limit)
+            ->getQuery()->getResult();
     }
 
     public function purgeOlderThan(\DateTime $before)

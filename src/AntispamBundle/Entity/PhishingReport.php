@@ -97,6 +97,25 @@ class PhishingReport
     #[ORM\Column(name: 'note', type: 'text', nullable: true)]
     private $note;
 
+    /** Last successful forward to CERT Polska / SOC (PhishingForwardService). */
+    #[ORM\Column(name: 'forwarded_at', type: 'datetime', nullable: true)]
+    private $forwardedAt;
+
+    /** Recipients (To + Cc) of the last successful forward, comma separated. */
+    #[ORM\Column(name: 'forwarded_to', type: 'string', length: 512, nullable: true)]
+    private $forwardedTo;
+
+    /** Error of the last failed forward attempt (null after a successful one). */
+    #[ORM\Column(name: 'forward_error', type: 'string', length: 1000, nullable: true)]
+    private $forwardError;
+
+    /**
+     * Last forward attempt (manual or automatic). Also the "in progress" marker
+     * that stops a double click / a parallel cron run from sending twice.
+     */
+    #[ORM\Column(name: 'forward_attempted_at', type: 'datetime', nullable: true)]
+    private $forwardAttemptedAt;
+
     /** Full RFC 822 source as received from the plugin. */
     #[ORM\Column(name: 'raw', type: 'blob')]
     private $raw;
@@ -175,6 +194,32 @@ class PhishingReport
 
     public function getNote() { return $this->note; }
     public function setNote($v) { $this->note = ($v === null || trim($v) === '') ? null : $v; return $this; }
+
+    public function getForwardedAt() { return $this->forwardedAt; }
+    public function getForwardedTo() { return $this->forwardedTo; }
+    public function getForwardError() { return $this->forwardError; }
+    public function getForwardAttemptedAt() { return $this->forwardAttemptedAt; }
+
+    public function markForwardAttempt(\DateTime $at)
+    {
+        $this->forwardAttemptedAt = $at;
+        $this->forwardError = null;
+        return $this;
+    }
+
+    public function markForwarded(array $recipients, \DateTime $at)
+    {
+        $this->forwardedAt = $at;
+        $this->forwardedTo = self::clip(implode(', ', $recipients), 512);
+        $this->forwardError = null;
+        return $this;
+    }
+
+    public function markForwardFailed($error)
+    {
+        $this->forwardError = self::clip(trim((string)$error) ?: 'Nieznany błąd', 1000);
+        return $this;
+    }
 
     /** Raw source as a string (Doctrine hands blobs back as streams). */
     public function getRaw()

@@ -97,8 +97,13 @@ class SpamScoreLogRepository extends EntityRepository
         return $qb->getQuery()->getResult();
     }
 
-    public function statsByDecision(?\DateTime $since = null)
+    /** @param string[]|null $accountEmails limit to these mailboxes (null = all, [] = none) */
+    public function statsByDecision(?\DateTime $since = null, ?array $accountEmails = null)
     {
+        $out = ['ham' => 0, 'quarantine' => 0, 'spam' => 0, 'whitelisted' => 0];
+        if ($accountEmails === []) {
+            return $out;
+        }
         $qb = $this->createQueryBuilder('l')
             ->select('l.decision AS decision, COUNT(l.id) AS cnt')
             ->andWhere('l.initialScan = false')
@@ -106,7 +111,9 @@ class SpamScoreLogRepository extends EntityRepository
         if ($since) {
             $qb->andWhere('l.scoredAt >= :since')->setParameter('since', $since);
         }
-        $out = ['ham' => 0, 'quarantine' => 0, 'spam' => 0, 'whitelisted' => 0];
+        if ($accountEmails !== null) {
+            $qb->andWhere('l.accountEmail IN (:emails)')->setParameter('emails', $accountEmails);
+        }
         foreach ($qb->getQuery()->getArrayResult() as $row) {
             $out[$row['decision']] = (int)$row['cnt'];
         }

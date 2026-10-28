@@ -138,34 +138,9 @@ class MyController extends AbstractController
             'filters' => $filters,
             'query' => $query,
             'accounts' => $this->access->accountEmails($user) ?? $repo->distinctAccounts(),
-            'stats' => $this->stats($filters['accounts'] ?? null),
+            'stats' => $repo->statsByDecision(new \DateTime('-30 days'), $filters['accounts'] ?? null),
             'scorelog_route' => 'antispam_my_scorelog',
         ];
-    }
-
-    /**
-     * Decision counts of the last 30 days, restricted to the given account
-     * e-mails (null = all).
-     *
-     * @param string[]|null $emails
-     */
-    private function stats(?array $emails): array
-    {
-        $out = ['ham' => 0, 'quarantine' => 0, 'spam' => 0, 'whitelisted' => 0];
-        if ($emails === []) {
-            return $out;
-        }
-        $qb = $this->em->getRepository(SpamScoreLog::class)->createQueryBuilder('l')
-            ->select('l.decision AS decision, COUNT(l.id) AS cnt')
-            ->andWhere('l.scoredAt >= :since')->setParameter('since', new \DateTime('-30 days'))
-            ->groupBy('l.decision');
-        if ($emails !== null) {
-            $qb->andWhere('l.accountEmail IN (:emails)')->setParameter('emails', $emails);
-        }
-        foreach ($qb->getQuery()->getArrayResult() as $row) {
-            $out[$row['decision']] = (int)$row['cnt'];
-        }
-        return $out;
     }
 
     /** Change the own password (users stored in the database; the env admin changes ADMIN_PASSWORD). */

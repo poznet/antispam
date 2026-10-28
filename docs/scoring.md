@@ -129,6 +129,52 @@ Blacklist and whitelist rules support three pattern types:
 Invalid regex is logged to the error log and simply never matches — a bad rule
 won't crash the scan.
 
+## Rule ownership
+
+Every white/blacklist rule (`antispam_whitelist`, `antispam_email_whitelist`,
+`antispam_blacklist`, `antispam_email_blacklist`) has an owner in its
+`email` column (`VARCHAR(255) NOT NULL`, unchanged):
+
+| `email` value | Applies to |
+|---------------|------------|
+| a mailbox address (an account's e-mail, or the legacy mailbox from Ustawienia → E-mail) | that mailbox only |
+| `*` (`RuleOwnership::ALL`, shown as **Wszystkie skrzynki**) | every mailbox: all IMAP and SSH accounts and the legacy mailbox |
+
+`*` was chosen over `NULL` because it keeps the column NOT NULL (no schema
+change), is never a valid address, and works in a plain `IN (...)` lookup.
+Every consumer loads the rules of a mailbox with
+`findBy(['email' => RuleOwnership::scope($mailbox)])`, i.e. `IN ($mailbox, '*')`:
+the scan listeners (`CheckWhitelist`, `CheckEmailWhitelist`, `CheckBlacklist`,
+`CheckEmailBlacklist`), the plugin's `RawMessageScanner`, the agent rules
+export (`AgentRulesExporter` - the agent gets its account's rules plus the
+global ones) and the retroactive pass (`RetroactiveSpamService`: a global
+blacklist rule is applied to every account and the legacy mailbox, and the
+whitelists checked there include the global ones).
+
+Panel forms (**Whitelista / Blacklista domen / e-mail**, **Import / eksport**)
+have a mailbox selector with **Wszystkie skrzynki**, the legacy mailbox (when
+its e-mail is set) and every account e-mail; the legacy mailbox is
+preselected when configured (what panel rules always got), otherwise
+**Wszystkie skrzynki** - so an install without a legacy mailbox can still add
+rules. The submitted owner must be one of those choices. The lists show the
+owner of every rule and can be filtered by owner (`?owner=`); owners that no
+longer exist (deleted account, changed legacy address) are shown as
+*nieaktywna* - such rules apply nowhere, delete and re-add them.
+
+Rules created elsewhere keep their own owner: plugin reports, phishing
+"Zablokuj" and the quarantine *Zawsze akceptuj* use the account's e-mail.
+
+**Dedupe** is per owner: the same value may be added for two mailboxes, but
+not twice for one mailbox, and a mailbox rule is skipped when an identical
+global rule exists (a global rule can still be added next to mailbox rules).
+Comparison is case-insensitive (the MySQL collation; bulk import lowercases
+exact/wildcard values). There is deliberately **no unique index** on
+`(email, value)`: the schema is applied by `doctrine:schema:update --force` at
+boot, and an existing install may already hold duplicates (plugin/phishing
+rules are deduped per pattern type only, double submits), which would make
+the index creation - and the container start - fail; a 255+255 character
+utf8mb4 key would also exceed the 767-byte limit of legacy row formats.
+
 ## DNSBL integration
 
 Configure DNS block lists under **Blacklists → DNSBL Providers**. Each zone

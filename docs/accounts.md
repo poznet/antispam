@@ -81,7 +81,9 @@ Verifies SSH connectivity and checks remote environment (PHP, SQLite3, Maildir).
 Uploads `antispam-agent.php` to the hosting server and runs environment test.
 
 ### Sync Rules
-Exports all blacklist/whitelist rules from the database and imports them into the agent's SQLite on the remote server.
+Exports the account's blacklist/whitelist rules plus the global ones (owner **Wszystkie skrzynki**, `email = '*'`, see [scoring.md](scoring.md#rule-ownership)) and imports them into the agent's SQLite on the remote server. Rules added in the panel reach an agent only after a sync (or, for a blacklist rule at or above the spam threshold, the retroactive pass, which syncs first).
+
+Panel rules are per mailbox: pick the account's e-mail (or **Wszystkie skrzynki**) in the mailbox selector of the white/blacklist forms - before this was added every panel rule belonged to the legacy mailbox and never reached any account.
 
 ### Scan
 Triggers remote scan and retrieves results as JSON.

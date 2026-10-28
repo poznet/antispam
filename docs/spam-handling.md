@@ -86,7 +86,10 @@ rule is added:
   e-mail blacklist rule, see [thunderbird.md](thunderbird.md)),
 
 `RetroactiveSpamService::applyRule()` moves matching INBOX messages from the
-last 30 days to `SPAM` in every mailbox owned by the rule's account e-mail. The
+last 30 days to `SPAM` in every mailbox owned by the rule's account e-mail (a
+global rule - owner **Wszystkie skrzynki**, `*` - goes through every account
+and the legacy mailbox, one after another in the same request; see
+[scoring.md](scoring.md#rule-ownership)). The
 panel shows how many were moved. For a plugin report the pass runs after the
 response has been sent (`DeferredRetroactivePass` on `kernel.terminate`, IMAP
 timeouts 20 s), so the plugin is not kept waiting; the API only answers

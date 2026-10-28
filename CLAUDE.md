@@ -26,7 +26,7 @@ See `docs/` directory for detailed documentation:
 - `docs/commands.md` - CLI commands reference
 - `docs/api.md` - web controller endpoints
 - `docs/deployment.md` - Docker / Coolify deployment guide
-- `docs/scoring.md` - scoring pipeline, DNSBL, regex/wildcard patterns
+- `docs/scoring.md` - scoring pipeline, DNSBL, regex/wildcard patterns, rule ownership (per-mailbox vs global `*` rules)
 - `docs/protection.md` - impersonation/BEC, link protection, attachment policy (web + agent)
 - `docs/spam-handling.md` - where spam goes (move vs delete), quarantine semantics, retroactive blacklist, cron log (`antispam:cron:run`, `/cron/logs`)
 - `docs/users.md` - users and roles (ROLE_ADMIN / ROLE_USER), mailbox ownership, legacy ADMIN_PASSWORD admin, `/my` area

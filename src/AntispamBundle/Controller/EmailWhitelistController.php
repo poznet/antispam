@@ -46,6 +46,10 @@ class EmailWhitelistController extends AbstractController
         if (!$email) {
             return $this->redirectToRoute('antispam_emailwhitelist_index');
         }
+        if ($err = \AntispamBundle\Services\PatternMatcher::validate($email, $patternType)) {
+            $this->addFlash('danger', $err);
+            return $this->redirectToRoute('antispam_emailwhitelist_index');
+        }
         $owner = $this->ownership->resolve($request->request->get('owner'));
         if ($owner === null) {
             $this->addFlash('danger', 'Nieznana skrzynka - wybierz skrzynkę z listy.');

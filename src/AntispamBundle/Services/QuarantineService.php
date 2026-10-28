@@ -171,7 +171,7 @@ class QuarantineService
                 $msg = $folder->getMessage((int)$id);
                 $sender = $msg->getFrom() ? strtolower((string)$msg->getFrom()->getAddress()) : '';
                 // Released mail must not be quarantined again on the next scan.
-                $this->messages->setAsChecked($msg);
+                $this->messages->setAsChecked($msg, $mailbox['account_email'] ?: null);
                 $msg->move($connection->getMailbox('INBOX'));
                 $connection->expunge();
             } catch (\Throwable $e) {

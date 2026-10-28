@@ -200,6 +200,7 @@ class AccountController extends AbstractController
             $result = $sshService->testConnection($account);
         } else {
             try {
+                \AntispamBundle\Services\ImapScanService::applyImapTimeouts();
                 $server = new \Ddeboer\Imap\Server(
                     $account->getImapHost(),
                     $account->getImapPort(),

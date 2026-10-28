@@ -50,6 +50,10 @@ class DomainBlacklistController extends AbstractController
         if (!$host) {
             return $this->redirectToRoute('antispam_blacklist_index');
         }
+        if ($err = \AntispamBundle\Services\PatternMatcher::validate($host, $patternType)) {
+            $this->addFlash('danger', $err);
+            return $this->redirectToRoute('antispam_blacklist_index');
+        }
         $owner = $this->ownership->resolve($request->request->get('owner'));
         if ($owner === null) {
             $this->addFlash('danger', 'Nieznana skrzynka - wybierz skrzynkę z listy.');

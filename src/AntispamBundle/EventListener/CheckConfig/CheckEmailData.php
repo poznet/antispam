@@ -62,6 +62,7 @@ class CheckEmailData
         if ($event->getStatus() !== true) {
             return;
         }
+        \AntispamBundle\Services\ImapScanService::applyImapTimeouts();
         $server = new Server((string)$this->config->get('imap'), (string)($this->config->get('imap_port') ?: '993'), (string)($this->config->get('imap_flags') ?: '/imap/ssl'));
         try {
             $password = (string)$this->config->get('password');

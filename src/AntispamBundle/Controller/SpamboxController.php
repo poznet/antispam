@@ -7,6 +7,7 @@ use AntispamBundle\Entity\SpamScoreLog;
 use AntispamBundle\Services\ConnectionService;
 use AntispamBundle\Services\InboxService;
 use AntispamBundle\Services\QuarantineDigestService;
+use AntispamBundle\Services\MessageService;
 use AntispamBundle\Services\QuarantineService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
@@ -30,6 +31,7 @@ class SpamboxController extends AbstractController
         private InboxService $inbox,
         private ConnectionService $connection,
         private QuarantineService $quarantine,
+        private MessageService $messages,
     ) {
     }
 
@@ -209,6 +211,8 @@ class SpamboxController extends AbstractController
         try {
             $messages = $this->inbox->getInbox($folder);
             $msg = $this->inbox->getMessage((int)$id);
+            // Restored mail must not be filtered again on the next scan.
+            $this->messages->setAsChecked($msg);
             $inboxMailbox = $this->connection->getConnection()->getMailbox('INBOX');
             $msg->move($inboxMailbox);
             $this->inbox->expunge();

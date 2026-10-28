@@ -75,6 +75,10 @@ class BulkImportController extends AbstractController
         $seen = [];
 
         foreach (self::parseEntries((string)$request->request->get('entries', ''), $patternType, $score) as $entry) {
+            if (\AntispamBundle\Services\PatternMatcher::validate($entry['value'], $entry['pattern_type']) !== '') {
+                $skipped++;
+                continue;
+            }
             $key = strtolower($entry['value']);
             if (isset($seen[$key]) || $this->ownership->findDuplicate($conf['entity'], $conf['field'], $owner, $entry['value'])) {
                 $skipped++;

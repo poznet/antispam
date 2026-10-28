@@ -234,7 +234,7 @@ class ConfigurationController extends AbstractController
     }
 
     /** Render the digest a mailbox would receive (last 7 days), without sending. */
-    #[Route('/digest/preview/{key}', name: 'antispam_digest_preview', requirements: ['key' => 'imap|ssh-\d+'])]
+    #[Route('/digest/preview/{key}', name: 'antispam_digest_preview', requirements: ['key' => 'imap(-\d+)?|ssh-\d+'])]
     public function digestPreviewAction($key)
     {
         $mailbox = $this->quarantine->getMailbox($key);

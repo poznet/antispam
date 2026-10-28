@@ -296,7 +296,7 @@ class PluginApiController extends AbstractController
             return $raw;
         }
 
-        return new JsonResponse($this->rawScanner->scan($raw, $account->getEmail()));
+        return new JsonResponse($this->rawScanner->scan($raw, $account->getEmail(), $account));
     }
 
     /** @return string|JsonResponse decoded message source or an error response */

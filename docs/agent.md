@@ -111,6 +111,10 @@ Thresholds and switches, in order of precedence: CLI flag → synced setting
 `header_check_enabled`, ...) → default (10 / 5, the web defaults). The panel
 passes the current thresholds and switches as flags on every scan, so a change
 in Ustawienia applies before the next Sync, also on agents older than 3.0.
+The values are the account's effective ones: its **Ustawienia skrzynki**
+overrides (spam / quarantine threshold, scoring on/off) or else the global
+settings - both in the scan flags and in the synced `settings` (see
+[accounts.md](accounts.md#per-mailbox-settings-ustawienia-skrzynki)).
 With `scoring_enabled` = 0 only the lists apply and a blacklist hit is spam,
 like the web pipeline.
 

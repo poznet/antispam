@@ -5,6 +5,7 @@ namespace AntispamBundle\Tests\Services;
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\HostKeyMismatchException;
+use AntispamBundle\Services\MailboxSettingsResolver;
 use AntispamBundle\Services\ScoringService;
 use AntispamBundle\Services\SshService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -214,6 +215,25 @@ class SshServiceTest extends TestCase
         $this->service([$mock], $scoring)->runScan($this->account());
     }
 
+    public function testScanFlagsUseTheAccountSettings()
+    {
+        $mock = $this->sshMock(null);
+        $mock->expects($this->once())->method('exec')->with($this->callback(function ($cmd) {
+            return str_contains($cmd, " scan --maildir='/srv/mail/Maildir' --spam-threshold=7 --quarantine-threshold=6 --no-dnsbl --no-headers --no-impersonation");
+        }))->willReturn('{"total":0}');
+        $config = $this->createMock(ConfigService::class);
+        $config->method('get')->willReturnMap([
+            ['scoring.spam_threshold', '12'],
+            ['scoring.quarantine_threshold', '6'],
+        ]);
+        $em = $this->createMock(EntityManagerInterface::class);
+        $scoring = new ScoringService($em, $config);
+        $account = $this->account()->setSpamThreshold(7)->setScoringEnabled(false);
+
+        $this->service([$mock], $scoring, new MailboxSettingsResolver($scoring, $config, $em))->runScan($account);
+        $this->assertSame(12, $scoring->getSpamThreshold());
+    }
+
     public function testDeployResolvesTildeAndReportsTheSelfTest()
     {
         $sftp = $this->sftpMock();
@@ -328,14 +348,14 @@ class SshServiceTest extends TestCase
      * SshService whose connections come from $sessions in order (SFTP mocks
      * for createSftp, SSH2 mocks for createSsh).
      */
-    private function service(array $sessions, ?ScoringService $scoring = null)
+    private function service(array $sessions, ?ScoringService $scoring = null, ?MailboxSettingsResolver $resolver = null)
     {
-        return new class($this->keysDir, $sessions, $scoring) extends SshService {
+        return new class($this->keysDir, $sessions, $scoring, $resolver) extends SshService {
             private $sessions;
 
-            public function __construct($dir, array $sessions, $scoring)
+            public function __construct($dir, array $sessions, $scoring, $resolver)
             {
-                parent::__construct($dir, $scoring);
+                parent::__construct($dir, $scoring, null, $resolver);
                 $this->sessions = $sessions;
             }
 

@@ -17,7 +17,7 @@ services:
             - '../src/AntispamBundle/AntispamBundle.php'
             - '../src/AntispamBundle/{Entity,Event,Resources,Tests}/'
             - '../src/AntispamBundle/EventListener/Message/AttachmentExtractorTrait.php'
-            - '../src/AntispamBundle/Services/{DomainHelper,PatternMatcher,RawMessageParser}.php'
+            - '../src/AntispamBundle/Services/{DomainHelper,MailboxSettings,PatternMatcher,RawMessageParser}.php'
 
     # App version + build commit (REVISION file written by the Dockerfile).
     AntispamBundle\AppVersion:

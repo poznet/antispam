@@ -46,6 +46,7 @@ class SshService
         #[Autowire('%antispam.ssh_keys_dir%')] string $keysDir,
         private ?ScoringService $scoring = null,
         private ?EntityManagerInterface $em = null,
+        private ?MailboxSettingsResolver $mailboxSettings = null,
     ) {
         $this->keysDir = rtrim($keysDir, '/');
     }
@@ -417,14 +418,17 @@ class SshService
     }
 
     /**
-     * Scan options default to the panel's current scoring configuration, so
-     * the agent uses the same thresholds and switches even before the next
+     * Scan options default to the panel's current scoring configuration -
+     * the account's effective values (Ustawienia skrzynki override -> global),
+     * so the agent uses the same thresholds and switches even before the next
      * rules sync (and with agents older than 3.0, which ignore the synced
      * values).
      */
     public function runScan(Account $account, array $options = [])
     {
-        $options += $this->scanDefaults();
+        $options += $this->mailboxSettings
+            ? $this->mailboxSettings->within($account, fn () => $this->scanDefaults())
+            : $this->scanDefaults();
         $args = $this->maildirArg($account);
         if (isset($options['spam_threshold'])) {
             $args .= ' --spam-threshold=' . (int)$options['spam_threshold'];

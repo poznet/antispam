@@ -53,7 +53,8 @@ class QuarantineService
         ConnectionService $connection,
         InboxService $inbox,
         MessageService $messages,
-        ImapScanService $imapScan
+        ImapScanService $imapScan,
+        private ?MailboxSettingsResolver $mailboxSettings = null,
     ) {
         $this->imapScan = $imapScan;
         $this->em = $em;
@@ -65,9 +66,13 @@ class QuarantineService
     }
 
     /**
-     * Every mailbox that has a quarantine, with the address its digest goes to.
+     * Every mailbox that has a quarantine, with its digest settings
+     * (Ustawienia skrzynki override -> global):
+     *   recipient       where its digest goes
+     *   digest_enabled  the mailbox's own on/off, null = global switch
+     *   digest_hour     0-23 = own send hour, null = global schedule
      *
-     * @return array list of ['key', 'label', 'account_email', 'recipient']
+     * @return array list of ['key', 'label', 'account_email', 'recipient', 'digest_enabled', 'digest_hour']
      */
     public function getMailboxes()
     {
@@ -75,28 +80,42 @@ class QuarantineService
         if ($this->config->get('imap') && $this->config->get('login')) {
             $email = (string)$this->config->get('email');
             $recipient = trim((string)$this->config->get('digest.imap_recipient')) ?: $email;
-            $out[] = ['key' => self::IMAP_KEY, 'label' => 'IMAP: ' . ($email ?: $this->config->get('login')), 'account_email' => $email, 'recipient' => $recipient];
+            $out[] = array_replace(['key' => self::IMAP_KEY, 'label' => 'IMAP: ' . ($email ?: $this->config->get('login')), 'account_email' => $email, 'recipient' => $recipient], $this->digestSettings(null));
         }
         foreach ($this->em->getRepository(Account::class)->findBy(['connectionType' => Account::CONNECTION_IMAP]) as $account) {
-            $out[] = [
+            $out[] = array_replace([
                 'key' => 'imap-' . $account->getId(),
                 'label' => $account->getName() . ' (' . $account->getEmail() . ')',
                 'account_email' => $account->getEmail(),
                 'recipient' => $account->getEmail(),
-            ];
+            ], $this->digestSettings($account));
         }
         foreach ($this->em->getRepository(Account::class)->findBy(['connectionType' => Account::CONNECTION_SSH]) as $account) {
             if (!$account->getAgentDeployed()) {
                 continue;
             }
-            $out[] = [
+            $out[] = array_replace([
                 'key' => 'ssh-' . $account->getId(),
                 'label' => $account->getName() . ' (' . $account->getEmail() . ')',
                 'account_email' => $account->getEmail(),
                 'recipient' => $account->getEmail(),
-            ];
+            ], $this->digestSettings($account));
         }
         return $out;
+    }
+
+    /** Digest part of a getMailboxes() row; a 'recipient' here replaces the default one. */
+    private function digestSettings(?Account $account): array
+    {
+        if ($this->mailboxSettings === null) {
+            return ['digest_enabled' => null, 'digest_hour' => null];
+        }
+        $s = $account ? $this->mailboxSettings->forAccount($account) : $this->mailboxSettings->global();
+        $row = ['digest_enabled' => $s->isOverridden('digest_enabled') ? $s->digestEnabled : null, 'digest_hour' => $s->digestHour];
+        if ($account && $s->isOverridden('digest_recipient')) {
+            $row['recipient'] = $s->digestRecipient;
+        }
+        return $row;
     }
 
     public function getMailbox($key)

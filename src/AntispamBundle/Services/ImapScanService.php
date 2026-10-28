@@ -54,6 +54,7 @@ class ImapScanService
         private MessageService $messages,
         private ?ManagerRegistry $doctrine = null,
         #[Autowire('%kernel.project_dir%/var/data/locks')] private ?string $lockDir = null,
+        private ?MailboxSettingsResolver $mailboxSettings = null,
     ) {
     }
 
@@ -94,7 +95,14 @@ class ImapScanService
             $connection = $this->connect($account);
             try {
                 $since = $account->getLastScanAt() ? $this->windowStart($account->getLastScanAt()) : null;
-                $stats = $this->scan($connection, $account->getEmail(), (bool)$account->getDeleteSpam(), $account->getLastScanAt() === null, $account->getImapCursor(), $since, $cursor);
+                // The account's thresholds / scoring switch (override -> global)
+                // apply to every listener of the pipeline while it runs.
+                $settings = $this->mailboxSettings?->forAccount($account);
+                $cursor = null;
+                $run = function () use ($connection, $account, $settings, $since, &$cursor) {
+                    return $this->scan($connection, $account->getEmail(), $settings ? $settings->deleteSpam : (bool)$account->getDeleteSpam(), $account->getLastScanAt() === null, $account->getImapCursor(), $since, $cursor);
+                };
+                $stats = $settings ? $this->mailboxSettings->within($settings, $run) : $run();
             } finally {
                 $connection->close();
             }

@@ -18,6 +18,17 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 
 ## [Unreleased]
 
+### Added
+- Per-mailbox settings (**Konta → Edytuj → Ustawienia skrzynki**, empty =
+  inherit the global value): spam / quarantine threshold, scoring on/off,
+  quarantine digest on/off, digest recipient and send hour. Honoured by the
+  IMAP scan, the SSH agent (scan flags and synced settings), the plugin
+  check, the retroactive blacklist pass and the digest; badge on the account
+  list, overrides in the `account.edit` audit entry and in backups.
+  `antispam:digest:send --scheduled-only` (hourly in the Docker scheduler) and
+  arguments after `--` for `antispam:cron:run`. New nullable columns on
+  `antispam_account` (migration `Version20261028140000`).
+
 ### Changed
 - Database schema is versioned with Doctrine Migrations (`migrations/`, baseline =
   full 2.0.0 schema). The Docker entrypoint runs the new `antispam:db:upgrade` instead

@@ -2,6 +2,7 @@
 
 namespace AntispamBundle\Services;
 
+use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\Blacklist;
 use AntispamBundle\Entity\DnsblProvider;
 use AntispamBundle\Entity\EmailBlacklist;
@@ -18,13 +19,18 @@ class AgentRulesExporter
     private $em;
     private $scoring;
 
-    public function __construct(EntityManagerInterface $em, ScoringService $scoring)
+    public function __construct(EntityManagerInterface $em, ScoringService $scoring, private ?MailboxSettingsResolver $mailboxSettings = null)
     {
         $this->em = $em;
         $this->scoring = $scoring;
     }
 
-    public function export($email)
+    /**
+     * @param Account|null $account the agent's account: its thresholds /
+     *        scoring switch go into `settings` (override -> global); null =
+     *        looked up by e-mail
+     */
+    public function export($email, ?Account $account = null)
     {
         $rules = [
             'whitelist' => [],
@@ -73,7 +79,12 @@ class AgentRulesExporter
                 'cache_ttl' => $prov->getCacheTtl(),
             ];
         }
-        $rules['settings'] = $this->scoring->exportAgentSettings($email);
+        $rules['settings'] = $this->mailboxSettings
+            ? $this->mailboxSettings->within(
+                $account ? $this->mailboxSettings->forAccount($account) : $this->mailboxSettings->forEmail($email),
+                fn () => $this->scoring->exportAgentSettings($email)
+            )
+            : $this->scoring->exportAgentSettings($email);
 
         return $rules;
     }

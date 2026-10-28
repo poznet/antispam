@@ -10,6 +10,7 @@ use AntispamBundle\Entity\ListSetting;
 use AntispamBundle\Entity\User;
 use AntispamBundle\Services\CryptoService;
 use AntispamBundle\Services\ImapFlags;
+use AntispamBundle\Services\MailboxSettingsResolver;
 use AntispamBundle\Services\PatternMatcher;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -453,6 +454,19 @@ class BackupImporter
                 'MaildirPath' => self::nullable($item['maildir_path'] ?? null) ?? '~/Maildir',
                 'AgentPath' => self::nullable($item['agent_path'] ?? null) ?? '~/antispam-agent',
             ];
+            // Per-mailbox settings: only keys present in the file (older
+            // backups have none - the current values stay). Invalid values
+            // are dropped with a warning; null = inherit.
+            $present = array_intersect(MailboxSettingsResolver::FIELDS, array_keys($item));
+            if ($present) {
+                [$overrides, $overrideErrors] = MailboxSettingsResolver::parseOverrideValues($item);
+                foreach ($overrideErrors as $err) {
+                    $this->report->warn('Account ' . $email . ': ' . $err . ' - setting ignored (inherit).');
+                }
+                foreach ($present as $field) {
+                    $fields[str_replace('_', '', ucwords($field, '_'))] = $overrides[$field];
+                }
+            }
             // Present only in exports with secrets; an empty value keeps the current path.
             if (self::nullable($item['ssh_key_path'] ?? null) !== null) {
                 $fields['SshKeyPath'] = (string)$item['ssh_key_path'];

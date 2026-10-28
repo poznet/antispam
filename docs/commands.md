@@ -72,6 +72,7 @@ output) in the cron log shown on **Przegląd → Logi crona**. Use it in crontab
 and the Docker scheduler. See [spam-handling.md](spam-handling.md).
 ```bash
 php bin/console antispam:cron:run antispam:agent:scan-all
+php bin/console antispam:cron:run antispam:digest:send -- --scheduled-only   # options after "--"
 ```
 
 ### antispam:purge
@@ -101,8 +102,14 @@ php bin/console antispam:digest:send
 php bin/console antispam:digest:send --dry-run            # build and count, don't send
 php bin/console antispam:digest:send --mailbox=ssh-3      # one mailbox ("imap", "imap-<accountId>" or "ssh-<accountId>")
 php bin/console antispam:digest:send --since="-3 days"    # ignore the last-sent marker
-php bin/console antispam:digest:send --force              # send even if disabled in settings
+php bin/console antispam:digest:send --force              # send even if disabled in settings (not to mailboxes switched off on their own)
+php bin/console antispam:digest:send --scheduled-only     # hourly: only mailboxes with their own send hour that are due
 ```
+Per-mailbox settings (account form, **Ustawienia skrzynki**) are honoured:
+a mailbox switched off is reported as `disabled`, one with its own send hour
+that is not due as `not-due`. `--mailbox` sends that mailbox regardless of its
+hour. The command runs when the global digest is off but some mailbox has it
+switched on. See [quarantine-digest.md](quarantine-digest.md#per-mailbox-settings).
 
 ## Phishing Forward
 

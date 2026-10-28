@@ -24,8 +24,60 @@
                         <option value="ssh" {% if account.connectionType == 'ssh' %}selected{% endif %}>SSH + Maildir</option>
                     </select>
                 </div>
+            </div>
+        </div>
+
+        {% set g = global_settings %}
+        {% set max_threshold = constant('AntispamBundle\\Services\\MailboxSettingsResolver::MAX_THRESHOLD') %}
+        <div class="panel panel-default" id="mailboxSettings">
+            <div class="panel-heading"><span class="glyphicon glyphicon-tasks"></span> Ustawienia skrzynki
+                {% if account.hasSettingsOverrides %}<span class="label label-info">własne ustawienia</span>{% endif %}
+            </div>
+            <div class="panel-body">
+                <p class="text-muted">Puste pole = <strong>dziedzicz</strong> wartość globalną (w nawiasie: aktualna wartość z <a href="{{ path('antispam_spam_config') }}">Ustawienia → Filtr spamu</a> i <a href="{{ path('antispam_digest_config') }}">Raport kwarantanny</a>). Obowiązują skan IMAP, agenta SSH (po synchronizacji reguł), sprawdzanie we wtyczkach pocztowych i przenoszenie wstecz po dodaniu reguły blacklisty. Skrzynka z <em>Ustawienia → E-mail</em> (stara konfiguracja) zawsze używa ustawień globalnych.</p>
+                <div class="row">
+                    <div class="col-sm-6 form-group">
+                        <label for="accSpamThreshold">Próg spamu</label>
+                        <input type="number" min="1" max="{{ max_threshold }}" class="form-control" id="accSpamThreshold" name="account[spam_threshold]" value="{{ account.spamThreshold }}" placeholder="dziedzicz ({{ g.spamThreshold }})">
+                    </div>
+                    <div class="col-sm-6 form-group">
+                        <label for="accQuarantineThreshold">Próg kwarantanny</label>
+                        <input type="number" min="0" max="{{ max_threshold }}" class="form-control" id="accQuarantineThreshold" name="account[quarantine_threshold]" value="{{ account.quarantineThreshold }}" placeholder="dziedzicz ({{ g.quarantineThreshold }})">
+                        <p class="help-block">Musi być niższy niż próg spamu (puste pole liczy się jako wartość globalna).</p>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="accScoringEnabled">Punktacja (nagłówki, DNSBL, linki, załączniki, podszywanie)</label>
+                    <select class="form-control" id="accScoringEnabled" name="account[scoring_enabled]">
+                        <option value="" {% if account.scoringEnabled is null %}selected{% endif %}>dziedzicz ({{ g.scoringEnabled ? 'włączona' : 'wyłączona' }})</option>
+                        <option value="1" {% if account.scoringEnabled is same as(true) %}selected{% endif %}>włączona</option>
+                        <option value="0" {% if account.scoringEnabled is same as(false) %}selected{% endif %}>wyłączona - tylko białe / czarne listy (trafienie w blacklistę = spam)</option>
+                    </select>
+                </div>
                 <div class="form-group">
                     <label><input type="checkbox" name="account[delete_spam]" value="1" {% if account.deleteSpam %}checked{% endif %}> Usuwaj spam (zamiast przenosić do folderu SPAM)</label>
+                    <p class="help-block">Tylko konta IMAP, osobno dla każdej skrzynki (bez dziedziczenia). Agent SSH zawsze przenosi spam do <code>~/Maildir/.SPAM</code>.</p>
+                </div>
+                <hr>
+                <div class="row">
+                    <div class="col-sm-4 form-group">
+                        <label for="accDigestEnabled">Raport kwarantanny</label>
+                        <select class="form-control" id="accDigestEnabled" name="account[digest_enabled]">
+                            <option value="" {% if account.digestEnabled is null %}selected{% endif %}>dziedzicz ({{ g.digestEnabled ? 'włączony' : 'wyłączony' }})</option>
+                            <option value="1" {% if account.digestEnabled is same as(true) %}selected{% endif %}>włączony</option>
+                            <option value="0" {% if account.digestEnabled is same as(false) %}selected{% endif %}>wyłączony</option>
+                        </select>
+                    </div>
+                    <div class="col-sm-5 form-group">
+                        <label for="accDigestRecipient">Odbiorca raportu</label>
+                        <input type="email" class="form-control" id="accDigestRecipient" name="account[digest_recipient]" value="{{ account.digestRecipient }}" placeholder="dziedzicz ({{ account.email }})">
+                        <p class="help-block">Np. kierownik działu zamiast właściciela skrzynki.</p>
+                    </div>
+                    <div class="col-sm-3 form-group">
+                        <label for="accDigestHour">Godzina wysyłki</label>
+                        <input type="number" min="0" max="23" class="form-control" id="accDigestHour" name="account[digest_hour]" value="{{ account.digestHour }}" placeholder="harmonogram globalny">
+                        <p class="help-block">0-23, czas serwera.</p>
+                    </div>
                 </div>
             </div>
         </div>

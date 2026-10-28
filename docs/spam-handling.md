@@ -24,6 +24,11 @@ deleted only when deletion is switched on:
 | Legacy mailbox (Ustawienia → Konfiguracja (stara)) | *Usuwaj spam na stałe* in Ustawienia → Filtr spamu (config `delete`) |
 | SSH+Maildir account | always moved to `~/Maildir/.SPAM` (the agent never deletes spam) |
 
+The thresholds deciding ham / quarantine / spam can differ per mailbox
+(**Ustawienia skrzynki** on the account form, empty = global value); the
+delete switch above has always been per account and does not inherit the
+global `delete` setting, which belongs to the legacy mailbox only.
+
 The `SPAM` and `QUARANTINE` folders are created on first use. In IMAP the
 message is moved with `MOVE`/`COPY`+`\Deleted` and the INBOX is expunged at the
 end of the scan. If the move fails (quota, permissions...) the score log gets
@@ -109,7 +114,12 @@ Rules and limits:
   can be undone from the SPAM folder.
 - Senders on the domain / e-mail whitelist are left alone, as in the scan.
 - With scoring enabled, a rule below the spam threshold only adds points in
-  the scan, so it is not applied retroactively (the panel says so).
+  the scan, so it is not applied retroactively (the panel says so). The check
+  is **per mailbox** with its effective settings (account override -> global):
+  a global rule with 6 points is applied to a mailbox with spam threshold 6
+  and skipped for one with 10 ("próg spamu skrzynki jest wyższy: ola@firma.pl
+  (10)"); scoring switched off for a mailbox applies every rule there. SSH
+  agents get the mailbox's threshold in `apply-blacklist --spam-threshold`.
 - Cost: IMAP searches `SINCE <30 days>`, exact rules also `FROM "<value>"`
   (server-side; a value that cannot be quoted safely is matched client-side
   only). Messages are processed **newest first**; wildcard/regex rules inspect
@@ -153,6 +163,7 @@ runs every job through `antispam:cron:run`. On a plain server:
 */5 * * * * php /path/to/bin/console antispam:cron:run antispam:agent:scan-all
 */15 * * * * php /path/to/bin/console antispam:cron:run antispam:feed:sync
 0 7 * * *   php /path/to/bin/console antispam:cron:run antispam:digest:send
+0 0-6,8-23 * * * php /path/to/bin/console antispam:cron:run antispam:digest:send -- --scheduled-only
 41 3 * * *  php /path/to/bin/console antispam:cron:run antispam:purge
 ```
 
@@ -163,4 +174,6 @@ least one day). See [commands.md](commands.md#antispampurge). A purged score log
 row also means an IMAP quarantine entry that old shows no reasons and gets no
 "Zawsze akceptuj" button (see [quarantine-digest.md](quarantine-digest.md)).
 
-Only `antispam:*` commands are accepted.
+Only `antispam:*` commands are accepted. Arguments for the wrapped command
+go after `--` (`antispam:cron:run antispam:digest:send -- --scheduled-only`);
+they are part of the command name stored in the log.

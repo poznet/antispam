@@ -2,6 +2,7 @@
 
 namespace AntispamBundle\Services;
 
+use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\Blacklist;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Entity\EmailWhitelist;
@@ -38,7 +39,8 @@ class RawMessageScanner
         ImpersonationAnalyzer $impersonation,
         UrlAnalyzer $urls,
         AttachmentPolicyAnalyzer $attachments,
-        CertHoleService $cert
+        CertHoleService $cert,
+        private ?MailboxSettingsResolver $mailboxSettings = null,
     ) {
         $this->em = $em;
         $this->headers = $headers;
@@ -54,10 +56,22 @@ class RawMessageScanner
     /**
      * @param string $raw          full message source
      * @param string $accountEmail mailbox whose rules apply
+     * @param Account|null $account logged-in account: its thresholds / scoring
+     *        switch apply (override -> global); null = looked up by e-mail
      *
      * @return array{decision:string, spam:bool, score:int, spam_threshold:int, quarantine_threshold:int, reasons:array, sender:string, subject:string}
      */
-    public function scan($raw, $accountEmail)
+    public function scan($raw, $accountEmail, ?Account $account = null)
+    {
+        if ($this->mailboxSettings === null) {
+            return $this->doScan($raw, $accountEmail);
+        }
+        $settings = $account ? $this->mailboxSettings->forAccount($account) : $this->mailboxSettings->forEmail($accountEmail);
+
+        return $this->mailboxSettings->within($settings, fn () => $this->doScan($raw, $accountEmail));
+    }
+
+    private function doScan($raw, $accountEmail)
     {
         $msg = new RawMessageParser($raw);
         $sender = $msg->getFromAddress();

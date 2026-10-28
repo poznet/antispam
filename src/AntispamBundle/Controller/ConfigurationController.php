@@ -232,7 +232,8 @@ class ConfigurationController extends AbstractController
                 if ($errors) {
                     $this->addFlash('danger', implode(' ', $errors));
                 } else {
-                    foreach ($this->digest->sendAll() as $row) {
+                    // "Send now": every mailbox not switched off on its own, whatever its send hour.
+                    foreach ($this->digest->sendAll(null, null, false, true, false, true) as $row) {
                         $type = $row['status'] === 'error' || $row['status'] === 'rejected' ? 'danger' : 'info';
                         $this->addFlash($type, sprintf('%s → %s: wiadomości: %d, status: %s%s', $row['key'], $row['recipient'], $row['count'], $row['status'], $row['error'] ? ' (' . $row['error'] . ')' : ''));
                     }

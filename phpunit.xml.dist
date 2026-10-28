@@ -11,6 +11,8 @@
     <php>
         <ini name="display_errors" value="1" />
         <ini name="error_reporting" value="-1" />
+        <!-- plugin/phishing tests decode messages up to 10 MiB (base64 + JSON copies) -->
+        <ini name="memory_limit" value="512M" />
         <server name="APP_ENV" value="test" force="true" />
         <server name="KERNEL_CLASS" value="App\Kernel" />
     </php>

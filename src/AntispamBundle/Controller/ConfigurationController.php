@@ -306,7 +306,16 @@ class ConfigurationController extends AbstractController
             }
             $c->set('plugin.token_ttl_days', max(1, (int)($post['token_ttl_days'] ?? 90)));
             $c->set('plugin.report_rate_limit', max(1, (int)($post['report_rate_limit'] ?? 120)));
-            $c->set('plugin.public_url', rtrim(trim($post['public_url'] ?? ''), '/'));
+            // Baked into downloaded plugins (manifest XML, Swift source) - accept a plain http(s) base URL only.
+            $publicUrl = rtrim(trim($post['public_url'] ?? ''), '/');
+            $parts = $publicUrl !== '' ? parse_url($publicUrl) : null;
+            if ($publicUrl !== '' && (!$parts || !in_array($parts['scheme'] ?? '', ['http', 'https'], true) || empty($parts['host'])
+                || isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])
+                || preg_match('/[\x00-\x20"\\\\<>]/', $publicUrl))) {
+                $this->addFlash('danger', 'Nieprawidłowy publiczny adres URL - podaj np. https://antispam.example.pl');
+                return $this->redirectToRoute('antispam_plugin_config');
+            }
+            $c->set('plugin.public_url', $publicUrl);
             $this->addFlash('success', 'Ustawienia wtyczek pocztowych zapisane');
             return $this->redirectToRoute('antispam_plugin_config');
         }

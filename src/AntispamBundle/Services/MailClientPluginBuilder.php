@@ -82,9 +82,15 @@ class MailClientPluginBuilder
     {
         $src = $this->resourceDir . '/applemail';
         $tmp = tempnam(sys_get_temp_dir(), 'amzip');
+        if ($tmp === false) {
+            throw new \RuntimeException('Cannot create a temporary file');
+        }
 
         $zip = new \ZipArchive();
-        $zip->open($tmp, \ZipArchive::OVERWRITE);
+        if ($zip->open($tmp, \ZipArchive::OVERWRITE) !== true) {
+            @unlink($tmp);
+            throw new \RuntimeException('Cannot create the Apple Mail source zip');
+        }
         $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($src, \FilesystemIterator::SKIP_DOTS));
         foreach ($it as $file) {
             $rel = str_replace('\\', '/', substr($file->getPathname(), strlen($src) + 1));

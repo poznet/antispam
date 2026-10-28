@@ -26,13 +26,13 @@ const MAX_UPLOAD_B64 = Math.floor(MAX_UPLOAD_BYTES / 3) * 4;
 const state = { token: "", email: "", autoCheck: false, status: null, busy: false };
 const $ = (id) => document.getElementById(id);
 
-// --- settings (roaming with the mailbox; localStorage as a fallback) --------
+// --- settings (roaming with the mailbox; non-secret ones also in localStorage) --
 
 function loadSettings() {
   const rs = Office.context.roamingSettings;
   for (const key of ["token", "email", "autoCheck"]) {
     let v = rs ? rs.get("antispam_" + key) : undefined;
-    if (v === undefined || v === null) {
+    if ((v === undefined || v === null) && key !== "token") {
       try { v = JSON.parse(localStorage.getItem("antispam_" + key)); } catch (e) { v = undefined; }
     }
     if (v !== undefined && v !== null) state[key] = v;
@@ -41,8 +41,10 @@ function loadSettings() {
 
 function saveSettings() {
   const rs = Office.context.roamingSettings;
+  try { localStorage.removeItem("antispam_token"); } catch (e) { /* blocked storage */ }
   for (const key of ["token", "email", "autoCheck"]) {
-    try { localStorage.setItem("antispam_" + key, JSON.stringify(state[key])); } catch (e) { /* blocked storage */ }
+    // The bearer token stays in roaming settings only: localStorage is shared with the whole panel origin.
+    if (key !== "token") try { localStorage.setItem("antispam_" + key, JSON.stringify(state[key])); } catch (e) { /* blocked storage */ }
     if (rs) rs.set("antispam_" + key, state[key]);
   }
   if (rs) rs.saveAsync(() => {});

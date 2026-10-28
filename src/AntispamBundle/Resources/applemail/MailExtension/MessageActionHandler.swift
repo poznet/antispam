@@ -63,8 +63,17 @@ final class MessageActionHandler: NSObject, MEMessageActionHandler {
         if recipients.contains(mailbox) { return true }
         let headers = message.headers ?? [:]
         for (name, values) in headers where requiredHeaders.contains(name.lowercased()) {
-            if values.contains(where: { $0.lowercased().contains(mailbox) }) { return true }
+            if values.contains(where: { Self.headerAddress($0) == mailbox }) { return true }
         }
         return false
+    }
+
+    /// Bare lowercased address from a header value like `Name <a@b.pl>` or `a@b.pl`.
+    private static func headerAddress(_ value: String) -> String {
+        var v = value.trimmingCharacters(in: .whitespaces)
+        if let lt = v.lastIndex(of: "<"), let gt = v.lastIndex(of: ">"), lt < gt {
+            v = String(v[v.index(after: lt)..<gt])
+        }
+        return v.trimmingCharacters(in: .whitespaces).lowercased()
     }
 }

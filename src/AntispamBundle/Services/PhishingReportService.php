@@ -33,7 +33,7 @@ class PhishingReportService
         'img', 'vhd', 'jar', 'ps1', 'docm', 'xlsm', 'pptm', 'html', 'htm', 'svg', 'zip', 'rar', '7z', 'cab',
     ];
 
-    public function __construct(private EntityManagerInterface $em)
+    public function __construct(private EntityManagerInterface $em, private ?CertHoleService $cert = null)
     {
     }
 
@@ -120,6 +120,29 @@ class PhishingReportService
         }
         arsort($hosts);
 
+        // Shown whether or not the CERT filter is enabled - it only needs a synced list.
+        $certListed = [];   // listed domains
+        $certHosts = [];    // link hosts that are, or are under, a listed domain
+        if ($this->cert) {
+            $byHost = [];
+            foreach (array_merge([$fromHost, self::domainOf((string)$report->getReplyTo()), self::domainOf((string)$report->getReturnPath())], array_keys($hosts)) as $h) {
+                $byHost[$h] = CertHoleService::candidates($h);
+            }
+            $candidates = array_merge([], ...array_values($byHost));
+            $listed = $candidates ? $this->cert->findListed($candidates) : [];
+            $certListed = array_keys($listed);
+            foreach ($byHost as $h => $cands) {
+                if (array_intersect_key(array_flip($cands), $listed)) {
+                    $certHosts[] = $h;
+                }
+            }
+        }
+
+        $flags = self::flags($report, $fromHost, $auth, $dkimDomains, $links, $attachments);
+        if ($certListed) {
+            array_unshift($flags, 'Domena z Listy Ostrzeżeń CERT Polska: ' . implode(', ', $certListed));
+        }
+
         return [
             'headers' => $msg->getHeaderList(),
             'from_host' => $fromHost,
@@ -133,7 +156,8 @@ class PhishingReportService
             'attachments' => $attachments,
             'text' => $parts['text'] !== '' ? $parts['text'] : $msg->getBodyText(),
             'html' => $parts['html'],
-            'flags' => self::flags($report, $fromHost, $auth, $dkimDomains, $links, $attachments),
+            'flags' => $flags,
+            'cert_hosts' => $certHosts,
             'freemail' => self::isFreemail($fromHost),
         ];
     }

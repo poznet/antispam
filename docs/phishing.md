@@ -40,7 +40,10 @@ arrives.
   - **red flags**: auth failures, DKIM domain unrelated to From, Reply-To or
     Return-Path in another domain, display name pretending to be another
     address, links whose visible text shows a different domain than the
-    target, links to IP addresses, risky attachment extensions, truncation;
+    target, links to IP addresses, risky attachment extensions, truncation,
+    and sender / link domains on the CERT Polska list (see
+    [protection.md](protection.md); shown whenever the list has been synced,
+    even with the CERT filter off - listed link domains are highlighted);
   - links (not clickable) with per-domain counts linking to VirusTotal;
   - attachments with type, size and SHA-256 (VirusTotal link);
   - text body, HTML **source** (escaped, never rendered) and all decoded

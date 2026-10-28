@@ -68,6 +68,7 @@ when a message is open (read mode).
 | To nie spam | — | ✔ sender whitelisted |
 | Sprawdź w Antyspamie | — | ✔ shows decision, score, reasons |
 | Check opened messages automatically | — | ✔ optional, while the pane is **pinned** |
+| Zgłoś phishing | — | ✔ whole `.eml` (up to 10 MiB) to *Zgłoszenia phishingu*, sender blacklisted ([phishing.md](phishing.md)) |
 
 Login uses the same credentials as Thunderbird: mailbox e-mail + plugin
 password (account form) or IMAP password. The token is stored in the add-in's

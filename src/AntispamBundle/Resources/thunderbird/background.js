@@ -10,6 +10,9 @@
  * message arriving to that mailbox can be sent to antispam for a check; the
  * plugin then marks / moves it according to the decision.
  *
+ * Logged in, "Zgłoś phishing" sends the whole message (attachments included,
+ * up to the server's limit) for the admin to inspect, and files it as junk.
+ *
  * Server API: docs/thunderbird.md (/api/plugin/*).
  */
 
@@ -30,6 +33,9 @@ const DEFAULTS = {
 // Only the head of a message is needed for scoring (headers + text body);
 // attachments past this point are cut off.
 const MAX_UPLOAD_BYTES = 1024 * 1024;
+// Phishing reports carry the whole message (attachments too) up to this size
+// (PhishingReportService::MAX_RAW_BYTES on the server).
+const MAX_PHISHING_BYTES = 10 * 1024 * 1024;
 // Thunderbird's own junk classifier flags messages right after they arrive;
 // junk changes within this window of arrival are not treated as user verdicts.
 const ARRIVAL_GRACE_MS = 2 * 60 * 1000;
@@ -120,21 +126,28 @@ async function needsSetup(text) {
 
 // --- message helpers --------------------------------------------------------
 
-/** Raw source as base64 (truncated to MAX_UPLOAD_BYTES). */
-async function rawBase64(messageId) {
+/** Raw source as base64, cut at `limit` bytes; `truncated` tells whether it was. */
+async function rawSource(messageId, limit = MAX_UPLOAD_BYTES) {
   let raw = await messenger.messages.getRaw(messageId);
   let bin;
+  let size;
   if (typeof raw === "string") {
-    bin = raw.length > MAX_UPLOAD_BYTES ? raw.slice(0, MAX_UPLOAD_BYTES) : raw;
+    size = raw.length;
+    bin = raw.length > limit ? raw.slice(0, limit) : raw;
   } else {
     // Newer Thunderbird may hand back a File/Blob.
-    const buf = new Uint8Array(await raw.slice(0, MAX_UPLOAD_BYTES).arrayBuffer());
+    size = raw.size;
+    const buf = new Uint8Array(await raw.slice(0, limit).arrayBuffer());
     bin = "";
     for (let i = 0; i < buf.length; i += 0x8000) {
       bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
     }
   }
-  return btoa(bin);
+  return { base64: btoa(bin), truncated: size > limit };
+}
+
+async function rawBase64(messageId) {
+  return (await rawSource(messageId)).base64;
 }
 
 async function accountEmails(accountId) {
@@ -236,6 +249,38 @@ async function report(message, verdict, { quiet = false, manual = false } = {}) 
 async function reportSpamAndFile(message) {
   await report(message, "spam", { manual: true });
   const s = await settings();
+  await setJunk(message, true);
+  if (s.moveOnReport) await moveToJunk(message);
+}
+
+/**
+ * Logged in only: report a phishing attempt. The server keeps the whole
+ * message for the admin and treats it as a spam report; locally it is filed
+ * as junk like "Zgłoś spam".
+ */
+async function reportPhishing(message) {
+  const s = await settings();
+  if (!s.token) {
+    await needsSetup("Zgłoszenie phishingu wymaga zalogowania we wtyczce (wiadomość trafia w całości do administratora).");
+    return;
+  }
+  try {
+    const src = await rawSource(message.id, MAX_PHISHING_BYTES);
+    const res = await api("/api/plugin/phishing", {
+      method: "POST",
+      body: { raw_base64: src.base64, truncated: src.truncated, client: "thunderbird" },
+    });
+    const text = "Zgłoszono próbę wyłudzenia: " + (message.author || res.sender || "")
+      + (res.duplicate ? " (już była zgłoszona)" : "") + (res.rules && res.rules.length ? " – nadawca zablokowany" : "");
+    await notify("Antyspam", text);
+    await feedback(true, text);
+  } catch (e) {
+    console.warn("antispam: phishing report failed", e);
+    const text = "Nie udało się zgłosić phishingu do " + s.server + ": " + e.message;
+    await notify("Antyspam — błąd", text);
+    await feedback(false, text);
+    return;
+  }
   await setJunk(message, true);
   if (s.moveOnReport) await moveToJunk(message);
 }
@@ -347,6 +392,7 @@ messenger.messageDisplayAction.onClicked.addListener(tab => {
 
 const MENU = {
   "antispam-spam": "Zgłoś jako spam (Antyspam)",
+  "antispam-phishing": "Zgłoś próbę wyłudzenia / phishing (Antyspam)",
   "antispam-ham": "To nie spam (Antyspam)",
   "antispam-check": "Sprawdź w Antyspamie",
 };
@@ -367,6 +413,7 @@ messenger.menus.onClicked.addListener(info => {
   enqueue(async () => {
     for (const m of await selectedMessages(info)) {
       if (info.menuItemId === "antispam-spam") await reportSpamAndFile(m);
+      else if (info.menuItemId === "antispam-phishing") await reportPhishing(m);
       else if (info.menuItemId === "antispam-ham") await reportHam(m);
       else await check(m, { manual: true });
     }

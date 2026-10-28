@@ -1,0 +1,65 @@
+{% extends '@Antispam/main.html.twig' %}
+{% block title %}Zgłoszenia phishingu{% endblock %}
+{% block page_title %}Zgłoszenia phishingu{% endblock %}
+
+{% block body %}
+    <p class="text-muted">
+        Wiadomości oznaczone we wtyczce (Thunderbird, Outlook) jako <strong>próba wyłudzenia</strong>. Każda jest też traktowana jak zgłoszenie spamu
+        (nadawca trafia na blacklistę skrzynki), a tu zostaje pełna treść z nagłówkami: można ją przejrzeć, dodać reguły i pobrać jako .eml
+        (np. do zgłoszenia w <a href="https://incydent.cert.pl" target="_blank" rel="noopener noreferrer">CERT Polska</a>).
+    </p>
+
+    <ul class="nav nav-pills" style="margin-bottom:15px;">
+        <li class="{{ filters.status is empty ? 'active' }}"><a href="{{ path('antispam_phishing_index', query|merge({status: null, page: null})) }}">Wszystkie</a></li>
+        {% for key, label in statuses %}
+            <li class="{{ filters.status == key ? 'active' }}"><a href="{{ path('antispam_phishing_index', query|merge({status: key, page: null})) }}">{{ label }} <span class="badge">{{ counts[key] }}</span></a></li>
+        {% endfor %}
+    </ul>
+
+    <form method="get" class="form-inline" style="margin-bottom:15px;">
+        {% if filters.status %}<input type="hidden" name="status" value="{{ filters.status }}">{% endif %}
+        <select name="account" class="form-control input-sm">
+            <option value="">Wszystkie skrzynki</option>
+            {% for acc in accounts %}<option value="{{ acc }}" {% if acc == filters.account %}selected{% endif %}>{{ acc }}</option>{% endfor %}
+        </select>
+        <input type="text" name="q" value="{{ filters.q }}" class="form-control input-sm" placeholder="Nadawca, Reply-To lub temat">
+        <button type="submit" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-filter"></span> Filtruj</button>
+    </form>
+
+    {% if rows|length > 0 %}
+    <div class="panel panel-default">
+        <div class="table-responsive">
+        <table class="table table-striped" style="margin-bottom:0;">
+            <thead><tr><th>Zgłoszono</th><th>Skrzynka</th><th>Nadawca</th><th>Temat</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+            {% for r in rows %}
+                <tr>
+                    <td style="white-space:nowrap;">{{ r.lastReportedAt|date('Y-m-d H:i') }}{% if r.reportCount > 1 %} <span class="badge" title="Zgłoszona kilka razy">×{{ r.reportCount }}</span>{% endif %}</td>
+                    <td>{{ r.accountEmail }}<br><small class="text-muted">{{ r.client ?: 'wtyczka' }}</small></td>
+                    <td>{% if r.senderName %}{{ r.senderName }}<br>{% endif %}<small>{{ r.sender ?: '—' }}</small>
+                        {% if r.replyTo and r.replyTo != r.sender %}<br><small class="text-danger">Reply-To: {{ r.replyTo }}</small>{% endif %}</td>
+                    <td>{{ (r.subject ?: '(bez tematu)')[:80] }}</td>
+                    <td><span class="label label-{{ {new: 'warning', confirmed: 'danger', reported: 'info', false_positive: 'default'}[r.status] }}">{{ statuses[r.status] }}</span></td>
+                    <td class="text-right"><a href="{{ path('antispam_phishing_show', {id: r.id}) }}" class="btn btn-xs btn-default"><span class="glyphicon glyphicon-search"></span> Analiza</a></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+
+    {% if pages > 1 %}
+        <nav class="text-center"><ul class="pagination">
+            {% for p in max(1, page - 3)..min(pages, page + 3) %}
+                <li class="{{ p == page ? 'active' }}"><a href="{{ path('antispam_phishing_index', query|merge({page: p})) }}">{{ p }}</a></li>
+            {% endfor %}
+        </ul></nav>
+    {% endif %}
+    {% else %}
+    <div class="empty-state">
+        <span class="glyphicon glyphicon-ok-circle"></span>
+        <p>Brak zgłoszeń</p>
+        <p class="text-muted">Zgłoszenia pojawią się, gdy użytkownik zalogowany we wtyczce wybierze „Zgłoś phishing”.</p>
+    </div>
+    {% endif %}
+{% endblock %}

@@ -1,0 +1,161 @@
+{% extends '@Antispam/main.html.twig' %}
+{% block title %}Phishing #{{ report.id }}{% endblock %}
+{% block page_title %}Zgłoszenie phishingu #{{ report.id }}{% endblock %}
+
+{% block body %}
+    {% set token = csrf_token('phishing') %}
+    {% set authClass = {pass: 'success', fail: 'danger', softfail: 'warning', permerror: 'danger', temperror: 'warning', none: 'default', neutral: 'default'} %}
+
+    <p>
+        <a href="{{ path('antispam_phishing_index') }}" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-arrow-left"></span> Lista</a>
+        <a href="{{ path('antispam_phishing_eml', {id: report.id}) }}" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-download-alt"></span> Pobierz .eml</a>
+        <a href="https://incydent.cert.pl" target="_blank" rel="noopener noreferrer" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-share"></span> Formularz CERT Polska</a>
+    </p>
+
+    <div class="row">
+        <div class="col-md-7">
+            <div class="panel panel-default">
+                <div class="panel-heading"><span class="glyphicon glyphicon-envelope"></span> Wiadomość</div>
+                <table class="table" style="margin-bottom:0;">
+                    <tr><th style="width:150px;">Od</th><td>{% if report.senderName %}{{ report.senderName }} {% endif %}<code>{{ report.sender ?: '—' }}</code></td></tr>
+                    {% if report.replyTo %}<tr><th>Reply-To</th><td><code>{{ report.replyTo }}</code></td></tr>{% endif %}
+                    {% if report.returnPath %}<tr><th>Return-Path</th><td><code>{{ report.returnPath }}</code></td></tr>{% endif %}
+                    <tr><th>Temat</th><td>{{ report.subject ?: '(bez tematu)' }}</td></tr>
+                    <tr><th>Data</th><td>{{ a.date ?: '—' }}</td></tr>
+                    <tr><th>Serwer nadawcy</th><td>{{ report.connectingIp ?: '—' }}{% if a.mailer %} <small class="text-muted">· {{ a.mailer }}</small>{% endif %}</td></tr>
+                    <tr><th>Uwierzytelnienie</th><td>
+                        {% for k in ['spf', 'dkim', 'dmarc'] %}
+                            <span class="label label-{{ authClass[a.auth[k] ?? 'none'] ?? 'default' }}">{{ k|upper }}: {{ a.auth[k] ?? 'brak' }}</span>
+                        {% endfor %}
+                        {% if a.dkim_domains %}<br><small class="text-muted">DKIM d= {{ a.dkim_domains|join(', ') }}</small>{% endif %}
+                    </td></tr>
+                    <tr><th>Zgłoszenie</th><td>{{ report.accountEmail }} · {{ report.client ?: 'wtyczka' }} · {{ report.createdAt|date('Y-m-d H:i') }}
+                        {% if report.reportCount > 1 %}<br><small class="text-muted">zgłoszona {{ report.reportCount }} razy, ostatnio {{ report.lastReportedAt|date('Y-m-d H:i') }}</small>{% endif %}
+                        <br><small class="text-muted">{{ (report.size / 1024)|round(1) }} KiB, SHA-256 {{ report.sha256[:16] }}…</small></td></tr>
+                </table>
+            </div>
+        </div>
+        <div class="col-md-5">
+            <div class="panel panel-{{ a.flags ? 'danger' : 'default' }}">
+                <div class="panel-heading"><span class="glyphicon glyphicon-alert"></span> Sygnały ostrzegawcze</div>
+                <div class="panel-body">
+                    {% if a.flags %}
+                        <ul style="padding-left:18px;margin:0;">{% for f in a.flags %}<li>{{ f }}</li>{% endfor %}</ul>
+                    {% else %}
+                        <p class="text-muted" style="margin:0;">Nie wykryto typowych sygnałów - oceń treść i linki.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="panel panel-default">
+                <div class="panel-heading"><span class="glyphicon glyphicon-tag"></span> Status</div>
+                <div class="panel-body">
+                    <form method="post" action="{{ path('antispam_phishing_update', {id: report.id}) }}">
+                        <input type="hidden" name="_token" value="{{ token }}">
+                        <select name="status" class="form-control input-sm" style="margin-bottom:8px;">
+                            {% for key, label in statuses %}<option value="{{ key }}" {% if key == report.status %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                        </select>
+                        <textarea name="note" class="form-control input-sm" rows="3" placeholder="Notatka (np. numer zgłoszenia w CERT)" style="margin-bottom:8px;">{{ report.note }}</textarea>
+                        <button type="submit" class="btn btn-primary btn-sm"><span class="glyphicon glyphicon-floppy-disk"></span> Zapisz</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="panel panel-default">
+                <div class="panel-heading"><span class="glyphicon glyphicon-ban-circle"></span> Filtrowanie dla {{ report.accountEmail }}</div>
+                <div class="panel-body">
+                    <form method="post" action="{{ path('antispam_phishing_block', {id: report.id}) }}">
+                        <input type="hidden" name="_token" value="{{ token }}">
+                        {% if report.sender %}
+                            {% if sender_blocked %}
+                                <p><span class="label label-success">nadawca {{ report.sender }} jest na blackliście</span></p>
+                            {% else %}
+                                <p><button type="submit" name="what" value="sender" class="btn btn-sm btn-default">Zablokuj adres {{ report.sender }}</button></p>
+                            {% endif %}
+                            {% if a.from_host and not a.freemail %}
+                                <p><button type="submit" name="what" value="domain" class="btn btn-sm btn-danger" onclick="return confirm('Zablokować całą domenę {{ a.from_host|e('js') }} dla tej skrzynki?');">Zablokuj domenę {{ a.from_host }}</button></p>
+                            {% elseif a.freemail %}
+                                <p class="text-muted"><small>{{ a.from_host }} to darmowa poczta - zablokuj tylko adres.</small></p>
+                            {% endif %}
+                        {% endif %}
+                        <p class="text-muted" style="margin:0;"><small>Reguły dostają punkty równe progowi spamu; pasująca poczta z INBOX z ostatnich 30 dni trafia do SPAM.</small></p>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-link"></span> Linki ({{ a.links|length }})</div>
+        {% if a.link_hosts %}
+        <div class="panel-body">
+            <strong>Domeny:</strong>
+            {% for host, n in a.link_hosts %}
+                <a href="https://www.virustotal.com/gui/domain/{{ host|url_encode }}" target="_blank" rel="noopener noreferrer" class="label label-default" style="display:inline-block;margin:2px;" title="Sprawdź w VirusTotal">{{ host }} ×{{ n }}</a>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% if a.links %}
+        <div class="table-responsive">
+        <table class="table table-condensed table-striped" style="margin-bottom:0;">
+            <thead><tr><th>Tekst linku</th><th>Prowadzi do</th></tr></thead>
+            <tbody>
+            {% for l in a.links %}
+                <tr class="{{ l.mismatch or l.ip ? 'danger' }}">
+                    <td>{{ l.text is null ? '—' : l.text[:100] }}{% if l.mismatch %} <span class="label label-danger">inny adres niż w tekście</span>{% endif %}</td>
+                    <td style="word-break:break-all;"><code>{{ l.href[:300] }}</code></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% endif %}
+        <div class="panel-body text-muted"><small>Linki nie są klikalne. Nie otwieraj ich w zwykłej przeglądarce.</small></div>
+    </div>
+
+    {% if a.attachments %}
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-paperclip"></span> Załączniki ({{ a.attachments|length }})</div>
+        <table class="table table-condensed" style="margin-bottom:0;">
+            <thead><tr><th>Nazwa</th><th>Typ</th><th>Rozmiar</th><th>SHA-256</th></tr></thead>
+            <tbody>
+            {% for att in a.attachments %}
+                <tr class="{{ att.risky ? 'danger' }}">
+                    <td>{{ att.filename }}</td>
+                    <td><small>{{ att.type }}</small></td>
+                    <td>{{ (att.size / 1024)|round(1) }} KiB</td>
+                    <td><a href="https://www.virustotal.com/gui/file/{{ att.sha256 }}" target="_blank" rel="noopener noreferrer"><code>{{ att.sha256 }}</code></a></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-file"></span> Treść</div>
+        <div class="panel-body">
+            <ul class="nav nav-tabs" role="tablist">
+                <li class="active"><a href="#ph-text" data-toggle="tab">Tekst</a></li>
+                {% if a.html %}<li><a href="#ph-html" data-toggle="tab">Źródło HTML</a></li>{% endif %}
+                <li><a href="#ph-headers" data-toggle="tab">Nagłówki ({{ a.headers|length }})</a></li>
+            </ul>
+            <div class="tab-content" style="margin-top:10px;">
+                <div class="tab-pane active" id="ph-text"><pre style="white-space:pre-wrap;max-height:500px;overflow:auto;">{{ a.text[:100000] }}</pre></div>
+                {% if a.html %}<div class="tab-pane" id="ph-html"><pre style="white-space:pre-wrap;max-height:500px;overflow:auto;">{{ a.html[:200000] }}</pre></div>{% endif %}
+                <div class="tab-pane" id="ph-headers">
+                    <table class="table table-condensed" style="font-size:12px;">
+                        {% for h in a.headers %}
+                            <tr><th style="white-space:nowrap;vertical-align:top;">{{ h.name }}</th><td style="word-break:break-all;">{{ h.value }}</td></tr>
+                        {% endfor %}
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form method="post" action="{{ path('antispam_phishing_delete', {id: report.id}) }}" onsubmit="return confirm('Usunąć zgłoszenie razem z treścią wiadomości?');">
+        <input type="hidden" name="_token" value="{{ token }}">
+        <button type="submit" class="btn btn-danger btn-sm"><span class="glyphicon glyphicon-trash"></span> Usuń zgłoszenie</button>
+    </form>
+{% endblock %}

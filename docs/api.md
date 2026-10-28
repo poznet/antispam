@@ -36,6 +36,19 @@
 | GET | `/spambox/scorelog` | Score log ("Dziennik ocen"), 50 per page. Query filters: `decision` (`ham`/`quarantine`/`spam`/`whitelisted`), `account`, `q` (sender/subject substring), `from`/`to` (`Y-m-d`), `min_score`, `page`. The decision tiles link to the matching `decision` filter |
 | GET | `/spambox/plugin-reports` | Thunderbird plugin reports (anonymous + logged in), filters `?verdict=spam\|ham`, `?who=anonymous\|account` |
 
+## Phishing reports (`/phishing`)
+
+See [phishing.md](phishing.md). CSRF token id `phishing` for all POSTs.
+
+| Method | URL | Description |
+|--------|-----|-------------|
+| GET | `/phishing/` | List, filters `?status=new\|confirmed\|reported\|false_positive`, `?account=`, `?q=`, `?page=` |
+| GET | `/phishing/{id}` | Analysis: headers, auth results, red flags, links, attachments, body |
+| POST | `/phishing/{id}/update` | `status`, `note` |
+| POST | `/phishing/{id}/block` | `what=sender\|domain` - blacklist rule for the reporting mailbox + retroactive pass |
+| GET | `/phishing/{id}/eml` | Original message as `.eml` download |
+| POST | `/phishing/{id}/delete` | Delete the report and its content |
+
 ## Cron log (`/cron`)
 
 | Method | URL | Description |
@@ -91,6 +104,7 @@ Full reference: **[thunderbird.md](thunderbird.md)**, clients:
 | POST | `/api/plugin/login` | Mailbox e-mail + plugin/IMAP password → token |
 | POST | `/api/plugin/report` | User verdict (`spam` anonymous or logged in, `ham` logged in) |
 | POST | `/api/plugin/check` | Score a raw message (logged in) |
+| POST | `/api/plugin/phishing` | Phishing report: full message stored for the admin + spam report (logged in) |
 | GET | `/plugin/download` | Download the `.xpi` (public) |
 | GET | `/plugin/outlook/manifest.xml` | Outlook add-in manifest (public; `409` when the server URL is not HTTPS) |
 | GET | `/plugin/outlook/{file}` | Outlook task pane files (`taskpane.html/js/css`, `commands.html`, `icons/icon-*.png`; public) |

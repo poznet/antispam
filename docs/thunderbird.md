@@ -79,7 +79,10 @@ to another.
   those come from Thunderbird's own classifier, not the user.
 - **Toolbar button** in the message view and **context menu** in the message list:
   report spam (then mark as junk and optionally move to the Junk folder), not spam,
-  check now.
+  check now. The context menu also has **report phishing** (logged in): the whole
+  message, attachments included (up to 10 MiB), goes to the admin's
+  *Zgłoszenia phishingu* page and is handled like a spam report - see
+  [phishing.md](phishing.md).
 - **Decision handling** (logged in): spam → mark + move to Junk (default),
   quarantine → nothing (default); both configurable.
 - **Feedback**: explicit actions (toolbar button, context menu) show their result
@@ -115,13 +118,15 @@ Shared by all mail client plugins: Thunderbird, the Outlook add-in
 
 JSON in / JSON out, exempt from form login. Authenticated calls send
 `Authorization: Bearer <token>`. Messages are sent as the base64 of the raw
-RFC 822 source (`raw_base64`, max 4 MiB decoded).
+RFC 822 source (`raw_base64`, max 4 MiB decoded; 10 MiB for `/phishing`).
+`/status` also returns `phishing_reports` and `phishing_max_bytes`.
 
 | Method | URL | Auth | Description |
 |--------|-----|------|-------------|
 | GET | `/api/plugin/status` | optional | Feature flags, whether the token is valid |
 | POST | `/api/plugin/login` | — | `{email, password}` → `{token, email, expires_at}` |
 | POST | `/api/plugin/report` | optional for `spam`, required for `ham` | `{raw_base64, verdict: "spam"\|"ham"}` → `{verdict, sender, signals, rules[], authenticated, moved_existing?}` |
+| POST | `/api/plugin/phishing` | required | `{raw_base64 (max 10 MiB decoded), client: "thunderbird"\|"outlook", truncated: bool}` → report fields + `{phishing_id, duplicate}`. 30/h per account. See [phishing.md](phishing.md) |
 | POST | `/api/plugin/check` | required | `{raw_base64}` → `{decision, spam, score, spam_threshold, quarantine_threshold, reasons[], sender, subject}` |
 | GET | `/plugin/download` | — | The `.xpi` |
 

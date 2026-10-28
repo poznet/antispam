@@ -52,6 +52,7 @@ main { padding: 12px 14px 20px; }
 .as-btn:hover:not(:disabled) { border-color: var(--pp-blue); }
 .as-btn:disabled { opacity: .5; cursor: not-allowed; }
 .as-btn-spam { background: var(--pp-red); border-color: var(--pp-red); color: #fff; }
+.as-btn-phishing { border-color: var(--pp-red); color: var(--pp-red); }
 .as-btn-primary { background: var(--pp-blue); border-color: var(--pp-blue); color: #fff; }
 .as-result {
     padding: 10px 12px; margin-bottom: 12px;

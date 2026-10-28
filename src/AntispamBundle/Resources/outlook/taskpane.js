@@ -7,7 +7,8 @@
  * Not logged in: "Zgłoś spam" sends the message to the shared spam DB.
  * Logged in (mailbox e-mail + plugin/IMAP password): reports also teach the
  * account's rules, "To nie spam" and "Sprawdź" work, and - while the pane is
- * pinned - every opened message can be checked automatically.
+ * pinned - every opened message can be checked automatically. "Zgłoś phishing"
+ * (logged in) sends the whole .eml for the admin to inspect.
  *
  * Office add-ins cannot move messages to Junk in read mode without Microsoft
  * Graph (Azure app registration + SSO), so the decision is only shown; the
@@ -22,6 +23,8 @@ const API = new URL("../../api/plugin/", window.location.href).href.replace(/\/+
 // Same upload cap as the Thunderbird plugin: headers + text body are enough.
 const MAX_UPLOAD_BYTES = 1024 * 1024;
 const MAX_UPLOAD_B64 = Math.floor(MAX_UPLOAD_BYTES / 3) * 4;
+// Phishing reports keep the whole message (PhishingReportService::MAX_RAW_BYTES).
+const MAX_PHISHING_B64 = Math.floor(10 * 1024 * 1024 / 3) * 4;
 
 const state = { token: "", email: "", autoCheck: false, status: null, busy: false };
 const $ = (id) => document.getElementById(id);
@@ -110,13 +113,22 @@ function supports(version) {
  * text/plain so the server parser reads the body correctly.
  */
 async function rawBase64() {
+  return (await rawSource(MAX_UPLOAD_B64)).base64;
+}
+
+/**
+ * Like rawBase64, with a custom cap. `truncated` is true when the source was
+ * cut, or when only headers + text body could be rebuilt (old clients).
+ */
+async function rawSource(maxB64) {
   const item = Office.context.mailbox.item;
   if (!item) throw new Error("Nie wybrano wiadomości.");
 
   if (supports("1.14") && typeof item.getAsFileAsync === "function") {
     try {
       const b64 = await officeCall((cb) => item.getAsFileAsync(cb));
-      if (b64) return b64.length > MAX_UPLOAD_B64 ? b64.slice(0, MAX_UPLOAD_B64) : b64;
+      // Cut on a 4-char boundary so the server can still decode it.
+      if (b64) return b64.length > maxB64 ? { base64: b64.slice(0, maxB64), truncated: true } : { base64: b64, truncated: false };
     } catch (e) { /* fall through */ }
   }
 
@@ -147,7 +159,7 @@ async function rawBase64() {
   try { body = await officeCall((cb) => item.body.getAsync(Office.CoercionType.Text, cb)); } catch (e) { body = ""; }
   const raw = lines.join("\r\n") + "\r\n\r\n" + (body || "");
   const b64 = utf8ToBase64(raw.length > MAX_UPLOAD_BYTES ? raw.slice(0, MAX_UPLOAD_BYTES) : raw);
-  return b64.length > MAX_UPLOAD_B64 ? b64.slice(0, MAX_UPLOAD_B64) : b64;
+  return { base64: b64.length > maxB64 ? b64.slice(0, maxB64) : b64, truncated: true };
 }
 
 // --- UI ---------------------------------------------------------------------
@@ -197,6 +209,8 @@ function render() {
   $("as-spam").disabled = state.busy || !hasItem || !enabled || (!logged && st.anonymous_reports === false);
   $("as-ham").disabled = state.busy || !hasItem || !enabled || !logged;
   $("as-check").disabled = state.busy || !hasItem || !enabled || !logged || st.check_enabled === false;
+  $("as-phishing").disabled = state.busy || !hasItem || !enabled || !logged || st.phishing_reports !== true;
+  $("as-phishing").title = !logged ? "Wymaga zalogowania" : (st.phishing_reports !== true ? "Serwer nie obsługuje zgłoszeń phishingu" : "");
   $("as-ham").title = logged ? "" : "Wymaga zalogowania";
   $("as-check").title = !logged ? "Wymaga zalogowania" : (st.check_enabled === false ? "Sprawdzanie wyłączone na serwerze" : "");
 }
@@ -244,6 +258,17 @@ async function report(verdict) {
     : "Oznaczono jako nie-spam: " + who + (learned ? " (nadawca na białej liście)" : "");
   showResult("ok", escapeHtml(text));
   $("as-junk-hint").hidden = verdict !== "spam";
+  notifyItem("Antyspam: " + text);
+}
+
+async function reportPhishing() {
+  showResult("", "Wysyłanie zgłoszenia phishingu…");
+  const src = await rawSource(MAX_PHISHING_B64);
+  const res = await api("/phishing", { method: "POST", body: { raw_base64: src.base64, truncated: src.truncated, client: "outlook" } });
+  const text = "Zgłoszono próbę wyłudzenia: " + (res.sender || "")
+    + (res.duplicate ? " (już była zgłoszona)" : "") + (res.rules && res.rules.length ? " – nadawca zablokowany" : "");
+  showResult("ok", escapeHtml(text));
+  $("as-junk-hint").hidden = false;
   notifyItem("Antyspam: " + text);
 }
 
@@ -309,6 +334,7 @@ Office.onReady((info) => {
   $("as-spam").addEventListener("click", () => run(() => report("spam")));
   $("as-ham").addEventListener("click", () => run(() => report("ham")));
   $("as-check").addEventListener("click", () => run(() => check()));
+  $("as-phishing").addEventListener("click", () => run(() => reportPhishing()));
   $("as-login").addEventListener("submit", login);
   $("as-logout").addEventListener("click", logout);
   $("as-autocheck").addEventListener("change", (e) => { state.autoCheck = e.target.checked; saveSettings(); });

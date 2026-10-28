@@ -39,6 +39,31 @@ class RawMessageParser
         return $values ? self::decodeWords($values[0]) : '';
     }
 
+    /**
+     * Every header in original order, unfolded and MIME-decoded, for display.
+     *
+     * @return array<int, array{name:string, value:string}>
+     */
+    public function getHeaderList()
+    {
+        $out = [];
+        $unfolded = preg_replace('/\r?\n[ \t]+/', ' ', $this->headerBlock);
+        foreach (preg_split('/\r?\n/', $unfolded) as $line) {
+            $colon = strpos($line, ':');
+            if ($colon === false || $colon === 0) {
+                continue;
+            }
+            $out[] = ['name' => trim(substr($line, 0, $colon)), 'value' => self::decodeWords(trim(substr($line, $colon + 1)))];
+        }
+        return $out;
+    }
+
+    /** Address of an address header such as Reply-To or Return-Path ('' when missing). */
+    public function getAddress($header)
+    {
+        return self::extractEmail($this->getHeader($header));
+    }
+
     /** @return string[] all values of a header (e.g. every Received line) */
     public function getHeaders($name)
     {
@@ -111,7 +136,7 @@ class RawMessageParser
      * First text/plain and text/html bodies plus every attachment, for the
      * link and attachment-policy analyzers.
      *
-     * @return array{text:string, html:string, attachments:array<int, array{filename:string, data:string}>}
+     * @return array{text:string, html:string, attachments:array<int, array{filename:string, type:string, data:string}>}
      */
     public function getParts()
     {
@@ -149,7 +174,7 @@ class RawMessageParser
         $isText = $type === 'text/plain' || $type === 'text/html';
         if (stripos($disposition, 'attachment') === 0 || $filename !== '' || !$isText) {
             if ($decoded !== '' && strpos($type, 'multipart/') !== 0) {
-                $out['attachments'][] = ['filename' => self::decodeWords($filename), 'data' => $decoded];
+                $out['attachments'][] = ['filename' => self::decodeWords($filename), 'type' => $type, 'data' => $decoded];
             }
             return;
         }

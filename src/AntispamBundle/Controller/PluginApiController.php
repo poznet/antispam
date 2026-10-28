@@ -2,7 +2,9 @@
 
 namespace AntispamBundle\Controller;
 
+use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\EmailBlacklist;
+use AntispamBundle\Services\PhishingReportService;
 use AntispamBundle\Services\PluginService;
 use AntispamBundle\Services\RawMessageScanner;
 use AntispamBundle\Services\RetroactiveSpamService;
@@ -33,13 +35,16 @@ class PluginApiController extends AbstractController
         private PluginService $plugin,
         private RetroactiveSpamService $retroactive,
         private EntityManagerInterface $em,
+        private PhishingReportService $phishing,
     ) {
     }
 
     /** Retroactive passes (IMAP/SSH login each) per account and hour. */
     const RETRO_RATE_LIMIT = 10;
+    /** Phishing reports (full messages up to 10 MiB each) per account and hour. */
+    const PHISHING_RATE_LIMIT = 30;
 
-    const PLUGIN_VERSION = '1.0.1';
+    const PLUGIN_VERSION = '1.1.0';
 
     #[Route('/plugin/download', name: 'antispam_plugin_download', methods: ['GET'])]
     public function downloadAction(Request $request)
@@ -87,6 +92,8 @@ class PluginApiController extends AbstractController
             'version' => self::PLUGIN_VERSION,
             'anonymous_reports' => $this->plugin->isAnonymousReportEnabled(),
             'check_enabled' => $this->plugin->isCheckEnabled(),
+            'phishing_reports' => true,
+            'phishing_max_bytes' => PhishingReportService::MAX_RAW_BYTES,
             'authenticated' => $account !== null,
             'email' => $account ? $account->getEmail() : null,
         ]);
@@ -150,11 +157,55 @@ class PluginApiController extends AbstractController
 
         $result = $this->plugin->learn($raw, $verdict, $account, $this->clientIp($request));
         $result['authenticated'] = $account !== null;
+        if ($account) {
+            $this->applyRetroactive($account, $result);
+        }
+        return new JsonResponse($result);
+    }
 
-        // A newly blacklisted sender: older mail from them leaves INBOX too.
-        // It logs in to the mailbox (IMAP/SSH), so it has its own, tighter limit;
-        // over the limit the rule still applies to new mail on the next scan.
-        if ($account && in_array('email_blacklist_added:' . $result['sender'], $result['rules'], true)
+    /**
+     * Phishing attempt: handled like a spam report (sender blacklisted, shared
+     * fingerprints) and the full message is kept for the admin on the
+     * "Zgłoszenia phishingu" page. POST {"raw_base64": "...", "client":
+     * "thunderbird|outlook", "truncated": bool}. Login required - the message
+     * content is stored.
+     */
+    #[Route('/api/plugin/phishing', name: 'antispam_plugin_api_phishing', methods: ['POST'])]
+    public function phishingAction(Request $request)
+    {
+        if (!$this->plugin->isEnabled()) {
+            return new JsonResponse(['error' => 'plugin disabled'], 403);
+        }
+        $account = $this->plugin->accountForToken($this->bearer($request));
+        if (!$account) {
+            return new JsonResponse(['error' => 'login required'], 401);
+        }
+        if (!$this->plugin->hit('phishing', 'acc:' . $account->getId(), self::PHISHING_RATE_LIMIT, 3600)) {
+            return new JsonResponse(['error' => 'rate limit exceeded'], 429);
+        }
+
+        $data = json_decode($request->getContent(), true);
+        if (($raw = $this->rawFrom($data, PhishingReportService::MAX_RAW_BYTES)) instanceof JsonResponse) {
+            return $raw;
+        }
+
+        $stored = $this->phishing->submit($raw, $account, (string)($data['client'] ?? ''), $this->clientIp($request), !empty($data['truncated']));
+        $result = $this->plugin->learn($raw, PluginService::VERDICT_SPAM, $account, $this->clientIp($request));
+        $result['authenticated'] = true;
+        $result['phishing_id'] = $stored['id'];
+        $result['duplicate'] = $stored['duplicate'];
+        $this->applyRetroactive($account, $result);
+        return new JsonResponse($result);
+    }
+
+    /**
+     * A newly blacklisted sender: older mail from them leaves INBOX too.
+     * It logs in to the mailbox (IMAP/SSH), so it has its own, tighter limit;
+     * over the limit the rule still applies to new mail on the next scan.
+     */
+    private function applyRetroactive(Account $account, array &$result)
+    {
+        if (in_array('email_blacklist_added:' . $result['sender'], $result['rules'], true)
             && $this->plugin->hit('retro', 'acc:' . $account->getId(), self::RETRO_RATE_LIMIT, 3600)) {
             $rule = $this->em->getRepository(EmailBlacklist::class)->findOneBy([
                 'email' => $account->getEmail(), 'blacklistemail' => $result['sender'], 'patternType' => 'exact',
@@ -163,7 +214,6 @@ class PluginApiController extends AbstractController
                 $result['moved_existing'] = $this->retroactive->applyRule($rule)['moved'];
             }
         }
-        return new JsonResponse($result);
     }
 
     /** Score a newly arrived message. POST {"raw_base64": "..."} (token required) */
@@ -187,14 +237,14 @@ class PluginApiController extends AbstractController
     }
 
     /** @return string|JsonResponse decoded message source or an error response */
-    private function rawFrom($data)
+    private function rawFrom($data, $maxBytes = PluginService::MAX_RAW_BYTES)
     {
         $b64 = is_array($data) ? (string)($data['raw_base64'] ?? '') : '';
         $raw = $b64 === '' ? false : base64_decode($b64, true);
         if ($raw === false || $raw === '') {
             return new JsonResponse(['error' => 'missing or invalid raw_base64'], 400);
         }
-        if (strlen($raw) > PluginService::MAX_RAW_BYTES) {
+        if (strlen($raw) > $maxBytes) {
             return new JsonResponse(['error' => 'message too large'], 413);
         }
         return $raw;

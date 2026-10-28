@@ -19,6 +19,7 @@ Page: **Przegląd → Dziennik audytu** (`/audit`, ROLE_ADMIN only).
 | `rule.import` | bulk import (`/bulk/import/{type}`) | list type, owner; added / skipped counts |
 | `rules.make_global` | `antispam:rules:make-global` (not with `--dry-run`) | owner; moved / merged counts; actor `cli` |
 | `quarantine.release`, `quarantine.whitelist` ("Zawsze akceptuj"), `quarantine.delete` | admin panel (`source: panel`), user area `/my` (`source: my`), digest link `/q/` (`source: digest`, actor `link z raportu`) | message id, sender, mailbox address, quarantine key; `ok` = whether it worked (failed attempts are recorded too) |
+| `quarantine.purge_queued`, `quarantine.purge` | bulk delete "Usuń wszystkie wysokiego ryzyka" / "Usuń wszystko z kwarantanny" (`/spambox/quarantine/purge[-all]`, `/my/quarantine/purge`): queued, and the job's end (worker, actor = requester) | target `quarantine` / mailbox key, mailbox address; `job`, `mode` (`high_risk` / `all`), `source` (`panel` / `my`); queued: `shown` (count in the confirmation); end: `ok`, `total`, `deleted`, `skipped`, `failed`, `error` |
 | `spambox.restore` | restore from the legacy SPAM / QUARANTINE folder | message number, folder |
 | `spam.release`, `spam.whitelist` ("Przywróć i zawsze akceptuj") | user area SPAM folder `/my/spam` | message id (IMAP UID / Maildir name), sender, mailbox address; `source: my`, `mailbox_id` (`imap-<id>` / `ssh-<id>`), `ok` (failed / refused attempts too) |
 | `plugin.login`, `plugin.login_failed` | plugin login (`/api/plugin/login`) | mailbox address typed / logged in |

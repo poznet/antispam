@@ -55,6 +55,7 @@
             </tbody>
         </table>
         </div>
+        {% include '@Antispam/Spambox/_purge_buttons.html.twig' with {mailbox: mailbox, purge_path: path('antispam_my_quarantine_purge'), purge_token: csrf_token('my_quarantine_purge')} only %}
         {% else %}
             <div class="panel-body text-muted">Kwarantanna jest pusta</div>
         {% endif %}

@@ -42,6 +42,7 @@ class JobContext
     public function accountId(): ?int { return $this->accountId; }
     public function mailbox(): ?string { return $this->mailbox; }
     public function requestedBy(): ?string { return $this->requestedBy; }
+    public function requestedByType(): ?string { return $this->requestedByType; }
     public function batchDeadline(): float { return $this->batchDeadline; }
 
     /** Progress text (+ counters) shown on the job page; also a heartbeat. */

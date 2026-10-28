@@ -218,9 +218,22 @@ class SshServiceTest extends TestCase
 
     public function testAgentScriptHasTheRescanCommand()
     {
-        $this->assertSame('3.3', SshService::bundledAgentVersion());
+        $this->assertSame('3.4', SshService::bundledAgentVersion());
         $src = file_get_contents(__DIR__ . '/../../Resources/agent/antispam-agent.php');
         $this->assertStringContainsString("case 'rescan':", $src);
+        $this->assertStringContainsString("case 'quarantine-purge':", $src);
+    }
+
+    public function testQuarantinePurgePassesOnlyAKnownModeAndUsesItsTimeout()
+    {
+        $purge = $this->sshMock(null);
+        $purge->expects($this->once())->method('setTimeout')->with(SshService::TIMEOUTS['quarantine-purge']);
+        $purge->expects($this->once())->method('exec')->with($this->callback(fn($cmd) => str_contains($cmd, " quarantine-purge --maildir='/srv/mail/Maildir' --mode=high_risk --account=5")))
+            ->willReturn('{"success":true,"total":3,"deleted":2,"skipped":1,"failed":0,"agent_version":"9.9"}');
+        $this->assertSame(2, $this->service([$purge])->quarantinePurge($this->account(), 'high_risk')['deleted']);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->service([])->quarantinePurge($this->account(), "all; rm -rf ~");
     }
 
     public function testSpamFolderCommandsQuoteTheIdAndUseTheirTimeouts()

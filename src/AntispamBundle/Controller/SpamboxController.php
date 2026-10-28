@@ -2,12 +2,14 @@
 
 namespace AntispamBundle\Controller;
 
+use AntispamBundle\Entity\BackgroundJob;
 use AntispamBundle\Entity\PluginReport;
 use AntispamBundle\Entity\SpamScoreLog;
 use AntispamBundle\Services\ConnectionService;
 use AntispamBundle\Services\InboxService;
 use AntispamBundle\Services\QuarantineDigestService;
 use AntispamBundle\Services\MessageService;
+use AntispamBundle\Services\QuarantinePurge;
 use AntispamBundle\Services\QuarantineService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
@@ -19,8 +21,11 @@ use Symfony\Component\Routing\Attribute\Route;
 class SpamboxController extends AbstractController
 {
     use AuditTrait;
+    use JobQueueTrait;
 
     private const SCORELOG_PER_PAGE = 50;
+    /** Messages listed per mailbox on the quarantine page. */
+    public const QUARANTINE_LIST_LIMIT = 100;
     private const DECISIONS = [
         SpamScoreLog::DECISION_HAM,
         SpamScoreLog::DECISION_QUARANTINE,
@@ -35,6 +40,7 @@ class SpamboxController extends AbstractController
         private QuarantineService $quarantine,
         private MessageService $messages,
         private ?\AntispamBundle\Services\Bayes\BayesService $bayes = null,
+        private ?QuarantinePurge $purger = null,
     ) {
     }
 
@@ -100,7 +106,7 @@ class SpamboxController extends AbstractController
             $items = [];
             $error = null;
             try {
-                foreach ($this->quarantine->listItems($mailbox['key'], null, 100) as $item) {
+                foreach ($this->quarantine->listItems($mailbox['key'], null, self::QUARANTINE_LIST_LIMIT) as $item) {
                     $item['labels'] = QuarantineDigestService::reasonLabels($item['reasons']);
                     $item['high_risk'] = QuarantineDigestService::isHighRisk($item['reasons']);
                     $items[] = $item;
@@ -108,13 +114,26 @@ class SpamboxController extends AbstractController
             } catch (\Throwable $e) {
                 $error = $e->getMessage();
             }
-            $mailboxes[] = $mailbox + ['items' => $items, 'error' => $error];
+            $mailboxes[] = $mailbox + ['items' => $items, 'error' => $error] + self::purgeCounts($items, self::QUARANTINE_LIST_LIMIT);
         }
 
         $logs = $this->em->getRepository(SpamScoreLog::class)
             ->findRecentByDecision(SpamScoreLog::DECISION_QUARANTINE, new \DateTime('-30 days'), 50);
 
         return ['mailboxes' => $mailboxes, 'logs' => $logs, 'locations' => self::locateLogs($logs, $mailboxes)];
+    }
+
+    /**
+     * Counts named by the bulk-delete confirmations: listed / high-risk messages
+     * and whether the list was cut at the limit (there may be more).
+     */
+    public static function purgeCounts(array $items, int $limit): array
+    {
+        $risky = 0;
+        foreach ($items as $item) {
+            $risky += !empty($item['high_risk']) ? 1 : 0;
+        }
+        return ['high_risk_count' => $risky, 'capped' => count($items) >= $limit];
     }
 
     /**
@@ -193,6 +212,65 @@ class SpamboxController extends AbstractController
 
         $this->addFlash($result['success'] ? 'success' : 'danger', $result['message']);
         return $this->redirectToRoute('antispam_spambox_quarantine');
+    }
+
+    /**
+     * "Usuń wszystkie wysokiego ryzyka" / "Usuń wszystko z kwarantanny" of one
+     * mailbox: a background job (quarantine.purge) - the IMAP / SSH work never
+     * runs in the request; what is deleted is decided when the job runs.
+     */
+    #[Route('/quarantine/purge', name: 'antispam_spambox_quarantine_purge', methods: ['POST'])]
+    public function quarantinePurgeAction(Request $request)
+    {
+        if (!$this->isCsrfTokenValid('quarantine_purge', (string)$request->request->get('_token'))) {
+            $this->addFlash('danger', 'Nieprawidłowy token formularza, spróbuj ponownie');
+            return $this->redirectToRoute('antispam_spambox_quarantine');
+        }
+        $mode = (string)$request->request->get('mode');
+        $mailbox = $this->quarantine->getMailbox((string)$request->request->get('mailbox'));
+        if (!QuarantinePurge::isMode($mode) || !$mailbox || $this->purger === null) {
+            $this->addFlash('danger', 'Nieznana skrzynka lub tryb usuwania.');
+            return $this->redirectToRoute('antispam_spambox_quarantine');
+        }
+        $queued = $this->purger->enqueue($mailbox, $mode, QuarantinePurge::SOURCE_PANEL, self::shownCount($request));
+        return $this->redirectToJob($queued, 'Trwałe usuwanie z kwarantanny ' . $mailbox['label']);
+    }
+
+    /** "Usuń wszystkie wysokiego ryzyka (wszystkie skrzynki)": one purge job per mailbox. */
+    #[Route('/quarantine/purge-all', name: 'antispam_spambox_quarantine_purge_all', methods: ['POST'])]
+    public function quarantinePurgeAllAction(Request $request)
+    {
+        if (!$this->isCsrfTokenValid('quarantine_purge', (string)$request->request->get('_token')) || $this->purger === null) {
+            $this->addFlash('danger', 'Nieprawidłowy token formularza, spróbuj ponownie');
+            return $this->redirectToRoute('antispam_spambox_quarantine');
+        }
+        $created = $existing = 0;
+        foreach ($this->quarantine->getMailboxes() as $mailbox) {
+            $this->purger->enqueue($mailbox, QuarantineService::PURGE_HIGH_RISK, QuarantinePurge::SOURCE_PANEL)->created ? $created++ : $existing++;
+        }
+        if ($created + $existing === 0) {
+            $this->addFlash('warning', 'Brak skrzynek z kwarantanną.');
+            return $this->redirectToRoute('antispam_spambox_quarantine');
+        }
+        $this->addFlash('success', sprintf('Trwałe usuwanie wiadomości wysokiego ryzyka: dodano do kolejki %d %s%s - wykonają się w tle.',
+            $created, self::pluralJobs($created), $existing ? sprintf(' (%d już było w kolejce lub w trakcie)', $existing) : ''));
+        return $this->redirectToRoute('antispam_job_index', ['type' => BackgroundJob::TYPE_QUARANTINE_PURGE]);
+    }
+
+    /** 1 zadanie, 2-4 zadania, 5+ zadań (12-14 zadań). */
+    private static function pluralJobs(int $n): string
+    {
+        if ($n === 1) {
+            return 'zadanie';
+        }
+        return in_array($n % 10, [2, 3, 4], true) && !in_array($n % 100, [12, 13, 14], true) ? 'zadania' : 'zadań';
+    }
+
+    /** The count the confirmation named (display / audit only, never used to select messages). */
+    private static function shownCount(Request $request): ?int
+    {
+        $shown = $request->request->get('shown');
+        return is_numeric($shown) ? max(0, (int)$shown) : null;
     }
 
     /** Move a message from SPAM or QUARANTINE back to INBOX. */

@@ -255,5 +255,44 @@ class AgentMaildirTest extends TestCase
         $this->assertSame(0, (int)$db->querySingle('SELECT COUNT(*) FROM rescan_done'));
         $db->close();
     }
+
+    /** quarantine-purge (agent 3.4): high risk judged from the agent's score_log at run time; INBOX and .SPAM untouched. */
+    public function testQuarantinePurgeHighRiskThenAll()
+    {
+        foreach (['.QUARANTINE/new', '.QUARANTINE/cur', '.SPAM/new'] as $d) {
+            mkdir($this->maildir() . '/' . $d, 0700, true);
+        }
+        $this->put('.QUARANTINE/new/1.M1.host', "From: ceo@evil.pl\nSubject: Przelew\n\nx\n");
+        $this->put('.QUARANTINE/cur/2.M1.host:2,S', "From: news@sklep.pl\nSubject: Promocja\n\nx\n");
+        $this->put('.QUARANTINE/new/3.M1.host', "From: who@unknown.pl\nSubject: Hej\n\nx\n"); // no score_log row
+        $this->put('new/4.M1.host', "From: a@b.pl\nSubject: inbox\n\nx\n");
+        $this->put('.SPAM/new/5.M1.host', "From: s@spam.pl\nSubject: spam\n\nx\n");
+        $db = \getDb($this->db());
+        $ins = $db->prepare('INSERT INTO score_log (sender, subject, score, decision, reasons, scored_at, file) VALUES (:s, :j, 7, :d, :r, :t, :f)');
+        foreach ([['1.M1.host', [['rule' => 'lookalike_domain', 'score' => 7]]], ['2.M1.host', [['rule' => 'dkim_fail', 'score' => 4]]], ['5.M1.host', []]] as [$file, $reasons]) {
+            $ins->bindValue(':s', 'x');
+            $ins->bindValue(':j', 'x');
+            $ins->bindValue(':d', 'quarantine');
+            $ins->bindValue(':r', json_encode($reasons));
+            $ins->bindValue(':t', date('c'));
+            $ins->bindValue(':f', $file);
+            $ins->execute();
+        }
+        $db->close();
+
+        $this->assertFalse(\quarantinePurge($this->maildir(), $this->db(), ['mode' => 'nope'])['success']);
+
+        $res = \quarantinePurge($this->maildir(), $this->db(), ['mode' => 'high_risk']);
+        $this->assertSame(['success' => true, 'mode' => 'high_risk', 'total' => 3, 'deleted' => 2, 'skipped' => 1, 'failed' => 0], $res);
+        $this->assertFileDoesNotExist($this->maildir() . '/.QUARANTINE/new/1.M1.host');
+        $this->assertFileDoesNotExist($this->maildir() . '/.QUARANTINE/new/3.M1.host');
+        $this->assertFileExists($this->maildir() . '/.QUARANTINE/cur/2.M1.host:2,S');
+
+        $res = \quarantinePurge($this->maildir(), $this->db(), ['mode' => 'all']);
+        $this->assertSame([1, 1], [$res['total'], $res['deleted']]);
+        $this->assertFileDoesNotExist($this->maildir() . '/.QUARANTINE/cur/2.M1.host:2,S');
+        $this->assertFileExists($this->maildir() . '/new/4.M1.host', 'INBOX is never touched');
+        $this->assertFileExists($this->maildir() . '/.SPAM/new/5.M1.host', '.SPAM is never touched');
+    }
 }
 

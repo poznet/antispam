@@ -51,13 +51,65 @@ Every quarantined message can be released:
 
 - in the panel: **Skrzynki → Kwarantanna** - *Przywróć* (back to INBOX),
   *Zawsze akceptuj* (back to INBOX + sender on the e-mail whitelist, hidden for
-  high-risk messages), *Usuń* (permanent);
+  high-risk messages), *Usuń* (permanent); per mailbox also the bulk
+  *Usuń wszystkie wysokiego ryzyka* / *Usuń wszystko z kwarantanny*
+  ([below](#bulk-deletion));
 - from the [quarantine digest](quarantine-digest.md) e-mail (signed one-click
   links, same three actions).
 
 A released message is marked as checked, so the next scan does not quarantine
 it again. The page covers the legacy mailbox (`imap`), every IMAP account
 (`imap-<id>`) and every SSH account with a deployed agent (`ssh-<id>`).
+
+### Bulk deletion
+
+Under the list of each mailbox (admin **Skrzynki → Kwarantanna** and the user's
+own mailbox on `/my/quarantine`) there are two buttons, both **permanent
+deletion** (`trwale`, nothing goes back to INBOX or to SPAM):
+
+| Button | Deletes |
+|--------|---------|
+| **Usuń wszystkie wysokiego ryzyka** (only shown when the list has high-risk messages) | the quarantined messages that are high risk |
+| **Usuń wszystko z kwarantanny** | every quarantined message of that mailbox |
+
+The admin page also has **Usuń wszystkie wysokiego ryzyka (wszystkie skrzynki)**
+above the mailboxes (when there are 2+ mailboxes and some high-risk messages):
+one job per mailbox, then the job list filtered to `quarantine.purge`.
+
+- **High risk** is exactly the rule that hides *Zawsze akceptuj*:
+  `QuarantineDigestService::isHighRisk()` (`HIGH_RISK_PATTERN`): a reason
+  `impersonation_*`, `lookalike_domain`, `internal_domain_spoof`,
+  `display_name_embedded_address`, `attachment_*`, `clamav*`, `virustotal*`,
+  `url_safebrowsing*`, `url_dbl*`, `cert_hole*`, **or no score log row**
+  (`score_unknown`, fail closed). Consequence: with score logging off
+  (`scoring.log_enabled`) or after `antispam:purge` removed the rows, every IMAP
+  quarantine message counts as high risk, so the high-risk button deletes them
+  all - the page shows them with the *wysokie ryzyko* label, so the count in
+  the confirmation says so. The SSH agent uses the same pattern
+  (`AGENT_HIGH_RISK_PATTERN`, kept equal by `AgentParityTest`) on its own
+  `score_log`; no row = high risk there too.
+- **Background job** `quarantine.purge` ([jobs.md](jobs.md)), payload mailbox
+  key + mode `high_risk` / `all`; one per mailbox and mode while queued /
+  running (dedupe key `quarantine.purge:<key>:<mode>`). The button redirects to
+  the job page (admin `/jobs/{id}`, user `/my/jobs/{id}`) with the counts:
+  messages in the quarantine, deleted, skipped (not high risk / unreadable /
+  already gone), errors.
+- **Decided at run time.** The confirmation (`data-confirm`) names the mailbox
+  and the count on the page, but that count is only displayed and audited
+  (`shown`). The job lists the quarantine folder when it runs and re-evaluates
+  each message then; mail released or deleted in between is not touched, mail
+  quarantined in between is included. IMAP: `QuarantineService::purge()` opens
+  only the quarantine folder (refuses if it were ever named `INBOX` or the SPAM
+  folder), flags `\Deleted` and expunges every 100 messages. SSH: agent **3.4**
+  command `quarantine-purge --mode=...` ([agent.md](agent.md#quarantine-management)),
+  which only unlinks files in `.QUARANTINE/new|cur`; an older agent fails the
+  job with "wdróż go ponownie".
+- **Permissions:** admin - any mailbox (including the legacy `imap`); ROLE_USER -
+  only an assigned mailbox (`MailboxAccess`, foreign key = 403), checked again
+  when the job runs (access removed meanwhile = the job fails, nothing deleted).
+  CSRF tokens `quarantine_purge` / `my_quarantine_purge`. Audit:
+  `quarantine.purge_queued` and `quarantine.purge` ([audit.md](audit.md)).
+- Digest links (`/q/`) have no bulk action.
 
 ### Quarantine log vs. quarantine folder
 

@@ -36,6 +36,13 @@ class QuarantineService
     /** Stored senders are clipped to this many characters. */
     const LOG_SENDER_CHARS = 255;
 
+    /** purge() modes: every quarantined message / only the high-risk ones. */
+    const PURGE_ALL = 'all';
+    const PURGE_HIGH_RISK = 'high_risk';
+    const PURGE_MODES = [self::PURGE_ALL, self::PURGE_HIGH_RISK];
+    /** IMAP purge: expunge after this many flagged messages (bounded work per round trip). */
+    const PURGE_EXPUNGE_EVERY = 100;
+
     private $em;
     private $config;
     private $ssh;
@@ -252,6 +259,125 @@ class QuarantineService
             return ['success' => false, 'message' => self::agentError($res, 'Nie udało się usunąć wiadomości.'), 'sender' => ''];
         }
         return ['success' => true, 'message' => 'Wiadomość została usunięta.', 'sender' => (string)($res['sender'] ?? '')];
+    }
+
+    /**
+     * Bulk permanent deletion from the quarantine of one mailbox (background
+     * job quarantine.purge, docs/spam-handling.md#bulk-deletion):
+     *
+     *   - PURGE_ALL        every message that is in the quarantine folder now;
+     *   - PURGE_HIGH_RISK  only the messages QuarantineDigestService::isHighRisk()
+     *                      selects - the rule that hides "Zawsze akceptuj" -
+     *                      re-evaluated here, at run time, never taken from the
+     *                      page the button was on (no score log row = high risk).
+     *
+     * Only the quarantine folder is opened (IMAP: getQuarantineFolderName(),
+     * refused if it ever named INBOX / SPAM; SSH: the agent's .QUARANTINE).
+     *
+     * @param callable|null $progress fn(int $done, int $total): heartbeat / progress of a long IMAP pass
+     *
+     * @return array{total:int, deleted:int, skipped:int, failed:int, errors:string[]}
+     *
+     * @throws \RuntimeException mailbox gone / unreachable, agent too old or failing
+     */
+    public function purge(string $key, string $mode, ?callable $progress = null): array
+    {
+        if (!in_array($mode, self::PURGE_MODES, true)) {
+            throw new \InvalidArgumentException('Unknown quarantine purge mode: ' . $mode);
+        }
+        $mailbox = $this->getMailbox($key);
+        if (!$mailbox) {
+            throw new \RuntimeException('Ta skrzynka nie jest już obsługiwana.');
+        }
+
+        if (!self::isImapKey($key)) {
+            $res = $this->ssh->quarantinePurge($this->sshAccount($key), $mode);
+            if (empty($res['success'])) {
+                throw new \RuntimeException('Agent quarantine-purge: ' . mb_substr((string)($res['error'] ?? 'unknown error'), 0, 300));
+            }
+            return [
+                'total' => (int)($res['total'] ?? 0),
+                'deleted' => (int)($res['deleted'] ?? 0),
+                'skipped' => (int)($res['skipped'] ?? 0),
+                'failed' => (int)($res['failed'] ?? 0),
+                'errors' => array_slice(array_map('strval', (array)($res['errors'] ?? [])), 0, 20),
+            ];
+        }
+
+        return $this->purgeImap($this->imapConnection($key), $mode, (string)$mailbox['account_email'], $progress);
+    }
+
+    private function purgeImap($connection, string $mode, string $accountEmail, ?callable $progress): array
+    {
+        $out = ['total' => 0, 'deleted' => 0, 'skipped' => 0, 'failed' => 0, 'errors' => []];
+        $name = $this->inbox->getQuarantineFolderName();
+        foreach (['INBOX', $this->inbox->getSpamFolderName()] as $forbidden) {
+            if (strcasecmp(trim((string)$name), (string)$forbidden) === 0) {
+                throw new \LogicException('Refusing to purge ' . $name . ': not the quarantine folder');
+            }
+        }
+        if (!$connection->hasMailbox($name)) {
+            return $out;
+        }
+        $folder = $connection->getMailbox($name);
+
+        // What is in the quarantine right now (UIDs of this session).
+        $items = [];
+        foreach ($folder->getMessages() as $msg) {
+            $out['total']++;
+            if ($mode === self::PURGE_ALL) {
+                $items[] = ['msg' => $msg];
+                continue;
+            }
+            try {
+                $from = $msg->getFrom();
+                $items[] = ['msg' => $msg, 'from' => $from ? strtolower((string)$from->getAddress()) : '', 'subject' => (string)$msg->getSubject()];
+            } catch (\Throwable $e) {
+                // Unreadable: not listed on the page either, so not judged - kept.
+                $out['skipped']++;
+            }
+        }
+
+        if ($mode === self::PURGE_HIGH_RISK) {
+            $risky = [];
+            foreach (array_chunk($items, 200) as $chunk) {
+                foreach ($this->attachImapScores($chunk, $accountEmail) as $item) {
+                    if (QuarantineDigestService::isHighRisk($item['reasons'])) {
+                        $risky[] = $item;
+                    } else {
+                        $out['skipped']++;
+                    }
+                }
+            }
+            $items = $risky;
+        }
+
+        $total = count($items);
+        $flagged = 0;
+        foreach ($items as $i => $item) {
+            try {
+                $item['msg']->delete();
+                $out['deleted']++;
+                $flagged++;
+            } catch (\Throwable $e) {
+                $out['failed']++;
+                if (count($out['errors']) < 20) {
+                    $out['errors'][] = 'UID ' . $item['msg']->getNumber() . ': ' . mb_substr($e->getMessage(), 0, 200);
+                }
+            }
+            if ($flagged >= self::PURGE_EXPUNGE_EVERY) {
+                $connection->expunge();
+                $flagged = 0;
+            }
+            if ($progress && ($i + 1) % 50 === 0) {
+                $progress($i + 1, $total);
+            }
+        }
+        if ($flagged > 0) {
+            $connection->expunge();
+        }
+        $progress && $progress($total, $total);
+        return $out;
     }
 
     /**

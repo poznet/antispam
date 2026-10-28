@@ -63,7 +63,9 @@
     {% endif %}
 
     <p style="margin-top:15px;">
-        {% if job.accountId %}
+        {% if job.type == 'quarantine.purge' %}
+            <a href="{{ path('antispam_spambox_quarantine') }}" class="btn btn-default"><span class="glyphicon glyphicon-arrow-left"></span> Powrót do kwarantanny</a>
+        {% elseif job.accountId %}
             <a href="{{ path('antispam_account_index') }}" class="btn btn-default"><span class="glyphicon glyphicon-arrow-left"></span> Powrót do kont</a>
         {% endif %}
         <a href="{{ path('antispam_job_index') }}" class="btn btn-default"><span class="glyphicon glyphicon-tasks"></span> Zadania w tle</a>

@@ -288,6 +288,24 @@ marks it checked, so it is not quarantined again. `--whitelist` also adds the se
 to the local `email_whitelist`. The web app adds the same rule to its own database,
 so the rule survives the next sync. `quarantine-delete` removes the file.
 
+```bash
+php antispam-agent.php quarantine-purge --mode=all|high_risk     # agent 3.4+
+```
+Bulk permanent deletion for the panel's *Usuń wszystko z kwarantanny* /
+*Usuń wszystkie wysokiego ryzyka* (job `quarantine.purge`,
+[spam-handling.md](spam-handling.md#bulk-deletion)). Only files present in
+`.QUARANTINE/{new,cur}` at that moment are unlinked; INBOX and `.SPAM` are never
+touched. `high_risk` judges each file now from its latest `score_log` row
+(`score_log.file`): a reason matching `AGENT_HIGH_RISK_PATTERN` (= the panel's
+`QuarantineDigestService::HIGH_RISK_PATTERN`, checked by `AgentParityTest`) or **no
+row at all** = high risk. Unknown `--mode` = error.
+
+```json
+{"success": true, "mode": "high_risk", "total": 12, "deleted": 5, "skipped": 7, "failed": 0}
+```
+`skipped` = not high risk (or already gone), `failed` = unlink refused (up to 20
+`errors`). Timeout in the panel: 600 s.
+
 ## SPAM folder (agent 3.1+)
 
 Used by the user area **Spam** page (`/my/spam`, see [users.md](users.md)). Same id rules

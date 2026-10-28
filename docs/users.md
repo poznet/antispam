@@ -5,7 +5,7 @@ The panel supports several logins with two roles:
 | Role | Sees | Can do |
 |------|------|--------|
 | `ROLE_ADMIN` | everything | everything (accounts, lists, DNSBL, feed, phishing, cron logs, plugin config, users) |
-| `ROLE_USER` | only the mailboxes (accounts) assigned to them | see their own quarantine, SPAM folder and score log; release ("Przywróć"), "Zawsze akceptuj" (release + whitelist the sender) and delete quarantined messages; release from SPAM ("Przywróć do skrzynki", "Przywróć i zawsze akceptuj"); manage own sender white/blacklists (`/my/rules`); change their own password; set up 2FA |
+| `ROLE_USER` | only the mailboxes (accounts) assigned to them | see their own quarantine, SPAM folder and score log; release ("Przywróć"), "Zawsze akceptuj" (release + whitelist the sender) and delete quarantined messages, also in bulk per mailbox ("Usuń wszystkie wysokiego ryzyka", "Usuń wszystko z kwarantanny" - background job, result on `/my/jobs/{id}`); release from SPAM ("Przywróć do skrzynki", "Przywróć i zawsze akceptuj"); manage own sender white/blacklists (`/my/rules`); change their own password; set up 2FA |
 
 ## Login sources
 
@@ -62,6 +62,13 @@ every request:
   messages no longer listed, or without a score log row of that mailbox -
   `score_unknown`, see [quarantine-digest.md](quarantine-digest.md)), the same rule
   the buttons follow.
+- **Bulk delete** (`/my/quarantine/purge`, `mailbox` + `mode` `high_risk` / `all`):
+  the key is checked the same way (403 for a foreign / legacy key, nothing queued),
+  then a `quarantine.purge` job is queued with the user as requester; the job checks
+  ownership again when it runs. The job page `/my/jobs/{id}` (and its status JSON)
+  answers 404 for any job that is not a purge of an own mailbox queued by this user
+  ([jobs.md](jobs.md#the-job-page)). See
+  [spam-handling.md](spam-handling.md#bulk-deletion).
 - **Score log** - `SpamScoreLogRepository::search()` gets an `accounts` filter (list
   of the user's account e-mails; an empty list matches nothing). A requested
   `account` that is not owned is dropped, not honoured. Tiles/stats and the account

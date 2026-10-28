@@ -55,6 +55,7 @@ class BackgroundJob
     const TYPE_DIGEST_SEND = 'digest.send';
     const TYPE_PHISHING_FORWARD = 'phishing.forward';
     const TYPE_HEALTH_FULL = 'health.full';
+    const TYPE_QUARANTINE_PURGE = 'quarantine.purge';
 
     const TYPES = [
         self::TYPE_ACCOUNT_SCAN => 'Skanowanie skrzynki',
@@ -67,6 +68,7 @@ class BackgroundJob
         self::TYPE_DIGEST_SEND => 'Raport kwarantanny: wysyłka',
         self::TYPE_PHISHING_FORWARD => 'Phishing: wysyłka zgłoszeń',
         self::TYPE_HEALTH_FULL => 'Pełne sprawdzenie stanu',
+        self::TYPE_QUARANTINE_PURGE => 'Kwarantanna: trwałe usuwanie',
     ];
 
     /** Finished jobs older than this are deleted by antispam:purge (config `jobs.retention_days`). */

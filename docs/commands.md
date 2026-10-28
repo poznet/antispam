@@ -55,10 +55,23 @@ php bin/console antispam:agent:scan-all
 php bin/console antispam:agent:scan-all --max-seconds=0   # no per-mailbox limit
 ```
 
+### antispam:rescan:due
+Queues the weekly full rescans that are due: accounts with **Cotygodniowy
+ponowny skan całej skrzynki** on, whose slot of this week (day + hour, server
+time; default Sunday 02:00) started less than 24 h ago and that had no rescan
+since. Only queues `account.rescan` jobs (deduplicated per account) - the job
+worker runs them. Run it hourly; the Docker scheduler does at minute 7
+(`RESCAN_DUE=off` disables it). See [spam-handling.md](spam-handling.md#full-rescan).
+```bash
+php bin/console antispam:cron:run antispam:rescan:due
+php bin/console antispam:rescan:due --dry-run       # list the due accounts
+php bin/console antispam:rescan:due --account=12    # queue a rescan of one account now
+```
+
 ## Background Jobs
 
 ### antispam:jobs:work (alias antispam:jobs:run)
-Runs the jobs queued by the panel (scan, agent deploy / sync / health,
+Runs the jobs queued by the panel (scan, full rescan, agent deploy / sync / health,
 retroactive rule pass, CERT sync, digest "send now", bulk phishing forward,
 full health check). Loops and polls every 2 s; recovers jobs whose worker
 died; every job gets a time limit. See [jobs.md](jobs.md).

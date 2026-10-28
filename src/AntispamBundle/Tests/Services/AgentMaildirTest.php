@@ -193,4 +193,67 @@ class AgentMaildirTest extends TestCase
         $this->assertSame('jan@firma.pl', $parsed['sender_email']);
         $this->assertSame('Zamówienie nr 5', $parsed['subject']);
     }
+
+    private function scanLogCount()
+    {
+        $db = \getDb($this->db());
+        $n = (int)$db->querySingle('SELECT COUNT(*) FROM scan_log');
+        $db->close();
+        return $n;
+    }
+
+    public function testRescanChecksAlreadyCheckedMailAgainWithTheCurrentRules()
+    {
+        $this->import([]);
+        $this->put('new/1.M1.host', "From: a@spam.pl\nMessage-ID: <1@x>\nSubject: hi\n\nbody\n");
+        $this->put('cur/2.M1.host:2,S', "From: ok@good.pl\nMessage-ID: <2@x>\nSubject: hello\n\nbody\n");
+        $res = \runScan($this->maildir(), $this->db(), []);
+        $this->assertSame([2, 0], [$res['checked'], $res['moved_to_spam']]);
+
+        // A rule added later: the normal scan does not look at checked mail again...
+        $this->import(['email_blacklist' => [['email' => 'me@firma.pl', 'blacklistemail' => 'a@spam.pl', 'pattern_type' => 'exact', 'score' => 10]]]);
+        $res = \runScan($this->maildir(), $this->db(), []);
+        $this->assertSame([0, 2], [$res['checked'], $res['skipped']]);
+        $logs = $this->scanLogCount();
+
+        // ...the rescan does.
+        $res = \runScan($this->maildir(), $this->db(), ['rescan' => true, 'reset' => true]);
+        $this->assertTrue($res['rescan']);
+        $this->assertSame([2, 0, 1, 0], [$res['checked'], $res['skipped'], $res['moved_to_spam'], $res['remaining']], json_encode($res));
+        $this->assertFileExists($this->maildir() . '/.SPAM/new/1.M1.host');
+        $this->assertFileExists($this->maildir() . '/cur/2.M1.host:2,S', 'ham stays');
+        $this->assertSame($logs, $this->scanLogCount(), 'a rescan writes no scan_log entry (statistics)');
+
+        // Still marked: the next normal scan skips the ham message.
+        $res = \runScan($this->maildir(), $this->db(), []);
+        $this->assertSame([0, 1], [$res['checked'], $res['skipped']]);
+    }
+
+    public function testRescanRunsInBatchesAndResumes()
+    {
+        $this->import([]);
+        foreach ([1, 2, 3] as $n) {
+            $this->put('new/' . $n . '.M1.host', "From: ok@good.pl\nMessage-ID: <$n@x>\nSubject: s$n\n\nbody\n");
+        }
+        \runScan($this->maildir(), $this->db(), []);
+
+        $res = \runScan($this->maildir(), $this->db(), ['rescan' => true, 'reset' => true, 'limit' => '1']);
+        $this->assertSame([1, 2], [$res['checked'], $res['remaining']]);
+        $res = \runScan($this->maildir(), $this->db(), ['rescan' => true, 'limit' => '1']);
+        $this->assertSame([1, 1], [$res['checked'], $res['remaining']], 'continues, does not start over');
+
+        // --reset (a new rescan from the panel) starts from scratch.
+        $res = \runScan($this->maildir(), $this->db(), ['rescan' => true, 'reset' => true, 'limit' => '2']);
+        $this->assertSame([2, 1], [$res['checked'], $res['remaining']]);
+        $res = \runScan($this->maildir(), $this->db(), ['rescan' => true, 'limit' => '2']);
+        $this->assertSame([1, 0], [$res['checked'], $res['remaining']]);
+
+        // Finished: the next rescan (even without --reset) covers everything again.
+        $res = \runScan($this->maildir(), $this->db(), ['rescan' => true]);
+        $this->assertSame([3, 0], [$res['checked'], $res['remaining']]);
+        $db = \getDb($this->db());
+        $this->assertSame(0, (int)$db->querySingle('SELECT COUNT(*) FROM rescan_done'));
+        $db->close();
+    }
 }
+

@@ -184,9 +184,25 @@ as flags, and retrieves results as JSON. A timeout, an old agent, a locked
 (already running) scan or a non-JSON answer is reported as a failed scan and
 does not overwrite the account's last scan result.
 
+### Full rescan ("Przeskanuj całą skrzynkę ponownie")
+Every account (IMAP and SSH) has a **Przeskanuj całą skrzynkę ponownie** button
+(↻ on the account list, below the form on the edit page): the whole INBOX is
+checked again with the current rules in a background job (`account.rescan`),
+in batches; spam is moved, never deleted; the results stay out of the
+statistics. SSH accounts need agent 3.3+ (redeploy with **Wdróż**). The account
+list shows the last rescan (time, counters or error, link to the job). Details:
+[spam-handling.md](spam-handling.md#full-rescan).
+
+**Cotygodniowy ponowny skan całej skrzynki** (Ustawienia skrzynki, off by
+default): the same rescan once a week, on the chosen day and hour (server time;
+empty = Sunday, 02:00). Columns `auto_rescan`, `rescan_weekday`, `rescan_hour`,
+`last_rescan_at`, `last_rescan_result` on `antispam_account` (migration
+`Version20261028220755`); queued by `antispam:rescan:due` (hourly in the Docker
+scheduler). The schedule is part of the configuration backup.
+
 ### Timeouts and error messages
 Each agent command has its own read timeout (`SshService::TIMEOUTS`: scan
-3600 s, apply-blacklist 1800 s, import-rules 300 s, quarantine-list 180 s,
+3600 s, rescan 3600 s (one batch; the agent stops itself after the job's batch length), apply-blacklist 1800 s, import-rules 300 s, quarantine-list 180 s,
 others 60 s; connect 15 s, keep-alive every 30 s). Stderr is kept apart from
 the JSON on stdout. Typical messages: "Agent nie odpowiedział w ciągu N s",
 "Agent na serwerze nie obsługuje polecenia ... - wdróż go ponownie",

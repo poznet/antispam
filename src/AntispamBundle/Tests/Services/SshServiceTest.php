@@ -202,6 +202,27 @@ class SshServiceTest extends TestCase
         $this->assertSame(2, $ssh->runScan($this->account())['total']);
     }
 
+    public function testRescanCarriesTheScanOptionsTimeLimitAndReset()
+    {
+        $first = $this->sshMock(null);
+        $first->expects($this->once())->method('setTimeout')->with(SshService::TIMEOUTS['rescan']);
+        $first->expects($this->once())->method('exec')->with($this->callback(fn($cmd) => str_contains($cmd, " rescan --maildir='/srv/mail/Maildir' --time-limit=110 --reset --account=5")))
+            ->willReturn('{"success":true,"rescan":true,"total":2,"remaining":1,"agent_version":"9.9"}');
+        $this->assertSame(1, $this->service([$first])->runRescan($this->account(), true, 110)['remaining']);
+
+        $next = $this->sshMock(null);
+        $next->expects($this->once())->method('exec')->with($this->callback(fn($cmd) => str_contains($cmd, ' rescan ') && str_contains($cmd, '--time-limit=10 --account=5') && !str_contains($cmd, '--reset')))
+            ->willReturn('{"success":true,"rescan":true,"total":2,"remaining":0,"agent_version":"9.9"}');
+        $this->assertSame(0, $this->service([$next])->runRescan($this->account(), false, 3)['remaining'], 'at least 10 s');
+    }
+
+    public function testAgentScriptHasTheRescanCommand()
+    {
+        $this->assertSame('3.3', SshService::bundledAgentVersion());
+        $src = file_get_contents(__DIR__ . '/../../Resources/agent/antispam-agent.php');
+        $this->assertStringContainsString("case 'rescan':", $src);
+    }
+
     public function testSpamFolderCommandsQuoteTheIdAndUseTheirTimeouts()
     {
         $list = $this->sshMock(null);

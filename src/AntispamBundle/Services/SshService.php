@@ -35,6 +35,8 @@ class SshService
         'health' => 60,
         'import-rules' => 300,
         'scan' => 3600,
+        // one batch of a full rescan; the agent stops itself after --time-limit
+        'rescan' => 3600,
         'apply-blacklist' => 1800,
         'quarantine-list' => 180,
         'quarantine-release' => 60,
@@ -430,6 +432,30 @@ class SshService
      */
     public function runScan(Account $account, array $options = [])
     {
+        return $this->runAgent($account, 'scan', $this->scanArgs($account, $options));
+    }
+
+    /**
+     * One batch of a full rescan (agent 3.3+, `rescan`): every INBOX message is
+     * checked again with the current rules, ignoring the agent's "already
+     * checked" markers. The agent remembers what this rescan has processed, so
+     * the next call continues; $reset starts a new rescan from scratch. The
+     * agent stops after $timeLimit seconds and reports 'remaining'.
+     *
+     * An agent older than 3.3 answers with its usage text, which interpret()
+     * turns into "nie obsługuje polecenia rescan ... wdróż go ponownie".
+     */
+    public function runRescan(Account $account, bool $reset, int $timeLimit, array $options = [])
+    {
+        $args = $this->scanArgs($account, $options) . ' --time-limit=' . max(10, $timeLimit);
+        if ($reset) {
+            $args .= ' --reset';
+        }
+        return $this->runAgent($account, 'rescan', $args);
+    }
+
+    private function scanArgs(Account $account, array $options)
+    {
         $options += $this->mailboxSettings
             ? $this->mailboxSettings->within($account, fn () => $this->scanDefaults())
             : $this->scanDefaults();
@@ -445,8 +471,7 @@ class SshService
                 $args .= ' --' . str_replace('_', '-', $flag);
             }
         }
-
-        return $this->runAgent($account, 'scan', $args);
+        return $args;
     }
 
     private function scanDefaults()

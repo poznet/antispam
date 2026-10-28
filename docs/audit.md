@@ -29,7 +29,8 @@ Page: **Przegląd → Dziennik audytu** (`/audit`, ROLE_ADMIN only).
 | `settings.save` | Filtr spamu, Wspólna baza spamu, Raport kwarantanny, Wtyczki pocztowe, Konfiguracja (stara), Lista CERT, Przekazywanie phishingu (`phishing_forward`), "Wymagaj 2FA dla administratorów" (`2fa_policy`, `required`), Logowanie OAuth (`oauth`) | `target_id` = page; submitted field **names**, `secrets_changed` = names of secret fields that were set or cleared |
 | `settings.digest_send` | "Wyślij teraz" of the digest page | as above |
 | `settings.uncheck_all`, `settings.reset_counters` | maintenance buttons of Filtr spamu | - |
-| `account.add`, `account.edit`, `account.delete`, `account.deploy`, `account.sync`, `account.host_key_reset` | `/account/*` | account id, name, mailbox; connection type, field names, `ok`; `account.edit` also `settings_overrides` (per-mailbox overrides with values) and `settings_changed` |
+| `account.add`, `account.edit`, `account.delete`, `account.deploy`, `account.sync`, `account.host_key_reset` | `/account/*` | account id, name, mailbox; connection type, field names, `ok`; `account.edit` also `settings_overrides` (per-mailbox overrides with values), `settings_changed` and `auto_rescan` (weekly rescan day / hour or `false`) |
+| `account.rescan_queued`, `account.rescan` | `/account/rescan/{id}`, `antispam:rescan:due` (actor `harmonogram`), job worker | account id, name, mailbox; `job`, `trigger` (`panel` / `schedule` / `cli`); `account.rescan` (job end) also `ok`, `total`, `checked`, `whitelisted`, `blacklisted`, `quarantined`, `moved_to_spam`, `error` |
 | `account.oauth_connected`, `account.oauth_disconnected` | OAuth consent finished / tokens deleted (`/account/oauth/*`, [oauth.md](oauth.md)) | account id, name, mailbox; `provider`, `oauth_username` |
 | `account.oauth_refresh_failed` | token renewal (refresh / client credentials) failed - once per new error, also from cron | account; `provider`, `method`, `error_code` (`invalid_grant`...), `reconnect`, `message` |
 | `user.add`, `user.edit`, `user.delete` | `/users/*` | user id, login; role, assigned mailboxes, `password_changed` (bool) |
@@ -120,7 +121,7 @@ its entry), `Tests/Security/AuditAccessTest.php` (ROLE_ADMIN only, wiring, page 
 
 ## Actions run as background jobs
 
-`account.deploy`, `account.sync`, `cert.sync` and the bulk `phishing.forward` run in the
+`account.deploy`, `account.sync`, `account.rescan`, `cert.sync` and the bulk `phishing.forward` run in the
 background job worker ([jobs.md](jobs.md)). Their entries are written when the job
 finishes, with the user who clicked as the actor (copied to the job when it was queued)
 and `job: <id>` in the details; the IP column is empty (the worker has no request).

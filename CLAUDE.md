@@ -31,7 +31,7 @@ See `docs/` directory for detailed documentation:
 - `docs/scoring.md` - scoring pipeline, DNSBL, regex/wildcard patterns, rule ownership (per-mailbox vs global `*` rules)
 - `docs/protection.md` - impersonation/BEC, link protection, attachment policy (web + agent)
 - `docs/jobs.md` - background job queue ("Zadania w tle", `/jobs`): heavy panel actions (Skanuj, Wdróż, Synchronizuj, retroactive rule pass, CERT sync, digest send, full health check) are queued in `antispam_job` and run by `antispam:jobs:work` (Docker scheduler) / `antispam:jobs:run --once` (cron); batched big IMAP scans, shared per-mailbox scan lock with scan-all, stale-job recovery, health `jobs`
-- `docs/spam-handling.md` - where spam goes (move vs delete), quarantine semantics, retroactive blacklist, cron log (`antispam:cron:run`, `/cron/logs`)
+- `docs/spam-handling.md` - where spam goes (move vs delete), quarantine semantics, retroactive blacklist, full mailbox rescan (panel button + weekly, `account.rescan` job, `antispam:rescan:due`), cron log (`antispam:cron:run`, `/cron/logs`)
 - `docs/health.md` - health checks, public `/health` for uptime monitors, token-protected details + Prometheus `/metrics`, "Stan systemu" page, `antispam:health:check` alerts (e-mail/webhook)
 - `docs/users.md` - users and roles (ROLE_ADMIN / ROLE_USER), mailbox ownership, legacy ADMIN_PASSWORD admin, `/my` area
 - `docs/audit.md` - audit log ("Dziennik audytu", `/audit`): what is recorded, `AuditLogger` / `AuditTrait`, CSV export, `audit.retention_days`

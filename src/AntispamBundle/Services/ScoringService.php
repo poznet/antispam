@@ -369,7 +369,7 @@ class ScoringService
         // Quarantine/spam get their outcome once the message has been moved.
         $outcome = in_array($decision, [SpamScoreLog::DECISION_HAM, SpamScoreLog::DECISION_WHITELISTED], true)
             ? SpamScoreLog::OUTCOME_NONE : null;
-        $event->setScoreLog($this->logDecision($event->getEmail(), $score, $decision, $reasons, $sender, $subject, SpamScoreLog::SOURCE_SCAN, $outcome, $event->isInitialScan()));
+        $event->setScoreLog($this->logDecision($event->getEmail(), $score, $decision, $reasons, $sender, $subject, $event->isRescan() ? SpamScoreLog::SOURCE_RESCAN : SpamScoreLog::SOURCE_SCAN, $outcome, $event->isInitialScan()));
 
         return $decision;
     }

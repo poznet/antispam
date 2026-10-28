@@ -479,6 +479,14 @@ class BackupImporter
             if (array_key_exists('oauth_tenant', $item)) {
                 $fields['OAuthTenant'] = self::nullable($item['oauth_tenant'] ?? null);
             }
+            // Weekly full rescan: only when in the file (older backups keep the current values).
+            if (array_key_exists('auto_rescan', $item)) {
+                $fields['AutoRescan'] = (bool)$item['auto_rescan'];
+                $day = $item['rescan_weekday'] ?? null;
+                $hour = $item['rescan_hour'] ?? null;
+                $fields['RescanWeekday'] = is_numeric($day) && (int)$day >= 1 && (int)$day <= 7 ? (int)$day : null;
+                $fields['RescanHour'] = is_numeric($hour) && (int)$hour >= 0 && (int)$hour <= 23 ? (int)$hour : null;
+            }
             // Present only in exports with secrets; an empty value keeps the current path.
             if (self::nullable($item['ssh_key_path'] ?? null) !== null) {
                 $fields['SshKeyPath'] = (string)$item['ssh_key_path'];

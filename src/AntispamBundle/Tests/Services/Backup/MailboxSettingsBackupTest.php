@@ -12,7 +12,8 @@ class MailboxSettingsBackupTest extends BackupTestCase
         self::seed($em);
         $jan = $em->getRepository(Account::class)->findOneBy(['email' => 'jan@firma.pl']);
         $jan->setSpamThreshold(6)->setQuarantineThreshold(3)->setScoringEnabled(false)
-            ->setDigestEnabled(true)->setDigestRecipient('kierownik@firma.pl')->setDigestHour(14);
+            ->setDigestEnabled(true)->setDigestRecipient('kierownik@firma.pl')->setDigestHour(14)
+            ->setAutoRescan(true)->setRescanWeekday(3)->setRescanHour(1);
         $em->flush();
         $em->clear();
     }
@@ -38,8 +39,10 @@ class MailboxSettingsBackupTest extends BackupTestCase
             ['spam_threshold' => 6, 'quarantine_threshold' => 3, 'scoring_enabled' => false, 'digest_enabled' => true, 'digest_recipient' => 'kierownik@firma.pl', 'digest_hour' => 14],
             $jan->getSettingsOverrides()
         );
+        $this->assertSame([true, 3, 1], [$jan->getAutoRescan(), $jan->getRescanWeekday(), $jan->getRescanHour()], 'weekly rescan schedule');
         $ssh = $target->getRepository(Account::class)->findOneBy(['email' => 'ssh@firma.pl']);
         $this->assertSame([], $ssh->getSettingsOverrides());
+        $this->assertSame([false, null, null], [$ssh->getAutoRescan(), $ssh->getRescanWeekday(), $ssh->getRescanHour()]);
     }
 
     public function testOlderBackupWithoutTheFieldsKeepsCurrentOverrides()

@@ -16,6 +16,9 @@
 #                       automatic phishing forward to CERT Polska; no-op while off in the panel
 #   PURGE_HOUR          hour (container time, UTC) for antispam:purge, at minute 41 (default 3, "off" = off) -
 #                       old score log rows (scorelog.retention_days) and expired DNSBL cache
+#   RESCAN_DUE          on | off (default on) - hourly at minute 7, antispam:rescan:due queues the
+#                       weekly full rescans that are due (accounts with "Cotygodniowy ponowny skan";
+#                       the job worker runs them in batches)
 #   JOB_TIMEOUT         seconds after which a job is killed (default 3600) - a hung run
 #                       would otherwise hold its flock and every later tick would skip
 #
@@ -40,6 +43,7 @@ APP_DIR=/var/www/html
 : "${CERT_SYNC_INTERVAL:=6}"
 : "${PHISHING_FORWARD_INTERVAL:=10}"
 : "${JOB_TIMEOUT:=3600}"
+: "${RESCAN_DUE:=on}"
 : "${JOBS_WORKER:=on}"
 : "${JOBS_WORKER_TIME_LIMIT:=3600}"
 : "${JOBS_JOB_TIMEOUT:=3900}"
@@ -111,6 +115,9 @@ while true; do
         else
             run digest antispam:digest:send -- --scheduled-only
         fi
+    fi
+    if [ "$RESCAN_DUE" != off ] && [ "$MINUTE" -eq 7 ]; then
+        run rescan antispam:rescan:due
     fi
     if [ -n "$PURGE_HOUR" ] && [ "$HOUR" -eq "$PURGE_HOUR" ] && [ "$MINUTE" -eq 41 ]; then
         run purge antispam:purge

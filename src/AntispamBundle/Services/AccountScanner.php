@@ -61,6 +61,52 @@ class AccountScanner
     }
 
     /**
+     * One batch of a full rescan of the whole INBOX against the current rules
+     * (markers ignored, spam moved - never deleted, kept out of the stats; see
+     * ImapScanService::rescanAccount() and the agent's `rescan`).
+     *
+     * IMAP: $cursor is the 'cursor' of the previous batch (null = start); the
+     * account's own scan cursor is not touched. SSH: the agent keeps the
+     * progress itself, $first starts a new rescan there (--reset); the batch
+     * length comes from $deadline.
+     *
+     * @return array counters + 'remaining' (0 = done) + 'cursor' (IMAP, for the next batch)
+     *
+     * @throws ScanLockedException the mailbox is being scanned by another process
+     * @throws \RuntimeException   connection / agent failure (old agent: "wdróż go ponownie")
+     */
+    public function rescan(Account $account, ?array $cursor, bool $first, ?float $deadline = null): array
+    {
+        if (!$account->isSsh()) {
+            return $this->imapScan->rescanAccount($account, $cursor, null, $deadline);
+        }
+        $seconds = $deadline !== null ? (int)ceil($deadline - microtime(true)) : 300;
+        $result = $this->ssh->runRescan($account, $first, max(10, $seconds));
+        if (!isset($result['total']) || empty($result['rescan'])) {
+            if (!empty($result['locked'])) {
+                throw new ScanLockedException('Agent na serwerze właśnie skanuje tę skrzynkę.');
+            }
+            throw new \RuntimeException(mb_substr((string)($result['error'] ?? 'nieprawidłowa odpowiedź agenta - wdróż go ponownie (Konta → Wdróż)'), 0, 500));
+        }
+        $result['errors'] = array_values((array)($result['errors'] ?? []));
+        if (!empty($result['agent_warning'])) {
+            $result['errors'][] = $result['agent_warning'];
+        }
+        unset($result['decisions'], $result['decisions_truncated'], $result['agent_warning'], $result['agent_outdated'], $result['warnings']);
+        $result['remaining'] = (int)($result['remaining'] ?? 0);
+        $result['cursor'] = null;
+        return $result;
+    }
+
+    /** Stores the end of a rescan on the account (list column), never the dashboard's last scan. */
+    public function finishRescan(Account $account, array $result): void
+    {
+        unset($result['cursor'], $result['initial']);
+        $account->markRescanned($result);
+        $this->em->flush();
+    }
+
+    /**
      * Stores the result on the account (last scan time + counters) unless the
      * initial scan still has messages left.
      *
@@ -90,7 +136,11 @@ class AccountScanner
             $pass['errors'] = array_slice(array_values((array)($pass['errors'] ?? [])), 0, 20);
             return $pass;
         }
-        foreach (['checked', 'skipped', 'whitelisted', 'blacklisted', 'quarantined', 'moved_to_spam'] as $k) {
+        foreach (['checked', 'skipped', 'whitelisted', 'blacklisted', 'quarantined', 'moved_to_spam', 'move_failed'] as $k) {
+            if ($k === 'move_failed' && !array_key_exists($k, $sum) && !array_key_exists($k, $pass)) {
+                // SSH agents only
+                continue;
+            }
             $sum[$k] = (int)($sum[$k] ?? 0) + (int)($pass[$k] ?? 0);
         }
         foreach (['total', 'remaining', 'initial'] as $k) {

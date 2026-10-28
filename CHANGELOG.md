@@ -19,6 +19,32 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 ## [Unreleased]
 
 ### Added
+- **Full mailbox rescan.** New per-account button **Przeskanuj całą skrzynkę
+  ponownie** (account list ↻ and the account edit page, admin only): the whole
+  INBOX is checked again with the current rules (white / blacklists, patterns,
+  scoring, per-mailbox settings), ignoring the "already checked" markers, as a
+  background job `account.rescan` in resumable batches (IMAP: own rescan cursor
+  in the job state, the account's scan cursor is untouched; SSH: new agent
+  command `rescan`). One rescan per account while queued / running; waits for
+  the mailbox lock like a scan. Spam is always **moved** (never deleted, even
+  with *Usuwaj spam*); results stay out of the statistics and the dashboard
+  (score log `source = rescan`, `initial_scan = 1`). Progress and counters on
+  the job page; last rescan time / counters / error on the account list
+  (`last_rescan_at`, `last_rescan_result`). Audit `account.rescan_queued` /
+  `account.rescan`. The confirm dialog of *Resetuj flagi sprawdzenia* points
+  to it. See `docs/spam-handling.md` ("Full rescan").
+- **Weekly automatic rescan** per account (*Ustawienia skrzynki →
+  Cotygodniowy ponowny skan całej skrzynki*, off by default, day + hour,
+  default Sunday 02:00): new command `antispam:rescan:due` queues the due
+  rescans; the Docker scheduler runs it hourly at minute 7 (`RESCAN_DUE`,
+  default `on`). Columns `auto_rescan`, `rescan_weekday`, `rescan_hour`,
+  `last_rescan_at`, `last_rescan_result` on `antispam_account` (migration
+  `Version20261028220755`); the schedule is included in the configuration
+  backup.
+- SSH+Maildir agent **3.3**: `rescan [--reset] [--time-limit=N] [--limit=N]`
+  (batched full re-check, progress in the new `rescan_done` table, no
+  `scan_log` entry). Redeploy the agent (*Konta → Wdróż*) - older agents fail a
+  rescan with "wdróż go ponownie".
 - Thunderbird plugin **1.3.0: one login per Thunderbird account.** The settings
   page lists the Thunderbird accounts with their own login / logout / test;
   every report, phishing report, not-spam, check and connection test uses the

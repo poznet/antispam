@@ -273,30 +273,8 @@ class ImapScanService
             }
             $done++;
             $maxUid = max($maxUid, $uid);
-            $event = null;
-            try {
-                $msg = $inbox->getMessage($uid);
-                $event = new MessageEvent($msg, $email, $connection, $deleteSpam);
-                $event->setInitialScan($initialScan);
-                $this->dispatcher->dispatch($event, 'antispam.check.message');
-
-                if ($event->isCheckedbefore()) {
-                    $stats['skipped']++;
-                    continue;
-                }
-                $stats['checked']++;
-                if ($event->isWhitelist()) { $stats['whitelisted']++; }
-                if ($event->isBlacklist()) { $stats['blacklisted']++; }
-                if ($event->isDelete()) {
-                    $event->isSpam() ? $stats['moved_to_spam']++ : $stats['quarantined']++;
-                }
-            } catch (\Throwable $e) {
+            if (!$this->processMessage($inbox, $connection, $uid, $email, $deleteSpam, $initialScan, false, $stats)) {
                 $firstFailed = $firstFailed ?? $uid;
-                if (count($stats['errors']) < 20) {
-                    $stats['errors'][] = 'UID ' . $uid . ': ' . $e->getMessage();
-                }
-            } finally {
-                $this->afterMessage($event, $stats);
             }
         }
 
@@ -314,6 +292,151 @@ class ImapScanService
         $this->messages->purgeIfDue();
 
         return $stats;
+    }
+
+    /**
+     * Full rescan of an IMAP account ("Przeskanuj całą skrzynkę ponownie",
+     * weekly rescan): every INBOX message is run through the pipeline again
+     * with the current rules, ignoring the "already checked" markers. Spam is
+     * always moved to SPAM, never deleted (a re-evaluation by changed rules
+     * must be reversible), whatever the account's delete setting says. The
+     * account's per-mailbox settings apply as in a scan.
+     *
+     * The rescan has its own cursor (kept by the caller, e.g. the job state),
+     * the account's incremental scan cursor is never touched, so regular
+     * scans between two batches go on as usual. Same per-mailbox lock as a scan.
+     *
+     * @param array|null $cursor  progress from the previous batch (the 'cursor' of
+     *                            its result); null = start from the oldest message
+     *
+     * @return array scan() counters + 'remaining' and 'cursor' (pass it to the
+     *               next call; null = the rescan is complete)
+     *
+     * @throws ScanLockedException another process is scanning this mailbox
+     */
+    public function rescanAccount(Account $account, ?array $cursor = null, ?int $maxMessages = null, ?float $deadline = null): array
+    {
+        $lock = $this->lock(self::accountLockName($account));
+        try {
+            $connection = $this->connect($account);
+            try {
+                $settings = $this->mailboxSettings?->forAccount($account);
+                $run = function () use ($connection, $account, $cursor, $maxMessages, $deadline) {
+                    return $this->rescan($connection, $account->getEmail(), $cursor, $maxMessages, $deadline);
+                };
+                return $settings ? $this->mailboxSettings->within($settings, $run) : $run();
+            } finally {
+                $connection->close();
+            }
+        } finally {
+            $this->unlock($lock);
+        }
+    }
+
+    /**
+     * One batch of a full rescan (see rescanAccount()). The set of messages is
+     * fixed when the rescan starts: UIDs up to UIDNEXT - 1 at that moment
+     * ('until_uid' in the cursor); newer mail is left to the regular scan. A
+     * message that fails is reported and skipped (it keeps its earlier
+     * verdict), so a broken message never stalls the rescan. When the
+     * mailbox's UIDVALIDITY changed between two batches the rescan starts
+     * again from the oldest message.
+     */
+    public function rescan(ConnectionInterface $connection, $email, ?array $cursor = null, ?int $maxMessages = null, ?float $deadline = null): array
+    {
+        $stats = ['total' => 0, 'checked' => 0, 'skipped' => 0, 'whitelisted' => 0, 'blacklisted' => 0,
+                  'quarantined' => 0, 'moved_to_spam' => 0, 'remaining' => 0, 'errors' => [], 'cursor' => null];
+
+        $inbox = $connection->getMailbox('INBOX');
+        try {
+            $status = $inbox->getStatus(\SA_MESSAGES | \SA_UIDVALIDITY | \SA_UIDNEXT);
+        } catch (\Throwable $e) {
+            $status = new \stdClass();
+        }
+        $validity = (int)($status->uidvalidity ?? 0);
+        $uidNext = (int)($status->uidnext ?? 0);
+
+        if ($cursor !== null && ($validity <= 0 || (int)($cursor['uidvalidity'] ?? -1) !== $validity)) {
+            $stats['errors'][] = 'Zmienił się UIDVALIDITY skrzynki - ponowny skan zaczyna się od początku.';
+            $cursor = null;
+        }
+        $last = $cursor !== null ? (int)$cursor['last_uid'] : 0;
+        $until = $cursor !== null ? (int)$cursor['until_uid'] : ($uidNext > 0 ? $uidNext - 1 : PHP_INT_MAX);
+
+        if ($last === 0) {
+            $uids = self::uidsOf($inbox->getMessages());
+        } else {
+            try {
+                $uids = self::uidsOf($inbox->getMessageSequence(($last + 1) . ':*'));
+            } catch (InvalidSearchCriteriaException $e) {
+                $uids = [];
+            }
+        }
+        $uids = self::sorted(array_filter($uids, function ($uid) use ($last, $until) {
+            return $uid > $last && $uid <= $until;
+        }));
+        if ($until === PHP_INT_MAX) {
+            $until = $uids ? max($uids) : 0;
+        }
+        // Without UIDVALIDITY a later batch could not tell the same UIDs apart: one pass.
+        $limited = ($maxMessages !== null || $deadline !== null) && $validity > 0;
+
+        $maxUid = $last;
+        $done = 0;
+        foreach ($uids as $uid) {
+            if ($limited && $done > 0 && (($maxMessages !== null && $done >= $maxMessages) || ($deadline !== null && microtime(true) >= $deadline))) {
+                $stats['remaining'] = count($uids) - $done;
+                $stats['cursor'] = ['uidvalidity' => $validity, 'last_uid' => $maxUid, 'until_uid' => $until];
+                break;
+            }
+            $done++;
+            $maxUid = max($maxUid, $uid);
+            $this->processMessage($inbox, $connection, $uid, $email, false, true, true, $stats);
+        }
+
+        if ($stats['moved_to_spam'] + $stats['quarantined'] > 0) {
+            $connection->expunge();
+        }
+        $stats['total'] = isset($status->messages) ? (int)$status->messages : count($uids);
+        $this->messages->purgeIfDue();
+
+        return $stats;
+    }
+
+    /**
+     * Runs one INBOX message through the pipeline and counts the outcome.
+     *
+     * @return bool false when the message failed (error recorded in $stats)
+     */
+    private function processMessage(MailboxInterface $inbox, ConnectionInterface $connection, int $uid, $email, ?bool $deleteSpam, bool $initialScan, bool $rescan, array &$stats): bool
+    {
+        $event = null;
+        try {
+            $msg = $inbox->getMessage($uid);
+            $event = new MessageEvent($msg, $email, $connection, $deleteSpam);
+            $event->setInitialScan($initialScan);
+            $event->setRescan($rescan);
+            $this->dispatcher->dispatch($event, 'antispam.check.message');
+
+            if ($event->isCheckedbefore()) {
+                $stats['skipped']++;
+                return true;
+            }
+            $stats['checked']++;
+            if ($event->isWhitelist()) { $stats['whitelisted']++; }
+            if ($event->isBlacklist()) { $stats['blacklisted']++; }
+            if ($event->isDelete()) {
+                $event->isSpam() ? $stats['moved_to_spam']++ : $stats['quarantined']++;
+            }
+            return true;
+        } catch (\Throwable $e) {
+            if (count($stats['errors']) < 20) {
+                $stats['errors'][] = 'UID ' . $uid . ': ' . $e->getMessage();
+            }
+            return false;
+        } finally {
+            $this->afterMessage($event, $stats);
+        }
     }
 
     /** "uidvalidity:last_uid:unix time" - the legacy mailbox cursor as stored in the config table. */

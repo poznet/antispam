@@ -17,6 +17,12 @@
  *  10. Local Bayes classifier (token probabilities synced from the panel)
  *  11. Threshold decision -> move to .SPAM or .QUARANTINE
  *
+ * `rescan` (3.3+) re-checks the whole INBOX with the current rules, ignoring
+ * the "already checked" markers, in batches limited by --time-limit: the
+ * rescan_done table remembers what the current rescan has processed, so the
+ * next call continues (--reset starts a new rescan). It moves only to .SPAM /
+ * .QUARANTINE and writes no scan_log entry (kept out of the statistics).
+ *
  * `apply-blacklist` re-checks recent INBOX mail (already scanned or not)
  * against the blacklists only, so a newly added rule also clears messages
  * that arrived before it. Only headers are read, which keeps it cheap.
@@ -35,7 +41,7 @@
  * PHP warnings never reach STDOUT; they are collected into "warnings".
  */
 
-const AGENT_VERSION = '3.2';
+const AGENT_VERSION = '3.3';
 const CERT_DEFAULT_URL = 'https://hole.cert.pl/domains/v2/domains.txt';
 const CERT_MAX_BYTES = 52428800;
 const CERT_MIN_ROWS = 100;
@@ -113,6 +119,11 @@ try {
                 return runScan($maildirPath, $dbPath, $options);
             }));
             break;
+        case 'rescan':
+            agentPrint(agentLocked($dbPath, function () use ($maildirPath, $dbPath, $options) {
+                return runScan($maildirPath, $dbPath, ['rescan' => true] + $options);
+            }));
+            break;
         case 'apply-blacklist':
             agentPrint(agentLocked($dbPath, function () use ($maildirPath, $dbPath, $options) {
                 return applyBlacklist($maildirPath, $dbPath, $options);
@@ -147,6 +158,7 @@ try {
             echo "  php antispam-agent.php version\n";
             echo "  php antispam-agent.php import-rules [--account=ID] [--db=path] < rules.json\n";
             echo "  php antispam-agent.php scan [--maildir=path] [--account=ID] [--db=path] [--spam-threshold=N] [--quarantine-threshold=N] [--no-dnsbl] [--no-headers] [--no-impersonation] [--no-urls] [--no-cert] [--no-attachment-policy] [--no-clamav] [--no-virustotal] [--no-bayes]\n";
+            echo "  php antispam-agent.php rescan [--reset] [--time-limit=SECONDS] [--limit=N] [scan options]\n";
             echo "  php antispam-agent.php apply-blacklist [--maildir=path] [--account=ID] [--db=path] [--spam-threshold=N] [--days=30] [--limit=5000]\n";
             echo "  php antispam-agent.php health [--maildir=path] [--account=ID] [--db=path]\n";
             echo "  php antispam-agent.php quarantine-list [--maildir=path] [--account=ID] [--db=path] [--since=unix-ts] [--limit=N]\n";
@@ -592,11 +604,35 @@ function agentLegacyId($file)
     return preg_replace('/:2,[A-Z]*$/', '', basename((string)$file));
 }
 
+/**
+ * `scan`: new INBOX messages (not in the "checked" table) through the scoring
+ * pipeline. With $options['rescan'] (`rescan` command) every INBOX message is
+ * checked again regardless of the markers; the run stops starting messages
+ * after --time-limit seconds or --limit messages (at least one is processed)
+ * and reports the rest
+ * in 'remaining'. Messages done by the current rescan are kept in rescan_done,
+ * so the next call continues; --reset (or a finished rescan) starts afresh.
+ * A rescan writes no scan_log entry and does not prune.
+ */
 function runScan($maildirPath, $dbPath, $options = [])
 {
     $db = getDb($dbPath);
     $settings = loadSettings($db);
     $cfg = scanConfig($settings, $options);
+    $rescan = !empty($options['rescan']);
+    $timeLimit = $rescan ? max(0, (int)($options['time-limit'] ?? 0)) : 0;
+    $deadline = $timeLimit > 0 ? microtime(true) + $timeLimit : null;
+    $batchLimit = $rescan ? max(0, (int)($options['limit'] ?? 0)) : 0;
+    $rescanDone = null;
+    $rescanMark = null;
+    if ($rescan) {
+        if (!empty($options['reset']) || agentMeta($db, 'rescan_started_ts') === null) {
+            $db->exec('DELETE FROM rescan_done');
+            agentSetMeta($db, 'rescan_started_ts', time());
+        }
+        $rescanDone = $db->prepare('SELECT 1 FROM rescan_done WHERE message_id = :id');
+        $rescanMark = $db->prepare('INSERT OR IGNORE INTO rescan_done (message_id) VALUES (:id)');
+    }
 
     $certScore = max(1, settingInt($settings, 'cert_score', $cfg['spam_threshold']));
     if ($cfg['cert']) {
@@ -627,6 +663,10 @@ function runScan($maildirPath, $dbPath, $options = [])
         'decisions' => [],
         'errors' => [],
     ];
+    if ($rescan) {
+        $stats['rescan'] = true;
+        $stats['remaining'] = 0;
+    }
 
     $lists = loadAllLists($db);
     $dnsblProviders = [];
@@ -661,6 +701,18 @@ function runScan($maildirPath, $dbPath, $options = [])
             $legacyId = agentLegacyId($file);
             $seen[$baseId] = true;
 
+            if ($rescan) {
+                $rescanDone->bindValue(':id', $baseId);
+                $doneRow = $rescanDone->execute()->fetchArray(SQLITE3_NUM);
+                $rescanDone->reset();
+                if ($doneRow) {
+                    continue; // processed by an earlier batch of this rescan
+                }
+                if ($stats['checked'] > 0 && (($deadline !== null && microtime(true) >= $deadline) || ($batchLimit > 0 && $stats['checked'] >= $batchLimit))) {
+                    $stats['remaining']++;
+                    continue; // left for the next batch
+                }
+            } else {
             $checkedStmt->bindValue(':id', $baseId);
             $checkedStmt->bindValue(':legacy', $legacyId);
             $hit = $checkedStmt->execute()->fetchArray(SQLITE3_NUM);
@@ -671,12 +723,20 @@ function runScan($maildirPath, $dbPath, $options = [])
                 $stats['skipped']++;
                 continue;
             }
+            }
 
             $headers = readHeaderBlock($filePath);
             if ($headers === false) {
                 continue; // vanished (expunged or moved to cur/) - seen again next run
             }
             $stats['checked']++;
+            if ($rescan) {
+                // Done for this rescan whatever happens below: a message that
+                // fails keeps its earlier verdict instead of stalling the rescan.
+                $rescanMark->bindValue(':id', $baseId);
+                $rescanMark->execute();
+                $rescanMark->reset();
+            }
 
             try {
                 $verdict = scoreMessage($filePath, $headers, $cfg, $lists, $dnsblProviders, $db, [
@@ -692,6 +752,7 @@ function runScan($maildirPath, $dbPath, $options = [])
                 ], $dblCache);
             } catch (\Throwable $e) {
                 $stats['errors'][] = $file . ': ' . $e->getMessage();
+                agentTxTick($db, $tx);
                 continue; // not marked checked: retried next run
             }
 
@@ -725,6 +786,17 @@ function runScan($maildirPath, $dbPath, $options = [])
         }
     }
 
+    if ($rescan) {
+        if ($stats['remaining'] === 0) {
+            // Finished: the next rescan starts from scratch.
+            $db->exec('DELETE FROM rescan_done');
+            $db->exec("DELETE FROM agent_meta WHERE key = 'rescan_started_ts'");
+            if (!$complete) {
+                $stats['errors'][] = 'cannot read INBOX new/ or cur/ - rescan incomplete';
+            }
+        }
+        agentTxEnd($db);
+    } else {
     // scan_log entry for "last scan" health reporting
     $stmt = $db->prepare('INSERT INTO scan_log (scanned_at, total, checked, moved_to_spam, quarantined) VALUES (:t, :tot, :ch, :sp, :q)');
     $stmt->bindValue(':t', date('c'));
@@ -734,8 +806,9 @@ function runScan($maildirPath, $dbPath, $options = [])
     $stmt->bindValue(':q', $stats['quarantined']);
     $stmt->execute();
     agentTxEnd($db);
+    }
 
-    if ($complete) {
+    if ($complete && !$rescan) {
         $pruned = agentPrune($db, $seen, max(30, settingInt($settings, 'agent_retention_days', 180)));
         if ($pruned) { $stats['pruned'] = $pruned; }
     }
@@ -3251,6 +3324,7 @@ function getDb($dbPath)
     $db->exec('CREATE TABLE IF NOT EXISTS cert_domains (domain TEXT PRIMARY KEY)');
     $db->exec('CREATE TABLE IF NOT EXISTS cert_meta (key TEXT PRIMARY KEY, value TEXT)');
     $db->exec('CREATE TABLE IF NOT EXISTS bayes_tokens (hash TEXT PRIMARY KEY, prob REAL)');
+    $db->exec('CREATE TABLE IF NOT EXISTS rescan_done (message_id TEXT PRIMARY KEY)');
 
     // pattern_type column may not exist on old agent databases; ALTER if needed.
     if (!$isNew) {

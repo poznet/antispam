@@ -27,6 +27,7 @@ class SpamScoreLog
     const SOURCE_SCAN = 'scan';       // server scan (cron / panel)
     const SOURCE_PLUGIN = 'plugin';   // mail client plugin check - never moves anything on the server
     const SOURCE_RETRO = 'retro';     // retroactive pass after a new blacklist rule
+    const SOURCE_RESCAN = 'rescan';   // full rescan of a mailbox (panel button / weekly); initial_scan = 1, out of the stats
 
     /** What happened to the message on the server. */
     const OUTCOME_NONE = 'none';              // left where it was

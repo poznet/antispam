@@ -87,7 +87,13 @@ rule is added:
 
 `RetroactiveSpamService::applyRule()` moves matching INBOX messages from the
 last 30 days to `SPAM` in every mailbox owned by the rule's account e-mail. The
-panel shows how many were moved; the plugin API returns `moved_existing`.
+panel shows how many were moved. For a plugin report the pass runs after the
+response has been sent (`DeferredRetroactivePass` on `kernel.terminate`, IMAP
+timeouts 20 s), so the plugin is not kept waiting; the API only answers
+`"retroactive": "scheduled"` and the result goes to the application log and
+the score log. On Apache + mod_php (the Docker image) such a response gets
+`Content-Length` + `Connection: close` and no mod_deflate, so the client sees
+its end before the script finishes.
 
 Rules and limits:
 

@@ -134,12 +134,12 @@ Full reference: **[thunderbird.md](thunderbird.md)**, clients:
 
 | Method | URL | Description |
 |--------|-----|-------------|
-| GET | `/api/plugin/status` | Feature flags + token validity |
+| GET | `/api/plugin/status` | Feature flags, `max_upload_bytes` + token validity (`authenticated`, always 200) |
 | POST | `/api/plugin/login` | Mailbox e-mail + plugin/IMAP password → token |
 | POST | `/api/plugin/report` | User verdict (`spam` anonymous or logged in, `ham` logged in) |
 | POST | `/api/plugin/check` | Score a raw message (logged in) |
 | POST | `/api/plugin/phishing` | Phishing report: full message stored for the admin + spam report (logged in) |
-| GET | `/plugin/download` | Download the `.xpi` (public) |
+| GET | `/plugin/download` | Download the `.xpi` (public, `Cache-Control: private, no-store`) |
 | GET | `/plugin/outlook/manifest.xml` | Outlook add-in manifest (public; `409` when the server URL is not HTTPS) |
 | GET | `/plugin/outlook/{file}` | Outlook task pane files (`taskpane.html/js/css`, `commands.html`, `icons/icon-*.png`; public) |
 | GET | `/plugin/apple-mail/source.zip` | Apple Mail extension source with the server URL set (public) |

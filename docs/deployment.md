@@ -171,6 +171,14 @@ Before exposing the instance publicly, make sure:
 - [ ] The domain is served over HTTPS (Coolify handles this automatically).
 - [ ] Access to the `db` service is not exposed - only the `app` service
       should be reachable from the internet.
+- [ ] Request body limit of the reverse proxy in front of antispam: nginx
+      defaults to `client_max_body_size 1m`. Mail client plugins send at most
+      700 KiB of a message by default (~0.95 MB request), which fits. To accept
+      whole phishing reports with attachments (up to 10 MiB), raise it, e.g.
+      `client_max_body_size 16m;` (Traefik in Coolify has no default limit),
+      and then raise **Maks. wysyłana wiadomość** in *Konfiguracja → Wtyczki
+      pocztowe* to match (`plugin.max_upload_kb`, published to the plugins as
+      `max_upload_bytes`). See [thunderbird.md](thunderbird.md#http-api-apiplugin).
 - [ ] If you use the [quarantine digest](quarantine-digest.md), `/q/` must be
       reachable by mailbox owners. It is the only anonymous route besides
       the home page `/`, `/login` and `/api/feed`. Set `MAILER_DSN` and either use

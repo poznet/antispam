@@ -4,10 +4,10 @@ namespace AntispamBundle\Controller;
 
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\EmailBlacklist;
+use AntispamBundle\Services\DeferredRetroactivePass;
 use AntispamBundle\Services\PhishingReportService;
 use AntispamBundle\Services\PluginService;
 use AntispamBundle\Services\RawMessageScanner;
-use AntispamBundle\Services\RetroactiveSpamService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -33,7 +33,7 @@ class PluginApiController extends AbstractController
     public function __construct(
         private RawMessageScanner $rawScanner,
         private PluginService $plugin,
-        private RetroactiveSpamService $retroactive,
+        private DeferredRetroactivePass $retroactive,
         private EntityManagerInterface $em,
         private PhishingReportService $phishing,
     ) {
@@ -44,7 +44,7 @@ class PluginApiController extends AbstractController
     /** Phishing reports (full messages up to 10 MiB each) per account and hour. */
     const PHISHING_RATE_LIMIT = 30;
 
-    const PLUGIN_VERSION = '1.1.1';
+    const PLUGIN_VERSION = '1.1.2';
 
     #[Route('/plugin/download', name: 'antispam_plugin_download', methods: ['GET'])]
     public function downloadAction(Request $request)
@@ -75,8 +75,10 @@ class PluginApiController extends AbstractController
         $zip->addFromString('config.json', json_encode(['server' => $server], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
         $zip->close();
 
-        $response = new BinaryFileResponse($tmp);
+        // Built per request with the current code: never let a browser or proxy keep an old .xpi.
+        $response = new BinaryFileResponse($tmp, 200, [], false);
         $response->headers->set('Content-Type', 'application/x-xpinstall');
+        $response->headers->set('Cache-Control', 'private, no-store');
         $response->setContentDisposition(ResponseHeaderBag::DISPOSITION_ATTACHMENT, 'antispam-thunderbird.xpi');
         $response->deleteFileAfterSend(true);
         return $response;
@@ -94,6 +96,9 @@ class PluginApiController extends AbstractController
             'check_enabled' => $this->plugin->isCheckEnabled(),
             'phishing_reports' => true,
             'phishing_max_bytes' => PhishingReportService::MAX_RAW_BYTES,
+            // Largest message source (decoded) the plugins should send in one request -
+            // reflects the body limit of a proxy in front of antispam (plugin.max_upload_kb).
+            'max_upload_bytes' => $this->plugin->getMaxUploadBytes(),
             'authenticated' => $account !== null,
             'email' => $account ? $account->getEmail() : null,
         ]);
@@ -138,10 +143,6 @@ class PluginApiController extends AbstractController
         if (!$account && !$this->plugin->isAnonymousReportEnabled()) {
             return new JsonResponse(['error' => 'login required'], 401);
         }
-        if (!$this->plugin->hit('report', $account ? 'acc:' . $account->getId() : $this->clientIp($request), $this->plugin->getReportRateLimit(), 3600)) {
-            return new JsonResponse(['error' => 'rate limit exceeded'], 429);
-        }
-
         $data = json_decode($request->getContent(), true);
         $verdict = $data['verdict'] ?? PluginService::VERDICT_SPAM;
         if (!in_array($verdict, [PluginService::VERDICT_SPAM, PluginService::VERDICT_HAM], true)) {
@@ -153,6 +154,10 @@ class PluginApiController extends AbstractController
         }
         if (($raw = $this->rawFrom($data)) instanceof JsonResponse) {
             return $raw;
+        }
+        // Counted only for valid reports: a malformed request must not use up the budget.
+        if (!$this->plugin->hit('report', $account ? 'acc:' . $account->getId() : $this->clientIp($request), $this->plugin->getReportRateLimit(), 3600)) {
+            return new JsonResponse(['error' => 'rate limit exceeded'], 429);
         }
 
         $result = $this->plugin->learn($raw, $verdict, $account, $this->clientIp($request));
@@ -180,15 +185,15 @@ class PluginApiController extends AbstractController
         if (!$account) {
             return new JsonResponse(['error' => 'login required'], 401);
         }
-        // Also counts against the spam report budget: it feeds learn() / the shared feed too.
-        if (!$this->plugin->hit('phishing', 'acc:' . $account->getId(), self::PHISHING_RATE_LIMIT, 3600)
-            || !$this->plugin->hit('report', 'acc:' . $account->getId(), $this->plugin->getReportRateLimit(), 3600)) {
-            return new JsonResponse(['error' => 'rate limit exceeded'], 429);
-        }
-
         $data = json_decode($request->getContent(), true);
         if (($raw = $this->rawFrom($data, PhishingReportService::MAX_RAW_BYTES)) instanceof JsonResponse) {
             return $raw;
+        }
+        // Validated first, then counted. Also counts against the spam report
+        // budget: it feeds learn() / the shared feed too.
+        if (!$this->plugin->hit('phishing', 'acc:' . $account->getId(), self::PHISHING_RATE_LIMIT, 3600)
+            || !$this->plugin->hit('report', 'acc:' . $account->getId(), $this->plugin->getReportRateLimit(), 3600)) {
+            return new JsonResponse(['error' => 'rate limit exceeded'], 429);
         }
 
         try {
@@ -209,6 +214,10 @@ class PluginApiController extends AbstractController
      * A newly blacklisted sender: older mail from them leaves INBOX too.
      * It logs in to the mailbox (IMAP/SSH), so it has its own, tighter limit;
      * over the limit the rule still applies to new mail on the next scan.
+     *
+     * The pass runs after the response is sent (DeferredRetroactivePass), so
+     * a slow mailbox never delays the plugin; how many messages it moved is
+     * not known here - "retroactive": "scheduled" only says it will run.
      */
     private function applyRetroactive(Account $account, array &$result)
     {
@@ -218,7 +227,8 @@ class PluginApiController extends AbstractController
                 'email' => $account->getEmail(), 'blacklistemail' => $result['sender'], 'patternType' => 'exact',
             ]);
             if ($rule) {
-                $result['moved_existing'] = $this->retroactive->applyRule($rule)['moved'];
+                $this->retroactive->defer($rule);
+                $result['retroactive'] = 'scheduled';
             }
         }
     }

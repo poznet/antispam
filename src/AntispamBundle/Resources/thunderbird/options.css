@@ -1,11 +1,18 @@
+:root { color-scheme: light dark; }
+html, body { min-height: 100%; }
+html { background: #ffffff; }
 body {
   font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
   color: #060735;
   background: #ffffff;
-  margin: 0;
+  margin: 0 auto;
   padding: 16px 20px 24px;
   max-width: 640px;
+  min-height: 100vh;
+  box-sizing: border-box;
 }
+button:disabled { opacity: .5; cursor: default; }
+.state-err { color: #a94442; }
 header { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
 h1 { font-size: 18px; margin: 0; color: #060735; }
 h2 { font-size: 14px; margin: 0 0 8px; color: #060735; text-transform: uppercase; letter-spacing: .5px; }
@@ -27,7 +34,8 @@ button.secondary { background: #fff; color: #005bba; }
 .msg.ok { color: #2e7d32; }
 .msg.err { color: #a94442; }
 @media (prefers-color-scheme: dark) {
-  body { background: #060735; color: #e8ecfa; }
+  html, body { background: #060735; color: #e8ecfa; }
+  .state-err { color: #ff8a80; }
   h1, h2 { color: #1fd7fd; }
   section { border-color: #1d2163; }
   input[type=email], input[type=password], input[type=url], select { background: #0b0d40; color: #e8ecfa; border-color: #2a2f78; }

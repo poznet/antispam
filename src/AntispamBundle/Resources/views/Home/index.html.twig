@@ -593,7 +593,7 @@
                     </tbody>
                 </table>
                 <p class="small-p"><strong>Thunderbird 115+</strong> – gotowy plik <code>.xpi</code>. <strong>Outlook</strong> (nowy i klasyczny z Microsoft 365, w przeglądarce i na Macu) – dodatek z panelem bocznym, wymaga HTTPS. <strong>Apple Mail</strong> – udostępniamy kod źródłowy rozszerzenia, które trzeba zbudować w Xcode i podpisać kontem Apple Developer.</p>
-                <p class="hero-actions" style="margin-top:22px"><a class="btn btn-primary" href="{{ path('antispam_plugin_download') }}">
+                <p class="hero-actions" style="margin-top:22px"><a class="btn btn-primary" href="{{ path('antispam_plugin_download', {v: constant('AntispamBundle\\Controller\\PluginApiController::PLUGIN_VERSION')}) }}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                     Wtyczka Thunderbird (.xpi)</a>
                     <a class="btn btn-outline" href="{{ path('antispam_plugin_outlook_manifest') }}">
@@ -782,7 +782,7 @@
             </div>
             <div>
                 <h4>Narzędzia</h4>
-                <ul><li><a href="#wtyczki">Wtyczki do poczty</a></li><li><a href="{{ path('antispam_plugin_download') }}">Pobierz .xpi</a></li><li><a href="#tryby">IMAP i agent</a></li><li><a href="{{ app.user ? panel_url : '#logowanie' }}">Panel</a></li></ul>
+                <ul><li><a href="#wtyczki">Wtyczki do poczty</a></li><li><a href="{{ path('antispam_plugin_download', {v: constant('AntispamBundle\\Controller\\PluginApiController::PLUGIN_VERSION')}) }}">Pobierz .xpi</a></li><li><a href="#tryby">IMAP i agent</a></li><li><a href="{{ app.user ? panel_url : '#logowanie' }}">Panel</a></li></ul>
             </div>
             <div>
                 <h4>Pancerna Panda</h4>

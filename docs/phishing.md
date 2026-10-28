@@ -9,7 +9,9 @@ forward it (e.g. to CERT Polska).
 
 1. Thunderbird (context menu) or Outlook (task pane button) sends the full
    RFC 822 source to `POST /api/plugin/phishing` - attachments included, up to
-   10 MiB (`PhishingReportService::MAX_RAW_BYTES`). Bigger messages are cut and
+   `max_upload_bytes` from `/api/plugin/status` (setting `plugin.max_upload_kb`,
+   default 700 KiB to fit a 1 MiB proxy body limit; at most 10 MiB,
+   `PhishingReportService::MAX_RAW_BYTES`). Bigger messages are cut and
    flagged as `truncated` (also Outlook clients older than Mailbox 1.14,
    which can only rebuild headers + text body). Login is required (the content is stored); the
    Apple Mail extension has no per-message action in MailKit, so it cannot
@@ -18,7 +20,7 @@ forward it (e.g. to CERT Polska).
    raw source in a blob) and also handles it as a spam report:
    `PluginService::learn()` puts the sender on the account's e-mail blacklist,
    records shared-feed fingerprints and the retroactive pass moves that
-   sender's INBOX mail to SPAM.
+   sender's INBOX mail to SPAM (after the response has been sent).
 3. The same message reported again by the same account (same SHA-256) only
    increments `report_count`.
 4. The client files the message as junk, like a spam report (Outlook cannot

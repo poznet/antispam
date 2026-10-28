@@ -1,13 +1,16 @@
 {
   "manifest_version": 2,
   "name": "Antispam Pancernapanda",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Zgłaszaj spam do Antispam Pancernapanda i sprawdzaj nową pocztę na serwerze antyspamu.",
   "author": "Pancernapanda",
   "browser_specific_settings": {
     "gecko": {
       "id": "antispam@pancernapanda.pl",
-      "strict_min_version": "115.0"
+      "strict_min_version": "115.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
     }
   },
   "icons": {
@@ -35,7 +38,7 @@
   },
   "options_ui": {
     "page": "options.html",
-    "open_in_tab": false,
+    "open_in_tab": true,
     "browser_style": false
   }
 }

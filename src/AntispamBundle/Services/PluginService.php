@@ -32,7 +32,15 @@ class PluginService
     const LOGIN_RATE_LIMIT = 10;           // failed+successful attempts per IP per 15 min
 
     /** Upper bound for a submitted (already decoded) message source. */
-    const MAX_RAW_BYTES = 4194304; // 4 MiB — the plugin truncates to 1 MiB anyway
+    const MAX_RAW_BYTES = 4194304; // 4 MiB — the plugin truncates to 700 KiB anyway
+
+    /**
+     * Default for plugin.max_upload_kb: the largest message source a plugin
+     * sends in one request. Base64 + JSON make the body ~4/3 of it, so 700 KiB
+     * stays under nginx's default client_max_body_size of 1 MiB.
+     */
+    const DEFAULT_MAX_UPLOAD_KB = 700;
+    const MIN_MAX_UPLOAD_KB = 64;
 
     private $em;
     private $config;
@@ -84,6 +92,20 @@ class PluginService
     public function getReportRateLimit()
     {
         return max(1, $this->readInt('plugin.report_rate_limit', self::DEFAULT_REPORT_RATE_LIMIT));
+    }
+
+    /**
+     * Largest (decoded) message source the plugins should upload, in bytes -
+     * published by /api/plugin/status as max_upload_bytes. Spam reports and
+     * checks send at most min(this, 700 KiB); phishing reports send the whole
+     * message when it fits. Raise it only together with the body limit of the
+     * reverse proxy in front of antispam.
+     */
+    public function getMaxUploadBytes()
+    {
+        $kb = $this->readInt('plugin.max_upload_kb', self::DEFAULT_MAX_UPLOAD_KB);
+        $max = intdiv(PhishingReportService::MAX_RAW_BYTES, 1024);
+        return max(self::MIN_MAX_UPLOAD_KB, min($max, $kb)) * 1024;
     }
 
     /** Public base URL baked into the downloaded plugin; empty => taken from the request. */

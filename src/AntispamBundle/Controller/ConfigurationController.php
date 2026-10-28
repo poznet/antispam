@@ -306,6 +306,7 @@ class ConfigurationController extends AbstractController
             }
             $c->set('plugin.token_ttl_days', max(1, (int)($post['token_ttl_days'] ?? 90)));
             $c->set('plugin.report_rate_limit', max(1, (int)($post['report_rate_limit'] ?? 120)));
+            $c->set('plugin.max_upload_kb', max(PluginService::MIN_MAX_UPLOAD_KB, min(10240, (int)($post['max_upload_kb'] ?? PluginService::DEFAULT_MAX_UPLOAD_KB))));
             // Baked into downloaded plugins (manifest XML, Swift source) - accept a plain http(s) base URL only.
             $publicUrl = rtrim(trim($post['public_url'] ?? ''), '/');
             $parts = $publicUrl !== '' ? parse_url($publicUrl) : null;
@@ -327,6 +328,7 @@ class ConfigurationController extends AbstractController
             'learn_rules' => $this->plugin->isLearnRulesEnabled(),
             'token_ttl_days' => $this->plugin->getTokenTtlDays(),
             'report_rate_limit' => $this->plugin->getReportRateLimit(),
+            'max_upload_kb' => intdiv($this->plugin->getMaxUploadBytes(), 1024),
             'public_url' => $this->plugin->getPublicUrl(),
         ];
         $baseUrl = $this->plugin->getPublicUrl() ?: $request->getSchemeAndHttpHost() . $request->getBasePath();

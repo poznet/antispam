@@ -23,7 +23,11 @@ themselves).
 
 When a logged-in spam report creates a new blacklist rule, mail from that
 sender already in the account's INBOX on the server (last 30 days) is moved to
-`SPAM` as well; the response carries `moved_existing`. See
+`SPAM` as well. This retroactive pass logs in to the mailbox (IMAP/SSH), so
+since 1.1.2 it runs **after** the response has been sent
+(`DeferredRetroactivePass`, `kernel.terminate`): the response says
+`"retroactive": "scheduled"` instead of the former `moved_existing` count, and
+the plugin never waits for the mailbox. See
 [spam-handling.md](spam-handling.md#retroactive-blacklist).
 
 Every accepted report (anonymous or logged in) is also logged in
@@ -39,7 +43,7 @@ impersonation / BEC, DNSBL, link protection, shared feed, attachment policy) and
 with the reason `source:thunderbird_plugin`. The message is never touched on the
 server — the plugin acts on the decision locally. Attachment scanning
 (ClamAV / VirusTotal) is not applied to plugin checks; the plugin uploads only
-the first 1 MiB of each message.
+the first 700 KiB of each message (or less, see `max_upload_bytes` below).
 
 ## Distribution
 
@@ -53,6 +57,12 @@ otherwise the URL is taken from the request (and may come out as `http://`).
 Install in Thunderbird: *Add-ons and Themes → ⚙ → Install Add-on From File…*.
 Thunderbird does not require add-on signing for this. Requires the PHP `zip`
 extension on the server (present in the Docker image).
+
+The download is sent with `Cache-Control: private, no-store` and the panel /
+home page links carry `?v=<PLUGIN_VERSION>`, so a browser or proxy cannot hand
+out an old `.xpi` after a deploy. The manifest declares
+`data_collection_permissions: {"required": ["none"]}` (Thunderbird 153 / new
+Gecko builds read it; 115 and 128 log *unexpected property* and ignore it).
 
 ## Logging in
 
@@ -75,8 +85,15 @@ to another.
 ## Plugin behaviour
 
 - **Junk / not-junk in Thunderbird** → report (option *Report when I mark a message
-  as junk*). Junk changes within 2 minutes of a message arriving are ignored —
-  those come from Thunderbird's own classifier, not the user.
+  as junk*). Junk changes on a message that arrived less than 2 minutes ago and
+  is still unread are ignored — those come from Thunderbird's own classifier
+  (the API does not expose whether the junk score came from the user or the
+  classifier). A message the user has opened counts as their verdict right away.
+  The arrival time is noted as soon as `onNewMailReceived` fires, not when its
+  queued check runs. The source is read the moment the junk flag changes:
+  Thunderbird usually moves a junk message to the Junk folder right after, and
+  a WebExtension message id stops working once the message is moved (as a
+  fallback, `messages.onMoved` maps the old id to the new one).
 - **Toolbar button** in the message view and **context menu** in the message list:
   report spam (then mark as junk and optionally move to the Junk folder), not spam,
   check now. The context menu also has **report phishing** (logged in): the whole
@@ -91,6 +108,16 @@ to another.
   server URL opens the plugin settings.
 
 ## Troubleshooting
+
+The settings page (*Add-ons and Themes → Antispam Pancernapanda → Preferences*,
+or the plugin opening it for a missing login) opens **in its own tab** since
+1.1.2 (`options_ui.open_in_tab`). The inline page inside the add-on manager
+could come out blank in Thunderbird 153. If loading the settings fails, the
+header says *Nie udało się wczytać ustawień wtyczki…* and **Zapisz** stays
+disabled (saving a half-loaded form would overwrite the settings with blanks).
+An expired or unknown login token is dropped once (`/api/plugin/status`
+answers `200 {"authenticated": false}`, never `401`) and the login form is
+shown with *Sesja wygasła…*.
 
 The settings page header shows the server URL and whether it is reachable.
 If it says *Brak połączenia z serwerem* with an `http://` URL, the `.xpi` was
@@ -113,37 +140,51 @@ Shared by all mail client plugins: Thunderbird, the Outlook add-in
 | `plugin.token_ttl_days` | 90 | Login token lifetime |
 | `plugin.report_rate_limit` | 120 | Reports per hour per IP (anonymous) or account |
 | `plugin.public_url` | (empty) | Base URL baked into the downloaded plugin |
+| `plugin.max_upload_kb` | 700 | Largest message source (KiB, decoded) a plugin sends in one request; published as `max_upload_bytes` in `/status`. 64…10240 |
 
 ## HTTP API (`/api/plugin`)
 
 JSON in / JSON out, exempt from form login. Authenticated calls send
 `Authorization: Bearer <token>`. Messages are sent as the base64 of the raw
 RFC 822 source (`raw_base64`, max 4 MiB decoded; 10 MiB for `/phishing`).
-`/status` also returns `phishing_reports` and `phishing_max_bytes`.
+`/status` also returns `phishing_reports`, `phishing_max_bytes` and
+`max_upload_bytes` (from `plugin.max_upload_kb`).
 
 | Method | URL | Auth | Description |
 |--------|-----|------|-------------|
-| GET | `/api/plugin/status` | optional | Feature flags, whether the token is valid |
+| GET | `/api/plugin/status` | optional | Feature flags, `max_upload_bytes`, whether the token is valid (`authenticated`; an invalid token is `200`, not `401`) |
 | POST | `/api/plugin/login` | — | `{email, password}` → `{token, email, expires_at}` |
-| POST | `/api/plugin/report` | optional for `spam`, required for `ham` | `{raw_base64, verdict: "spam"\|"ham"}` → `{verdict, sender, signals, rules[], authenticated, moved_existing?}` |
+| POST | `/api/plugin/report` | optional for `spam`, required for `ham` | `{raw_base64, verdict: "spam"\|"ham"}` → `{verdict, sender, signals, rules[], authenticated, retroactive?: "scheduled"}` |
 | POST | `/api/plugin/phishing` | required | `{raw_base64 (max 10 MiB decoded), client: "thunderbird"\|"outlook", truncated: bool}` → report fields + `{phishing_id, duplicate}`. 30/h per account. See [phishing.md](phishing.md) |
 | POST | `/api/plugin/check` | required | `{raw_base64}` → `{decision, spam, score, spam_threshold, quarantine_threshold, reasons[], sender, subject}` |
 | GET | `/plugin/download` | — | The `.xpi` |
 
 Errors: `400` bad payload, `401` login required / bad credentials / expired token,
 `403` feature disabled, `413` message too large, `429` rate limit, `507`
-phishing storage quota of the mailbox used up.
+phishing storage quota of the mailbox used up. Rate limits count only requests
+that passed validation (a malformed body does not use up the hourly budget).
 
-Behind a reverse proxy, raise its body limit (nginx defaults to
-`client_max_body_size 1m`; antispam itself accepts 32 MiB, `docker/php.ini`),
-e.g. `client_max_body_size 16m;`. Otherwise phishing reports with attachments
-get the proxy's `413`; since 1.1.1 the plugin then resends the first 700 KiB
-(`truncated: true`) so the report still reaches the panel. Spam reports and
-checks send at most 700 KiB of the source, which fits a 1 MiB limit.
+Upload size: spam reports and checks send at most
+`min(700 KiB, max_upload_bytes)` of the source; phishing reports send the whole
+message up to `max_upload_bytes` (never above `phishing_max_bytes`), cut and
+flagged `truncated: true` beyond it. Base64 + JSON make the request ~1.34× the
+source, so the default 700 KiB fits nginx's default `client_max_body_size 1m`.
+To accept whole phishing messages with attachments, raise the proxy's body
+limit first (e.g. `client_max_body_size 16m;`; antispam itself accepts 32 MiB,
+`docker/php.ini`), then **Maks. wysyłana wiadomość** in *Konfiguracja →
+Wtyczki pocztowe* (e.g. 10240 KiB for 16 MiB). If the proxy still answers
+`413`, the plugin resends the first 700 KiB (`truncated: true`), so the report
+still reaches the panel. The plugin reads `/status` for this at most every 10
+minutes (1 minute after a failure); without it the 1.1.1 behaviour applies
+(try up to 10 MiB, fall back on `413`).
 
 The plugin (1.1.1+) files the message as junk locally before talking to the
 server, and aborts a request after 30 s (phishing upload: 120 s), so a slow or
-unreachable server no longer stalls the following clicks. Clicks (button,
+unreachable server no longer stalls the following clicks. A spam report that
+times out is reported as *prawdopodobnie przyjęte* (the server stores the
+report before it answers), not as an error. Moving to Junk passes the folder id
+to `messages.move()` (Thunderbird 121+; the MailFolder object is deprecated)
+and the folder object on 115. Clicks (button,
 context menu) have their own queue, separate from on-arrival checks, so they
 do not wait behind a batch of new mail. Filing locally first also avoids a
 race with the server: for a logged-in user a spam report blacklists the

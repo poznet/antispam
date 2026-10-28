@@ -32,12 +32,18 @@ const DEFAULTS = {
 
 // Only the head of a message is needed for scoring (headers + text body);
 // attachments past this point are cut off. Kept so the base64 JSON body stays
-// under 1 MiB - the default request limit of an nginx reverse proxy.
+// under 1 MiB - the default request limit of an nginx reverse proxy. The
+// server can lower it (or raise the phishing limit) with max_upload_bytes in
+// /api/plugin/status.
 const MAX_UPLOAD_BYTES = 700 * 1024;
-// Phishing reports carry the whole message (attachments too) up to this size
-// (PhishingReportService::MAX_RAW_BYTES on the server). When a proxy in front
-// of antispam rejects the body (413), the report is resent cut to MAX_UPLOAD_BYTES.
+// Phishing reports carry the whole message (attachments too) up to the
+// server's max_upload_bytes (never more than phishing_max_bytes,
+// PhishingReportService::MAX_RAW_BYTES). When a proxy in front of antispam
+// still rejects the body (413), the report is resent cut to MAX_UPLOAD_BYTES.
 const MAX_PHISHING_BYTES = 10 * 1024 * 1024;
+// Server limits from /api/plugin/status are cached this long.
+const LIMITS_TTL_MS = 10 * 60 * 1000;
+const LIMITS_TIMEOUT_MS = 8 * 1000;
 // Requests run one after another (enqueue); a request that never answers would
 // stall every later click, so each one is aborted after this long.
 const REQUEST_TIMEOUT_MS = 30 * 1000;
@@ -54,6 +60,7 @@ const bundledServer = fetch(messenger.runtime.getURL("config.json"))
 const BUTTON_TITLE = "Zgłoś spam (Antyspam)";
 const ownChanges = new Set();   // message ids whose junk flag we changed ourselves
 const arrivals = new Map();     // message id → arrival timestamp
+const movedTo = new Map();      // old message id → { id, t } after a move (onMoved)
 
 // --- settings / API ---------------------------------------------------------
 
@@ -83,7 +90,12 @@ async function api(path, { method = "GET", body = null, auth = true, timeout = R
       signal: ctrl.signal,
     });
   } catch (e) {
-    throw new Error(e.name === "AbortError" ? "serwer nie odpowiedział w " + Math.round(timeout / 1000) + " s" : e.message);
+    if (e.name === "AbortError") {
+      const err = new Error("serwer nie odpowiedział w " + Math.round(timeout / 1000) + " s");
+      err.timeout = true;
+      throw err;
+    }
+    throw new Error(e.message);
   } finally {
     clearTimeout(timer);
   }
@@ -100,6 +112,41 @@ async function api(path, { method = "GET", body = null, auth = true, timeout = R
     throw err;
   }
   return data;
+}
+
+/**
+ * Upload limits published by the server (max_upload_bytes, phishing_max_bytes).
+ * Cached; on any error the built-in defaults are used.
+ */
+let limitsCache = null;
+async function serverLimits() {
+  const s = await settings();
+  if (limitsCache && limitsCache.server === s.server && Date.now() - limitsCache.t < limitsCache.ttl) {
+    return limitsCache.limits;
+  }
+  const limits = { maxUpload: MAX_UPLOAD_BYTES, phishingMax: MAX_PHISHING_BYTES, known: false };
+  let ttl = LIMITS_TTL_MS;
+  try {
+    const st = await api("/api/plugin/status", { timeout: LIMITS_TIMEOUT_MS });
+    const max = Number(st.max_upload_bytes);
+    if (Number.isFinite(max) && max >= 16 * 1024) {
+      limits.maxUpload = max;
+      limits.known = true;
+    }
+    const pmax = Number(st.phishing_max_bytes);
+    if (Number.isFinite(pmax) && pmax > 0) limits.phishingMax = pmax;
+  } catch (e) {
+    // Unreachable server: use the defaults and do not ask again before every message.
+    console.warn("antispam: could not read server limits", e);
+    ttl = 60 * 1000;
+  }
+  limitsCache = { server: s.server, t: Date.now(), ttl, limits };
+  return limits;
+}
+
+/** Size cap for spam reports and checks: the head is enough, the server may ask for less. */
+async function reportLimit() {
+  return Math.min(MAX_UPLOAD_BYTES, (await serverLimits()).maxUpload);
 }
 
 async function notify(title, message) {
@@ -143,16 +190,19 @@ async function needsSetup(text) {
 
 // --- message helpers --------------------------------------------------------
 
-/** Raw source as base64, cut at `limit` bytes; `truncated` tells whether it was. */
-async function rawSource(messageId, limit = MAX_UPLOAD_BYTES) {
-  let raw = await messenger.messages.getRaw(messageId);
+/**
+ * Message source as returned by messages.getRaw() (binary string or, in newer
+ * Thunderbird, a File) cut at `limit` bytes and base64-encoded; `truncated`
+ * tells whether it was cut. Works on data read earlier, so the message may
+ * have been moved in the meantime.
+ */
+async function encodeRaw(raw, limit = MAX_UPLOAD_BYTES) {
   let bin;
   let size;
   if (typeof raw === "string") {
     size = raw.length;
     bin = raw.length > limit ? raw.slice(0, limit) : raw;
   } else {
-    // Newer Thunderbird may hand back a File/Blob.
     size = raw.size;
     const buf = new Uint8Array(await raw.slice(0, limit).arrayBuffer());
     bin = "";
@@ -163,8 +213,29 @@ async function rawSource(messageId, limit = MAX_UPLOAD_BYTES) {
   return { base64: btoa(bin), truncated: size > limit };
 }
 
-async function rawBase64(messageId) {
-  return (await rawSource(messageId)).base64;
+/** Raw source of a message as base64, cut at `limit` bytes. */
+async function rawSource(messageId, limit = MAX_UPLOAD_BYTES) {
+  return encodeRaw(await messenger.messages.getRaw(messageId), limit);
+}
+
+async function rawBase64(messageId, limit = MAX_UPLOAD_BYTES) {
+  return (await rawSource(messageId, limit)).base64;
+}
+
+/**
+ * Raw source of a message Thunderbird may have moved since `rawPromise` was
+ * started (its junk button files the message into Junk, and the WebExtension
+ * id is bound to the folder): the preread data, else the message under its
+ * new id.
+ */
+async function rawAfterMove(message, rawPromise) {
+  try {
+    return await rawPromise;
+  } catch (e) {
+    const moved = movedTo.get(message.id);
+    if (!moved) throw e;
+    return messenger.messages.getRaw(moved.id);
+  }
 }
 
 async function accountEmails(accountId) {
@@ -216,7 +287,9 @@ async function moveToJunk(message) {
   if (!junk) return false;
   if (message.folder && junk.path === message.folder.path) return true;
   try {
-    await messenger.messages.move([message.id], junk);
+    // Thunderbird 121+ takes the folder id (the MailFolder object is deprecated
+    // and gone in MV3); 115 has no folder ids and needs the object.
+    await messenger.messages.move([message.id], junk.id || junk);
     return true;
   } catch (e) {
     console.warn("antispam: move to junk failed", e);
@@ -226,8 +299,12 @@ async function moveToJunk(message) {
 
 // --- actions ----------------------------------------------------------------
 
-/** Send a user verdict ("spam" | "ham") to antispam. */
-async function report(message, verdict, { quiet = false, manual = false, raw = null } = {}) {
+/**
+ * Send a user verdict ("spam" | "ham") to antispam. `rawData` is the
+ * (pending) result of messages.getRaw() started before the message could be
+ * moved; without it the message is read now.
+ */
+async function report(message, verdict, { quiet = false, manual = false, rawData = null } = {}) {
   const s = await settings();
   if (verdict === "ham" && !s.token) {
     const text = "Zgłoszenie „to nie spam” wymaga zalogowania we wtyczce.";
@@ -241,10 +318,23 @@ async function report(message, verdict, { quiet = false, manual = false, raw = n
     else if (!quiet) await notify("Antyspam — błąd", text);
     return null;
   }
+  let raw;
+  try {
+    const limit = await reportLimit();
+    raw = rawData
+      ? (await encodeRaw(await rawAfterMove(message, rawData), limit)).base64
+      : await rawBase64(message.id, limit);
+  } catch (e) {
+    console.warn("antispam: could not read message", e);
+    const text = "Nie udało się odczytać wiadomości do zgłoszenia: " + e.message;
+    if (!quiet) await notify("Antyspam — błąd", text);
+    if (manual) await feedback(false, text);
+    return null;
+  }
   try {
     const res = await api("/api/plugin/report", {
       method: "POST",
-      body: { verdict, raw_base64: raw || await rawBase64(message.id) },
+      body: { verdict, raw_base64: raw },
     });
     const who = message.author || res.sender || "";
     const text = verdict === "spam"
@@ -255,6 +345,14 @@ async function report(message, verdict, { quiet = false, manual = false, raw = n
     return res;
   } catch (e) {
     console.warn("antispam: report failed", e);
+    if (e.timeout) {
+      // The server stores the report before it answers; a timeout almost
+      // always means it is still busy, not that the report was lost.
+      const text = "Serwer " + s.server + " nie odpowiedział na czas – zgłoszenie prawdopodobnie zostało przyjęte.";
+      if (!quiet) await notify("Antyspam", text);
+      if (manual) await feedback(true, text);
+      return null;
+    }
     const text = "Nie udało się wysłać zgłoszenia do " + s.server + ": " + e.message;
     if (!quiet) await notify("Antyspam — błąd", text);
     if (manual) await feedback(false, text);
@@ -273,9 +371,9 @@ async function fileAsJunk(message) {
 async function reportSpamAndFile(message) {
   // Read the source first: a moved message cannot be read under its old id.
   let raw = null;
-  try { raw = await rawBase64(message.id); } catch (e) { console.warn("antispam: could not read message", e); }
+  try { raw = await messenger.messages.getRaw(message.id); } catch (e) { console.warn("antispam: could not read message", e); }
   await fileAsJunk(message);
-  if (raw) await report(message, "spam", { manual: true, raw });
+  if (raw !== null) await report(message, "spam", { manual: true, rawData: Promise.resolve(raw) });
   else await feedback(false, "Nie udało się odczytać wiadomości do zgłoszenia.");
 }
 
@@ -290,11 +388,10 @@ async function reportPhishing(message) {
     await needsSetup("Zgłoszenie phishingu wymaga zalogowania we wtyczce (wiadomość trafia w całości do administratora).");
     return;
   }
-  let src, head = null;
+  // Read now: the move below changes the message id.
+  let raw;
   try {
-    src = await rawSource(message.id, MAX_PHISHING_BYTES);
-    // Fallback for a proxy that rejects big bodies; read now, the move below changes the id.
-    if (src.base64.length > MAX_UPLOAD_BYTES * 4 / 3) head = await rawSource(message.id, MAX_UPLOAD_BYTES);
+    raw = await messenger.messages.getRaw(message.id);
   } catch (e) {
     await feedback(false, "Nie udało się odczytać wiadomości: " + e.message);
     return;
@@ -302,13 +399,19 @@ async function reportPhishing(message) {
   await fileAsJunk(message);
   const send = (body) => api("/api/plugin/phishing", { method: "POST", body, timeout: UPLOAD_TIMEOUT_MS });
   try {
+    // As much of the message as the server (and the proxy in front of it) accepts.
+    const limits = await serverLimits();
+    const limit = Math.min(limits.phishingMax, limits.known ? limits.maxUpload : MAX_PHISHING_BYTES);
+    const src = await encodeRaw(raw, limit);
     let res;
     try {
       res = await send({ raw_base64: src.base64, truncated: src.truncated, client: "thunderbird" });
     } catch (e) {
-      if (e.status !== 413 || !head) throw e;
-      // A proxy in front of antispam limits the body size: send the head of the message.
-      res = await send({ raw_base64: head.base64, truncated: true, client: "thunderbird" });
+      const fallback = Math.min(MAX_UPLOAD_BYTES, limit);
+      // Nothing to gain when what was sent is no bigger than the fallback.
+      if (e.status !== 413 || src.base64.length <= Math.ceil(fallback / 3) * 4) throw e;
+      // A proxy in front of antispam still limits the body size: send the head of the message.
+      res = await send({ raw_base64: (await encodeRaw(raw, fallback)).base64, truncated: true, client: "thunderbird" });
     }
     const text = "Zgłoszono próbę wyłudzenia: " + (message.author || res.sender || "")
       + (res.duplicate ? " (już była zgłoszona)" : "") + (res.rules && res.rules.length ? " – nadawca zablokowany" : "");
@@ -316,6 +419,13 @@ async function reportPhishing(message) {
     await feedback(true, text);
   } catch (e) {
     console.warn("antispam: phishing report failed", e);
+    if (e.timeout) {
+      // Unlike a spam report the upload itself may have stalled, so only "may have".
+      const text = "Serwer " + s.server + " nie odpowiedział na czas – zgłoszenie phishingu mogło zostać przyjęte; sprawdź u administratora, zanim zgłosisz je ponownie.";
+      await notify("Antyspam", text);
+      await feedback(false, text);
+      return;
+    }
     const text = "Nie udało się zgłosić phishingu do " + s.server + ": " + e.message;
     await notify("Antyspam — błąd", text);
     await feedback(false, text);
@@ -336,7 +446,7 @@ async function check(message, { manual = false } = {}) {
   }
   let res;
   try {
-    res = await api("/api/plugin/check", { method: "POST", body: { raw_base64: await rawBase64(message.id) } });
+    res = await api("/api/plugin/check", { method: "POST", body: { raw_base64: await rawBase64(message.id, await reportLimit()) } });
   } catch (e) {
     console.warn("antispam: check failed", e);
     if (manual) {
@@ -389,19 +499,35 @@ async function* listMessages(list) {
 }
 
 messenger.messages.onNewMailReceived.addListener((folder, messageList) => {
+  // Note the arrival now, not when the queued job runs: behind a batch of
+  // checks that can be minutes later, after the classifier already ran.
+  const now = Date.now();
+  for (const m of (messageList && messageList.messages) || []) arrivals.set(m.id, now);
+  for (const [id, t] of arrivals) if (now - t > ARRIVAL_GRACE_MS) arrivals.delete(id);
+
   enqueue(async () => {
-    const now = Date.now();
     const s = await settings();
     const checkThis = s.token && s.autoCheck
       && (await accountEmails(folderAccountId(folder))).includes((s.email || "").toLowerCase());
 
     for await (const message of listMessages(messageList)) {
-      arrivals.set(message.id, now);
+      if (!arrivals.has(message.id)) arrivals.set(message.id, now); // later pages
       if (checkThis) await check(message);
     }
-    for (const [id, t] of arrivals) if (now - t > ARRIVAL_GRACE_MS) arrivals.delete(id);
   });
 });
+
+// Old id → new id of moved messages, so a report can still read a message
+// Thunderbird filed away before the queued job got to it.
+if (messenger.messages.onMoved) {
+  messenger.messages.onMoved.addListener((original, moved) => {
+    const now = Date.now();
+    const from = (original && original.messages) || [];
+    const to = (moved && moved.messages) || [];
+    for (let i = 0; i < from.length && i < to.length; i++) movedTo.set(from[i].id, { id: to[i].id, t: now });
+    for (const [id, m] of movedTo) if (now - m.t > 60 * 1000) movedTo.delete(id);
+  });
+}
 
 // Thunderbird's own junk / not-junk buttons.
 if (messenger.messages.onUpdated) {
@@ -409,12 +535,18 @@ if (messenger.messages.onUpdated) {
     if (!changed || typeof changed.junk !== "boolean") return;
     if (ownChanges.has(message.id)) return;
     const arrived = arrivals.get(message.id);
-    if (arrived && Date.now() - arrived < ARRIVAL_GRACE_MS) return; // automatic classifier
+    // A fresh, unread message: Thunderbird's own classifier, not the user. A
+    // message the user has already opened is their verdict even right after arrival.
+    if (arrived && Date.now() - arrived < ARRIVAL_GRACE_MS && !message.read) return;
+    // Start reading right away: Thunderbird usually moves a junk message to
+    // the Junk folder next, and the id stops working once it is moved.
+    const rawData = messenger.messages.getRaw(message.id);
+    rawData.catch(() => {}); // handled in report(); avoids an unhandled rejection meanwhile
     enqueue(async () => {
       const s = await settings();
       if (!s.reportOnJunk) return;
-      if (changed.junk) await report(message, "spam");
-      else if (s.token) await report(message, "ham");
+      if (changed.junk) await report(message, "spam", { rawData });
+      else if (s.token) await report(message, "ham", { rawData });
     });
   });
 }
@@ -472,8 +604,18 @@ messenger.runtime.onMessage.addListener(async (msg) => {
   switch (msg && msg.cmd) {
     case "settings":
       return settings();
-    case "status":
-      return api("/api/plugin/status");
+    case "status": {
+      const s = await settings();
+      const res = await api("/api/plugin/status");
+      // /status answers 200 {"authenticated": false} for an expired / unknown
+      // token (never 401): log out once here, so the page shows the login form.
+      if (s.token && !res.authenticated) {
+        await messenger.storage.local.set({ token: "", email: "" });
+        res.logged_out = true;
+      }
+      limitsCache = null;
+      return res;
+    }
     case "login": {
       const res = await api("/api/plugin/login", {
         method: "POST", auth: false, body: { email: msg.email, password: msg.password },

@@ -78,7 +78,9 @@ password (account form) or IMAP password. The token is stored in the add-in's
 Message source sent to the server:
 
 - Mailbox 1.14+ (new Outlook, web, current Microsoft 365 desktop, Mac):
-  `item.getAsFileAsync()` → the real `.eml`, truncated to 1 MiB like Thunderbird;
+  `item.getAsFileAsync()` → the real `.eml`, truncated to 700 KiB like Thunderbird
+  (or `max_upload_bytes` from `/api/plugin/status` when lower; phishing reports
+  up to `max_upload_bytes`, resent cut to 700 KiB if a proxy answers `413`);
 - older clients: internet headers (`getAllInternetHeadersAsync`, 1.8) + the plain
   text body, relabelled as `text/plain`; without 1.8 only From / Subject / Date /
   Message-ID are synthesised. Scoring is then less precise (no HTML / attachment

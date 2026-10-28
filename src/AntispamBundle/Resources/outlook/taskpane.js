@@ -20,11 +20,29 @@
 
 // API base: the pane lives at <base>/plugin/outlook/taskpane.html.
 const API = new URL("../../api/plugin/", window.location.href).href.replace(/\/+$/, "");
-// Same upload cap as the Thunderbird plugin: headers + text body are enough.
-const MAX_UPLOAD_BYTES = 1024 * 1024;
-const MAX_UPLOAD_B64 = Math.floor(MAX_UPLOAD_BYTES / 3) * 4;
-// Phishing reports keep the whole message (PhishingReportService::MAX_RAW_BYTES).
-const MAX_PHISHING_B64 = Math.floor(10 * 1024 * 1024 / 3) * 4;
+// Same upload cap as the Thunderbird plugin: headers + text body are enough,
+// and 700 KiB in base64 + JSON stays under a 1 MiB proxy body limit (nginx
+// default). The server may lower it with max_upload_bytes in /status.
+const MAX_UPLOAD_BYTES = 700 * 1024;
+// Phishing reports keep the whole message up to the server's max_upload_bytes
+// (at most PhishingReportService::MAX_RAW_BYTES); on a proxy 413 the first
+// MAX_UPLOAD_BYTES are resent.
+const MAX_PHISHING_BYTES = 10 * 1024 * 1024;
+const b64Len = (bytes) => Math.floor(bytes / 3) * 4;
+
+/** Decoded-bytes cap for spam reports / checks. */
+function uploadLimit() {
+  const max = state.status && Number(state.status.max_upload_bytes);
+  return Number.isFinite(max) && max > 0 ? Math.min(MAX_UPLOAD_BYTES, max) : MAX_UPLOAD_BYTES;
+}
+
+/** Decoded-bytes cap for phishing reports. */
+function phishingLimit() {
+  const st = state.status || {};
+  const pmax = Number(st.phishing_max_bytes) > 0 ? Number(st.phishing_max_bytes) : MAX_PHISHING_BYTES;
+  const max = Number(st.max_upload_bytes);
+  return Number.isFinite(max) && max > 0 ? Math.min(pmax, max) : pmax;
+}
 
 const state = { token: "", email: "", autoCheck: false, status: null, busy: false };
 const $ = (id) => document.getElementById(id);
@@ -113,7 +131,7 @@ function supports(version) {
  * text/plain so the server parser reads the body correctly.
  */
 async function rawBase64() {
-  return (await rawSource(MAX_UPLOAD_B64)).base64;
+  return (await rawSource(b64Len(uploadLimit()))).base64;
 }
 
 /**
@@ -263,8 +281,16 @@ async function report(verdict) {
 
 async function reportPhishing() {
   showResult("", "Wysyłanie zgłoszenia phishingu…");
-  const src = await rawSource(MAX_PHISHING_B64);
-  const res = await api("/phishing", { method: "POST", body: { raw_base64: src.base64, truncated: src.truncated, client: "outlook" } });
+  const src = await rawSource(b64Len(phishingLimit()));
+  const fallback = b64Len(Math.min(MAX_UPLOAD_BYTES, phishingLimit()));
+  let res;
+  try {
+    res = await api("/phishing", { method: "POST", body: { raw_base64: src.base64, truncated: src.truncated, client: "outlook" } });
+  } catch (e) {
+    if (e.status !== 413 || src.base64.length <= fallback) throw e;
+    // A proxy in front of antispam limits the body size: send the head of the message.
+    res = await api("/phishing", { method: "POST", body: { raw_base64: src.base64.slice(0, fallback), truncated: true, client: "outlook" } });
+  }
   const text = "Zgłoszono próbę wyłudzenia: " + (res.sender || "")
     + (res.duplicate ? " (już była zgłoszona)" : "") + (res.rules && res.rules.length ? " – nadawca zablokowany" : "");
   showResult("ok", escapeHtml(text));

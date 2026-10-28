@@ -4,12 +4,33 @@ const $ = id => document.getElementById(id);
 const FLAGS = ["reportOnJunk", "moveOnReport", "autoCheck", "notify"];
 const SELECTS = ["spamAction", "quarantineAction"];
 
-const send = msg => messenger.runtime.sendMessage(msg);
+const ext = globalThis.messenger || globalThis.browser;
+const send = msg => ext.runtime.sendMessage(msg);
+
+// Saving writes every field from the form, so it is allowed only once the
+// stored settings are on the page - otherwise it would overwrite them with
+// the blank initial form.
+let loaded = false;
+
+function errorText(e) {
+  return (e && e.message) || String(e);
+}
 
 function show(el, text, ok) {
   el.textContent = text;
   el.className = "msg " + (ok ? "ok" : "err");
   el.hidden = false;
+}
+
+function setState(text, isError) {
+  const el = $("serverState");
+  el.textContent = text;
+  el.className = isError ? "state-err" : "muted";
+}
+
+function setLoaded(value) {
+  loaded = value;
+  $("save").disabled = !value;
 }
 
 function originPattern(url) {
@@ -21,28 +42,54 @@ function originPattern(url) {
   }
 }
 
-async function refresh() {
-  const s = await send({ cmd: "settings" });
-  for (const f of FLAGS) $(f).checked = !!s[f];
-  for (const f of SELECTS) $(f).value = s[f];
-  $("server").value = s.server || "";
+function renderAccount(s) {
   $("loggedIn").hidden = !s.token;
   $("loggedOut").hidden = !!s.token;
   $("who").textContent = s.email || "";
+}
 
+async function refresh() {
   try {
-    const st = await send({ cmd: "status" });
-    const parts = ["Połączono z " + s.server];
-    if (!st.enabled) parts.push("wtyczka wyłączona na serwerze");
-    if (!st.anonymous_reports && !st.authenticated) parts.push("zgłoszenia wymagają logowania");
-    if (!st.check_enabled) parts.push("sprawdzanie poczty wyłączone na serwerze");
-    if (!s.token) parts.push("niezalogowano — działa tylko zgłaszanie spamu");
-    $("serverState").textContent = parts.join(" · ");
-    if (s.token && !st.authenticated) await refresh(); // token expired → logged out by background
+    let s;
+    try {
+      s = await send({ cmd: "settings" });
+      if (!s || typeof s !== "object") throw new Error("brak odpowiedzi skryptu wtyczki");
+    } catch (e) {
+      setLoaded(false);
+      setState("Nie udało się wczytać ustawień wtyczki: " + errorText(e).replace(/\.$/, "")
+        + ". Zamknij tę kartę i otwórz ustawienia ponownie; jeśli to nie pomoże, uruchom ponownie Thunderbirda.", true);
+      return;
+    }
+
+    for (const f of FLAGS) $(f).checked = !!s[f];
+    for (const f of SELECTS) $(f).value = s[f];
+    $("server").value = s.server || "";
+    renderAccount(s);
+    setLoaded(true);
+
+    try {
+      const st = await send({ cmd: "status" });
+      if (st && st.logged_out) {
+        // The background script dropped an expired / unknown token.
+        s.token = "";
+        s.email = "";
+        renderAccount(s);
+        show($("loginMsg"), "Sesja wygasła lub konto nie istnieje — zaloguj się ponownie.", false);
+      }
+      const parts = ["Połączono z " + s.server];
+      if (!st.enabled) parts.push("wtyczka wyłączona na serwerze");
+      if (!st.anonymous_reports && !st.authenticated) parts.push("zgłoszenia wymagają logowania");
+      if (!st.check_enabled) parts.push("sprawdzanie poczty wyłączone na serwerze");
+      if (!s.token) parts.push("niezalogowano — działa tylko zgłaszanie spamu");
+      setState(parts.join(" · "), false);
+    } catch (e) {
+      let text = "Brak połączenia z serwerem " + (s.server || "(nie ustawiono)") + ": " + errorText(e);
+      if (/^http:\/\//i.test(s.server || "")) text += " — jeśli antyspam działa na https, zmień adres poniżej na https:// i zapisz.";
+      setState(text, true);
+    }
   } catch (e) {
-    let text = "Brak połączenia z serwerem " + (s.server || "(nie ustawiono)") + ": " + e.message;
-    if (/^http:\/\//i.test(s.server || "")) text += " — jeśli antyspam działa na https, zmień adres poniżej na https:// i zapisz.";
-    $("serverState").textContent = text;
+    console.error("antispam options:", e);
+    setState("Błąd strony ustawień: " + errorText(e), true);
   }
 }
 
@@ -53,31 +100,40 @@ $("loginForm").addEventListener("submit", async ev => {
     $("password").value = "";
     show($("loginMsg"), "Zalogowano jako " + res.email, true);
   } catch (e) {
-    show($("loginMsg"), "Logowanie nieudane: " + e.message, false);
+    show($("loginMsg"), "Logowanie nieudane: " + errorText(e), false);
   }
   refresh();
 });
 
 $("logout").addEventListener("click", async () => {
-  await send({ cmd: "logout" });
-  $("loginMsg").hidden = true;
+  try {
+    await send({ cmd: "logout" });
+    $("loginMsg").hidden = true;
+  } catch (e) {
+    show($("loginMsg"), "Wylogowanie nieudane: " + errorText(e), false);
+  }
   refresh();
 });
 
 $("save").addEventListener("click", () => {
+  if (!loaded) return;
   const server = $("server").value.trim().replace(/\/+$/, "");
   const pattern = server ? originPattern(server) : null;
   // permissions.request must run synchronously inside the click handler.
   const granted = pattern
-    ? messenger.permissions.request({ origins: [pattern] }).catch(() => false)
+    ? ext.permissions.request({ origins: [pattern] }).catch(() => false)
     : Promise.resolve(true);
 
   granted.then(async ok => {
     const values = { server };
     for (const f of FLAGS) values[f] = $(f).checked;
     for (const f of SELECTS) values[f] = $(f).value;
-    await messenger.storage.local.set(values);
-    show($("saveMsg"), ok ? "Zapisano" : "Zapisano, ale bez zgody na połączenie z serwerem", ok);
+    try {
+      await ext.storage.local.set(values);
+      show($("saveMsg"), ok ? "Zapisano" : "Zapisano, ale bez zgody na połączenie z serwerem", ok);
+    } catch (e) {
+      show($("saveMsg"), "Nie zapisano: " + errorText(e), false);
+    }
     refresh();
   });
 });

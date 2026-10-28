@@ -73,16 +73,24 @@ class SharedSpamSignalRepository extends EntityRepository
     }
 
     /**
-     * Signals updated after $since, for serving an incremental pull. Ordered by
-     * updatedAt so clients can checkpoint on the response's "now" timestamp.
+     * Signals updated after a cursor, for serving an incremental pull, ordered
+     * by (updatedAt, id) - a stable keyset, so a client pages with the last
+     * row's (updated_at, id) and never skips rows sharing one second.
+     *
+     * Without $afterId: updatedAt > $since (the original API). With $afterId:
+     * (updatedAt, id) > ($since, $afterId).
      */
-    public function findUpdatedSince(?\DateTime $since = null, $limit = 5000)
+    public function findUpdatedSince(?\DateTime $since = null, $limit = 5000, $afterId = 0)
     {
         $qb = $this->createQueryBuilder('s')
             ->orderBy('s.updatedAt', \SortDirection::Ascending)
             ->addOrderBy('s.id', \SortDirection::Ascending)
             ->setMaxResults((int)$limit);
-        if ($since) {
+        if ($since && (int)$afterId > 0) {
+            $qb->andWhere('s.updatedAt > :since OR (s.updatedAt = :since AND s.id > :afterId)')
+                ->setParameter('since', $since)
+                ->setParameter('afterId', (int)$afterId);
+        } elseif ($since) {
             $qb->andWhere('s.updatedAt > :since')->setParameter('since', $since);
         }
         return $qb->getQuery()->getResult();

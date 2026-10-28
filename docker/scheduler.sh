@@ -10,6 +10,8 @@
 #   FEED_SYNC_INTERVAL  minutes between antispam:feed:sync      (default 15, 0 = off)
 #   CERT_SYNC_INTERVAL  hours between antispam:cert:sync     (default 6, 0 = off); runs at minute 17
 #   DIGEST_HOUR         hour (container time, UTC) for antispam:digest:send (default 7, "off" = off)
+#   PURGE_HOUR          hour (container time, UTC) for antispam:purge, at minute 41 (default 3, "off" = off) -
+#                       old score log rows (scorelog.retention_days) and expired DNSBL cache
 #
 # Feed sync, CERT sync and the digest are no-ops while disabled in the panel settings.
 set -e
@@ -20,6 +22,8 @@ APP_DIR=/var/www/html
 : "${CERT_SYNC_INTERVAL:=6}"
 DIGEST_HOUR=${DIGEST_HOUR-7}
 [ "$DIGEST_HOUR" = off ] && DIGEST_HOUR=
+PURGE_HOUR=${PURGE_HOUR-3}
+[ "$PURGE_HOUR" = off ] && PURGE_HOUR=
 
 run() {
     name=$1
@@ -51,6 +55,9 @@ while true; do
     fi
     if [ -n "$DIGEST_HOUR" ] && [ "$HOUR" -eq "$DIGEST_HOUR" ] && [ "$MINUTE" -eq 0 ]; then
         run digest antispam:digest:send
+    fi
+    if [ -n "$PURGE_HOUR" ] && [ "$HOUR" -eq "$PURGE_HOUR" ] && [ "$MINUTE" -eq 41 ]; then
+        run purge antispam:purge
     fi
 
     sleep $(( 60 - $(date +%-S) ))

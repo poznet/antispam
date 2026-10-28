@@ -36,7 +36,12 @@ class CertSyncCommand extends Command
         }
 
         $started = microtime(true);
-        $result = $this->cert->sync();
+        try {
+            $result = $this->cert->sync();
+        } catch (\Throwable $e) {
+            // e.g. the database is down while writing the status keys.
+            $result = ['ok' => false, 'message' => get_class($e) . ': ' . $e->getMessage()];
+        }
         if (!$result['ok']) {
             $output->writeln('<error>CERT list sync failed: ' . $result['message'] . '</error>');
             return Command::FAILURE;

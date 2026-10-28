@@ -29,6 +29,9 @@ class SpamSignalService
     /** Below this many normalized chars a body is too thin to fingerprint usefully. */
     const MIN_BODY_LENGTH = 24;
 
+    /** Upper bound for a `reports` value taken from a hub. */
+    const MAX_IMPORTED_REPORTS = 1000000;
+
     private $em;
     private $config;
 
@@ -251,6 +254,56 @@ class SpamSignalService
             $touched++;
         }
 
+        return $touched;
+    }
+
+    /**
+     * Import signals pulled from a hub. Unlike record() this does not add one
+     * report per pull: the hub's `reports` is already the total it has seen,
+     * and that total includes our own pushes. So the local count becomes
+     * max(local, hub) - pulling our own pushed signal back (an echo) never
+     * raises its count, so a signal can't corroborate itself through the hub
+     * (feed.min_reports). Origin is never changed: a local signal stays
+     * local. Re-importing the same page is a no-op, so pull cursors may overlap.
+     * Caller is responsible for flushing.
+     *
+     * @param array<int, array{type:string, hash:string, reports?:int}> $signals
+     * @return int number of rows created or changed
+     */
+    public function importRemote(array $signals)
+    {
+        $valid = [];
+        foreach ($signals as $sig) {
+            $type = $sig['type'] ?? null;
+            $hash = $sig['hash'] ?? null;
+            if (!$this->isValidType($type) || !$this->isValidHash($hash)) {
+                continue;
+            }
+            $reports = min(self::MAX_IMPORTED_REPORTS, max(1, (int)($sig['reports'] ?? 1)));
+            $k = $type . ':' . $hash;
+            $valid[$k] = ['type' => $type, 'hash' => $hash, 'reports' => max($reports, $valid[$k]['reports'] ?? 0)];
+        }
+        if (!$valid) {
+            return 0;
+        }
+        $existing = $this->em->getRepository(SharedSpamSignal::class)->findByTypeHashPairs(array_values($valid));
+
+        $touched = 0;
+        foreach ($valid as $k => $sig) {
+            $entity = $existing[$k] ?? null;
+            if ($entity) {
+                if ($sig['reports'] > $entity->getReports()) {
+                    $entity->setReports($sig['reports'])->touch();
+                    $touched++;
+                }
+                continue;
+            }
+            $entity = new SharedSpamSignal();
+            $entity->setType($sig['type'])->setHash($sig['hash'])
+                ->setOrigin(SharedSpamSignal::ORIGIN_REMOTE)->setReports($sig['reports']);
+            $this->em->persist($entity);
+            $touched++;
+        }
         return $touched;
     }
 

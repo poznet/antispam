@@ -29,6 +29,9 @@ class CertHoleService
     const INSERT_BATCH = 1000;
     const MAX_LINK_HOSTS = 100;
 
+    /** cert.last_error is clipped to this many characters. */
+    const MAX_ERROR_CHARS = 1000;
+
     private $em;
     private $config;
 
@@ -203,6 +206,9 @@ class CertHoleService
     public function findListed(array $domains)
     {
         $found = [];
+        // The column is ASCII: a non-ASCII parameter would make MySQL fail the
+        // whole IN() with "Illegal mix of collations" (and none can be listed).
+        $domains = array_filter(array_map('strval', $domains), fn($d) => $d !== '' && preg_match('/^[\x21-\x7e]+$/', $d) === 1);
         try {
             foreach (array_chunk(array_values(array_unique($domains)), 500) as $chunk) {
                 $rows = $this->conn()->fetchFirstColumn(
@@ -237,7 +243,7 @@ class CertHoleService
             }
             $this->replaceAll($domains);
         } catch (\Throwable $e) {
-            $this->config->set('cert.last_error', date('Y-m-d H:i') . ' - ' . $e->getMessage());
+            $this->recordError($e->getMessage());
             return ['ok' => false, 'count' => $this->countDomains(), 'message' => $e->getMessage()];
         }
         $this->config->set('cert.last_sync_at', date(DATE_ATOM));
@@ -245,6 +251,20 @@ class CertHoleService
         $this->config->set('cert.last_error', '');
 
         return ['ok' => true, 'count' => count($domains), 'message' => sprintf('Zaimportowano %d domen', count($domains))];
+    }
+
+    /**
+     * Store the failure for the panel. Never throws: a failure to record the
+     * error must not hide the error itself (the caller still reports it).
+     */
+    private function recordError($message)
+    {
+        $text = date('Y-m-d H:i') . ' - ' . mb_substr(trim((string)$message), 0, self::MAX_ERROR_CHARS, 'UTF-8');
+        try {
+            $this->config->set('cert.last_error', $text);
+        } catch (\Throwable $e) {
+            // DB unavailable: the command output / cron log still carries the message.
+        }
     }
 
     /** @param string[] $domains unique, normalized */

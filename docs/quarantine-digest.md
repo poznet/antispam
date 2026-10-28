@@ -36,13 +36,25 @@ recipient clicks link ─► GET  /q/{token}   confirmation page (nothing happen
 
 **Which messages are listed:** those received since the previous successful digest
 for that mailbox (on the first run, the last 24 hours), newest first, up to
-*Max messages per digest*. The rest are counted and the e-mail says how many more
-there are. Mailboxes with nothing new are skipped and get no e-mail.
+*Max messages per digest*. "Received" is the server's arrival time: IMAP
+INTERNALDATE (`SEARCH SINCE` plus an exact cut-off), the file mtime for Maildir -
+never the sender-controlled `Date:` header. The rest are counted and the e-mail
+says how many more there are. Mailboxes with nothing new are skipped and get no e-mail.
 
 **Reasons:** each entry shows up to three human-readable reasons from the score log
 (e.g. "Domena nadawcy łudząco podobna do Twojej"). For the SSH agent the link is
-exact (`score_log.file`). For IMAP the newest quarantine decision with the same
-sender and subject is used.
+exact (`score_log.file`). For IMAP the newest quarantine decision **of the same
+mailbox** (`account_email`) with the same sender and subject is used (one query per
+listing, index `idx_account_sender`; subjects are compared with the 500-character
+clip of the log, older 500-byte clipped rows match too).
+
+**No score log row = high risk (fail closed).** When no row is found (logging
+disabled with `scoring.log_enabled`, row purged by `antispam:purge`, or the agent
+has no `score_log` entry), the entry gets the synthetic reason `score_unknown`
+("Brak zapisanej oceny - zachowaj ostrożność"). It counts as high risk, so neither
+the digest nor `/my/quarantine` / `/spambox/quarantine` offers **Zawsze akceptuj**
+for it. Deliver and Delete still work. With score logging turned off, IMAP
+quarantine entries therefore never get the whitelist button.
 
 ## Security
 
@@ -51,9 +63,19 @@ sender and subject is used.
   id, action and expiry, plus sender and subject for the confirmation page. It is
   valid for *Link validity* days (default 7). Changing `APP_SECRET` invalidates
   every link already sent.
+- **IMAP links are bound to UIDVALIDITY.** An IMAP message id is a UID, and UIDs
+  are only unique within one UIDVALIDITY of the folder (a recreated / restored
+  `QUARANTINE` folder starts again and reuses them). IMAP tokens therefore carry
+  the folder's UIDVALIDITY (`u`), and release / delete refuse to act ("Nie
+  znaleziono wiadomości…") when the folder's current UIDVALIDITY differs. IMAP
+  tokens **without** it - links in digests sent before this check existed - are
+  rejected as invalid: they could act on whatever message now has that UID, and
+  they expire within the link validity anyway (the quarantine stays available on
+  `/my/quarantine`). SSH (Maildir) ids are unique file names and need no binding.
 - **Default secret = disabled.** While `secret` still has one of the placeholder
-  values shipped in this repository, the digest refuses to send and `/q/` rejects
-  every token, because anyone could forge one.
+  values shipped in this repository, looks like one ("change me", "not so
+  secret"), or is shorter than 16 characters, the digest refuses to send and `/q/`
+  rejects every token, because anyone could forge one.
 - **GET never acts.** Mail gateways and link scanners (Barracuda, Defender Safe
   Links, …) pre-fetch URLs. Opening a link only shows a confirmation page, and the
   action runs on the POST from its button.

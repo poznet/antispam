@@ -49,9 +49,9 @@ class QuarantineActionController extends AbstractController
 
         try {
             if ($data['action'] === DigestTokenService::ACTION_DELETE) {
-                $result = $this->quarantine->delete($data['mailbox'], $data['id']);
+                $result = $this->quarantine->delete($data['mailbox'], $data['id'], $data['uidvalidity']);
             } else {
-                $result = $this->quarantine->release($data['mailbox'], $data['id'], $data['action'] === DigestTokenService::ACTION_WHITELIST);
+                $result = $this->quarantine->release($data['mailbox'], $data['id'], $data['action'] === DigestTokenService::ACTION_WHITELIST, $data['uidvalidity']);
             }
         } catch (\Throwable $e) {
             $result = ['success' => false, 'message' => 'Nie udało się połączyć z serwerem poczty. Spróbuj ponownie później.'];

@@ -21,7 +21,13 @@ class Config
     #[ORM\Column(name: 'name', type: 'string', length: 255)]
     private $name;
 
-    #[ORM\Column(name: 'value', type: 'string', length: 255)]
+    /**
+     * serialize()d value. TEXT, not VARCHAR(255): serialized strings carry a
+     * prefix, and values like cert.last_error (curl error text) or a pasted
+     * key list exceed 255 bytes - MySQL strict mode then rejected the write.
+     * Widening VARCHAR -> TEXT keeps every existing row.
+     */
+    #[ORM\Column(name: 'value', type: 'text')]
     private $value;
 
     /** Unused, kept so schema updates don't drop the legacy column. */

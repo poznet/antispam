@@ -70,6 +70,19 @@ and the Docker scheduler. See [spam-handling.md](spam-handling.md).
 php bin/console antispam:cron:run antispam:agent:scan-all
 ```
 
+### antispam:purge
+Housekeeping, run daily (the Docker scheduler does it at `PURGE_HOUR`:41):
+deletes score log rows (`antispam_spam_score_log`) older than the retention and
+DNSBL cache rows (`antispam_dnsbl_cache`) older than the longest provider cache
+TTL (at least 24 h). Retention comes from the config key
+`scorelog.retention_days` (default 180; `0` = keep the score log forever). There
+is no panel field yet - set it with `--days` per run or in the `config` table.
+```bash
+php bin/console antispam:purge
+php bin/console antispam:purge --days=90     # override the retention for this run
+php bin/console antispam:purge --dry-run     # only count
+```
+
 ## Quarantine Digest Commands
 
 ### antispam:digest:send
@@ -94,7 +107,9 @@ into `antispam_cert_domain` and records the status (see
 [protection.md](protection.md#cert-polska-warning-list-cert_hole)). Does nothing (exit 0)
 while the filter is disabled in the panel; `--force` syncs anyway. Refuses to replace
 the table when the download is empty or less than half of the current list (exit 1,
-error saved in `cert.last_error`). Run by the scheduler every `CERT_SYNC_INTERVAL` hours.
+error saved in `cert.last_error`, clipped to 1000 characters). Any failure - also one
+while saving the status - ends with exit 1 and the error in the output (cron log),
+never with an uncaught exception. Run by the scheduler every `CERT_SYNC_INTERVAL` hours.
 
 ```bash
 php bin/console antispam:cert:sync

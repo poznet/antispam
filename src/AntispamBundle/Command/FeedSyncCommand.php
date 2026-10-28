@@ -2,6 +2,7 @@
 
 namespace AntispamBundle\Command;
 
+use AntispamBundle\Controller\SpamFeedApiController;
 use AntispamBundle\Entity\SharedSpamSignal;
 use AntispamBundle\Services\SpamSignalService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -24,6 +25,11 @@ use Symfony\Component\Console\Output\OutputInterface;
 #[AsCommand(name: 'antispam:feed:sync', description: 'Push/pull spam fingerprints to/from the configured shared feed hub')]
 class FeedSyncCommand extends Command
 {
+    /** Rows asked for per pull request (the hub caps it at SpamFeedApiController::MAX_SIGNALS_PER_PULL). */
+    const PULL_PAGE_SIZE = SpamFeedApiController::MAX_SIGNALS_PER_PULL;
+    /** Pages per run; whatever is left is pulled on the next run. */
+    const MAX_PULL_PAGES = 200;
+
     private $em;
     private $feed;
 
@@ -38,7 +44,7 @@ class FeedSyncCommand extends Command
     {
         $this->addOption('push-only', null, InputOption::VALUE_NONE, 'Only push local signals')
             ->addOption('pull-only', null, InputOption::VALUE_NONE, 'Only pull remote signals')
-            ->addOption('batch', null, InputOption::VALUE_REQUIRED, 'Push batch size', 1000);
+            ->addOption('batch', null, InputOption::VALUE_REQUIRED, 'Push batch size (at most ' . SpamFeedApiController::MAX_SIGNALS_PER_REPORT . ')', SpamFeedApiController::MAX_SIGNALS_PER_REPORT);
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -72,7 +78,8 @@ class FeedSyncCommand extends Command
 
     private function push($url, $key, $batch, OutputInterface $output)
     {
-        $batch = max(1, $batch);
+        // The hub answers 413 above its per-report limit, which would block the push forever.
+        $batch = min(SpamFeedApiController::MAX_SIGNALS_PER_REPORT, max(1, $batch));
         $repo = $this->em->getRepository(SharedSpamSignal::class);
         $lastId = $this->feed->getLastPushId();
         $sent = 0;
@@ -108,47 +115,95 @@ class FeedSyncCommand extends Command
         return 0;
     }
 
+    /**
+     * Pull everything updated since the checkpoint, page by page.
+     *
+     * The cursor is the hub's own (updated_at, id) of the last row received -
+     * never the hub's "now", which is taken after the query and would skip
+     * rows. Each run starts one second before the stored checkpoint, because
+     * a row may be updated again within the second already pulled; the import
+     * is idempotent (SpamSignalService::importRemote), so the overlap is safe.
+     * The checkpoint only moves after a page was imported and flushed.
+     */
     private function pull($url, $key, OutputInterface $output)
     {
-        $since = $this->feed->getLastPullAt();
-        $query = $since ? ('?since=' . urlencode($since->format(\DateTime::ATOM))) : '';
+        $checkpoint = $this->feed->getLastPullAt();
+        $since = $checkpoint ? (clone $checkpoint)->modify('-1 second')->format(\DateTime::ATOM) : null;
+        $afterId = 0;
+        $pulled = 0;
+        $imported = 0;
 
-        list($code, $body) = $this->http('GET', $url . '/api/feed/pull' . $query, $key, null);
-        if ($code !== 200) {
-            $output->writeln(sprintf('<error>Pull failed (HTTP %d): %s</error>', $code, $body));
-            return 1;
-        }
+        for ($page = 1; $page <= self::MAX_PULL_PAGES; $page++) {
+            $params = ['limit' => self::PULL_PAGE_SIZE];
+            if ($since !== null) {
+                $params['since'] = $since;
+                if ($afterId > 0) {
+                    $params['after_id'] = $afterId;
+                }
+            }
+            list($code, $body) = $this->http('GET', $url . '/api/feed/pull?' . http_build_query($params), $key, null);
+            if ($code !== 200) {
+                $output->writeln(sprintf('<error>Pull failed (HTTP %d): %s</error>', $code, mb_substr((string)$body, 0, 300)));
+                return 1;
+            }
 
-        $data = json_decode($body, true);
-        if (!is_array($data) || !isset($data['signals']) || !is_array($data['signals'])) {
-            $output->writeln('<error>Pull returned an unexpected payload.</error>');
-            return 1;
-        }
+            $data = json_decode($body, true);
+            if (!is_array($data) || !isset($data['signals']) || !is_array($data['signals'])) {
+                $output->writeln('<error>Pull returned an unexpected payload.</error>');
+                return 1;
+            }
 
-        $signals = [];
-        foreach ($data['signals'] as $sig) {
-            if (is_array($sig)) {
-                $signals[] = ['type' => $sig['type'] ?? null, 'hash' => $sig['hash'] ?? null];
+            $signals = [];
+            $lastAt = null;
+            $lastId = 0;
+            foreach ($data['signals'] as $sig) {
+                if (!is_array($sig)) {
+                    continue;
+                }
+                $signals[] = ['type' => $sig['type'] ?? null, 'hash' => $sig['hash'] ?? null, 'reports' => (int)($sig['reports'] ?? 1)];
+                if (!empty($sig['updated_at'])) {
+                    $lastAt = (string)$sig['updated_at'];
+                    $lastId = (int)($sig['id'] ?? 0);
+                }
+            }
+            $imported += $this->feed->importRemote($signals);
+            $this->feed->flush();
+            $pulled += count($signals);
+
+            if ($lastAt !== null) {
+                $this->feed->setLastPullAt($lastAt);
+            }
+
+            // The hub's page size may be smaller than ours: trust its "limit".
+            $limit = isset($data['limit']) ? (int)$data['limit'] : self::PULL_PAGE_SIZE;
+            if (count($data['signals']) < max(1, $limit) || $lastAt === null) {
+                break;
+            }
+            // A hub without "id" in the rows can only page by second; if a whole
+            // page shares one second the cursor would not move.
+            if ($lastId === 0 && $lastAt === $since) {
+                $output->writeln('<comment>Hub does not support paging within one second (no row ids) - stopping; update the hub.</comment>');
+                break;
+            }
+            $since = $lastAt;
+            $afterId = $lastId;
+            if ($page === self::MAX_PULL_PAGES) {
+                $output->writeln(sprintf('<comment>Stopped after %d pages; the rest follows on the next run.</comment>', $page));
             }
         }
-        $imported = $this->feed->record($signals, SharedSpamSignal::ORIGIN_REMOTE);
-        $this->feed->flush();
 
-        if (!empty($data['now'])) {
-            $this->feed->setLastPullAt($data['now']);
-        }
-
-        $output->writeln(sprintf('<info>Pulled %d signal(s), imported %d.</info>', count($signals), $imported));
+        $output->writeln(sprintf('<info>Pulled %d signal(s), imported %d.</info>', $pulled, $imported));
         return 0;
     }
 
     /**
      * Minimal cURL wrapper. Returns [httpCode, responseBody]; httpCode 0 on a
-     * transport error (with the error text as the body).
+     * transport error (with the error text as the body). Protected so tests
+     * can replace the transport.
      *
      * @return array{0:int, 1:string}
      */
-    private function http($method, $url, $key, $jsonBody)
+    protected function http($method, $url, $key, $jsonBody)
     {
         $ch = curl_init($url);
         $headers = ['X-Feed-Key: ' . $key, 'Accept: application/json'];

@@ -97,6 +97,50 @@ class SpamScoreLogRepository extends EntityRepository
         return $qb->getQuery()->getResult();
     }
 
+    /**
+     * Quarantine decisions of one mailbox for the given senders, newest first
+     * (uses idx_account_sender). Feeds the score/reasons shown next to IMAP
+     * quarantine items, which have no stable link to their log row.
+     *
+     * @param string[] $senders lower-case sender addresses
+     *
+     * @return SpamScoreLog[]
+     */
+    public function findQuarantineBySenders($accountEmail, array $senders, $limit = 2000)
+    {
+        $senders = array_values(array_unique(array_filter(array_map('strval', $senders), 'strlen')));
+        if ((string)$accountEmail === '' || !$senders) {
+            return [];
+        }
+        $out = [];
+        foreach (array_chunk($senders, 200) as $chunk) {
+            $rows = $this->createQueryBuilder('l')
+                ->andWhere('l.accountEmail = :account')->setParameter('account', (string)$accountEmail)
+                ->andWhere('l.decision = :d')->setParameter('d', SpamScoreLog::DECISION_QUARANTINE)
+                ->andWhere('l.sender IN (:senders)')->setParameter('senders', $chunk)
+                ->orderBy('l.scoredAt', \SortDirection::Descending)
+                ->addOrderBy('l.id', \SortDirection::Descending)
+                ->setMaxResults((int)$limit)
+                ->getQuery()->getResult();
+            $out = array_merge($out, $rows);
+        }
+        if (count($out) > 1) {
+            usort($out, fn(SpamScoreLog $a, SpamScoreLog $b) => [$b->getScoredAt(), $b->getId()] <=> [$a->getScoredAt(), $a->getId()]);
+        }
+        return $out;
+    }
+
+    /** Delete log rows scored before $before (retention, `antispam:purge`). @return int rows deleted */
+    public function purgeOlderThan(\DateTimeInterface $before)
+    {
+        return (int)$this->createQueryBuilder('l')
+            ->delete()
+            ->where('l.scoredAt < :before')
+            ->setParameter('before', \DateTime::createFromInterface($before))
+            ->getQuery()
+            ->execute();
+    }
+
     /** @param string[]|null $accountEmails limit to these mailboxes (null = all, [] = none) */
     public function statsByDecision(?\DateTime $since = null, ?array $accountEmails = null)
     {

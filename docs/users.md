@@ -55,7 +55,9 @@ every request:
   before anything else; a foreign or malformed key gives HTTP 403. The message `id`
   is only resolved inside that mailbox's quarantine, so it cannot reach another
   mailbox. "Zawsze akceptuj" is refused server-side for high-risk messages (or
-  messages no longer listed), the same rule the buttons follow.
+  messages no longer listed, or without a score log row of that mailbox -
+  `score_unknown`, see [quarantine-digest.md](quarantine-digest.md)), the same rule
+  the buttons follow.
 - **Score log** - `SpamScoreLogRepository::search()` gets an `accounts` filter (list
   of the user's account e-mails; an empty list matches nothing). A requested
   `account` that is not owned is dropped, not honoured. Tiles/stats and the account

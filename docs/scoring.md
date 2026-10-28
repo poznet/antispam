@@ -212,6 +212,43 @@ owner of every rule and can be filtered by owner (`?owner=`); owners that no
 longer exist (deleted account, changed legacy address) are shown as
 *nieaktywna* - such rules apply nowhere, delete and re-add them.
 
+### Making a rule global
+
+Every admin list (**Whitelista domen / e-mail**, **Blacklista domen / e-mail**)
+can change the owner of existing rules to **Wszystkie skrzynki** (`*`):
+
+- per rule: the **Wszystkie skrzynki** button with the globe icon (only on rules that are not global yet),
+- checked rules: row checkboxes (+ *Zaznacz wszystkie*, `rule-select.js`) and
+  **Zmień zaznaczone na: Wszystkie skrzynki**,
+- every rule of one mailbox: filter the list by the mailbox, then
+  **Wszystkie reguły tej skrzynki → Wszystkie skrzynki**.
+
+All are POST + CSRF (`list_rules`) with a `data-confirm` dialog that says the
+rule will apply to every mailbox (and, on the blacklists, that mail from the
+last 30 days in every mailbox is checked). Admin only (`#[IsGranted('ROLE_ADMIN')]`
+on top of `access_control`); **Moje reguły** (`/my/rules`) has no such action -
+users never create global rules. There is no rule edit form; any other owner
+change is delete + add.
+
+The logic is `Services\RuleGlobalizer` (shared with `antispam:rules:make-global`):
+
+- **moved**: the rule just gets owner `*` - same id, hit counter and score;
+- **merged**: when a global rule with the same value and pattern type already
+  exists (case-insensitive, the MySQL collation) - or a second mailbox copy of
+  the value is in the same batch - the mailbox rule is deleted and its counter
+  is added to the global rule; the global rule keeps its score;
+- already global rules are skipped.
+
+Side effects (`makeGlobal()`): one audit entry `rule.make_global` per changed
+rule ([audit.md](audit.md)); every **moved** blacklist rule queues its
+retroactive pass (`rule.retroactive`, [spam-handling.md](spam-handling.md#retroactive-blacklist)) -
+for a global rule `RetroactiveSpamService::applyRule()` goes over every account
+and the legacy mailbox; a merged one does not (the global rule already applied
+everywhere); every deployed SSH agent gets an `account.sync` job
+(`DeferredAgentSync::deferAll()`), since every agent exports the global rules.
+The console command only reassigns (no per-rule audit, no jobs) and tells you to
+sync the agents.
+
 Rules created elsewhere keep their own owner: plugin reports, phishing
 "Zablokuj" and the quarantine *Zawsze akceptuj* use the account's e-mail.
 

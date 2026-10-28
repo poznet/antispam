@@ -229,6 +229,8 @@ Full reference: **[thunderbird.md](thunderbird.md)**, clients:
 | GET | `/emailwhitelist/index` | Email whitelist; `?owner=` filter as above |
 | POST | `/emailwhitelist/add` | Add email to whitelist: `email`, `pattern_type`, `owner`; CSRF token `list_rules` |
 | POST | `/emailwhitelist/del/{id}` | Remove from email whitelist (CSRF token `list_rules`) |
+| POST | `/whitelist/global/{id}`, `/emailwhitelist/global/{id}` | Make one rule global (owner `*`, **Wszystkie skrzynki**); a duplicate of an existing global rule is merged into it; optional `return_owner` (list filter to go back to); CSRF token `list_rules`; admin only ([Making a rule global](scoring.md#making-a-rule-global)) |
+| POST | `/whitelist/global`, `/emailwhitelist/global` | Bulk: `ids[]` (checked rules) or `all_of=<mailbox>` (every rule of that mailbox) to global; `return_owner`; CSRF token `list_rules`; admin only |
 
 ## Blacklists
 
@@ -240,6 +242,8 @@ Full reference: **[thunderbird.md](thunderbird.md)**, clients:
 | GET | `/emailblacklst/index` | Email blacklist; `?owner=` filter as above |
 | POST | `/emailblacklst/add` | Add email to blacklist: `email`, `pattern_type`, `score`, `owner`; CSRF token `list_rules`; matching INBOX mail is moved to SPAM, as above |
 | POST | `/emailblacklst/del/{id}` | Remove from email blacklist (CSRF token `list_rules`) |
+| POST | `/domainblacklst/global/{id}`, `/emailblacklst/global/{id}` | Make one rule global, as for the whitelists; a moved rule queues the retroactive pass over every mailbox (`rule.retroactive`) |
+| POST | `/domainblacklst/global`, `/emailblacklst/global` | Bulk (`ids[]` or `all_of`), as above; one retroactive job per moved rule; deployed SSH agents get `account.sync` (all four lists) |
 
 ## Bulk import / export
 

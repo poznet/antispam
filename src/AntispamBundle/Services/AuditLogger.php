@@ -50,6 +50,7 @@ class AuditLogger
         'rule.add' => 'Reguła: dodanie',
         'rule.delete' => 'Reguła: usunięcie',
         'rule.import' => 'Reguły: import',
+        'rule.make_global' => 'Reguła: zmiana na wszystkie skrzynki',
         'rules.make_global' => 'Reguły: globalne (konsola)',
         'quarantine.release' => 'Kwarantanna: przywrócenie',
         'quarantine.whitelist' => 'Kwarantanna: zawsze akceptuj',

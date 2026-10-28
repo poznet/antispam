@@ -4,23 +4,27 @@ namespace AntispamBundle\Controller;
 
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Services\DeferredRetroactivePass;
+use AntispamBundle\Services\RuleGlobalizer;
 use AntispamBundle\Services\RuleOwnership;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route('/emailblacklst')]
 class EmailBlacklistController extends AbstractController
 {
     use AuditTrait;
+    use RuleMakeGlobalTrait;
     use JobQueueTrait;
 
     public function __construct(
         private EntityManagerInterface $em,
         private RuleOwnership $ownership,
         private DeferredRetroactivePass $retroactive,
+        private ?RuleGlobalizer $globalizer = null,
     ) {
     }
 
@@ -92,6 +96,22 @@ class EmailBlacklistController extends AbstractController
             $this->audit('rule.delete', targetType: 'email_blacklist', targetId: $id, label: $entry->getBlacklistemail(), mailbox: $entry->getEmail(), details: ['pattern_type' => $entry->getPatternType()]);
         }
         return $this->redirectToRoute('antispam_emailblacklist_index');
+    }
+
+    /** "Zmień na: Wszystkie skrzynki" for one rule (RuleMakeGlobalTrait). */
+    #[Route('/global/{id}', name: 'antispam_emailblacklist_make_global', requirements: ['id' => '\d+'], methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function makeGlobalAction($id, Request $request)
+    {
+        return $this->makeGlobalOne($request, $id, 'email_blacklist', 'antispam_emailblacklist_index');
+    }
+
+    /** Checked rules (ids[]) or every rule of one mailbox (all_of) to "Wszystkie skrzynki". */
+    #[Route('/global', name: 'antispam_emailblacklist_make_global_bulk', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function makeGlobalBulkAction(Request $request)
+    {
+        return $this->makeGlobalBulk($request, 'email_blacklist', 'antispam_emailblacklist_index');
     }
 
     /** Rule changes reshape filtering (and move mail retroactively) - POST + CSRF only. */

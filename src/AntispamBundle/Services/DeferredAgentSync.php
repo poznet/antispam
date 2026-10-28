@@ -14,6 +14,9 @@ use Doctrine\ORM\EntityManagerInterface;
  * The push runs as a background job (Jobs\Handler\AccountSyncHandler); one
  * pending sync per account, a change during a running sync queues another.
  *
+ * Also after an admin turns rules global ("Zmień na: Wszystkie skrzynki",
+ * RuleGlobalizer -> deferAll()): every agent exports the global rules.
+ *
  * Only accounts with a deployed agent are synced; IMAP accounts read the
  * rules from the database on every scan and need nothing.
  */
@@ -26,7 +29,7 @@ class DeferredAgentSync
     }
 
     /** @return bool true when the account will be synced */
-    public function defer(Account $account): bool
+    public function defer(Account $account, string $reason = 'zmiana w panelu użytkownika'): bool
     {
         if (!$account->isSsh() || !$account->getAgentDeployed() || $account->getId() === null) {
             return false;
@@ -35,7 +38,7 @@ class DeferredAgentSync
             BackgroundJob::TYPE_ACCOUNT_SYNC,
             ['background' => true],
             $account,
-            label: 'Synchronizacja reguł (zmiana w panelu użytkownika): ' . $account->getEmail(),
+            label: 'Synchronizacja reguł (' . $reason . '): ' . $account->getEmail(),
             dedupeKey: 'account.sync:' . $account->getId(),
         );
         return true;
@@ -54,6 +57,21 @@ class DeferredAgentSync
         $n = 0;
         foreach ($this->em->getRepository(Account::class)->findBy(['email' => $owner, 'connectionType' => Account::CONNECTION_SSH]) as $account) {
             $n += $this->defer($account) ? 1 : 0;
+        }
+        return $n;
+    }
+
+    /**
+     * Schedule every deployed SSH account - after a change of global rules
+     * (owner '*'), which every agent exports.
+     *
+     * @return int number of accounts scheduled
+     */
+    public function deferAll(string $reason = 'zmiana reguł globalnych'): int
+    {
+        $n = 0;
+        foreach ($this->em->getRepository(Account::class)->findBy(['connectionType' => Account::CONNECTION_SSH]) as $account) {
+            $n += $this->defer($account, $reason) ? 1 : 0;
         }
         return $n;
     }

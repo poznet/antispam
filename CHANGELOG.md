@@ -19,6 +19,19 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 ## [Unreleased]
 
 ### Added
+- **Rule lists: "Zmień na: Wszystkie skrzynki".** Domain / e-mail white- and
+  blacklists can turn existing mailbox rules into global ones (owner `*`):
+  a per-rule button (globe icon), row checkboxes with *Zmień zaznaczone na:
+  Wszystkie skrzynki*, and - with the list filtered by a mailbox - *Wszystkie
+  reguły tej skrzynki → Wszystkie skrzynki*. POST + CSRF, confirm dialog,
+  admin only (not on *Moje reguły*). A rule keeps its id, counter and score; a
+  duplicate of an existing global rule (same value and pattern type) is merged
+  into it (counter added, mailbox copy deleted). Moved blacklist rules queue the
+  retroactive pass over every mailbox (`rule.retroactive`), every deployed SSH
+  agent gets an `account.sync`. Audit `rule.make_global` per rule. New routes
+  `/{domainblacklst,emailblacklst,whitelist,emailwhitelist}/global[/{id}]`;
+  shared `Services\RuleGlobalizer` (also used by `antispam:rules:make-global`,
+  which now also merges two copies of a value within one run). No migration.
 - **Full mailbox rescan.** New per-account button **Przeskanuj całą skrzynkę
   ponownie** (account list ↻ and the account edit page, admin only): the whole
   INBOX is checked again with the current rules (white / blacklists, patterns,

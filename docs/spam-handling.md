@@ -89,7 +89,9 @@ Spam in the legacy mailbox's `SPAM` folder can be restored to INBOX on
 A new blacklist rule also applies to mail that is **already in INBOX**. When a
 rule is added:
 
-- on **Blacklista domen** / **Blacklista e-mail** in the panel, or
+- on **Blacklista domen** / **Blacklista e-mail** in the panel,
+- when an existing mailbox rule is changed to **Wszystkie skrzynki** there
+  (the pass then covers every mailbox; [scoring.md](scoring.md#making-a-rule-global)), or
 - by a logged-in Thunderbird plugin user reporting spam (which adds an exact
   e-mail blacklist rule, see [thunderbird.md](thunderbird.md)),
 

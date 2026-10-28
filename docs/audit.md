@@ -17,6 +17,7 @@ Page: **Przegląd → Dziennik audytu** (`/audit`, ROLE_ADMIN only).
 | `auth.2fa_reset` | admin reset of a user's 2FA (`/users/2fa-reset/{id}`) | user id, login |
 | `rule.add`, `rule.delete` | white/blacklist rule (domain and e-mail lists; admin lists and the user's own rules on `/my/rules` with `source: my`) | list type + rule id, value, owner mailbox (`*` = all); pattern type, score, `source` |
 | `rule.import` | bulk import (`/bulk/import/{type}`) | list type, owner; added / skipped counts |
+| `rule.make_global` | **Zmień na: Wszystkie skrzynki** on a rule list (one entry per changed rule, also in bulk) | list type + rule id, value, mailbox `*`; `from` (old owner), `merged` (deleted into an existing global rule), pattern type, score (blacklists) |
 | `rules.make_global` | `antispam:rules:make-global` (not with `--dry-run`) | owner; moved / merged counts; actor `cli` |
 | `quarantine.release`, `quarantine.whitelist` ("Zawsze akceptuj"), `quarantine.delete` | admin panel (`source: panel`), user area `/my` (`source: my`), digest link `/q/` (`source: digest`, actor `link z raportu`) | message id, sender, mailbox address, quarantine key; `ok` = whether it worked (failed attempts are recorded too) |
 | `spambox.restore` | restore from the legacy SPAM / QUARANTINE folder | message number, folder |

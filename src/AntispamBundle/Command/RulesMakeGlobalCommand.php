@@ -2,11 +2,8 @@
 
 namespace AntispamBundle\Command;
 
-use AntispamBundle\Entity\Blacklist;
-use AntispamBundle\Entity\EmailBlacklist;
-use AntispamBundle\Entity\EmailWhitelist;
-use AntispamBundle\Entity\Whitelist;
 use AntispamBundle\Services\AuditLogger;
+use AntispamBundle\Services\RuleGlobalizer;
 use AntispamBundle\Services\RuleOwnership;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -25,25 +22,22 @@ use Symfony\Component\Console\Output\OutputInterface;
  *     php bin/console antispam:rules:make-global [--owner=jan@firma.pl]
  *
  * A rule that already exists globally (same value and pattern type) is
- * removed instead of moved; its hit counter is added to the global one.
+ * removed instead of moved; its hit counter is added to the global one
+ * (RuleGlobalizer::reassign, shared with the panel action).
  */
 #[AsCommand(name: 'antispam:rules:make-global', description: 'Make the list rules of a mailbox (default: the legacy one) apply to all mailboxes')]
 class RulesMakeGlobalCommand extends Command
 {
-    /** entity => field holding the rule value */
-    const LISTS = [
-        Whitelist::class => 'host',
-        Blacklist::class => 'host',
-        EmailWhitelist::class => 'whitelistemail',
-        EmailBlacklist::class => 'blacklistemail',
-    ];
-
     public function __construct(
         private EntityManagerInterface $em,
         private RuleOwnership $ownership,
         private ?AuditLogger $audit = null,
+        private ?RuleGlobalizer $globalizer = null,
     ) {
         parent::__construct();
+        // Only reassign() is used (no per-rule audit, no jobs): the command
+        // writes its own summary entry and tells the admin to sync the agents.
+        $this->globalizer ??= new RuleGlobalizer($em);
     }
 
     protected function configure(): void
@@ -62,31 +56,20 @@ class RulesMakeGlobalCommand extends Command
         }
         $dryRun = (bool)$input->getOption('dry-run');
 
+        $rules = [];
+        foreach (RuleGlobalizer::LISTS as [$entity]) {
+            array_push($rules, ...$this->em->getRepository($entity)->findBy(['email' => $owner]));
+        }
         $moved = $merged = 0;
-        foreach (self::LISTS as $entity => $field) {
-            $getter = 'get' . ucfirst($field);
-            $repo = $this->em->getRepository($entity);
-            foreach ($repo->findBy(['email' => $owner]) as $rule) {
-                $global = $repo->findOneBy([
-                    'email' => RuleOwnership::ALL,
-                    $field => $rule->$getter(),
-                    'patternType' => $rule->getPatternType(),
-                ]);
-                $name = (new \ReflectionClass($entity))->getShortName();
-                if ($global) {
-                    $output->writeln(sprintf('  %s %s: already global, removing the mailbox copy', $name, $rule->$getter()));
-                    if (!$dryRun) {
-                        $global->setCounter((int)$global->getCounter() + (int)$rule->getCounter());
-                        $this->em->remove($rule);
-                    }
-                    $merged++;
-                } else {
-                    $output->writeln(sprintf('  %s %s -> global', $name, $rule->$getter()));
-                    if (!$dryRun) {
-                        $rule->setEmail(RuleOwnership::ALL);
-                    }
-                    $moved++;
-                }
+        foreach ($this->globalizer->reassign($rules, $dryRun) as $entry) {
+            $name = (new \ReflectionClass($entry['rule']))->getShortName();
+            $value = RuleGlobalizer::valueOf($entry['rule']);
+            if ($entry['outcome'] === RuleGlobalizer::MERGED) {
+                $output->writeln(sprintf('  %s %s: already global, removing the mailbox copy', $name, $value));
+                $merged++;
+            } elseif ($entry['outcome'] === RuleGlobalizer::MOVED) {
+                $output->writeln(sprintf('  %s %s -> global', $name, $value));
+                $moved++;
             }
         }
         if (!$dryRun) {

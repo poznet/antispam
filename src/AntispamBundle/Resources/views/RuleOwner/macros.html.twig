@@ -31,3 +31,41 @@
         <span class="label label-info" title="Reguła dotyczy tylko tej skrzynki">{{ owner }}</span>
     {% endif %}
 {% endmacro %}
+
+{# "Zmień na: Wszystkie skrzynki" (RuleMakeGlobalTrait / RuleGlobalizer) - admin lists only, never /my/rules. #}
+
+{% macro global_confirm(blacklist, what) %}{{ what }} będzie działać dla KAŻDEJ skrzynki: wszystkich kont IMAP i SSH oraz skrzynki z ustawień, nie tylko dla dotychczasowej. Jeśli identyczna reguła globalna już istnieje, kopia skrzynki zostanie z nią scalona (licznik trafień zostanie dodany, punkty reguły globalnej bez zmian).{% if blacklist %} Poczta z ostatnich 30 dni we wszystkich skrzynkach zostanie w tle sprawdzona i pasujące wiadomości trafią do SPAM.{% endif %} Kontynuować?{% endmacro %}
+
+{% macro global_button(route, rule, blacklist, owner_filter) %}
+    {% if rule.email != '*' %}
+        <form method="post" action="{{ path(route, {'id': rule.id}) }}" style="display:inline;">
+            <input type="hidden" name="_token" value="{{ csrf_token('list_rules') }}">
+            <input type="hidden" name="return_owner" value="{{ owner_filter }}">
+            <button type="submit" class="btn btn-default btn-xs list-actions" title="Zmień na: Wszystkie skrzynki" data-confirm="{{ _self.global_confirm(blacklist, 'Reguła') }}"><span class="glyphicon glyphicon-globe"></span> Wszystkie skrzynki</button>
+        </form>
+    {% endif %}
+{% endmacro %}
+
+{# Row checkbox; it joins the bulk form through form="rules-make-global" (rows already hold their own forms). #}
+{% macro checkbox(rule) %}
+    {% if rule.email != '*' %}
+        <input type="checkbox" name="ids[]" value="{{ rule.id }}" form="rules-make-global" class="rule-select" aria-label="Zaznacz regułę">
+    {% else %}
+        <input type="checkbox" disabled class="rule-select" title="Reguła już dotyczy wszystkich skrzynek" aria-label="Reguła globalna">
+    {% endif %}
+{% endmacro %}
+
+{% macro bulk_form(route, list, blacklist, owner_filter) %}
+    {% set local = list|filter(l => l.email != '*')|length %}
+    {% if local > 0 %}
+        <form method="post" action="{{ path(route) }}" id="rules-make-global" class="form-inline rule-bulk-actions" style="margin-bottom:12px;">
+            <input type="hidden" name="_token" value="{{ csrf_token('list_rules') }}">
+            <input type="hidden" name="return_owner" value="{{ owner_filter }}">
+            <label class="checkbox-inline" style="margin-right:8px;"><input type="checkbox" data-check-all="rules-make-global"> Zaznacz wszystkie</label>
+            <button type="submit" class="btn btn-default btn-sm" data-confirm="{{ _self.global_confirm(blacklist, 'Każda zaznaczona reguła') }}"><span class="glyphicon glyphicon-globe"></span> Zmień zaznaczone na: Wszystkie skrzynki</button>
+            {% if owner_filter is not empty and owner_filter != '*' %}
+                <button type="submit" name="all_of" value="{{ owner_filter }}" class="btn btn-warning btn-sm" data-confirm="{{ _self.global_confirm(blacklist, 'Każda reguła skrzynki ' ~ owner_filter ~ ' (' ~ local ~ ')') }}"><span class="glyphicon glyphicon-globe"></span> Wszystkie reguły tej skrzynki → Wszystkie skrzynki</button>
+            {% endif %}
+        </form>
+    {% endif %}
+{% endmacro %}

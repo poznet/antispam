@@ -91,7 +91,10 @@ Turns the white/black list rules of one mailbox into global rules
 For installs from the single-mailbox days, where every panel rule belonged to
 the legacy mailbox from the "E-mail" settings and never reached IMAP/SSH accounts.
 A rule that already exists globally is removed and its hit counter added to
-the global one. SSH agents need a sync afterwards.
+the global one (also when two copies of a value are in the batch). Same logic
+as the panel action **Zmień na: Wszystkie skrzynki** (`RuleGlobalizer`,
+[scoring.md](scoring.md#making-a-rule-global)), but without per-rule audit
+entries or jobs: SSH agents need a sync afterwards.
 ```bash
 php bin/console antispam:rules:make-global --dry-run          # preview
 php bin/console antispam:rules:make-global                    # legacy mailbox

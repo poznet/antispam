@@ -21,13 +21,16 @@
     {{ owner.filter('antispam_whitelist_index', owners, owner_filter) }}
 
     {% if list|length > 0 %}
+    {{ owner.bulk_form('antispam_whitelist_make_global_bulk', list, false, owner_filter) }}
     <ul class="list-group">
         {% for l in list %}
         <li class="list-group-item">
+            {{ owner.checkbox(l) }}
             <form method="post" action="{{ path('antispam_whitelist_del',{'id':l.id}) }}" style="display:inline;">
                 <input type="hidden" name="_token" value="{{ csrf_token('list_rules') }}">
                 <button type="submit" class="btn btn-danger btn-xs list-actions" data-confirm="Usunąć tę domenę z whitelisty?"><span class="glyphicon glyphicon-remove"></span> Usuń</button>
             </form>
+            {{ owner.global_button('antispam_whitelist_make_global', l, false, owner_filter) }}
             <span class="badge badge-counter">{{ l.counter }} trafień</span>
             <span class="label label-default">{{ l.patternType }}</span>
             <span class="glyphicon glyphicon-globe"></span> {{ l.host }}
@@ -46,4 +49,5 @@
 
 {% block javascripts %}
     <script src="{{ asset('bundles/antispam/js/data-confirm.js') }}"></script>
+    <script src="{{ asset('bundles/antispam/js/rule-select.js') }}"></script>
 {% endblock %}

@@ -27,6 +27,7 @@ first scan of a big mailbox.
 | New rule on **Blacklista domen / e-mail**, **Phishing → Zablokuj** | `rule.retroactive` | `RetroactiveSpamService::applyRule()` - mail already in INBOX ([spam-handling.md](spam-handling.md#retroactive-blacklist)) |
 | Plugin spam / phishing report that adds a blacklist rule | `rule.retroactive` | requester = the mailbox (actor `plugin`); the API still answers `"retroactive": "scheduled"` |
 | Rule change in the user area (`/my/rules`, "Zawsze akceptuj" in `/my/spam`) of an SSH mailbox | `account.sync` | background only (no job page for the user); a failure is a failed job |
+| **Zmień na: Wszystkie skrzynki** on a rule list (one rule, checked rules, every rule of a mailbox) | `rule.retroactive` per moved blacklist rule + `account.sync` per deployed SSH agent | the pass of a global rule covers every account and the legacy mailbox; [scoring.md](scoring.md#making-a-rule-global) |
 | Lista CERT → **Synchronizuj teraz** | `cert.sync` | download + replace the CERT Polska list |
 | Raport kwarantanny → **Wyślij teraz** | `digest.send` | reads every quarantine, sends the digests |
 | Phishing → bulk **Wyślij zaznaczone** | `phishing.forward` | one e-mail per report |

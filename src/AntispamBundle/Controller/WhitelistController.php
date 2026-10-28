@@ -3,21 +3,25 @@
 namespace AntispamBundle\Controller;
 
 use AntispamBundle\Entity\Whitelist;
+use AntispamBundle\Services\RuleGlobalizer;
 use AntispamBundle\Services\RuleOwnership;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route('/whitelist')]
 class WhitelistController extends AbstractController
 {
     use AuditTrait;
+    use RuleMakeGlobalTrait;
 
     public function __construct(
         private EntityManagerInterface $em,
         private RuleOwnership $ownership,
+        private ?RuleGlobalizer $globalizer = null,
     ) {
     }
 
@@ -82,6 +86,22 @@ class WhitelistController extends AbstractController
             $this->audit('rule.delete', targetType: 'whitelist', targetId: $id, label: $entry->getHost(), mailbox: $entry->getEmail(), details: ['pattern_type' => $entry->getPatternType()]);
         }
         return $this->redirectToRoute('antispam_whitelist_index');
+    }
+
+    /** "Zmień na: Wszystkie skrzynki" for one rule (RuleMakeGlobalTrait). */
+    #[Route('/global/{id}', name: 'antispam_whitelist_make_global', requirements: ['id' => '\d+'], methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function makeGlobalAction($id, Request $request)
+    {
+        return $this->makeGlobalOne($request, $id, 'whitelist', 'antispam_whitelist_index');
+    }
+
+    /** Checked rules (ids[]) or every rule of one mailbox (all_of) to "Wszystkie skrzynki". */
+    #[Route('/global', name: 'antispam_whitelist_make_global_bulk', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function makeGlobalBulkAction(Request $request)
+    {
+        return $this->makeGlobalBulk($request, 'whitelist', 'antispam_whitelist_index');
     }
 
     /** Rule changes reshape filtering (and move mail retroactively) - POST + CSRF only. */

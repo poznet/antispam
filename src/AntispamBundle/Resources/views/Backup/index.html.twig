@@ -1,0 +1,102 @@
+{% extends '@Antispam/main.html.twig' %}
+{% block title %}Kopia zapasowa{% endblock %}
+{% block page_title %}Kopia zapasowa konfiguracji{% endblock %}
+
+{% block body %}
+    {% set section_labels = {
+        settings: 'Ustawienia (filtr, wtyczki, raport, wspólna baza, listy ustawień)',
+        rules: 'Reguły white/blacklist (domeny i adresy, z właścicielami i punktami)',
+        dnsbl: 'Dostawcy DNSBL',
+        accounts: 'Konta (skrzynki IMAP / SSH)',
+        users: 'Użytkownicy panelu i przypisane skrzynki'
+    } %}
+
+    <p class="text-muted">Jeden plik JSON z ustawieniami, regułami list, dostawcami DNSBL, kontami i użytkownikami - do odtworzenia instalacji
+        albo przeniesienia klienta na inny serwer. Kopia nie zawiera kwarantanny, dziennika ocen, logów crona ani zgłoszeń phishingu.
+        Pełna kopia serwera (zrzut bazy, wolumen <code>var/data</code> z kluczami SSH) jest opisana w <code>docs/backup.md</code>.
+        To samo z konsoli: <code>antispam:export</code> / <code>antispam:import</code>.</p>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="panel panel-default">
+                <div class="panel-heading"><strong><span class="glyphicon glyphicon-download-alt"></span> Pobierz kopię</strong></div>
+                <div class="panel-body">
+                    <form method="post" action="{{ path('antispam_backup_export') }}">
+                        <input type="hidden" name="_token" value="{{ csrf_token('backup_export') }}">
+                        <div class="form-group">
+                            <label for="backupFormat">Format</label>
+                            <select name="format" id="backupFormat" class="form-control">
+                                <option value="json">JSON</option>
+                                {% if zip_available %}<option value="zip">ZIP (JSON w archiwum)</option>{% endif %}
+                            </select>
+                        </div>
+                        <p class="help-block">Domyślnie bez sekretów: hasła IMAP, klucze API, klucze wspólnej bazy, hashe haseł użytkowników
+                            i ścieżki kluczy SSH zostają na serwerze. Po imporcie trzeba je wpisać ponownie.</p>
+                        <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-download-alt"></span> Pobierz (bez sekretów)</button>
+                    </form>
+
+                    <hr>
+
+                    <form method="post" action="{{ path('antispam_backup_export') }}" autocomplete="off">
+                        <input type="hidden" name="_token" value="{{ csrf_token('backup_export') }}">
+                        <input type="hidden" name="include_secrets" value="1">
+                        <div class="form-group">
+                            <label for="backupFormatSecrets">Format</label>
+                            <select name="format" id="backupFormatSecrets" class="form-control">
+                                <option value="json">JSON</option>
+                                {% if zip_available %}<option value="zip">ZIP (JSON w archiwum)</option>{% endif %}
+                            </select>
+                        </div>
+                        <div class="alert alert-warning" style="margin-bottom:10px;">
+                            Kopia <strong>z sekretami</strong> zawiera hasła IMAP, klucze API i hashe haseł, zaszyfrowane kluczem z <code>APP_SECRET</code> tej instancji.
+                            Kto ma plik <em>i</em> <code>APP_SECRET</code>, odczyta je - przechowuj plik jak hasło. Serwer docelowy musi mieć ten sam
+                            <code>APP_SECRET</code>, inaczej sekrety zostaną pominięte przy imporcie.
+                        </div>
+                        <div class="checkbox"><label><input type="checkbox" name="confirm_secrets" value="1" required> Rozumiem, plik będzie zawierał sekrety</label></div>
+                        <div class="form-group">
+                            <label for="backupPassword">Twoje hasło administratora</label>
+                            <input type="password" name="password" id="backupPassword" class="form-control" required autocomplete="current-password">
+                        </div>
+                        <button type="submit" class="btn btn-warning" data-confirm="Pobrać kopię zawierającą hasła i klucze API?">
+                            <span class="glyphicon glyphicon-lock"></span> Pobierz z sekretami
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="panel panel-default">
+                <div class="panel-heading"><strong><span class="glyphicon glyphicon-upload"></span> Przywróć z kopii</strong></div>
+                <div class="panel-body">
+                    <form method="post" action="{{ path('antispam_backup_import') }}" enctype="multipart/form-data">
+                        <input type="hidden" name="_token" value="{{ csrf_token('backup_import') }}">
+                        <div class="form-group">
+                            <label for="backupFile">Plik kopii (.json lub .zip, maks. {{ max_upload_mb }} MB)</label>
+                            <input type="file" name="backup" id="backupFile" accept=".json,.zip,application/json,application/zip" required>
+                        </div>
+                        <fieldset class="form-group">
+                            <legend style="font-size:inherit; font-weight:bold; border:0; margin-bottom:5px;">Sekcje</legend>
+                            {% for section in sections %}
+                                <div class="checkbox" style="margin-top:0;"><label><input type="checkbox" name="sections[]" value="{{ section }}" checked> {{ section_labels[section]|default(section) }}</label></div>
+                            {% endfor %}
+                        </fieldset>
+                        <fieldset class="form-group">
+                            <legend style="font-size:inherit; font-weight:bold; border:0; margin-bottom:5px;">Tryb</legend>
+                            <div class="radio" style="margin-top:0;"><label><input type="radio" name="mode" value="merge" checked> Scal - dodaj brakujące, zaktualizuj zmienione, resztę zostaw</label></div>
+                            <div class="radio"><label><input type="radio" name="mode" value="replace"> Zastąp - jak scal, a potem usuń z wybranych sekcji wszystko, czego nie ma w pliku</label></div>
+                        </fieldset>
+                        <p class="help-block">Najpierw zobaczysz podgląd zmian (nic nie jest zapisywane), potem zatwierdzisz import.
+                            Wpisy są dopasowywane po kluczach naturalnych (nazwa ustawienia, skrzynka + wartość reguły, strefa DNSBL, e-mail konta, login),
+                            sekrety nigdy nie są nadpisywane pustą wartością.</p>
+                        <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-eye-open"></span> Podgląd importu</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block javascripts %}
+    <script src="{{ asset('bundles/antispam/js/data-confirm.js') }}"></script>
+{% endblock %}

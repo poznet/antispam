@@ -1,0 +1,67 @@
+{% extends '@Antispam/main.html.twig' %}
+{% block title %}Podgląd importu{% endblock %}
+{% block page_title %}Podgląd importu kopii{% endblock %}
+
+{% block body %}
+    {% set section_labels = {settings: 'Ustawienia', rules: 'Reguły list', dnsbl: 'Dostawcy DNSBL', accounts: 'Konta', users: 'Użytkownicy'} %}
+    {% set action_labels = {created: 'Dodane', updated: 'Zmienione', unchanged: 'Bez zmian', deleted: 'Usunięte', skipped: 'Pominięte'} %}
+    {% set meta = report.meta %}
+
+    <p>Plik <code>{{ file_name }}</code>: schemat {{ meta.schema_version|default('?') }}, wersja aplikacji {{ meta.app_version|default(null) ?: 'nieznana' }},
+        eksport {{ meta.exported_at|default(null) ?: '?' }}, sekrety: {{ meta.include_secrets|default(false) ? 'tak' : 'nie' }}.
+        Tryb: <strong>{{ mode == 'replace' ? 'zastąp' : 'scal' }}</strong>.</p>
+
+    <div class="alert alert-info">To jest podgląd - nic jeszcze nie zostało zapisane.</div>
+
+    <div class="panel panel-default">
+        <div class="table-responsive">
+            <table class="table table-striped" style="margin-bottom:0;">
+                <thead><tr><th>Sekcja</th>{% for action, label in action_labels %}<th class="text-right">{{ label }}</th>{% endfor %}</tr></thead>
+                <tbody>
+                {% for section, counts in report.counts %}
+                    <tr>
+                        <td>{{ section_labels[section]|default(section) }}</td>
+                        {% for action, label in action_labels %}
+                            <td class="text-right{% if action == 'deleted' and counts[action] > 0 %} text-danger{% endif %}">{{ counts[action] }}</td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if report.warnings|length > 0 %}
+        <div class="panel panel-warning">
+            <div class="panel-heading"><strong>Uwagi ({{ report.warnings|length }})</strong></div>
+            <ul class="list-group">
+                {% for warning in report.warnings %}<li class="list-group-item"><small>{{ warning }}</small></li>{% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    {% if report.hasChanges %}
+        <form method="post" action="{{ path('antispam_backup_apply') }}">
+            <input type="hidden" name="_token" value="{{ csrf_token('backup_apply') }}">
+            <input type="hidden" name="pending_id" value="{{ pending_id }}">
+            <input type="hidden" name="mode" value="{{ mode }}">
+            {% for section in sections %}<input type="hidden" name="sections[]" value="{{ section }}">{% endfor %}
+            {% if mode == 'replace' %}
+                <div class="checkbox"><label><input type="checkbox" name="confirm_replace" value="1" required>
+                    Rozumiem, że wpisy z wybranych sekcji, których nie ma w pliku, zostaną usunięte</label></div>
+            {% endif %}
+            <button type="submit" class="btn btn-{{ mode == 'replace' ? 'danger' : 'primary' }}"
+                    data-confirm="Zastosować import? Zmiany zostaną zapisane w jednej transakcji.">
+                <span class="glyphicon glyphicon-ok"></span> Zastosuj import
+            </button>
+            <a href="{{ path('antispam_backup_index') }}" class="btn btn-default">Anuluj</a>
+        </form>
+    {% else %}
+        <p>Nic do zmiany - konfiguracja jest zgodna z plikiem.</p>
+        <a href="{{ path('antispam_backup_index') }}" class="btn btn-default">Wróć</a>
+    {% endif %}
+{% endblock %}
+
+{% block javascripts %}
+    <script src="{{ asset('bundles/antispam/js/data-confirm.js') }}"></script>
+{% endblock %}

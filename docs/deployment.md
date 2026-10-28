@@ -155,6 +155,53 @@ restart the `app` service). The entrypoint re-hashes the password and
 regenerates `.env.local.php` on startup, so the new credentials are picked
 up on the next request.
 
+### Backup and restore
+
+Three things make up an instance; back up all of them (e.g. nightly, keep a few days):
+
+| What | Where | Contains |
+| --- | --- | --- |
+| Database | `db` service, volume `db-data` | everything: settings, rules, accounts, users, quarantine index, score log, phishing reports |
+| Application data | volume `app-data` = `var/data` | SSH private keys (`ssh-keys/`), checked-message markers, scan locks |
+| Environment | Coolify env screen / `.env` | `APP_SECRET` (encryption key of stored passwords and digest links), DB passwords, `ADMIN_*`, `MAILER_DSN` |
+
+Without the same `APP_SECRET` a restored database cannot decrypt the stored IMAP
+passwords - keep it with the backup (in a password manager, not next to the dump).
+
+```bash
+# 1. database dump (consistent, without locking InnoDB tables)
+docker compose exec -T db sh -c 'exec mariadb-dump --single-transaction --routines -uroot -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE"' \
+  | gzip > antispam-db-$(date +%F).sql.gz
+
+# 2. var/data volume (SSH keys!) - via the app container
+docker compose exec -T app tar -C /var/www/html/var -czf - data > antispam-data-$(date +%F).tar.gz
+
+# 3. optional: configuration-only backup (portable between servers, see backup.md)
+docker compose exec -T -u www-data app php bin/console antispam:export > antispam-config-$(date +%F).json
+```
+
+(MariaDB 10.6 also has `mysqldump`; with the `docker-compose.prod.yml` stack use
+`docker compose -f docker-compose.prod.yml ...`.)
+
+Restore on a new or the same server:
+
+```bash
+# start the stack with the SAME APP_SECRET, then stop the writers
+docker compose up -d db app && docker compose stop scheduler
+gunzip -c antispam-db-2026-10-28.sql.gz \
+  | docker compose exec -T db sh -c 'exec mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE"'
+docker compose exec -T app tar -C /var/www/html/var -xzf - < antispam-data-2026-10-28.tar.gz
+docker compose exec app chown -R www-data:www-data /var/www/html/var/data
+docker compose exec app chmod 700 /var/www/html/var/data/ssh-keys
+docker compose restart app && docker compose start scheduler   # entrypoint runs doctrine:schema:update
+docker compose exec -u www-data app php bin/console antispam:doctor
+```
+
+Only the configuration (fresh database, another server, another customer): restore
+`var/data/ssh-keys` as above, then `antispam:import file.json --dry-run` and
+`antispam:import file.json` - see [backup.md](backup.md). The panel offers the same
+under **Ustawienia → Kopia zapasowa**. Run `antispam:doctor` after every restore.
+
 ## Running with plain docker-compose
 
 For local / VPS deployments without Coolify:

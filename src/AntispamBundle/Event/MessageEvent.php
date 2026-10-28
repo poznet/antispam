@@ -26,6 +26,8 @@ class MessageEvent extends Event
     private $connection;
     /** Delete spam instead of moving it to SPAM; null = global "delete" setting */
     private $deleteSpam;
+    /** SpamScoreLog entry for this message, so later listeners can record where it went. */
+    private $scoreLog;
 
     public function __construct(MessageInterface $message, $email = null, ?ConnectionInterface $connection = null, ?bool $deleteSpam = null)
     {
@@ -135,5 +137,15 @@ class MessageEvent extends Event
     public function addReasons(array $reasons)
     {
         $this->reasons = array_merge($this->reasons, $reasons);
+    }
+
+    public function getScoreLog()
+    {
+        return $this->scoreLog;
+    }
+
+    public function setScoreLog($scoreLog)
+    {
+        $this->scoreLog = $scoreLog;
     }
 }

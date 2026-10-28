@@ -51,6 +51,27 @@ A released message is marked as checked, so the next scan does not quarantine
 it again. The page covers the legacy mailbox (`imap`), every IMAP account
 (`imap-<id>`) and every SSH account with a deployed agent (`ssh-<id>`).
 
+### Quarantine log vs. quarantine folder
+
+The bottom table on **Kwarantanna** ("Decyzje „kwarantanna”") is the score
+log (`antispam_spam_score_log`), not the folder: an entry stays after the
+message was released or deleted, and plugin checks are logged without moving
+anything. Each entry records:
+
+- `source` - `scan` (server scan), `plugin` (Thunderbird/Outlook check, never
+  moves mail on the server), `retro` (retroactive blacklist pass);
+- `outcome` - `none`, `quarantined`, `spam_folder`, `deleted`, `move_failed`
+  (decision made but the move failed, the message is still in INBOX).
+
+The **Gdzie teraz** column combines that with the live folder listing
+(`SpamboxController::locateLogs`, matched by account + sender + subject):
+*w kwarantannie*, *już nie w kwarantannie* (released/deleted), *przeniesienie
+nie powiodło się*, *ocena wtyczki*. Entries written before these columns
+existed have both empty; old plugin entries are still recognised by their
+`source:thunderbird_plugin` reason. SSH agents keep their decisions in the
+agent's SQLite DB, so they never appear in this table - only in the mailbox
+panels above it.
+
 Spam in the legacy mailbox's `SPAM` folder can be restored to INBOX on
 **Skrzynki → Folder spamu**. For IMAP/SSH accounts use the mail client
 (the folder is a normal IMAP folder).

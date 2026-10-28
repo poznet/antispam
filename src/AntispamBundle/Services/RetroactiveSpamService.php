@@ -153,7 +153,7 @@ class RetroactiveSpamService
             $this->scoring->logDecision($owner, $rule->getScore(), SpamScoreLog::DECISION_SPAM, [[
                 'rule' => 'retroactive ' . ($isDomain ? 'blacklist:' : 'email_blacklist:') . $pattern,
                 'score' => (int)$rule->getScore(),
-            ]], $sender, $subject);
+            ]], $sender, $subject, SpamScoreLog::SOURCE_RETRO, SpamScoreLog::OUTCOME_SPAM_FOLDER);
         }
 
         if ($moved > 0) {

@@ -21,6 +21,18 @@ class SpamScoreLog
     const DECISION_SPAM = 'spam';
     const DECISION_WHITELISTED = 'whitelisted';
 
+    /** Who made the decision. */
+    const SOURCE_SCAN = 'scan';       // server scan (cron / panel)
+    const SOURCE_PLUGIN = 'plugin';   // mail client plugin check - never moves anything on the server
+    const SOURCE_RETRO = 'retro';     // retroactive pass after a new blacklist rule
+
+    /** What happened to the message on the server. */
+    const OUTCOME_NONE = 'none';              // left where it was
+    const OUTCOME_QUARANTINED = 'quarantined';
+    const OUTCOME_SPAM_FOLDER = 'spam_folder';
+    const OUTCOME_DELETED = 'deleted';
+    const OUTCOME_MOVE_FAILED = 'move_failed'; // decision made, but the move failed - still in INBOX
+
     #[ORM\Column(name: 'id', type: 'integer')]
     #[ORM\Id]
     #[ORM\GeneratedValue(strategy: 'AUTO')]
@@ -47,6 +59,14 @@ class SpamScoreLog
 
     #[ORM\Column(name: 'scored_at', type: 'datetime')]
     private $scoredAt;
+
+    /** SOURCE_* - null for entries written before it was recorded. */
+    #[ORM\Column(name: 'source', type: 'string', length: 16, nullable: true)]
+    private $source;
+
+    /** OUTCOME_* - null for entries written before it was recorded. */
+    #[ORM\Column(name: 'outcome', type: 'string', length: 16, nullable: true)]
+    private $outcome;
 
     public function __construct()
     {
@@ -90,4 +110,10 @@ class SpamScoreLog
 
     public function getScoredAt() { return $this->scoredAt; }
     public function setScoredAt(\DateTime $dt) { $this->scoredAt = $dt; return $this; }
+
+    public function getSource() { return $this->source; }
+    public function setSource($source) { $this->source = $source; return $this; }
+
+    public function getOutcome() { return $this->outcome; }
+    public function setOutcome($outcome) { $this->outcome = $outcome; return $this; }
 }

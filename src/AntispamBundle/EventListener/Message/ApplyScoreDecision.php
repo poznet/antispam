@@ -2,6 +2,7 @@
 
 namespace AntispamBundle\EventListener\Message;
 
+use AntispamBundle\Entity\SpamScoreLog;
 use AntispamBundle\Event\MessageEvent;
 use AntispamBundle\Services\ScoringService;
 use AntispamBundle\Services\InboxService;
@@ -43,14 +44,16 @@ class ApplyScoreDecision
         $reasons = $event->getReasons();
         $decision = $this->scoring->decide($event, $reasons, $sender, $subject);
 
-        if ($decision === \AntispamBundle\Entity\SpamScoreLog::DECISION_QUARANTINE && !$event->isSpam()) {
+        if ($decision === SpamScoreLog::DECISION_QUARANTINE && !$event->isSpam()) {
             try {
                 $quarantine = $this->inbox->getQuarantineFolder($event->getConnection());
                 $event->getMessage()->move($quarantine);
                 $event->setDelete(true);
                 $event->stopPropagation();
+                $this->scoring->recordOutcome($event->getScoreLog(), SpamScoreLog::OUTCOME_QUARANTINED);
             } catch (\Throwable $e) {
-                // fall through - quarantine failed, leave message in inbox
+                // quarantine failed, leave message in inbox
+                $this->scoring->recordOutcome($event->getScoreLog(), SpamScoreLog::OUTCOME_MOVE_FAILED);
             }
         }
     }

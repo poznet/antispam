@@ -310,7 +310,10 @@ class ScoringService
             $event->setSpam(true);
         }
 
-        $this->logDecision($event->getEmail(), $score, $decision, $reasons, $sender, $subject);
+        // Quarantine/spam get their outcome once the message has been moved.
+        $outcome = in_array($decision, [SpamScoreLog::DECISION_HAM, SpamScoreLog::DECISION_WHITELISTED], true)
+            ? SpamScoreLog::OUTCOME_NONE : null;
+        $event->setScoreLog($this->logDecision($event->getEmail(), $score, $decision, $reasons, $sender, $subject, SpamScoreLog::SOURCE_SCAN, $outcome));
 
         return $decision;
     }
@@ -333,11 +336,15 @@ class ScoringService
         return SpamScoreLog::DECISION_HAM;
     }
 
-    /** Persist a SpamScoreLog entry when decision logging is enabled. */
-    public function logDecision($accountEmail, $score, $decision, array $reasons, $sender = null, $subject = null)
+    /**
+     * Persist a SpamScoreLog entry when decision logging is enabled.
+     *
+     * @return SpamScoreLog|null null when logging is disabled
+     */
+    public function logDecision($accountEmail, $score, $decision, array $reasons, $sender = null, $subject = null, $source = null, $outcome = null)
     {
         if (!$this->isLoggingEnabled()) {
-            return;
+            return null;
         }
         $log = new SpamScoreLog();
         $log->setAccountEmail($accountEmail)
@@ -345,8 +352,21 @@ class ScoringService
             ->setSubject($subject)
             ->setScore($score)
             ->setDecision($decision)
-            ->setReasons($reasons);
+            ->setReasons($reasons)
+            ->setSource($source)
+            ->setOutcome($outcome);
         $this->em->persist($log);
+        $this->em->flush();
+        return $log;
+    }
+
+    /** Record where a logged message ended up (OUTCOME_*); no-op without a log entry. */
+    public function recordOutcome(?SpamScoreLog $log, $outcome)
+    {
+        if ($log === null) {
+            return;
+        }
+        $log->setOutcome($outcome);
         $this->em->flush();
     }
 

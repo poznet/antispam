@@ -68,15 +68,16 @@
     <div class="panel panel-default">
         <div class="panel-heading"><span class="glyphicon glyphicon-list-alt"></span> Decyzje „kwarantanna” z ostatnich 30 dni</div>
         <div class="panel-body text-muted" style="padding-bottom:0;">
-            <p>Na tej podstawie liczony jest kafelek na pulpicie. Wpis zostaje w dzienniku także wtedy, gdy wiadomości nie ma już w kwarantannie:
-            została dostarczona lub usunięta, przeniesienie do folderu się nie udało, albo ocenę wykonała wtyczka Thunderbird
-            (ona niczego nie przenosi na serwerze).</p>
+            <p>Na tej podstawie liczony jest kafelek na pulpicie. To dziennik ocen, nie zawartość folderu: wpis zostaje także wtedy,
+            gdy wiadomości nie ma już w kwarantannie. Kolumna <strong>Gdzie teraz</strong> mówi, co się z nią stało.
+            Decyzje agentów SSH są zapisywane na serwerze z pocztą, więc tu ich nie ma - ich wiadomości widać w kafelkach powyżej.</p>
         </div>
         {% if logs|length > 0 %}
         <table class="table table-striped" style="margin-bottom:0;">
-            <thead><tr><th>Kiedy</th><th>Konto</th><th>Nadawca</th><th>Temat</th><th>Punkty</th><th>Powód</th></tr></thead>
+            <thead><tr><th>Kiedy</th><th>Konto</th><th>Nadawca</th><th>Temat</th><th>Punkty</th><th>Powód</th><th>Gdzie teraz</th></tr></thead>
             <tbody>
             {% for l in logs %}
+                {% set loc = locations[l.id] %}
                 <tr>
                     <td>{{ l.scoredAt|date('Y-m-d H:i') }}</td>
                     <td>{{ l.accountEmail }}</td>
@@ -88,6 +89,7 @@
                             <small>{{ r.rule }} (+{{ r.score }})</small><br>
                         {% endfor %}
                     </td>
+                    <td><span class="label label-{{ loc.class }}" style="white-space:normal;">{{ loc.label }}</span></td>
                 </tr>
             {% endfor %}
             </tbody>

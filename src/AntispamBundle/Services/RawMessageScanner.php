@@ -153,7 +153,7 @@ class RawMessageScanner
 
         $decision = $this->scoring->classify($score, $forcedSpam, $whitelisted);
         $reasons[] = ['rule' => 'source:thunderbird_plugin', 'score' => 0];
-        $this->scoring->logDecision($accountEmail, $score, $decision, $reasons, $sender, $subject);
+        $this->scoring->logDecision($accountEmail, $score, $decision, $reasons, $sender, $subject, SpamScoreLog::SOURCE_PLUGIN, SpamScoreLog::OUTCOME_NONE);
 
         return [
             'decision' => $decision,

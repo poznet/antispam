@@ -70,7 +70,56 @@ class SpamboxController extends AbstractController
         $logs = $this->em->getRepository(SpamScoreLog::class)
             ->findRecentByDecision(SpamScoreLog::DECISION_QUARANTINE, new \DateTime('-30 days'), 50);
 
-        return ['mailboxes' => $mailboxes, 'logs' => $logs];
+        return ['mailboxes' => $mailboxes, 'logs' => $logs, 'locations' => self::locateLogs($logs, $mailboxes)];
+    }
+
+    /**
+     * Where each logged quarantine decision's message is now, judged from the
+     * recorded source/outcome and whether a matching message (same account,
+     * sender and subject) is listed in that account's quarantine right now.
+     *
+     * @param SpamScoreLog[] $logs
+     *
+     * @return array log id => ['label' => string, 'class' => bootstrap label suffix]
+     */
+    public static function locateLogs(array $logs, array $mailboxes)
+    {
+        $present = [];
+        foreach ($mailboxes as $mailbox) {
+            foreach ($mailbox['items'] as $item) {
+                $present[self::matchKey($mailbox['account_email'], $item['from'], $item['subject'])] = true;
+            }
+        }
+
+        $out = [];
+        foreach ($logs as $log) {
+            $isPlugin = $log->getSource() === SpamScoreLog::SOURCE_PLUGIN;
+            if ($log->getSource() === null) {
+                // Older entries: the plugin marked itself with a pseudo-reason.
+                foreach ($log->getReasonsDecoded() as $r) {
+                    $isPlugin = $isPlugin || str_starts_with((string)($r['rule'] ?? ''), 'source:');
+                }
+            }
+
+            if (isset($present[self::matchKey($log->getAccountEmail(), $log->getSender(), $log->getSubject())])) {
+                $out[$log->getId()] = ['label' => 'w kwarantannie', 'class' => 'warning'];
+            } elseif ($isPlugin) {
+                $out[$log->getId()] = ['label' => 'ocena wtyczki - na serwerze nic nie przeniesiono', 'class' => 'default'];
+            } elseif ($log->getOutcome() === SpamScoreLog::OUTCOME_MOVE_FAILED) {
+                $out[$log->getId()] = ['label' => 'przeniesienie nie powiodło się - została w INBOX', 'class' => 'danger'];
+            } elseif ($log->getOutcome() === SpamScoreLog::OUTCOME_QUARANTINED) {
+                $out[$log->getId()] = ['label' => 'już nie w kwarantannie (dostarczona lub usunięta)', 'class' => 'success'];
+            } else {
+                $out[$log->getId()] = ['label' => 'brak w kwarantannie (wpis sprzed zapisywania wyniku)', 'class' => 'default'];
+            }
+        }
+        return $out;
+    }
+
+    private static function matchKey($account, $sender, $subject)
+    {
+        // SpamScoreLog keeps at most 500 bytes of the subject.
+        return strtolower(trim((string)$account)) . '|' . strtolower(trim((string)$sender)) . '|' . substr(trim((string)$subject), 0, 500);
     }
 
     /** Release (optionally whitelisting the sender) or delete a quarantined message. */

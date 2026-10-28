@@ -23,7 +23,7 @@ class SpamScoreLogRepository extends EntityRepository
      * Filtered, paginated score log for the "Dziennik ocen" view.
      *
      * Supported filters (all optional): decision (ham|quarantine|spam|whitelisted),
-     * account (exact account e-mail), q (substring of sender or subject),
+     * account (exact account e-mail), accounts (list of account e-mails the result is restricted to), q (substring of sender or subject),
      * from / to (\DateTimeInterface, inclusive day range), minScore (int).
      *
      * @return array{items: SpamScoreLog[], total: int}
@@ -39,6 +39,14 @@ class SpamScoreLogRepository extends EntityRepository
         }
         if (!empty($filters['account'])) {
             $qb->andWhere('l.accountEmail = :account')->setParameter('account', $filters['account']);
+        }
+        if (isset($filters['accounts'])) {
+            // Ownership scope of a non-admin user: only these account e-mails (an empty list matches nothing).
+            if ($filters['accounts'] === []) {
+                $qb->andWhere('1 = 0');
+            } else {
+                $qb->andWhere('l.accountEmail IN (:accounts)')->setParameter('accounts', array_values($filters['accounts']));
+            }
         }
         if (isset($filters['q']) && $filters['q'] !== '') {
             // Escape LIKE wildcards so "100%" or "a_b" match literally (portable ESCAPE char, not backslash).

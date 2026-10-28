@@ -1,5 +1,5 @@
 {% set shield = asset('bundles/antispam/img/pp-shield.png') %}
-{% set panel_url = path('antispam_index') %}
+{% set panel_url = path(is_granted('ROLE_ADMIN') ? 'antispam_index' : 'antispam_my_quarantine') %}
 <!DOCTYPE html>
 <html lang="pl" class="no-js">
 <head>
@@ -529,7 +529,7 @@
                 <a class="login-alt" href="{{ path('logout') }}">Wyloguj się</a>
             {% else %}
                 <h3 id="login-title">Zaloguj się do panelu</h3>
-                <p class="login-lead">Wprowadź dane dostępowe administratora.</p>
+                <p class="login-lead">Wprowadź dane dostępowe swojego konta.</p>
 
                 {% if error %}
                     <div class="login-alert" role="alert">

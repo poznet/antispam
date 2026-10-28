@@ -56,7 +56,7 @@ check for local testing only.
    ```env
    APP_SECRET=<openssl rand -hex 32>
    ADMIN_USER=<your login>
-   ADMIN_PASSWORD=<strong password>
+   ADMIN_PASSWORD=<strong password>   # always-available admin; more users: docs/users.md
    DATABASE_PASSWORD=<random>
    DATABASE_ROOT_PASSWORD=<random>
    ```

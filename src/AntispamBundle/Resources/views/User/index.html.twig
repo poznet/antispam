@@ -1,0 +1,50 @@
+{% extends '@Antispam/main.html.twig' %}
+
+{% block title %}Użytkownicy{% endblock %}
+{% block page_title %}Użytkownicy panelu{% endblock %}
+
+{% block body %}
+    <div class="pp-toolbar">
+        <a href="{{ path('antispam_user_add') }}" class="btn btn-primary"><span class="glyphicon glyphicon-plus"></span> Dodaj użytkownika</a>
+    </div>
+
+    <p class="text-muted">Administrator widzi wszystko. Użytkownik widzi wyłącznie kwarantannę, spam i dziennik ocen przypisanych mu skrzynek i może wyciągać z nich wiadomości.
+    {% if env_admin %}Konto <strong>{{ env_admin }}</strong> pochodzi z konfiguracji serwera (ADMIN_USER) i nie jest tu edytowalne.{% endif %}</p>
+
+    <div class="table-responsive">
+    <table class="table table-bordered">
+        <thead>
+            <tr><th>Login</th><th>Rola</th><th>Skrzynki</th><th>Utworzono</th><th>Akcje</th></tr>
+        </thead>
+        <tbody>
+        {% for u in users %}
+            <tr>
+                <td><div class="pp-acct"><span class="pp-acct-ic">{{ u.username|first|upper }}</span><b>{{ u.username }}</b></div></td>
+                <td>
+                    {% if u.admin %}<span class="label label-danger">Administrator</span>{% else %}<span class="label label-default">Użytkownik</span>{% endif %}
+                </td>
+                <td>
+                    {% if u.admin %}
+                        <span class="text-muted">wszystkie</span>
+                    {% else %}
+                        {% for a in u.accounts %}<span class="label label-info" title="{{ a.email }}">{{ a.name }}</span> {% else %}<span class="text-muted">brak</span>{% endfor %}
+                    {% endif %}
+                </td>
+                <td class="pp-mono">{{ u.createdAt|date('Y-m-d H:i') }}</td>
+                <td>
+                    <form method="post" action="{{ path('antispam_user_del', {id: u.id}) }}" style="margin:0">
+                        <input type="hidden" name="_token" value="{{ csrf_token('user_action_' ~ u.id) }}">
+                        <div class="btn-group btn-group-xs">
+                            <a href="{{ path('antispam_user_edit', {id: u.id}) }}" class="btn btn-default"><span class="glyphicon glyphicon-pencil"></span> Edytuj</a>
+                            <button type="submit" class="btn btn-danger" title="Usuń" onclick="return confirm('Usunąć tego użytkownika?')"><span class="glyphicon glyphicon-trash"></span></button>
+                        </div>
+                    </form>
+                </td>
+            </tr>
+        {% else %}
+            <tr><td colspan="5" class="text-center text-muted" style="padding:40px;">Brak użytkowników &mdash; <a href="{{ path('antispam_user_add') }}">dodaj pierwszego</a></td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% endblock %}

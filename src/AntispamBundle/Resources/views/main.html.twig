@@ -51,8 +51,21 @@
     {label: 'Wspólna baza spamu',   icon: 'signal',       path: 'antispam_feed_config',          match: ['antispam_feed_config']},
     {label: 'Raport kwarantanny',   icon: 'envelope',     path: 'antispam_digest_config',        match: ['antispam_digest_config', 'antispam_digest_preview']},
     {label: 'Wtyczki pocztowe',     icon: 'download-alt', path: 'antispam_plugin_config',        match: ['antispam_plugin_config']},
+    {label: 'Użytkownicy',          icon: 'user',         path: 'antispam_user_index',           match: ['antispam_user_index', 'antispam_user_add', 'antispam_user_edit']},
     {label: 'Konfiguracja (stara)', icon: 'cog',          path: 'antispam_account_config',       match: ['antispam_account_config']}
 ] %}
+{# ROLE_USER sees only their own mailbox views (access is enforced server-side too). #}
+{% if not is_granted('ROLE_ADMIN') %}
+    {% set nav = [
+        {section: 'Moja poczta'},
+        {label: 'Kwarantanna',   icon: 'warning-sign', path: 'antispam_my_quarantine', match: ['antispam_my_quarantine']},
+        {label: 'Spam',          icon: 'inbox',        path: 'antispam_my_scorelog', params: {decision: 'spam'},  match: []},
+        {label: 'Dziennik ocen', icon: 'list-alt',     path: 'antispam_my_scorelog', match: ['antispam_my_scorelog']},
+        {section: 'Konto'},
+        {label: 'Zmiana hasła',  icon: 'lock',         path: 'antispam_my_password', match: ['antispam_my_password']}
+    ] %}
+{% endif %}
+{% set home_path = is_granted('ROLE_ADMIN') ? 'antispam_index' : 'antispam_my_quarantine' %}
 {% set crumb = 'Przegląd' %}
 {% for item in nav %}
     {% if item.section is defined %}{% set section = item.section %}{% elseif route in item.match %}{% set crumb = section %}{% endif %}
@@ -60,7 +73,7 @@
 <body class="pp-app">
 
 <aside class="pp-sidebar" id="pp-sidebar">
-    <a class="pp-brand" href="{{ path('antispam_index') }}">
+    <a class="pp-brand" href="{{ path(home_path) }}">
         <span class="pp-brand-logo"><img src="{{ asset('bundles/antispam/img/pp-shield.png') }}" alt="" width="40" height="40"></span>
         <span class="pp-brand-name">
             <strong>Antispam</strong>
@@ -73,7 +86,7 @@
             {% if item.section is defined %}
                 <div class="pp-nav-section">{{ item.section }}</div>
             {% else %}
-                <a href="{{ path(item.path) }}" class="{{ route in item.match ? 'active' }}"{% if route in item.match %} aria-current="page"{% endif %}>
+                <a href="{{ path(item.path, item.params|default({})) }}" class="{{ route in item.match ? 'active' }}"{% if route in item.match %} aria-current="page"{% endif %}>
                     <span class="glyphicon glyphicon-{{ item.icon }}" aria-hidden="true"></span> {{ item.label }}
                 </a>
             {% endif %}
@@ -108,7 +121,12 @@
                 </a>
                 <ul class="dropdown-menu dropdown-menu-right">
                     <li class="dropdown-header">Zalogowano jako {{ app.user.userIdentifier }}</li>
+                    {% if is_granted('ROLE_ADMIN') %}
                     <li><a href="{{ path('antispam_spam_config') }}"><span class="glyphicon glyphicon-cog"></span> Ustawienia</a></li>
+                    {% endif %}
+                    {% if app.user.role is defined %}
+                    <li><a href="{{ path('antispam_my_password') }}"><span class="glyphicon glyphicon-lock"></span> Zmiana hasła</a></li>
+                    {% endif %}
                     <li role="separator" class="divider"></li>
                     <li><a href="{{ path('logout') }}"><span class="glyphicon glyphicon-log-out"></span> Wyloguj</a></li>
                 </ul>

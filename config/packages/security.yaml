@@ -1,16 +1,33 @@
 # Authentication and access control.
 #
-# The single administrator account comes from the ADMIN_USER and
-# ADMIN_PASSWORD_HASH environment variables (see AdminUserProvider). The Docker
-# entrypoint derives ADMIN_PASSWORD_HASH from ADMIN_PASSWORD; outside Docker
-# generate it with `php bin/console security:hash-password`.
+# Two user sources, tried in this order (chain provider):
+#   1. the legacy administrator from the ADMIN_USER and ADMIN_PASSWORD_HASH
+#      environment variables (AdminUserProvider) - always ROLE_ADMIN, answered
+#      without touching the database, so existing deployments can never lock
+#      themselves out (even before the user table exists). The Docker entrypoint
+#      derives ADMIN_PASSWORD_HASH from ADMIN_PASSWORD; outside Docker generate
+#      it with `php bin/console security:hash-password`.
+#   2. antispam_user table (Entity\User): ROLE_ADMIN / ROLE_USER accounts managed
+#      in the panel under /users (see docs/users.md). The login of the env admin
+#      is reserved and cannot be created there.
 security:
     password_hashers:
         Symfony\Component\Security\Core\User\InMemoryUser: auto
+        AntispamBundle\Entity\User: auto
+
+    role_hierarchy:
+        ROLE_ADMIN: ROLE_USER
 
     providers:
-        admin:
+        db_users:
+            entity:
+                class: AntispamBundle\Entity\User
+                property: username
+        env_admin:
             id: AntispamBundle\Security\AdminUserProvider
+        app_users:
+            chain:
+                providers: ['env_admin', 'db_users']
 
     firewalls:
         dev:
@@ -19,11 +36,11 @@ security:
 
         main:
             lazy: true
-            provider: admin
+            provider: app_users
             form_login:
                 login_path: login
                 check_path: login
-                default_target_path: antispam_index
+                default_target_path: antispam_start
                 enable_csrf: true
             logout:
                 path: logout
@@ -43,12 +60,22 @@ security:
         # task pane loaded by Outlook) and the Apple Mail extension source.
         - { path: ^/api/plugin, roles: PUBLIC_ACCESS }
         - { path: ^/plugin/(download|outlook/|apple-mail/), roles: PUBLIC_ACCESS }
+        # End-user area (own quarantine / spam / score log): ROLE_USER, ownership
+        # of each mailbox is enforced in the controller (Security\MailboxAccess).
+        # /start redirects to the role's landing page after login.
+        - { path: ^/(my|start)(/|$), roles: ROLE_USER }
+        # Everything else is administration.
         - { path: ^/, roles: ROLE_ADMIN }
 
 when@test:
     security:
         password_hashers:
             Symfony\Component\Security\Core\User\InMemoryUser:
+                algorithm: auto
+                cost: 4
+                time_cost: 3
+                memory_cost: 10
+            AntispamBundle\Entity\User:
                 algorithm: auto
                 cost: 4
                 time_cost: 3

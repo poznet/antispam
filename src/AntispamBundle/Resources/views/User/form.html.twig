@@ -1,0 +1,65 @@
+{% extends '@Antispam/main.html.twig' %}
+
+{% set editing = user_entity.id is not null %}
+{% block title %}{{ editing ? 'Edycja użytkownika' : 'Dodaj użytkownika' }}{% endblock %}
+{% block page_title %}{{ editing ? 'Edycja użytkownika: ' ~ user_entity.username : 'Dodaj użytkownika' }}{% endblock %}
+
+{% block body %}
+    <form method="post" action="{{ editing ? path('antispam_user_edit', {id: user_entity.id}) : path('antispam_user_add') }}" autocomplete="off">
+        <input type="hidden" name="_token" value="{{ csrf_token('user_form') }}">
+        <div class="panel panel-default">
+            <div class="panel-heading"><span class="glyphicon glyphicon-user"></span> Dane logowania</div>
+            <div class="panel-body">
+                <div class="form-group">
+                    <label>Login</label>
+                    <input type="text" class="form-control" name="user[username]" value="{{ form.username }}" placeholder="np. jan.kowalski lub jan@example.com" autocomplete="off" required>
+                </div>
+                <div class="form-group">
+                    <label>Hasło{% if editing %} <small class="text-muted">(zostaw puste, aby nie zmieniać)</small>{% endif %}</label>
+                    <input type="password" class="form-control" name="user[password]" autocomplete="new-password" minlength="{{ min_password }}"{{ editing ? '' : ' required' }}>
+                    <p class="help-block">Co najmniej {{ min_password }} znaków.</p>
+                </div>
+                <div class="form-group">
+                    <label>Powtórz hasło</label>
+                    <input type="password" class="form-control" name="user[password_repeat]" autocomplete="new-password">
+                </div>
+                <div class="form-group">
+                    <label>Rola</label>
+                    <select class="form-control" name="user[role]" id="userRole" onchange="toggleAccounts()"{{ is_self ? ' title="Nie możesz zmienić własnej roli"' }}>
+                        <option value="ROLE_USER"{{ form.role == 'ROLE_USER' ? ' selected' }}{{ is_self ? ' disabled' }}>Użytkownik - tylko własne skrzynki</option>
+                        <option value="ROLE_ADMIN"{{ form.role == 'ROLE_ADMIN' ? ' selected' }}>Administrator - pełny dostęp</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel panel-default" id="accountsPanel">
+            <div class="panel-heading"><span class="glyphicon glyphicon-inbox"></span> Przypisane skrzynki</div>
+            <div class="panel-body">
+                <p class="text-muted">Użytkownik zobaczy kwarantannę, spam i dziennik ocen tylko tych kont. Administrator widzi wszystkie skrzynki niezależnie od wyboru.</p>
+                {% for a in accounts %}
+                    <div class="checkbox">
+                        <label>
+                            <input type="checkbox" name="user[accounts][]" value="{{ a.id }}"{{ a.id in form.accounts ? ' checked' }}>
+                            {{ a.name }} <small class="text-muted">({{ a.email }}, {{ a.connectionType == 'ssh' ? 'SSH+Maildir' : 'IMAP' }})</small>
+                        </label>
+                    </div>
+                {% else %}
+                    <p class="text-muted">Brak kont. Najpierw <a href="{{ path('antispam_account_add') }}">dodaj konto pocztowe</a>.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-ok"></span> Zapisz</button>
+        <a href="{{ path('antispam_user_index') }}" class="btn btn-default">Anuluj</a>
+    </form>
+{% endblock %}
+
+{% block javascripts %}
+<script>
+    function toggleAccounts() {
+        document.getElementById('accountsPanel').style.opacity = document.getElementById('userRole').value === 'ROLE_ADMIN' ? '0.5' : '1';
+    }
+    toggleAccounts();
+</script>
+{% endblock %}

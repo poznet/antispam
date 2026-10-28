@@ -42,6 +42,8 @@ class MyControllerTest extends TestCase
             $this->quarantine,
             new MailboxAccess(),
             $this->createMock(UserPasswordHasherInterface::class),
+            $this->createMock(\AntispamBundle\Services\SpamFolderService::class),
+            $this->createMock(\AntispamBundle\Services\DeferredAgentSync::class),
         );
 
         $tokens = new TokenStorage();

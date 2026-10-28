@@ -188,6 +188,10 @@ Every white/blacklist rule (`antispam_whitelist`, `antispam_email_whitelist`,
 
 `*` was chosen over `NULL` because it keeps the column NOT NULL (no schema
 change), is never a valid address, and works in a plain `IN (...)` lookup.
+
+End users (`ROLE_USER`) can add and delete rules owned by their own mailboxes on
+**Moje reguły** (`/my/rules`) - exact and wildcard only, never `*`; see
+[users.md](users.md#own-sender-rules-myrules).
 Every consumer loads the rules of a mailbox with
 `findBy(['email' => RuleOwnership::scope($mailbox)])`, i.e. `IN ($mailbox, '*')`:
 the scan listeners (`CheckWhitelist`, `CheckEmailWhitelist`, `CheckBlacklist`,

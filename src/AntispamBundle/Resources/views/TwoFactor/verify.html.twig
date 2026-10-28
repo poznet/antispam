@@ -1,0 +1,21 @@
+{% extends '@Antispam/main.html.twig' %}
+{% block title %}Weryfikacja dwuetapowa{% endblock %}
+{% block page_title %}Weryfikacja dwuetapowa{% endblock %}
+
+{% block body %}
+    <form method="post" action="{{ path('antispam_2fa_verify') }}" style="max-width:480px;" autocomplete="off">
+        <input type="hidden" name="_token" value="{{ csrf_token('two_factor_verify') }}">
+        <div class="panel panel-default">
+            <div class="panel-heading"><span class="glyphicon glyphicon-phone"></span> Kod z aplikacji uwierzytelniającej</div>
+            <div class="panel-body">
+                <p>Hasło jest poprawne. Wpisz 6-cyfrowy kod z aplikacji (Google Authenticator, Microsoft Authenticator, Aegis...){% if backup_allowed %} albo jeden z kodów zapasowych{% endif %}.</p>
+                <div class="form-group">
+                    <label for="code">Kod</label>
+                    <input type="text" class="form-control pp-mono" id="code" name="code" inputmode="{{ backup_allowed ? 'text' : 'numeric' }}" autocomplete="one-time-code" maxlength="16" required autofocus>
+                </div>
+                <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-log-in"></span> Potwierdź</button>
+                <a href="{{ path('logout') }}" class="btn btn-link">Wyloguj</a>
+            </div>
+        </div>
+    </form>
+{% endblock %}

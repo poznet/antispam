@@ -1,0 +1,74 @@
+{% extends '@Antispam/main.html.twig' %}
+{% block title %}Weryfikacja dwuetapowa{% endblock %}
+{% block page_title %}Weryfikacja dwuetapowa (2FA){% endblock %}
+
+{% block body %}
+    {% set token = csrf_token('my_2fa') %}
+    <div style="max-width:640px;">
+    {% if env_admin %}
+        <div class="panel panel-default">
+            <div class="panel-heading"><span class="glyphicon glyphicon-lock"></span> Konto z konfiguracji serwera</div>
+            <div class="panel-body">
+                {% if enabled %}
+                    <p><span class="label label-success">włączona</span> Kod jednorazowy jest wymagany przy logowaniu. Sekret pochodzi ze zmiennej środowiskowej <code>ADMIN_TOTP_SECRET</code>.</p>
+                {% else %}
+                    <p><span class="label label-default">wyłączona</span> Konto <code>ADMIN_USER</code> nie jest zapisane w bazie, więc 2FA nie da się dla niego włączyć w panelu.</p>
+                {% endif %}
+                <p class="text-muted">2FA tego konta ustawia się zmienną środowiskową <code>ADMIN_TOTP_SECRET</code> (sekret base32, np. z <code>php bin/console antispam:2fa:secret</code>), którą trzeba też dodać w aplikacji uwierzytelniającej. To konto nie ma kodów zapasowych. Zalecane: utwórz administratora w <strong>Ustawienia → Użytkownicy</strong> i włącz mu 2FA tutaj.</p>
+            </div>
+        </div>
+    {% elseif enabled %}
+        <div class="panel panel-default">
+            <div class="panel-heading"><span class="glyphicon glyphicon-ok-circle"></span> Stan</div>
+            <div class="panel-body">
+                <p><span class="label label-success">włączona</span> od {{ enabled_at ? enabled_at|date('Y-m-d H:i') : '—' }}. Przy logowaniu po haśle wymagany jest kod z aplikacji.</p>
+                <p style="margin:0;">Pozostałe kody zapasowe: <strong>{{ remaining_codes }}</strong>{% if remaining_codes <= 2 %} <span class="label label-warning">wygeneruj nowe</span>{% endif %}</p>
+            </div>
+        </div>
+
+        <form method="post" action="{{ path('antispam_my_2fa_backup_codes') }}" class="panel panel-default" autocomplete="off">
+            <div class="panel-heading"><span class="glyphicon glyphicon-refresh"></span> Nowe kody zapasowe</div>
+            <div class="panel-body">
+                <input type="hidden" name="_token" value="{{ token }}">
+                <p class="text-muted">Poprzednie kody przestaną działać.</p>
+                <div class="form-group"><label for="bc-current">Obecne hasło</label><input type="password" class="form-control" id="bc-current" name="current" autocomplete="current-password" required></div>
+                <div class="form-group"><label for="bc-code">Kod z aplikacji</label><input type="text" class="form-control pp-mono" id="bc-code" name="code" autocomplete="one-time-code" maxlength="16" required></div>
+                <button type="submit" class="btn btn-default"><span class="glyphicon glyphicon-refresh"></span> Wygeneruj nowe kody</button>
+            </div>
+        </form>
+
+        <form method="post" action="{{ path('antispam_my_2fa_disable') }}" class="panel panel-danger" autocomplete="off">
+            <div class="panel-heading"><span class="glyphicon glyphicon-remove-circle"></span> Wyłącz 2FA</div>
+            <div class="panel-body">
+                <input type="hidden" name="_token" value="{{ token }}">
+                <div class="form-group"><label for="d-current">Obecne hasło</label><input type="password" class="form-control" id="d-current" name="current" autocomplete="current-password" required></div>
+                <div class="form-group"><label for="d-code">Kod z aplikacji lub kod zapasowy</label><input type="text" class="form-control pp-mono" id="d-code" name="code" autocomplete="one-time-code" maxlength="16" required></div>
+                <button type="submit" class="btn btn-danger" data-confirm="Wyłączyć weryfikację dwuetapową?"><span class="glyphicon glyphicon-remove"></span> Wyłącz</button>
+            </div>
+        </form>
+    {% else %}
+        {% if required %}
+            <div class="alert alert-warning">Administrator musi mieć włączoną weryfikację dwuetapową. Dokończ konfigurację, aby korzystać z panelu.</div>
+        {% endif %}
+        <form method="post" action="{{ path('antispam_my_2fa_enable') }}" class="panel panel-default" autocomplete="off">
+            <div class="panel-heading"><span class="glyphicon glyphicon-qrcode"></span> Włącz weryfikację dwuetapową</div>
+            <div class="panel-body">
+                <input type="hidden" name="_token" value="{{ token }}">
+                <ol>
+                    <li>Zainstaluj aplikację uwierzytelniającą (Google Authenticator, Microsoft Authenticator, Aegis, 1Password...).</li>
+                    <li>Zeskanuj kod QR albo wpisz klucz ręcznie.</li>
+                    <li>Wpisz 6-cyfrowy kod z aplikacji, aby potwierdzić.</li>
+                </ol>
+                <p class="text-center"><img src="{{ qr }}" alt="Kod QR do aplikacji uwierzytelniającej" width="220" height="220" style="background:#fff; padding:8px; border-radius:6px;"></p>
+                <p class="text-center">Klucz: <code class="pp-mono">{{ secret }}</code></p>
+                <div class="form-group"><label for="e-code">Kod z aplikacji</label><input type="text" class="form-control pp-mono" id="e-code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required></div>
+                <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-ok"></span> Włącz 2FA</button>
+            </div>
+        </form>
+    {% endif %}
+    </div>
+{% endblock %}
+
+{% block javascripts %}
+    <script src="{{ asset('bundles/antispam/js/data-confirm.js') }}"></script>
+{% endblock %}

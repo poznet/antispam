@@ -28,6 +28,7 @@ The repository ships a production-ready Docker setup:
 | `ADMIN_USER` | Login for the web UI | `admin` |
 | `ADMIN_PASSWORD` | Password for the web UI (bcrypted on startup) | `admin` |
 | `ADMIN_PASSWORD_HASH` | Pre-computed bcrypt hash (skip runtime hashing) | _(unset)_ |
+| `ADMIN_TOTP_SECRET` | Optional 2FA (TOTP) of `ADMIN_USER`: base32 secret from `php bin/console antispam:2fa:secret`, added to an authenticator app. Empty = the env admin logs in with the password only, even when "Wymagaj 2FA dla administratorów" is on. Database users set 2FA up in the panel instead - see [users.md](users.md#two-factor-authentication-2fa) | _(empty)_ |
 | `DATABASE_NAME` | MySQL database name | `antispam` |
 | `DATABASE_USER` | MySQL user | `antispam` |
 | `DATABASE_PASSWORD` | MySQL user password | `antispam` |
@@ -255,6 +256,12 @@ Before exposing the instance publicly, make sure:
       disabled and `/q/` rejects every link. Changing it invalidates links
       already sent.
 - [ ] `ADMIN_PASSWORD` is strong and not `admin`.
+- [ ] Two-factor authentication: create a database administrator (*Ustawienia →
+      Użytkownicy*), enable 2FA for it (*menu konta → Weryfikacja dwuetapowa*),
+      turn on **Wymagaj 2FA dla administratorów**, and set `ADMIN_TOTP_SECRET`
+      for the env admin (`php bin/console antispam:2fa:secret`) - without it the
+      env admin keeps logging in with the password only. See
+      [users.md](users.md#two-factor-authentication-2fa).
 - [ ] `DATABASE_PASSWORD` / `DATABASE_ROOT_PASSWORD` are random.
 - [ ] The domain is served over HTTPS (Coolify handles this automatically).
       In prod the session cookie is always `Secure` (`cookie_secure: true`
@@ -303,6 +310,10 @@ logowania, spróbuj ponownie po upływie N minut" until the window passes (`logi
 `cache.rate_limiter` pool = `var/cache`). A successful login resets the
 counter; restarting the container (cache rebuild) clears it as well. The
 client IP is only correct with a trusted proxy (next section).
+
+The 2FA code step (`/2fa`) and the 2FA forms of `/my/2fa` have their own limiter,
+`two_factor_code` in `config/packages/framework.yaml`: 5 wrong codes per login
+within 15 minutes (keyed by login only), same storage; a correct code resets it.
 
 ### Behind a reverse proxy (nginx)
 

@@ -28,6 +28,16 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   `antispam:digest:send --scheduled-only` (hourly in the Docker scheduler) and
   arguments after `--` for `antispam:cron:run`. New nullable columns on
   `antispam_account` (migration `Version20261028134625`).
+- User self-service: own sender white/blacklists (`/my/rules`, exact + wildcard,
+  owned by the user's mailboxes; SSH agents get the rules synced after the response),
+  SPAM folder with "Przywróć do skrzynki" / "Przywróć i zawsze akceptuj" for IMAP and
+  SSH mailboxes (`/my/spam`; the user menu "Spam" now points there).
+- Two-factor authentication (TOTP, local QR code, hashed backup codes, throttled code
+  step) for database users; `ADMIN_TOTP_SECRET` for the env admin; admin reset and
+  "Wymagaj 2FA dla administratorów"; `antispam:2fa:secret`.
+- Agent 3.1: `spam-list` / `spam-release` (redeploy SSH accounts: Konta → Wdróż).
+- Audit actions `spam.release`, `spam.whitelist`, `auth.2fa_*`.
+- New nullable 2FA columns on `antispam_user` (migration `VERSION_2FA`).
 
 ### Changed
 - Database schema is versioned with Doctrine Migrations (`migrations/`, baseline =

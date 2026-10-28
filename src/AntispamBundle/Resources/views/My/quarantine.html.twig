@@ -67,7 +67,7 @@
     </div>
     {% endfor %}
 
-    <p class="text-muted">Wiadomości uznane za spam i ich powody znajdziesz w <a href="{{ path('antispam_my_scorelog', {decision: 'spam'}) }}">dzienniku ocen</a>.</p>
+    <p class="text-muted">Wiadomości uznane za spam znajdziesz w <a href="{{ path('antispam_my_spam') }}">folderze SPAM</a>, a powody ocen w <a href="{{ path('antispam_my_scorelog', {decision: 'spam'}) }}">dzienniku ocen</a>.</p>
 {% endblock %}
 
 {% block javascripts %}

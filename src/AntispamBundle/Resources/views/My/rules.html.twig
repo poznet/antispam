@@ -1,0 +1,68 @@
+{% extends '@Antispam/main.html.twig' %}
+{% block title %}Moje reguły{% endblock %}
+{% block page_title %}Moje reguły nadawców{% endblock %}
+
+{% block body %}
+    {% set token = csrf_token('my_rules') %}
+    <p class="text-muted">Zaufani nadawcy zawsze trafiają do skrzynki odbiorczej, blokowani - do folderu SPAM. Reguły dotyczą tylko Twoich skrzynek i nowych wiadomości; reguły ustawione przez administratora dla wszystkich skrzynek obowiązują niezależnie od tych.</p>
+
+    {% if owners is empty %}
+        <div class="empty-state">
+            <span class="glyphicon glyphicon-inbox"></span>
+            <p>Brak przypisanych skrzynek</p>
+            <p class="text-muted">Do Twojego konta nie przypisano żadnej skrzynki. Skontaktuj się z administratorem.</p>
+        </div>
+    {% else %}
+        <div class="add-form">
+            <form method="post" action="{{ path('antispam_my_rules_add') }}" class="form-inline">
+                <input type="hidden" name="_token" value="{{ token }}">
+                <select name="list" class="form-control" aria-label="Lista">
+                    {% for key, l in lists %}<option value="{{ key }}">{{ l.label }}</option>{% endfor %}
+                </select>
+                <input type="text" class="form-control" name="value" placeholder="jan@firma.pl, firma.pl lub *@firma.pl" required maxlength="255" style="min-width:260px;" aria-label="Adres lub domena">
+                <select name="pattern_type" class="form-control" aria-label="Typ wzorca">
+                    <option value="exact">Dokładnie</option>
+                    <option value="wildcard">Wzorzec (* i ?)</option>
+                </select>
+                <select name="owner" class="form-control" aria-label="Skrzynka">
+                    {% for o in owners %}<option value="{{ o }}">{{ o }}</option>{% endfor %}
+                </select>
+                <button type="submit" class="btn btn-success"><span class="glyphicon glyphicon-plus"></span> Dodaj</button>
+            </form>
+            <p class="help-block">Domeny wpisuj bez „@” (np. <code>firma.pl</code>); wzorzec <code>*.firma.pl</code> obejmuje subdomeny, <code>*@firma.pl</code> - wszystkie adresy domeny.
+            {% if ssh_owners is not empty %}Skrzynki obsługiwane przez agenta na serwerze dostają zmiany kilkanaście sekund po zapisaniu.{% endif %}</p>
+        </div>
+
+        {% for key, l in lists %}
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                <span class="glyphicon glyphicon-{{ key starts with 'email' ? 'envelope' : 'globe' }}"></span> {{ l.label }}
+                <span class="badge pull-right">{{ l.rules|length }}</span>
+            </div>
+            {% if l.rules is not empty %}
+            <ul class="list-group">
+                {% for r in l.rules %}
+                <li class="list-group-item">
+                    <form method="post" action="{{ path('antispam_my_rules_delete') }}" style="display:inline;">
+                        <input type="hidden" name="_token" value="{{ token }}">
+                        <input type="hidden" name="list" value="{{ key }}">
+                        <input type="hidden" name="id" value="{{ r.id }}">
+                        <button type="submit" class="btn btn-danger btn-xs list-actions" data-confirm="Usunąć tę regułę?"><span class="glyphicon glyphicon-remove"></span> Usuń</button>
+                    </form>
+                    <span class="label label-default">{{ r.patternType == 'wildcard' ? 'wzorzec' : 'dokładnie' }}</span>
+                    <strong>{{ attribute(r, l.field) }}</strong>
+                    <small class="text-muted">&middot; {{ r.email }}</small>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <div class="panel-body text-muted">Brak reguł</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% endif %}
+{% endblock %}
+
+{% block javascripts %}
+    <script src="{{ asset('bundles/antispam/js/data-confirm.js') }}"></script>
+{% endblock %}

@@ -11,17 +11,22 @@ Page: **Przegląd → Dziennik audytu** (`/audit`, ROLE_ADMIN only).
 | `auth.login` | panel login (form_login) | user; firewall |
 | `auth.login_failed` | failed panel login (also throttled) | the login that was typed; `reason` = exception class or `throttled` |
 | `auth.logout` | logout | user |
-| `rule.add`, `rule.delete` | white/blacklist rule (domain and e-mail lists) | list type + rule id, value, owner mailbox (`*` = all); pattern type, score |
+| `auth.2fa_verified` | correct 2FA code at login (`/2fa`) | user; `method` = `totp` / `backup` |
+| `auth.2fa_failed` | wrong / throttled 2FA code, wrong password on a 2FA form | user; `step` = `login` / `enable` / `disable` / `backup_codes`, `reason` = `wrong_code` / `wrong_password` / `throttled` |
+| `auth.2fa_enabled`, `auth.2fa_disabled`, `auth.2fa_backup_codes` | own 2FA (`/my/2fa`): turned on, off, new backup codes | user |
+| `auth.2fa_reset` | admin reset of a user's 2FA (`/users/2fa-reset/{id}`) | user id, login |
+| `rule.add`, `rule.delete` | white/blacklist rule (domain and e-mail lists; admin lists and the user's own rules on `/my/rules` with `source: my`) | list type + rule id, value, owner mailbox (`*` = all); pattern type, score, `source` |
 | `rule.import` | bulk import (`/bulk/import/{type}`) | list type, owner; added / skipped counts |
 | `rules.make_global` | `antispam:rules:make-global` (not with `--dry-run`) | owner; moved / merged counts; actor `cli` |
 | `quarantine.release`, `quarantine.whitelist` ("Zawsze akceptuj"), `quarantine.delete` | admin panel (`source: panel`), user area `/my` (`source: my`), digest link `/q/` (`source: digest`, actor `link z raportu`) | message id, sender, mailbox address, quarantine key; `ok` = whether it worked (failed attempts are recorded too) |
 | `spambox.restore` | restore from the legacy SPAM / QUARANTINE folder | message number, folder |
+| `spam.release`, `spam.whitelist` ("Przywróć i zawsze akceptuj") | user area SPAM folder `/my/spam` | message id (IMAP UID / Maildir name), sender, mailbox address; `source: my`, `mailbox_id` (`imap-<id>` / `ssh-<id>`), `ok` (failed / refused attempts too) |
 | `plugin.login`, `plugin.login_failed` | plugin login (`/api/plugin/login`) | mailbox address typed / logged in |
 | `plugin.report` | spam / not-spam report from a plugin | sender, mailbox; verdict, learned rules; actor = plugin account (or anonymous) |
 | `plugin.phishing` | phishing report from a plugin | phishing report id, sender, mailbox; duplicate, client |
 | `phishing.update`, `phishing.block`, `phishing.delete`, `phishing.eml_download`, `phishing.forward` | `/phishing/*` | report id, sender, mailbox; status from/to, blocked value, rule id; forward result, recipients, resend/bulk |
 | `backup.export`, `backup.import` | Kopia zapasowa | file name, with/without secrets, format; import mode, sections, created/updated/deleted/skipped counts |
-| `settings.save` | Filtr spamu, Wspólna baza spamu, Raport kwarantanny, Wtyczki pocztowe, Konfiguracja (stara), Lista CERT, Przekazywanie phishingu (`phishing_forward`) | `target_id` = page; submitted field **names**, `secrets_changed` = names of secret fields that were set or cleared |
+| `settings.save` | Filtr spamu, Wspólna baza spamu, Raport kwarantanny, Wtyczki pocztowe, Konfiguracja (stara), Lista CERT, Przekazywanie phishingu (`phishing_forward`), "Wymagaj 2FA dla administratorów" (`2fa_policy`, `required`) | `target_id` = page; submitted field **names**, `secrets_changed` = names of secret fields that were set or cleared |
 | `settings.digest_send` | "Wyślij teraz" of the digest page | as above |
 | `settings.uncheck_all`, `settings.reset_counters` | maintenance buttons of Filtr spamu | - |
 | `account.add`, `account.edit`, `account.delete`, `account.deploy`, `account.sync`, `account.host_key_reset` | `/account/*` | account id, name, mailbox; connection type, field names, `ok`; `account.edit` also `settings_overrides` (per-mailbox overrides with values) and `settings_changed` |

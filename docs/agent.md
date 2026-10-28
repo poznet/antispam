@@ -7,7 +7,7 @@ server, operating on Maildir folders without IMAP. It keeps its rules,
 settings and state in a local SQLite database. The panel talks to it over SSH
 (`AntispamBundle\Services\SshService`); see [accounts.md](accounts.md).
 
-Current version: **3.0** (`AGENT_VERSION` at the top of the script; also
+Current version: **3.1** (`AGENT_VERSION` at the top of the script; also
 returned as `agent_version` in every JSON answer). The panel compares it with
 the bundled version and asks for a re-deploy (Konta → Wdróż) when the remote
 agent is older or does not know a command.
@@ -257,6 +257,34 @@ php antispam-agent.php quarantine-delete --id=<id>
 marks it checked, so it is not quarantined again. `--whitelist` also adds the sender
 to the local `email_whitelist`. The web app adds the same rule to its own database,
 so the rule survives the next sync. `quarantine-delete` removes the file.
+
+## SPAM folder (agent 3.1+)
+
+Used by the user area **Spam** page (`/my/spam`, see [users.md](users.md)). Same id rules
+as the quarantine commands.
+
+```bash
+php antispam-agent.php spam-list [--limit=100]
+php antispam-agent.php spam-release --id=<id> [--whitelist]
+```
+
+`spam-list` lists `.SPAM/{new,cur}` newest first (file mtime). The folder can be large,
+so only names and mtimes are collected first and headers are read for the newest
+`--limit` files only (default 100, max 500); `total` is the number of files in the
+folder. Items have the same shape as `quarantine-list` (`id`, `from`, `from_name`,
+`subject`, `date`, `received_at`, `size`, `score`, `reasons`; score/reasons from
+`score_log.file`, `null` / `[]` when unknown). A missing `.SPAM` folder gives an empty list.
+
+`spam-release` moves the message from `.SPAM/new` or `.SPAM/cur` back to the same
+sub-folder of INBOX (Maildir flags kept), marks it checked so the next scan leaves it
+alone, and with `--whitelist` adds the sender to the local `email_whitelist` (the panel
+adds the rule to its database too and syncs the rules afterwards). Answers
+`{"success": true, "id": "...", "sender": "a@b.pl", "whitelisted": false}`; an id that is
+not in `.SPAM` gives `{"success": false, "error": "Message not found in the SPAM folder ..."}`.
+
+Agents older than 3.1 answer with the usage text; the panel then reports the agent as
+outdated for that mailbox (redeploy: Konta → Wdróż). Nothing else changed in 3.1 - the
+SQLite schema is the same, rules and the checked history are kept on redeploy.
 
 ## Maildir Structure
 

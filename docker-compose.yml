@@ -71,7 +71,24 @@ services:
       retries: 10
       start_period: 20s
 
+  # ClamAV daemon for attachment scanning. Set the ClamAV DSN in the panel to
+  # tcp://clamav:3310. Not published outside the stack, so SSH agents on other
+  # servers cannot use it. First signature download takes a few minutes;
+  # clamd needs about 1.5-2 GB of RAM.
+  clamav:
+    image: clamav/clamav-debian:1.4
+    restart: unless-stopped
+    volumes:
+      - clamav_db:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+
 volumes:
+  clamav_db:
   app_data:
   app_logs:
   db_data:

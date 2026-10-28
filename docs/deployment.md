@@ -92,6 +92,7 @@ the `app` service on port `80`.
 | `app` | Apache + PHP, web UI. Runs `doctrine:schema:update` at boot; healthy once Apache is up |
 | `db` | MariaDB 10.6 (volume `db-data`) |
 | `scheduler` | Same image, runs `docker/scheduler.sh` instead of Apache. No migrations; starts after `app` is healthy |
+| `clamav` | ClamAV daemon (`clamav/clamav-debian:1.4`, multi-arch) for attachment scanning; signatures in volume `clamav-db` |
 
 `app` and `scheduler` share `app-data` (`var/data`) and `app-logs` (`var/log`).
 The scheduler ticks once a minute and runs each command as `www-data`. A job
@@ -108,6 +109,25 @@ on **Przegląd → Logi crona** (see [spam-handling.md](spam-handling.md)).
 The feed sync and the digest do nothing while they are disabled in the panel
 settings, so leaving them on is safe. The scheduler's output is in the
 `scheduler` service logs in Coolify.
+
+### ClamAV
+
+Both compose files include a `clamav` service (clamd + freshclam, which
+updates signatures on its own). To use it, in the panel open
+**Konfiguracja → Spam**:
+
+1. *Skanowanie załączników (ClamAV)* → *Adres clamd*: `tcp://clamav:3310`;
+2. turn on ClamAV scanning in the scoring section and save;
+3. press the ClamAV connection test button - it should report that the daemon
+   answers.
+
+The first start downloads the signature database (a few minutes, the
+healthcheck allows 5); until then the test fails. clamd needs about
+1.5-2 GB of RAM. Port 3310 is only reachable inside the stack, so it serves
+the server-side scans (IMAP accounts, legacy mailbox, mail client plugins).
+SSH agents get the same DSN with their settings but cannot reach it from
+another server - they report the error and treat the attachment as clean.
+For agents, run clamd on the mail server and use a separate install there.
 
 ### Updating
 

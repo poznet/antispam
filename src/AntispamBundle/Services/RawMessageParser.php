@@ -106,20 +106,48 @@ class RawMessageParser
 
     /**
      * IP of the connecting host taken from the topmost Received header that
-     * carries a public address, mirroring CheckDnsbl for IMAP messages.
+     * carries a public address (see connectingIpFromReceived()).
      */
     public function getConnectingIp()
     {
-        foreach ($this->getHeaders('received') as $line) {
-            if (preg_match_all('/\[?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\]?/', $line, $m)) {
-                foreach ($m[1] as $ip) {
-                    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-                        return $ip;
-                    }
+        return self::connectingIpFromReceived($this->getHeaders('received'));
+    }
+
+    /**
+     * The one connecting-IP extractor shared by the IMAP pipeline (CheckDnsbl)
+     * and the plugin scanner. Walks the (unfolded) Received lines top-down -
+     * the topmost ones were added by the receiving servers and are the only
+     * ones that can be trusted - and returns the first public IPv4 address in
+     * a "from" clause, preferring the bracketed [a.b.c.d] form. The "by" part
+     * names the receiving server and is ignored; private, loopback and
+     * reserved addresses (internal relays, content filters) are skipped.
+     *
+     * @param string[] $lines Received header values, topmost first
+     */
+    public static function connectingIpFromReceived(array $lines)
+    {
+        foreach (array_slice(array_values($lines), 0, 30) as $line) {
+            $from = preg_split('/\sby\s/i', ' ' . (string)$line, 2)[0];
+            $candidates = [];
+            if (preg_match_all('/\[(?:IPv6:[0-9a-f:]*:)?(\d{1,3}(?:\.\d{1,3}){3})\]/i', $from, $m)) {
+                $candidates = $m[1];
+            }
+            if (preg_match_all('/(?<![\d.])(\d{1,3}(?:\.\d{1,3}){3})(?![\d.])/', $from, $m)) {
+                $candidates = array_merge($candidates, $m[1]);
+            }
+            foreach ($candidates as $ip) {
+                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                    return $ip;
                 }
             }
         }
         return null;
+    }
+
+    /** All values of one header from a raw header block, unfolded, in order (topmost first). */
+    public static function headerValues($headerBlock, $name)
+    {
+        return self::parseHeaders((string)$headerBlock)[strtolower($name)] ?? [];
     }
 
     /**

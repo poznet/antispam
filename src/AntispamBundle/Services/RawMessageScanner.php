@@ -104,7 +104,7 @@ class RawMessageScanner
             if ($this->scoring->isImpersonationEnabled()) {
                 try {
                     $result = $this->impersonation->analyze(
-                        ['from_name' => $msg->getFromName(), 'from_email' => $sender, 'auth_results' => implode("\n", $msg->getHeaders('authentication-results'))],
+                        ['from_name' => $msg->getFromName(), 'from_email' => $sender, 'auth_results' => HeaderAnalyzer::topmostAuthResults($msg->getHeaderBlock())],
                         $this->scoring->getProtectedDomains($accountEmail),
                         ImpersonationAnalyzer::parseVips($this->scoring->getVipList()),
                         $this->scoring->getImpersonationScores()

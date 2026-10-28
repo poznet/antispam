@@ -3,6 +3,7 @@
 namespace AntispamBundle\EventListener\Message;
 
 use AntispamBundle\Event\MessageEvent;
+use AntispamBundle\Services\HeaderAnalyzer;
 use AntispamBundle\Services\ImpersonationAnalyzer;
 use AntispamBundle\Services\ScoringService;
 
@@ -43,8 +44,9 @@ class CheckImpersonation
             return;
         }
         try {
-            $auth = $msg->getHeaders()->get('authentication-results');
-            $data['auth_results'] = is_array($auth) ? implode("\n", $auth) : (string)$auth;
+            // Raw headers: imap_headerinfo() has no Authentication-Results.
+            // Only the receiving server's (topmost) result is trusted.
+            $data['auth_results'] = HeaderAnalyzer::topmostAuthResults($msg->getRawHeaders());
         } catch (\Throwable $e) {
             // no Authentication-Results header: internal-spoof check is skipped
         }

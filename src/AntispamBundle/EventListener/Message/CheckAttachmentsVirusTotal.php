@@ -19,8 +19,13 @@ class CheckAttachmentsVirusTotal
 {
     use AttachmentExtractorTrait;
 
+    /** Verdicts kept per process (one scan run), so the same attachment in many messages costs one lookup. */
+    const CACHE_SIZE = 1000;
+
     private $virustotal;
     private $scoring;
+    /** @var array<string, array> sha256 => lookupHash() result (errors are not cached) */
+    private $verdicts = [];
 
     public function __construct(VirusTotalService $virustotal, ScoringService $scoring)
     {
@@ -57,7 +62,16 @@ class CheckAttachmentsVirusTotal
             }
 
             $hash = hash('sha256', $data);
-            $result = $this->virustotal->lookupHash($hash, $apiKey, $timeout);
+            $result = $this->verdicts[$hash] ?? null;
+            if ($result === null) {
+                $result = $this->virustotal->lookupHash($hash, $apiKey, $timeout);
+                if ($result['error'] === null) {
+                    if (count($this->verdicts) >= self::CACHE_SIZE) {
+                        array_shift($this->verdicts);
+                    }
+                    $this->verdicts[$hash] = $result;
+                }
+            }
             if ($result['error'] !== null || !$result['found']) {
                 continue;
             }

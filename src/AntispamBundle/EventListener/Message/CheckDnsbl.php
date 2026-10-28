@@ -4,11 +4,12 @@ namespace AntispamBundle\EventListener\Message;
 
 use AntispamBundle\Event\MessageEvent;
 use AntispamBundle\Services\DnsblService;
+use AntispamBundle\Services\RawMessageParser;
 use AntispamBundle\Services\ScoringService;
 
 /**
- * Extracts the connecting IP from the latest Received header and checks it
- * against the configured DNSBL providers. Each hit adds the provider's
+ * Extracts the connecting IP from the topmost Received header with a public
+ * address and checks it against the configured DNSBL providers. Each hit adds the provider's
  * configured score to the event.
  */
 class CheckDnsbl
@@ -44,26 +45,18 @@ class CheckDnsbl
         }
     }
 
+    /**
+     * Connecting IP from the raw Received headers. imap_headerinfo() (what
+     * getHeaders() returns) has no Received lines at all, so the raw header
+     * block is needed; the extractor is shared with the plugin scanner.
+     */
     private function extractIp(MessageEvent $event)
     {
         try {
-            $msg = $event->getMessage();
-            $received = $msg->getHeaders()->get('received');
-            if (is_array($received)) {
-                $received = implode("\n", $received);
-            }
-            if (!$received) {
-                return null;
-            }
-            if (preg_match('/\[(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\]/', (string)$received, $m)) {
-                return $m[1];
-            }
-            if (preg_match('/\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/', (string)$received, $m)) {
-                return $m[1];
-            }
+            $raw = $event->getMessage()->getRawHeaders();
         } catch (\Throwable $e) {
             return null;
         }
-        return null;
+        return RawMessageParser::connectingIpFromReceived(RawMessageParser::headerValues($raw, 'received'));
     }
 }

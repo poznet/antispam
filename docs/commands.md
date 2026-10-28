@@ -102,6 +102,19 @@ php bin/console antispam:digest:send --since="-3 days"    # ignore the last-sent
 php bin/console antispam:digest:send --force              # send even if disabled in settings
 ```
 
+## Phishing Forward
+
+### antispam:phishing:forward
+
+Automatic mode of the phishing forward to CERT Polska / SOC (see
+[phishing.md](phishing.md#forwarding-to-cert-polska--soc)): sends reports older than the configured
+delay that are not marked as false positive, at most 20 per run. Does nothing while the automatic mode
+is off (the default). The Docker scheduler runs it every `PHISHING_FORWARD_INTERVAL` minutes (default 10).
+
+```bash
+php bin/console antispam:phishing:forward
+```
+
 ## CERT Polska List
 
 ### antispam:cert:sync

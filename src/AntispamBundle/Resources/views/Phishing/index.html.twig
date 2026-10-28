@@ -7,7 +7,8 @@
     <p class="text-muted">
         Wiadomości oznaczone we wtyczce (Thunderbird, Outlook) jako <strong>próba wyłudzenia</strong>. Każda jest też traktowana jak zgłoszenie spamu
         (nadawca trafia na blacklistę skrzynki), a tu zostaje pełna treść z nagłówkami: można ją przejrzeć, dodać reguły i pobrać jako .eml
-        (np. do zgłoszenia w <a href="https://incydent.cert.pl" target="_blank" rel="noopener noreferrer">CERT Polska</a>).
+        (np. do zgłoszenia w <a href="{{ cert_form_url }}" target="_blank" rel="noopener noreferrer">CERT Polska</a>) albo wysłać jednym kliknięciem
+        na adres CERT Polska / SOC (<a href="{{ path('antispam_phishing_forward_settings') }}">ustawienia przekazywania</a>).
     </p>
 
     <ul class="nav nav-pills" style="margin-bottom:15px;">
@@ -28,19 +29,31 @@
     </form>
 
     {% if rows|length > 0 %}
+    <form method="post" id="phishing-bulk" action="{{ path('antispam_phishing_forward_bulk') }}" style="margin-bottom:10px;">
+        <input type="hidden" name="_token" value="{{ token }}">
+        {% if forward_errors %}
+            <small class="text-warning">{{ forward_errors|join(' ') }}</small>
+        {% else %}
+            <button type="submit" class="btn btn-sm btn-primary" data-confirm="Wysłać zaznaczone zgłoszenia do {{ forward_recipients|join(', ') }}? Już wysłane i oznaczone jako „to nie phishing” zostaną pominięte."><span class="glyphicon glyphicon-send" aria-hidden="true"></span> Wyślij zaznaczone do {{ forward_recipients == ['cert@cert.pl'] ? 'CERT Polska' : forward_recipients|join(', ') }}</button>
+        {% endif %}
+    </form>
+
     <div class="panel panel-default">
         <div class="table-responsive">
         <table class="table table-striped" style="margin-bottom:0;">
-            <thead><tr><th>Zgłoszono</th><th>Skrzynka</th><th>Nadawca</th><th>Temat</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th><span class="sr-only">Zaznacz</span></th><th>Zgłoszono</th><th>Skrzynka</th><th>Nadawca</th><th>Temat</th><th>Status</th><th></th></tr></thead>
             <tbody>
             {% for r in rows %}
                 <tr>
+                    <td><input type="checkbox" name="ids[]" value="{{ r.id }}" form="phishing-bulk" aria-label="Zaznacz zgłoszenie #{{ r.id }}" {% if r.forwardedAt or r.status == 'false_positive' %}disabled{% endif %}></td>
                     <td style="white-space:nowrap;">{{ r.lastReportedAt|date('Y-m-d H:i') }}{% if r.reportCount > 1 %} <span class="badge" title="Zgłoszona kilka razy">×{{ r.reportCount }}</span>{% endif %}</td>
                     <td>{{ r.accountEmail }}<br><small class="text-muted">{{ r.client ?: 'wtyczka' }}</small></td>
                     <td>{% if r.senderName %}{{ r.senderName }}<br>{% endif %}<small>{{ r.sender ?: '—' }}</small>
                         {% if r.replyTo and r.replyTo != r.sender %}<br><small class="text-danger">Reply-To: {{ r.replyTo }}</small>{% endif %}</td>
                     <td>{{ (r.subject ?: '(bez tematu)')[:80] }}</td>
-                    <td><span class="label label-{{ {new: 'warning', confirmed: 'danger', reported: 'info', false_positive: 'default'}[r.status] }}">{{ statuses[r.status] }}</span></td>
+                    <td><span class="label label-{{ {new: 'warning', confirmed: 'danger', reported: 'info', false_positive: 'default'}[r.status] }}">{{ statuses[r.status] }}</span>
+                        {% if r.forwardedAt %}<br><span class="label label-success" title="{{ r.forwardedTo }}">wysłano {{ r.forwardedAt|date('Y-m-d H:i') }}</span>
+                        {% elseif r.forwardError %}<br><span class="label label-danger" title="{{ r.forwardError }}">błąd wysyłki</span>{% endif %}</td>
                     <td class="text-right" style="white-space:nowrap;">
                         <a href="{{ path('antispam_phishing_show', {id: r.id}) }}" class="btn btn-xs btn-default"><span class="glyphicon glyphicon-search"></span> Analiza</a>
                         <form method="post" action="{{ path('antispam_phishing_delete', {id: r.id}) }}" style="display:inline;">

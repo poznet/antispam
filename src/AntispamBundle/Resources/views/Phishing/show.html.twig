@@ -9,7 +9,7 @@
     <p>
         <a href="{{ path('antispam_phishing_index') }}" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-arrow-left"></span> Lista</a>
         <a href="{{ path('antispam_phishing_eml', {id: report.id}) }}" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-download-alt"></span> Pobierz .eml</a>
-        <a href="https://incydent.cert.pl" target="_blank" rel="noopener noreferrer" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-share"></span> Formularz CERT Polska</a>
+        <a href="{{ cert_form_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-share"></span> Formularz CERT Polska</a>
     </p>
 
     <div class="row">
@@ -44,6 +44,46 @@
                     {% else %}
                         <p class="text-muted" style="margin:0;">Nie wykryto typowych sygnałów - oceń treść i linki.</p>
                     {% endif %}
+                </div>
+            </div>
+
+            <div class="panel panel-{{ report.forwardedAt ? 'success' : (report.forwardError ? 'danger' : 'default') }}">
+                <div class="panel-heading"><span class="glyphicon glyphicon-send"></span> Zgłoszenie do CERT Polska / SOC</div>
+                <div class="panel-body">
+                    {% if report.forwardedAt %}
+                        <p><span class="label label-success">wysłano {{ report.forwardedAt|date('Y-m-d H:i') }}</span> <small>do {{ report.forwardedTo }}</small></p>
+                    {% elseif forwarded_before %}
+                        <p><span class="label label-info">ta sama wiadomość wysłana {{ forwarded_before.forwardedAt|date('Y-m-d H:i') }}</span>
+                            <small>(<a href="{{ path('antispam_phishing_show', {id: forwarded_before.id}) }}">zgłoszenie #{{ forwarded_before.id }}</a>, do {{ forwarded_before.forwardedTo }})</small></p>
+                    {% endif %}
+                    {% if report.forwardError %}
+                        <p class="text-danger"><small><strong>Błąd ostatniej wysyłki</strong> ({{ report.forwardAttemptedAt ? report.forwardAttemptedAt|date('Y-m-d H:i') }}): {{ report.forwardError }}</small></p>
+                    {% endif %}
+
+                    {% if forward_errors %}
+                        <p class="text-warning"><small>{% for e in forward_errors %}{{ e }}<br>{% endfor %}</small></p>
+                    {% elseif report.status == 'false_positive' %}
+                        <p class="text-muted"><small>Zgłoszenie oznaczono jako „to nie phishing” - zmień status, żeby je wysłać.</small></p>
+                    {% else %}
+                        <form method="post" action="{{ path('antispam_phishing_forward', {id: report.id}) }}" style="margin-bottom:8px;">
+                            <input type="hidden" name="_token" value="{{ token }}">
+                            {% set recipients = forward_settings.recipients|join(', ') %}
+                            {% if forwarded_before %}
+                                <input type="hidden" name="resend" value="1">
+                                <button type="submit" class="btn btn-warning btn-sm" data-confirm="Ta wiadomość została już wysłana {{ forwarded_before.forwardedAt|date('Y-m-d H:i') }} do {{ forwarded_before.forwardedTo }}. Wysłać ją PONOWNIE do {{ recipients }}?"><span class="glyphicon glyphicon-send" aria-hidden="true"></span> Wyślij ponownie</button>
+                            {% else %}
+                                <button type="submit" class="btn btn-primary btn-sm" data-confirm="Wysłać oryginalną wiadomość (.eml) z opisem analizy do {{ recipients }}?"><span class="glyphicon glyphicon-send" aria-hidden="true"></span> Wyślij do {{ forward_settings.recipients == ['cert@cert.pl'] ? 'CERT Polska' : recipients }}</button>
+                            {% endif %}
+                        </form>
+                        <p class="text-muted" style="margin:0;"><small>
+                            Załącznik: oryginał bez zmian (message/rfc822){% if report.size > forward_settings.max_kb * 1024 %} - <strong>za duży ({{ (report.size / 1024)|round }} KiB &gt; {{ forward_settings.max_kb }} KiB), pójdą tylko nagłówki</strong>{% elseif report.truncated %} - <strong>obcięty przez wtyczkę</strong>, CERT dostanie o tym informację{% endif %}.
+                            Adres zgłaszającej skrzynki {{ forward_settings.include_reporter ? 'jest' : 'nie jest' }} podawany w opisie (nagłówki oryginału mogą go jednak zawierać).
+                        </small></p>
+                    {% endif %}
+                    <p style="margin:8px 0 0;"><small>
+                        <a href="{{ path('antispam_phishing_forward_settings') }}">Ustawienia przekazywania</a> ·
+                        <a href="{{ cert_form_url }}" target="_blank" rel="noopener noreferrer">formularz incydent.cert.pl</a> (z pobranym .eml)
+                    </small></p>
                 </div>
             </div>
 

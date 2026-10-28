@@ -1,0 +1,99 @@
+{% extends '@Antispam/main.html.twig' %}
+{% block title %}Przekazywanie phishingu{% endblock %}
+{% block page_title %}Przekazywanie zgłoszeń phishingu{% endblock %}
+
+{% block body %}
+    <p>
+        <a href="{{ path('antispam_phishing_index') }}" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-arrow-left"></span> Zgłoszenia phishingu</a>
+    </p>
+    <p class="text-muted">
+        Przycisk <strong>Wyślij do CERT Polska</strong> na stronie zgłoszenia wysyła e-mail z krótkim opisem (sygnały ostrzegawcze z analizy)
+        i oryginalną wiadomością bez zmian jako załącznik <code>message/rfc822</code>. Domyślny odbiorca to
+        <code>{{ default_recipient }}</code> - adres zgłaszania incydentów CERT Polska (RFC 2350 zespołu). Alternatywa:
+        <a href="{{ cert_form_url }}" target="_blank" rel="noopener noreferrer">formularz incydent.cert.pl</a> z pobranym plikiem .eml.
+    </p>
+
+    {% if errors %}
+    <div class="alert alert-danger">{% for e in errors %}<div>{{ e }}</div>{% endfor %}</div>
+    {% elseif status_errors %}
+    <div class="alert alert-warning">{% for e in status_errors %}<div>{{ e }}</div>{% endfor %}</div>
+    {% endif %}
+
+    <form method="post">
+    <input type="hidden" name="_token" value="{{ csrf_token('phishing_forward_settings') }}">
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-send"></span> Odbiorcy i nadawca</div>
+        <div class="panel-body">
+            <div class="row">
+                <div class="col-sm-6">
+                    <label for="pf-recipients">Odbiorcy</label>
+                    <input type="text" id="pf-recipients" name="config[recipients]" class="form-control" value="{{ settings.recipients|join(', ') }}" placeholder="{{ default_recipient }}">
+                    <small class="text-muted">Adres CERT Polska albo własnego SOC; kilka adresów oddziel przecinkiem. Puste pole wyłącza wysyłkę.</small>
+                </div>
+                <div class="col-sm-6">
+                    <label for="pf-cc">Kopia (CC)</label>
+                    <input type="text" id="pf-cc" name="config[cc]" class="form-control" value="{{ settings.cc|join(', ') }}" placeholder="admin@example.com">
+                    <small class="text-muted">Np. adres administratora - dostanie kopię każdego zgłoszenia (i odpowiedź z numerem sprawy).</small>
+                </div>
+            </div>
+            <div class="row" style="margin-top:10px;">
+                <div class="col-sm-6">
+                    <label for="pf-from">Adres nadawcy</label>
+                    <input type="email" id="pf-from" name="config[from_email]" class="form-control" value="{{ settings.from_email }}" placeholder="domyślnie nadawca raportu kwarantanny">
+                    <small class="text-muted">Na ten adres CERT odpowie (numer zgłoszenia). Musi przechodzić SPF/DMARC serwera z <code>MAILER_DSN</code>.</small>
+                </div>
+                <div class="col-sm-6">
+                    <label for="pf-from-name">Nazwa nadawcy</label>
+                    <input type="text" id="pf-from-name" name="config[from_name]" class="form-control" value="{{ settings.from_name }}" placeholder="Pancernapanda antispam" maxlength="100">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-file"></span> Treść</div>
+        <div class="panel-body">
+            <label for="pf-note">Wstęp wiadomości</label>
+            <textarea id="pf-note" name="config[note]" class="form-control" rows="4" maxlength="2000" placeholder="{{ default_note }}">{{ settings.note }}</textarea>
+            <small class="text-muted">Pod wstępem zawsze idą: nadawca, Reply-To, temat, IP serwera, SPF/DKIM/DMARC, domeny linków i sygnały ostrzegawcze.
+                Zmienne: <code>{id}</code>, <code>{subject}</code>, <code>{sender}</code>. Puste = tekst domyślny.</small>
+
+            <div class="checkbox" style="margin-top:12px;"><label>
+                <input type="checkbox" name="config[include_reporter]" value="1" {% if settings.include_reporter %}checked{% endif %}>
+                Podaj w opisie adres skrzynki, która zgłosiła wiadomość
+            </label></div>
+            <small class="text-muted">Domyślnie wyłączone (prywatność). Uwaga: nagłówki oryginału (To, Received) i tak zwykle zawierają adres odbiorcy.</small>
+
+            <div class="row" style="margin-top:12px;">
+                <div class="col-sm-4">
+                    <label for="pf-max">Limit załącznika (KiB)</label>
+                    <input type="number" id="pf-max" name="config[max_kb]" class="form-control" value="{{ settings.max_kb }}" min="64" max="25600">
+                    <small class="text-muted">Większa wiadomość idzie jako same nagłówki (<code>text/rfc822-headers</code>) z informacją w treści.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-time"></span> Tryb automatyczny</div>
+        <div class="panel-body">
+            <div class="row">
+                <div class="col-sm-4">
+                    <label for="pf-auto">Wysyłaj automatycznie po (min)</label>
+                    <input type="number" id="pf-auto" name="config[auto_minutes]" class="form-control" value="{{ settings.auto_minutes }}" min="0" max="10080">
+                </div>
+                <div class="col-sm-8">
+                    <small class="text-muted">
+                        0 = wyłączone (domyślnie). Po włączeniu każde <strong>nowe</strong> zgłoszenie (status „nowe” lub „potwierdzony phishing”) jest wysyłane po podanym czasie,
+                        chyba że wcześniej oznaczysz je jako „to nie phishing”. Obejmuje tylko zgłoszenia przyjęte po włączeniu trybu{% if settings.auto_since %} (od {{ settings.auto_since|date('Y-m-d H:i') }}){% endif %},
+                        najwyżej {{ constant('AntispamBundle\\Services\\PhishingForwardService::AUTO_BATCH') }} na uruchomienie; ta sama wiadomość z kilku skrzynek idzie raz, nieudana wysyłka nie jest ponawiana automatycznie.
+                        Uruchamia je <code>antispam:phishing:forward</code> (scheduler, <code>PHISHING_FORWARD_INTERVAL</code>).
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-floppy-disk"></span> Zapisz</button>
+    </form>
+{% endblock %}

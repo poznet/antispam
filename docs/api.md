@@ -75,6 +75,9 @@ See [phishing.md](phishing.md). CSRF token id `phishing` for all POSTs.
 | POST | `/phishing/{id}/update` | `status`, `note` |
 | POST | `/phishing/{id}/block` | `what=sender\|domain` - blacklist rule for the reporting mailbox + retroactive pass |
 | GET | `/phishing/{id}/eml` | Original message as `.eml` download |
+| POST | `/phishing/{id}/forward` | E-mail the original (message/rfc822) + analysis to CERT Polska / SOC; `resend=1` required when already sent |
+| POST | `/phishing/forward` | Bulk forward, `ids[]` (already sent / false positives skipped, never resends) |
+| GET/POST | `/phishing/forward-settings` | Forward settings: recipients, sender, CC, note, reporter address, size limit, automatic mode (CSRF id `phishing_forward_settings`) |
 | POST | `/phishing/{id}/delete` | Delete the report and its content |
 
 ## Cron log (`/cron`)

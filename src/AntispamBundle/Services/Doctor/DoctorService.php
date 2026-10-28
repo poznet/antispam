@@ -40,8 +40,6 @@ class DoctorService
     public const CRON_STALE_MINUTES = 60;
     public const DISK_FAIL_BYTES = 100 * 1024 * 1024;
     public const DISK_WARN_BYTES = 1024 * 1024 * 1024;
-    /** Config keys of e-mail alerting (read defensively - added by the health/alerting feature). */
-    public const ALERT_FLAGS = ['alerts.enabled', 'alert.enabled', 'health.alerts_enabled'];
 
     public function __construct(
         private EntityManagerInterface $em,
@@ -185,11 +183,12 @@ class DoctorService
         if ($this->flag('digest.enabled')) {
             $needs[] = 'quarantine digest';
         }
-        foreach (self::ALERT_FLAGS as $key) {
-            if ($this->flag($key)) {
-                $needs[] = 'e-mail alerts (' . $key . ')';
-                break;
-            }
+        // Health alerts (Stan systemu): on unless switched off, and they go by
+        // e-mail when a recipient is set or the digest address is used instead.
+        $alertsOn = $this->config->get('health.alert_enabled') === null || $this->flag('health.alert_enabled');
+        $alertRecipient = trim((string)$this->config->get('health.alert_email')) !== '' || trim((string)$this->config->get('digest.from_email')) !== '';
+        if ($alertsOn && $alertRecipient) {
+            $needs[] = 'e-mail alerts (Stan systemu)';
         }
         $dsn = trim((string)$this->mailerDsn);
         $disabled = $dsn === '' || str_starts_with(strtolower($dsn), 'null://');

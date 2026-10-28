@@ -176,8 +176,9 @@ docker compose exec -u www-data app php bin/console antispam:doctor
 | `feed` | hub URL without hub key | enabled with nothing configured, hub not https, short local key |
 | `clamav` | enabled but clamd does not answer | |
 
-E-mail alerting flags are read defensively (`alerts.enabled`, `alert.enabled`,
-`health.alerts_enabled`) so the check also covers the alerting feature once present.
+The `mailer` check also counts the health alerts of *Stan systemu*
+(`health.alert_enabled`, on by default) when they have an e-mail recipient
+(`health.alert_email`, or the digest address they fall back to).
 
 ## Moving a customer to another server
 

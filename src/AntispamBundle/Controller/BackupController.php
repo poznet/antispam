@@ -29,6 +29,8 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[IsGranted('ROLE_ADMIN')]
 class BackupController extends AbstractController
 {
+    use AuditTrait;
+
     public const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
     private const SESSION_KEY = 'backup_import';
     private const PENDING_TTL = 3600;
@@ -77,6 +79,7 @@ class BackupController extends AbstractController
         $zip = $request->request->get('format') === 'zip' && class_exists(\ZipArchive::class);
         $name = 'antispam-backup-' . date('Ymd-His') . ($withSecrets ? '-secrets' : '') . ($zip ? '.zip' : '.json');
 
+        $this->audit('backup.export', targetType: 'backup', label: $name, details: ['secrets' => $withSecrets, 'format' => $zip ? 'zip' : 'json']);
         $response = new Response($zip ? BackupFormat::zip($json) : $json);
         $response->headers->set('Content-Type', $zip ? 'application/zip' : 'application/json; charset=UTF-8');
         $response->headers->set('Content-Disposition', $response->headers->makeDisposition(ResponseHeaderBag::DISPOSITION_ATTACHMENT, $name));
@@ -165,6 +168,7 @@ class BackupController extends AbstractController
             $request->getSession()->remove(self::SESSION_KEY);
         }
 
+        $this->audit('backup.import', targetType: 'backup', details: ['mode' => $mode, 'sections' => $sections, 'created' => $report->total('created'), 'updated' => $report->total('updated'), 'deleted' => $report->total('deleted'), 'skipped' => $report->total('skipped')]);
         $this->addFlash('success', sprintf('Import zakończony (%s): dodano %d, zaktualizowano %d, usunięto %d, pominięto %d.',
             $mode === BackupImporter::MODE_REPLACE ? 'zastąp' : 'scal',
             $report->total('created'), $report->total('updated'), $report->total('deleted'), $report->total('skipped')));

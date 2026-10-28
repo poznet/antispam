@@ -251,6 +251,8 @@ class ScoringService
      * Scanning settings in the shape the Maildir agent expects in the
      * `settings` section of its import-rules payload. Lists are flattened to
      * newline-separated strings (the agent stores settings as key/value text).
+     * The set is complete: the agent replaces its settings with it, keys left
+     * out fall back to the agent's defaults (see docs/agent.md).
      */
     public function exportAgentSettings($accountEmail = null)
     {
@@ -259,6 +261,13 @@ class ScoringService
         $imp = $this->getImpersonationScores();
 
         return [
+            // Thresholds and global switches: the agent's scan and its
+            // apply-blacklist pass decide like the web pipeline.
+            'scoring_enabled' => $this->isScoringEnabled(),
+            'spam_threshold' => $this->getSpamThreshold(),
+            'quarantine_threshold' => $this->getQuarantineThreshold(),
+            'dnsbl_enabled' => $this->isDnsblEnabled(),
+            'header_check_enabled' => $this->isHeaderCheckEnabled(),
             'impersonation_enabled' => $this->isImpersonationEnabled(),
             'impersonation_protected_domains' => implode("\n", $this->getProtectedDomains($accountEmail)),
             'impersonation_vips' => $this->getVipList(),
@@ -268,6 +277,7 @@ class ScoringService
             'impersonation_internal_score' => $imp['internal'],
             'cert_enabled' => (bool)$this->readBool('cert.enabled', false),
             'cert_score' => $this->readInt('cert.score', $this->getSpamThreshold()),
+            'cert_url' => $this->readString('cert.url', ''),
             'url_enabled' => $this->isUrlCheckEnabled(),
             'url_mismatch_score' => $url['mismatch_score'],
             'url_ip_score' => $url['ip_score'],

@@ -52,8 +52,15 @@ class AgentSyncCommand extends Command
 
         try {
             $result = $this->ssh->syncRules($account, json_encode($rules));
+            if (($result['success'] ?? null) !== true) {
+                $output->writeln('<error>Sync failed: ' . ($result['error'] ?? 'unknown error') . '</error>');
+                return 1;
+            }
             $output->writeln('<info>Rules synced successfully</info>');
-            $output->writeln(json_encode($result, JSON_PRETTY_PRINT));
+            if (!empty($result['agent_warning'])) {
+                $output->writeln('<comment>' . $result['agent_warning'] . '</comment>');
+            }
+            $output->writeln(json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
         } catch (\Exception $e) {
             $output->writeln('<error>Sync failed: ' . $e->getMessage() . '</error>');
             return 1;

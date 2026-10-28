@@ -50,6 +50,7 @@ a foreign mailbox key gives 403, see [users.md](users.md).
 | POST | `/account/sync/{id}` | Sync rules to hosting (SSH only) (CSRF token `account_action_{id}`) |
 | POST | `/account/scan/{id}` | Run spam scan (CSRF token `account_action_{id}`) |
 | POST | `/account/health/{id}` | Agent health check (SSH only, CSRF token `account_action_{id}`) |
+| POST | `/account/reset-host-key/{id}` | Forget the pinned SSH host key (CSRF token `account_action_{id}`), redirects to the edit form |
 | GET | `/account/download-agent` | Download agent PHP script |
 
 ## Spambox (`/spambox`)

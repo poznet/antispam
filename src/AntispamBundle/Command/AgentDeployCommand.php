@@ -41,10 +41,16 @@ class AgentDeployCommand extends Command
 
         try {
             $result = $this->ssh->deployAgent($account);
+            if (($result['success'] ?? null) !== true) {
+                $output->writeln('<error>Deploy failed: ' . ($result['error'] ?? 'agent self-test failed') . '</error>');
+                $output->writeln(json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                return 1;
+            }
             $account->setAgentDeployed(true);
             $this->em->flush();
-            $output->writeln('<info>Agent deployed successfully</info>');
-            $output->writeln(json_encode($result, JSON_PRETTY_PRINT));
+            $output->writeln('<info>Agent deployed successfully to ' . ($result['remote_path'] ?? '?') . '</info>');
+            $output->writeln(json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            $output->writeln('Run antispam:agent:sync ' . $account->getId() . ' to push rules and settings.');
         } catch (\Exception $e) {
             $output->writeln('<error>Deploy failed: ' . $e->getMessage() . '</error>');
             return 1;

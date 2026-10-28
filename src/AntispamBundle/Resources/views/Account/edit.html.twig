@@ -81,6 +81,11 @@
                     <label>Ścieżka agenta (na hostingu)</label>
                     <input type="text" class="form-control" name="account[agent_path]" value="{{ account.agentPath }}">
                 </div>
+                <div class="form-group">
+                    <label>Klucz hosta SSH (zapamiętany przy pierwszym połączeniu)</label>
+                    <p class="form-control-static pp-mono">{{ account.sshHostKey ?: 'jeszcze nie zapamiętany' }}</p>
+                    <p class="help-block">Zmiana hosta lub portu kasuje zapamiętany klucz. Jeśli serwer zmienił klucz celowo, porównaj odcisk z <code>ssh-keyscan HOST | ssh-keygen -lf -</code> i użyj przycisku „Resetuj klucz hosta” pod formularzem.</p>
+                </div>
             </div>
         </div>
 
@@ -102,6 +107,13 @@
         <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-floppy-disk"></span> Zapisz</button>
         <a href="{{ path('antispam_account_index') }}" class="btn btn-default">Anuluj</a>
     </form>
+
+    {% if account.sshHostKey %}
+    <form method="post" action="{{ path('antispam_account_reset_host_key', {id: account.id}) }}" style="margin-top:15px">
+        <input type="hidden" name="_token" value="{{ csrf_token('account_action_' ~ account.id) }}">
+        <button type="submit" class="btn btn-warning btn-sm"><span class="glyphicon glyphicon-refresh"></span> Resetuj klucz hosta SSH</button>
+    </form>
+    {% endif %}
 
     <script>
     function toggleFields() {

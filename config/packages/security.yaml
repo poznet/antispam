@@ -50,6 +50,10 @@ security:
         # Public home page (landing) with the embedded login form.
         - { path: ^/$, roles: PUBLIC_ACCESS }
         - { path: ^/login, roles: PUBLIC_ACCESS }
+        # The firewall is lazy, so access_control is checked before the logout
+        # listener runs: without this rule ^/ (ROLE_ADMIN) answered 403 to a
+        # ROLE_USER logging out.
+        - { path: ^/logout$, roles: PUBLIC_ACCESS }
         # Shared spam feed API authenticates via the X-Feed-Key header, not the
         # form-login firewall, so it must be reachable anonymously.
         - { path: ^/api/feed, roles: PUBLIC_ACCESS }

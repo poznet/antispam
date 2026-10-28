@@ -48,7 +48,7 @@ class PluginApiController extends AbstractController
     /** Phishing reports (full messages up to 10 MiB each) per account and hour. */
     const PHISHING_RATE_LIMIT = 30;
 
-    const PLUGIN_VERSION = '1.1.3';
+    const PLUGIN_VERSION = '1.1.4';
 
     #[Route('/plugin/download', name: 'antispam_plugin_download', methods: ['GET'])]
     public function downloadAction(Request $request)
@@ -159,7 +159,12 @@ class PluginApiController extends AbstractController
         $account = $this->plugin->authenticate($data['email'] ?? '', $data['password'] ?? '');
         if (!$account) {
             $this->audit('plugin.login_failed', targetType: 'account', mailbox: $typed = mb_substr(is_scalar($data['email'] ?? null) ? (string)$data['email'] : '', 0, 180), actor: $typed !== '' ? $typed : 'wtyczka', actorType: AuditLog::ACTOR_ANONYMOUS);
-            return new JsonResponse(['error' => 'invalid e-mail or password'], 401);
+            // Same answer for every failure (no account enumeration); the hint
+            // covers mailboxes connected with OAuth, which have no IMAP password here.
+            return new JsonResponse([
+                'error' => 'invalid e-mail or password',
+                'message' => 'Nieprawidłowy adres lub hasło. Użyj hasła wtyczki ustawionego w panelu antyspamu (Konta → edycja konta); hasło IMAP działa tylko dla skrzynek logowanych hasłem, nie dla Microsoft 365 / Google połączonych przez OAuth.',
+            ], 401);
         }
 
         $token = $this->plugin->issueToken($account);

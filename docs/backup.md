@@ -42,7 +42,8 @@ One JSON document (UTF-8, pretty printed), optionally inside a ZIP as
     "ssh_host": null, "ssh_port": 22, "ssh_user": null, "maildir_path": "~/Maildir", "agent_path": "~/antispam-agent",
     "ssh_host_key": null, "agent_deployed": false,
     "spam_threshold": 6, "quarantine_threshold": null, "scoring_enabled": null,
-    "digest_enabled": null, "digest_recipient": "kierownik@firma.pl", "digest_hour": 14
+    "digest_enabled": null, "digest_recipient": "kierownik@firma.pl", "digest_hour": 14,
+    "imap_auth_method": "password", "oauth_tenant": null
   }],
   "users": [{ "username": "jan", "role": "ROLE_USER", "accounts": ["jan@firma.pl"] }]
 }
@@ -56,6 +57,7 @@ One JSON document (UTF-8, pretty printed), optionally inside a ZIP as
 | `settings.lists` | `antispam_list_setting` (protected domains, VIPs, URI DBL zones, blocked extensions). |
 | `rules.*` | All four lists with owner (`*` = all mailboxes, see [scoring.md](scoring.md#rule-ownership)), pattern type, score (blacklists) and hit counter (`hits`, only used when a rule is created). |
 | `accounts` | Connection settings. `ssh_host_key` is the pinned public fingerprint (kept so the TOFU pin survives a move), not a secret. Per-mailbox settings (`spam_threshold`, `quarantine_threshold`, `scoring_enabled`, `digest_enabled`, `digest_recipient`, `digest_hour`; `null` = inherit, see [accounts.md](accounts.md#per-mailbox-settings-ustawienia-skrzynki)): imported only when the key is in the file, so an older backup keeps the current values; an invalid value (hour 31, quarantine >= spam...) is dropped with a warning. |
+| `accounts` (OAuth) | `imap_auth_method` (`password`, `oauth_microsoft`, `oauth_microsoft_app`, `oauth_google`) and `oauth_tenant`, imported only when the key is in the file (older backups keep the password login). With secrets also `oauth_refresh_token` + `oauth_username`: the consent moves with the backup (same `APP_SECRET` needed). An imported refresh token for a different login method is ignored. |
 | `users` | Username, role, assigned mailboxes by e-mail. The legacy `ADMIN_USER` administrator lives in the environment and is never exported. |
 
 ### Secrets
@@ -65,6 +67,9 @@ Without `--include-secrets` (and in the panel's default download) these stay on 
 - legacy mailbox password (`config.password`), VirusTotal / Safe Browsing API keys
   (`scoring.vt_api_key`, `url.gsb_api_key`), shared feed keys (`feed.server_key`,
   `feed.remote_key`) - `BackupSecrets::CONFIG_KEYS`;
+- OAuth client secrets (`oauth.microsoft.client_secret`, `oauth.google.client_secret`,
+  stored encrypted) and the accounts' OAuth refresh tokens (`oauth_refresh_token`; access
+  tokens are never exported - they are renewed on first use, see [oauth.md](oauth.md));
 - account IMAP passwords, plugin password hashes and SSH key paths;
 - user password hashes.
 
@@ -174,6 +179,7 @@ docker compose exec -u www-data app php bin/console antispam:doctor
 | `accounts_scanned` | | accounts that never had a successful scan |
 | `ssh_agents` | | deployed agents whose last reported `agent_version` is older than the bundled one |
 | `stored_passwords` | encrypted IMAP passwords that do not decrypt (APP_SECRET changed) | legacy plaintext IMAP passwords (legacy mailbox or accounts) |
+| `oauth` | OAuth accounts whose provider app is not configured or whose client secret does not decrypt; accounts not connected or with a failing token renewal ([oauth.md](oauth.md)) | app-only account with a multi-tenant alias (`common`) as tenant |
 | `orphan_rules` | | list rules owned by a mailbox that no longer exists (they never match) |
 | `feed` | hub URL without hub key | enabled with nothing configured, hub not https, short local key |
 | `clamav` | enabled but clamd does not answer | |

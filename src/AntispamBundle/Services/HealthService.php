@@ -253,6 +253,19 @@ class HealthService
 
         $status = self::OK;
         $messages = [];
+        if ($account->isOAuth()) {
+            // Token state of OAuth accounts (Microsoft 365 / Google, docs/oauth.md).
+            $details['auth'] = $account->getImapAuthMethod();
+            $details['oauth_connected'] = $account->isOAuthConnected();
+            $details['oauth_error'] = $account->getOAuthError();
+            if (!$account->isOAuthConnected()) {
+                $status = self::FAIL;
+                $messages[] = 'Konto OAuth nie jest połączone - użyj „Połącz” na stronie edycji konta';
+            } elseif ($account->getOAuthError()) {
+                $status = self::FAIL;
+                $messages[] = 'Odświeżenie tokenu OAuth nieudane: ' . mb_substr((string)$account->getOAuthError(), 0, 200);
+            }
+        }
         $last = $account->getLastScanAt();
         $maxAge = $this->settings->getScanMaxAge() * 60;
         if (!$last) {

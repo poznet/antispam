@@ -16,6 +16,21 @@ Traditional mode using IMAP protocol to connect to mail server.
 - **Password** - IMAP password, stored encrypted (libsodium, key derived from `APP_SECRET`). Leave it empty when editing to keep the current one. After changing `APP_SECRET` the passwords have to be entered again.
 - **IMAP Flags** - c-client connection flags (default: `/imap/ssl`; the old unencrypted setup is port 143 with `/novalidate-cert/notls`)
 
+### Login method: password or OAuth2 (Microsoft 365, Google)
+
+**Sposób logowania** in the IMAP section: *Login i hasło IMAP* (default, ext-imap),
+*Microsoft 365 / Outlook.com - OAuth*, *Microsoft 365 - OAuth aplikacji* (client
+credentials) or *Google - OAuth*. OAuth accounts store no password: after saving,
+**Połącz z Microsoft 365 / Google** on the edit page sends the admin to the
+provider's sign-in and stores the tokens (encrypted); the panel shows the
+connected address, token expiry and errors, **Rozłącz** deletes the tokens. The
+host may stay empty (provider server, 993, SSL/TLS); *no encryption* is refused.
+Optional *Tenant Microsoft* overrides the global tenant. The provider apps are
+set once in **Ustawienia → Logowanie OAuth**. Scanning, quarantine / SPAM
+release, retroactive blacklist, Test and health work as for password accounts;
+token problems show as a red badge in the account list, in Stan systemu and in
+`antispam:doctor`. Setup, limits and troubleshooting: [oauth.md](oauth.md).
+
 ### SSL/TLS options in the form
 
 The account add/edit form and the legacy global config (`/config/email/`) build the flags from clickable
@@ -35,7 +50,7 @@ options (`AntispamBundle\Services\ImapFlags`, shared template `Account/_imap_sec
 - Switching encryption swaps the port between 993 and 143 if it still holds a default value; the full
   mailbox string (`{host:port/flags}`) is previewed live.
 
-**Check connection and certificate** (`POST /account/imap-check`, CSRF `imap_check`, works before saving):
+**Check connection and certificate** (password login only; for OAuth accounts use **Test** in the list) (`POST /account/imap-check`, CSRF `imap_check`, works before saving):
 DNS, TCP, TLS handshake (implicit or STARTTLS), TLS version and cipher, the server certificate (CN, SANs,
 issuer, validity, days left, hostname match, trusted chain, self-signed, SHA-256 fingerprint), server
 capabilities (`STARTTLS`, `LOGINDISABLED`...) and, with a login given, a real c-client login with the chosen

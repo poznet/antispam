@@ -12,6 +12,16 @@ class Account
     const CONNECTION_IMAP = 'imap';
     const CONNECTION_SSH = 'ssh';
 
+    /** IMAP login methods (imap_auth_method; null = password, accounts from before OAuth). */
+    const AUTH_PASSWORD = 'password';
+    /** Microsoft 365 / Outlook.com, delegated: authorization code + refresh token. */
+    const AUTH_OAUTH_MICROSOFT = 'oauth_microsoft';
+    /** Microsoft 365 app-only: client credentials, Exchange service principal + mailbox permission. */
+    const AUTH_OAUTH_MICROSOFT_APP = 'oauth_microsoft_app';
+    /** Google Workspace / Gmail: authorization code + refresh token. */
+    const AUTH_OAUTH_GOOGLE = 'oauth_google';
+    const AUTH_METHODS = [self::AUTH_PASSWORD, self::AUTH_OAUTH_MICROSOFT, self::AUTH_OAUTH_MICROSOFT_APP, self::AUTH_OAUTH_GOOGLE];
+
     #[ORM\Column(name: 'id', type: 'integer')]
     #[ORM\Id]
     #[ORM\GeneratedValue(strategy: 'AUTO')]
@@ -129,6 +139,41 @@ class Account
     #[ORM\Column(name: 'digest_hour', type: 'smallint', nullable: true)]
     private $digestHour;
 
+    // OAuth2 (XOAUTH2) IMAP login - see docs/oauth.md. Provider app settings
+    // (client id / secret / tenant) are global (config table, oauth.*).
+
+    #[ORM\Column(name: 'imap_auth_method', type: 'string', length: 20, nullable: true)]
+    private $imapAuthMethod;
+
+    /** Address the OAuth consent was given for (id_token email / upn). */
+    #[ORM\Column(name: 'oauth_username', type: 'string', length: 255, nullable: true)]
+    private $oauthUsername;
+
+    /** Microsoft tenant (GUID or domain) for this mailbox; null = the global oauth.microsoft.tenant. */
+    #[ORM\Column(name: 'oauth_tenant', type: 'string', length: 100, nullable: true)]
+    private $oauthTenant;
+
+    /** Encrypted (CryptoService). */
+    #[ORM\Column(name: 'oauth_access_token', type: 'text', nullable: true)]
+    private $oauthAccessToken;
+
+    #[ORM\Column(name: 'oauth_token_expires_at', type: 'datetime', nullable: true)]
+    private $oauthTokenExpiresAt;
+
+    /** Encrypted (CryptoService); null for app-only (client credentials). */
+    #[ORM\Column(name: 'oauth_refresh_token', type: 'text', nullable: true)]
+    private $oauthRefreshToken;
+
+    #[ORM\Column(name: 'oauth_connected_at', type: 'datetime', nullable: true)]
+    private $oauthConnectedAt;
+
+    /** Last token error (refresh / client credentials failed); null = fine. */
+    #[ORM\Column(name: 'oauth_error', type: 'string', length: 500, nullable: true)]
+    private $oauthError;
+
+    #[ORM\Column(name: 'oauth_error_at', type: 'datetime', nullable: true)]
+    private $oauthErrorAt;
+
     public function getId() { return $this->id; }
 
     public function getName() { return $this->name; }
@@ -157,6 +202,101 @@ class Account
 
     public function getImapFlags() { return $this->imapFlags; }
     public function setImapFlags($imapFlags) { $this->imapFlags = $imapFlags; return $this; }
+
+    public function getImapAuthMethod(): string
+    {
+        return in_array($this->imapAuthMethod, self::AUTH_METHODS, true) ? $this->imapAuthMethod : self::AUTH_PASSWORD;
+    }
+
+    /** Switching to another method (or provider) forgets the tokens of the old one. */
+    public function setImapAuthMethod(?string $method)
+    {
+        $method = in_array($method, self::AUTH_METHODS, true) ? $method : self::AUTH_PASSWORD;
+        if ($method !== $this->getImapAuthMethod()) {
+            $this->clearOAuthTokens();
+        }
+        $this->imapAuthMethod = $method === self::AUTH_PASSWORD ? null : $method;
+        return $this;
+    }
+
+    /** IMAP account that logs in with OAuth2 (XOAUTH2) instead of a password. */
+    public function isOAuth(): bool
+    {
+        return $this->isImap() && $this->getImapAuthMethod() !== self::AUTH_PASSWORD;
+    }
+
+    /** 'microsoft' / 'google' / null. */
+    public function getOAuthProvider(): ?string
+    {
+        return match ($this->isImap() ? $this->getImapAuthMethod() : null) {
+            self::AUTH_OAUTH_MICROSOFT, self::AUTH_OAUTH_MICROSOFT_APP => 'microsoft',
+            self::AUTH_OAUTH_GOOGLE => 'google',
+            default => null,
+        };
+    }
+
+    /** App-only (client credentials): no user consent, no refresh token. */
+    public function isOAuthAppOnly(): bool
+    {
+        return $this->isImap() && $this->getImapAuthMethod() === self::AUTH_OAUTH_MICROSOFT_APP;
+    }
+
+    /** Delegated OAuth with a stored refresh token (or app-only, which needs none). */
+    public function isOAuthConnected(): bool
+    {
+        return $this->isOAuth() && ($this->isOAuthAppOnly() || (string)$this->oauthRefreshToken !== '');
+    }
+
+    /** XOAUTH2 user: the IMAP login (e.g. a shared mailbox), else the consented address, else the e-mail. */
+    public function getOAuthImapUser(): string
+    {
+        foreach ([$this->imapLogin, $this->oauthUsername, $this->email] as $v) {
+            if (trim((string)$v) !== '') {
+                return trim((string)$v);
+            }
+        }
+        return '';
+    }
+
+    public function getOAuthUsername() { return $this->oauthUsername; }
+    public function setOAuthUsername($v) { $this->oauthUsername = ($v === null || trim((string)$v) === '') ? null : mb_substr(trim((string)$v), 0, 255); return $this; }
+
+    public function getOAuthTenant() { return $this->oauthTenant; }
+    public function setOAuthTenant($v) { $this->oauthTenant = ($v === null || trim((string)$v) === '') ? null : trim((string)$v); return $this; }
+
+    public function getOAuthAccessToken() { return $this->oauthAccessToken; }
+    public function setOAuthAccessToken($v) { $this->oauthAccessToken = $v; return $this; }
+
+    public function getOAuthTokenExpiresAt() { return $this->oauthTokenExpiresAt; }
+    public function setOAuthTokenExpiresAt(?\DateTimeInterface $v) { $this->oauthTokenExpiresAt = $v; return $this; }
+
+    public function getOAuthRefreshToken() { return $this->oauthRefreshToken; }
+    public function setOAuthRefreshToken($v) { $this->oauthRefreshToken = $v; return $this; }
+
+    public function getOAuthConnectedAt() { return $this->oauthConnectedAt; }
+    public function setOAuthConnectedAt(?\DateTimeInterface $v) { $this->oauthConnectedAt = $v; return $this; }
+
+    public function getOAuthError() { return $this->oauthError; }
+    public function getOAuthErrorAt() { return $this->oauthErrorAt; }
+    public function setOAuthError(?string $error)
+    {
+        $this->oauthError = $error === null || $error === '' ? null : mb_substr($error, 0, 500);
+        $this->oauthErrorAt = $this->oauthError === null ? null : new \DateTime();
+        return $this;
+    }
+
+    /** Forget every token and error (Rozłącz, switch of the login method). */
+    public function clearOAuthTokens()
+    {
+        $this->oauthAccessToken = null;
+        $this->oauthTokenExpiresAt = null;
+        $this->oauthRefreshToken = null;
+        $this->oauthConnectedAt = null;
+        $this->oauthUsername = null;
+        $this->oauthError = null;
+        $this->oauthErrorAt = null;
+        return $this;
+    }
 
     public function getSshHost() { return $this->sshHost; }
     public function setSshHost($sshHost) { $this->sshHost = $sshHost; return $this; }

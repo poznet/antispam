@@ -62,6 +62,10 @@ a foreign mailbox key gives 403, see [users.md](users.md).
 | POST | `/account/sync/{id}` | Sync rules to hosting (SSH only) (CSRF token `account_action_{id}`) |
 | POST | `/account/scan/{id}` | Run spam scan (CSRF token `account_action_{id}`) |
 | POST | `/account/health/{id}` | Agent health check (SSH only, CSRF token `account_action_{id}`) |
+| GET | `/account/oauth/connect/{id}?_token=` | Start the OAuth consent (Microsoft 365 / Google): state + PKCE in the session, redirect to the provider. GET because CSP `form-action 'self'` blocks a cross-origin form post (CSRF token `account_action_{id}` in the query) - see [oauth.md](oauth.md) |
+| GET | `/account/oauth/callback` | Redirect URI registered at the provider; validates `state` (session, single use, 15 min), exchanges the code, stores the tokens |
+| POST | `/account/oauth/disconnect/{id}` | Delete the account's OAuth tokens (CSRF token `account_action_{id}`) |
+| GET/POST | `/config/oauth/` | Provider app settings (client id / secret / tenant), redirect URI and setup steps (CSRF token `oauth_config`) |
 | POST | `/account/reset-host-key/{id}` | Forget the pinned SSH host key (CSRF token `account_action_{id}`), redirects to the edit form |
 | GET | `/account/download-agent` | Download agent PHP script |
 
@@ -190,7 +194,7 @@ Full reference: **[thunderbird.md](thunderbird.md)**, clients:
 | Method | URL | Description |
 |--------|-----|-------------|
 | GET | `/api/plugin/status` | Feature flags, `server_version`, `max_upload_bytes` + token validity (`authenticated`, always 200) |
-| POST | `/api/plugin/login` | Mailbox e-mail + plugin/IMAP password → token |
+| POST | `/api/plugin/login` | Mailbox e-mail + plugin/IMAP password → token (OAuth accounts: plugin password only; a 401 carries a Polish `message` saying so) |
 | POST | `/api/plugin/report` | User verdict (`spam` anonymous or logged in, `ham` logged in) |
 | POST | `/api/plugin/check` | Score a raw message (logged in) |
 | POST | `/api/plugin/phishing` | Phishing report: full message stored for the admin + spam report (logged in) |

@@ -124,7 +124,7 @@ async function api(path, { method = "GET", body = null, auth = true, timeout = R
     await messenger.storage.local.set({ token: "", email: "" });
   }
   if (!res.ok) {
-    const err = new Error(data.error
+    const err = new Error(data.message || data.error
       || (res.status === 413 ? "wiadomość za duża dla serwera (HTTP 413)" : "HTTP " + res.status));
     err.status = res.status;
     logEvent("api", false, method + " " + path + ": " + (data.error ? "HTTP " + res.status + " " + data.error : err.message));

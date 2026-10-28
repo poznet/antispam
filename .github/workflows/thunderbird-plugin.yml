@@ -60,10 +60,11 @@ jobs:
           fi
           echo "VERSION=$MANIFEST" >> "$GITHUB_ENV"
 
-      - name: Syntax check and first-run test (node)
+      - name: Syntax check, first-run and accounts tests (node)
         run: |
           for f in src/AntispamBundle/Resources/thunderbird/*.js; do node --check "$f"; done
           node tests/js/thunderbird-first-run.mjs
+          node tests/js/thunderbird-accounts.mjs
 
       - name: Build generic .xpi (reproducible)
         run: |

@@ -8,7 +8,7 @@ use Doctrine\ORM\EntityRepository;
 class PhishingReportRepository extends EntityRepository
 {
     /** Columns for the list view - everything except the raw source. */
-    private const LIST_FIELDS = 'r.id, r.createdAt, r.lastReportedAt, r.reportCount, r.accountEmail, r.client, r.sender, r.senderName, r.replyTo, r.subject, r.size, r.truncated, r.status, r.sha256, r.forwardedAt, r.forwardedTo, r.forwardError';
+    private const LIST_FIELDS = 'r.id, r.createdAt, r.lastReportedAt, r.reportCount, r.accountEmail, r.reportedFrom, r.reportOnly, r.client, r.sender, r.senderName, r.replyTo, r.subject, r.size, r.truncated, r.status, r.sha256, r.forwardedAt, r.forwardedTo, r.forwardError';
 
     /**
      * Filters (all optional): status, account, q (sender / reply-to / subject substring).

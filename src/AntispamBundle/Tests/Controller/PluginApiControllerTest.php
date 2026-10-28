@@ -203,6 +203,125 @@ class PluginApiControllerTest extends TestCase
         $this->assertSame(11, json_decode($res->getContent(), true)['phishing_id']);
     }
 
+    private function withAudit(PluginApiController $controller): \AntispamBundle\Tests\Support\RecordingAuditLogger
+    {
+        $audit = new \AntispamBundle\Tests\Support\RecordingAuditLogger();
+        $controller->setContainer(new \Symfony\Component\DependencyInjection\ServiceLocator([
+            \AntispamBundle\Services\AuditLogger::class => fn() => $audit,
+        ]));
+        return $audit;
+    }
+
+    /** Plugins before 1.3.0 send no scope: the token's mailbox learns, as before. */
+    public function testReportWithoutScopeTeachesTheTokensMailbox()
+    {
+        $this->loggedIn();
+        $this->plugin->expects($this->once())->method('learn')
+            ->with($this->anything(), 'spam', $this->anything(), '203.0.113.5', 'plugin', PluginService::SCOPE_MAILBOX, null)
+            ->willReturn(['verdict' => 'spam', 'sender' => 'spam@evil.top', 'signals' => 0, 'rules' => []]);
+        $c = $this->controller();
+        $audit = $this->withAudit($c);
+
+        $data = json_decode($c->reportAction($this->post(['verdict' => 'spam', 'raw_base64' => base64_encode(self::RAW)], 'good'))->getContent(), true);
+
+        $this->assertSame('jan@example.com', $data['mailbox']);
+        $this->assertArrayNotHasKey('scope', $audit->entries[0]['details']);
+        $this->assertArrayNotHasKey('reported_from', $audit->entries[0]['details']);
+    }
+
+    public function testReportOnlySpamLearnsNothingForTheMailboxAndHasNoRetroactivePass()
+    {
+        $this->loggedIn();
+        $this->plugin->expects($this->once())->method('learn')
+            ->with($this->anything(), 'spam', $this->anything(), $this->anything(), 'plugin', PluginService::SCOPE_REPORT_ONLY, 'anna@inna.pl')
+            // Even if rules came back, a report_only report must not start a pass on the mailbox.
+            ->willReturn(['verdict' => 'spam', 'sender' => 'spam@evil.top', 'signals' => 2, 'rules' => ['email_blacklist_added:spam@evil.top'], 'scope' => 'report_only']);
+        $this->deferred->expects($this->never())->method('defer');
+        $c = $this->controller();
+        $audit = $this->withAudit($c);
+
+        $res = $c->reportAction($this->post(['verdict' => 'spam', 'raw_base64' => base64_encode(self::RAW), 'scope' => 'report_only', 'reported_from' => 'Anna@Inna.pl'], 'good'));
+        $data = json_decode($res->getContent(), true);
+
+        $this->assertSame(200, $res->getStatusCode());
+        $this->assertTrue($data['authenticated']);
+        $this->assertNull($data['mailbox']);
+        $this->assertArrayNotHasKey('retroactive', $data);
+        $this->assertSame(['report'], $this->hits, 'counted against the authenticating account, no retro budget');
+        $this->assertSame('jan@example.com', $audit->entries[0]['mailbox']);
+        $this->assertSame('report_only', $audit->entries[0]['details']['scope']);
+        $this->assertSame('anna@inna.pl', $audit->entries[0]['details']['reported_from']);
+    }
+
+    public function testReportOnlyNotSpamAndUnknownScopeAreRefused()
+    {
+        $this->loggedIn();
+        $this->plugin->expects($this->never())->method('learn');
+        $c = $this->controller();
+
+        $ham = $c->reportAction($this->post(['verdict' => 'ham', 'raw_base64' => base64_encode(self::RAW), 'scope' => 'report_only'], 'good'));
+        $this->assertSame(400, $ham->getStatusCode());
+        $this->assertArrayHasKey('message', json_decode($ham->getContent(), true));
+        $this->assertSame(400, $c->reportAction($this->post(['verdict' => 'spam', 'raw_base64' => base64_encode(self::RAW), 'scope' => 'all'], 'good'))->getStatusCode());
+        $this->assertSame(400, $c->phishingAction($this->post(['raw_base64' => base64_encode(self::RAW), 'scope' => 'all'], 'good'))->getStatusCode());
+        $this->assertSame([], $this->hits);
+    }
+
+    public function testAnonymousReportOnlySpamIsAccepted()
+    {
+        $this->plugin->method('learn')->willReturn(['verdict' => 'spam', 'sender' => 'spam@evil.top', 'signals' => 1, 'rules' => []]);
+
+        $res = $this->controller()->reportAction($this->post(['verdict' => 'spam', 'raw_base64' => base64_encode(self::RAW), 'scope' => 'report_only', 'reported_from' => 'anna@inna.pl']));
+
+        $this->assertSame(200, $res->getStatusCode());
+        $this->assertFalse(json_decode($res->getContent(), true)['authenticated']);
+    }
+
+    public function testReportOnlyPhishingIsStoredWithTheForeignAddress()
+    {
+        $this->loggedIn();
+        $this->phishing->expects($this->once())->method('submit')
+            ->with($this->anything(), $this->anything(), 'thunderbird', '203.0.113.5', false, true, 'anna@inna.pl')
+            ->willReturn(['id' => 12, 'duplicate' => false]);
+        $this->plugin->expects($this->once())->method('learn')
+            ->with($this->anything(), 'spam', $this->anything(), $this->anything(), 'phishing', PluginService::SCOPE_REPORT_ONLY, 'anna@inna.pl')
+            ->willReturn(['verdict' => 'spam', 'sender' => 'spam@evil.top', 'signals' => 0, 'rules' => ['email_blacklist_added:spam@evil.top']]);
+        $this->deferred->expects($this->never())->method('defer');
+        $c = $this->controller();
+        $audit = $this->withAudit($c);
+
+        $res = $c->phishingAction($this->post(['raw_base64' => base64_encode(self::RAW), 'client' => 'thunderbird', 'scope' => 'report_only', 'reported_from' => ['anna@inna.pl']], 'good'));
+        $data = json_decode($res->getContent(), true);
+
+        $this->assertSame(200, $res->getStatusCode());
+        $this->assertSame(12, $data['phishing_id']);
+        $this->assertNull($data['mailbox']);
+        $this->assertSame(['phishing', 'report'], $this->hits);
+        $this->assertSame('report_only', $audit->entries[0]['details']['scope']);
+        $this->assertSame('anna@inna.pl', $audit->entries[0]['details']['reported_from']);
+    }
+
+    public function testOldPhishingRequestIsStoredAsTheMailboxsOwn()
+    {
+        $this->loggedIn();
+        $this->phishing->expects($this->once())->method('submit')
+            ->with($this->anything(), $this->anything(), 'outlook', $this->anything(), false, false, null)
+            ->willReturn(['id' => 13, 'duplicate' => false]);
+        $this->plugin->method('learn')->willReturn(['verdict' => 'spam', 'sender' => 'spam@evil.top', 'signals' => 0, 'rules' => []]);
+
+        $data = json_decode($this->controller()->phishingAction($this->post(['raw_base64' => base64_encode(self::RAW), 'client' => 'outlook'], 'good'))->getContent(), true);
+
+        $this->assertSame('jan@example.com', $data['mailbox']);
+    }
+
+    public function testStatusAdvertisesReportOnly()
+    {
+        $data = json_decode($this->controller()->statusAction(Request::create('/api/plugin/status'))->getContent(), true);
+
+        $this->assertTrue($data['report_only']);
+        $this->assertSame(['mailbox', 'report_only'], $data['report_scopes']);
+    }
+
     public function testStatusPublishesTheUploadLimit()
     {
         $data = json_decode($this->controller()->statusAction(Request::create('/api/plugin/status'))->getContent(), true);

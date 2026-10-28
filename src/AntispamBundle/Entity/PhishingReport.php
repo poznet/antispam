@@ -59,6 +59,21 @@ class PhishingReport
     #[ORM\Column(name: 'client_ip', type: 'string', length: 45, nullable: true)]
     private $clientIp;
 
+    /**
+     * Address(es) of the mail client account the message was in, when that is
+     * not the authenticating mailbox (Thunderbird plugin 1.3.0+, an account
+     * without its own antispam login). Informational, sent by the client.
+     */
+    #[ORM\Column(name: 'reported_from', type: 'string', length: 255, nullable: true)]
+    private $reportedFrom;
+
+    /**
+     * "Report to the admin only" (scope report_only): no rules were learned for
+     * accountEmail - it only authenticated the request.
+     */
+    #[ORM\Column(name: 'report_only', type: 'boolean', options: ['default' => false])]
+    private $reportOnly = false;
+
     #[ORM\Column(name: 'sender', type: 'string', length: 255, nullable: true)]
     private $sender;
 
@@ -148,6 +163,12 @@ class PhishingReport
 
     public function getClientIp() { return $this->clientIp; }
     public function setClientIp($v) { $this->clientIp = $v; return $this; }
+
+    public function getReportedFrom() { return $this->reportedFrom; }
+    public function setReportedFrom($v) { $this->reportedFrom = ($v === null || $v === '') ? null : self::clip($v, 255); return $this; }
+
+    public function isReportOnly() { return $this->reportOnly; }
+    public function setReportOnly($v) { $this->reportOnly = (bool)$v; return $this; }
 
     public function getSender() { return $this->sender; }
     public function setSender($v) { $this->sender = self::clip($v, 255); return $this; }

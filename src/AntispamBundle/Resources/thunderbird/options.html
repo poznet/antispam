@@ -27,29 +27,28 @@
   </section>
 
   <section>
-    <h2>Konto</h2>
-    <div id="loggedOut">
-      <p class="muted">Bez logowania możesz zgłaszać spam — antyspam uczy się na Twoich zgłoszeniach.
-        Zaloguj się adresem skrzynki i hasłem wtyczki (lub hasłem IMAP), aby antyspam sprawdzał nową pocztę
-        i tworzył reguły dla Twojej skrzynki.</p>
-      <form id="loginForm">
-        <label>E-mail <input type="email" id="email" required autocomplete="username"></label>
-        <label>Hasło <input type="password" id="password" required autocomplete="current-password"></label>
-        <button type="submit">Zaloguj</button>
-      </form>
-    </div>
-    <div id="loggedIn" hidden>
-      <p>Zalogowano jako <strong id="who"></strong></p>
-      <button type="button" id="logout" class="secondary">Wyloguj</button>
-    </div>
+    <h2>Konta</h2>
+    <p class="muted">Każde konto Thunderbirda, które ma swoją skrzynkę w antyspamie, logujesz osobno - adresem
+      tej skrzynki i hasłem wtyczki (lub hasłem IMAP). Zgłoszenia z zalogowanego konta uczą reguł jego skrzynki,
+      a nowa poczta na nim może być sprawdzana w antyspamie.</p>
+    <div id="accounts" class="accounts"><p class="muted">Wczytywanie kont…</p></div>
     <p id="loginMsg" class="msg" hidden></p>
+
+    <label>Wiadomości z kont bez logowania w antyspamie
+      <select id="foreignMode">
+        <option value="report_only">zgłaszaj tylko do administratora (zalecane)</option>
+        <option value="linked">traktuj jak podpiętą skrzynkę (jak w wersji 1.2)</option>
+        <option value="off">wyłączone - nic nie wysyłaj</option>
+      </select>
+    </label>
+    <p class="muted" id="foreignHint"></p>
   </section>
 
   <section>
     <h2>Działanie</h2>
     <label class="check"><input type="checkbox" id="reportOnJunk"> Zgłaszaj do antyspamu, gdy oznaczę wiadomość jako śmieci / nie-śmieci</label>
     <label class="check"><input type="checkbox" id="moveOnReport"> Po zgłoszeniu przenoś wiadomość do folderu Śmieci</label>
-    <label class="check"><input type="checkbox" id="autoCheck"> Sprawdzaj nową pocztę w antyspamie <span class="muted">(wymaga zalogowania)</span></label>
+    <label class="check"><input type="checkbox" id="autoCheck"> Sprawdzaj nową pocztę w antyspamie <span class="muted">(na kontach zalogowanych we wtyczce)</span></label>
     <label>Gdy antyspam uzna wiadomość za SPAM
       <select id="spamAction">
         <option value="move">oznacz jako śmieci i przenieś do Śmieci</option>
@@ -80,14 +79,18 @@
     <h2>Diagnostyka</h2>
     <p class="muted">Sprawdza adres, zgodę Thunderbirda na połączenie, odpowiedź serwera i zapisuje test
       na serwerze - administrator zobaczy go w panelu (Dziennik audytu, akcja <code>plugin.ping</code>).</p>
-    <button type="button" id="test" class="secondary">Testuj połączenie</button>
+    <button type="button" id="test" class="secondary">Testuj połączenie (wszystkie konta)</button>
     <ul id="testResult" class="steps" hidden></ul>
 
     <h3>Ostatnie zdarzenia wtyczki</h3>
-    <p class="muted">Kliknięcia, oznaczanie śmieci i wyniki zapytań do serwera. Jeśli po kliknięciu
-      w Thunderbirdzie nic tu nie przybywa, wtyczka nie dostaje kliknięcia - uruchom Thunderbirda ponownie.</p>
+    <p class="muted">Kliknięcia, oznaczanie śmieci, zapytania do serwera (z czasem odpowiedzi) i ich wyniki -
+      konto, logowanie, temat i nadawca wiadomości. Hasła, tokeny i treść wiadomości nie są zapisywane.
+      Jeśli po kliknięciu w Thunderbirdzie nic tu nie przybywa, wtyczka nie dostaje kliknięcia - uruchom Thunderbirda ponownie.</p>
     <button type="button" id="eventsRefresh" class="secondary">Odśwież</button>
+    <button type="button" id="eventsCopy" class="secondary">Kopiuj</button>
+    <button type="button" id="eventsDownload" class="secondary">Pobierz .txt</button>
     <button type="button" id="eventsClear" class="secondary">Wyczyść</button>
+    <span id="eventsMsg" class="msg" hidden></span>
     <ul id="events" class="events"></ul>
   </section>
 

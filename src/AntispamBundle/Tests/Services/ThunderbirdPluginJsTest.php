@@ -41,4 +41,17 @@ class ThunderbirdPluginJsTest extends TestCase
         $this->assertSame(0, $code, implode("\n", $out));
         $this->assertStringContainsString('all checks passed', implode("\n", $out));
     }
+
+    /**
+     * Per-account logins, accounts without a login (report_only / linked /
+     * off), legacy login migration, event log contents and hung Thunderbird
+     * API calls (tests/js/thunderbird-accounts.mjs).
+     */
+    public function testAccountsFlow()
+    {
+        $node = $this->node();
+        exec(escapeshellarg($node) . ' ' . escapeshellarg(dirname(__DIR__, 4) . '/tests/js/thunderbird-accounts.mjs') . ' 2>&1', $out, $code);
+        $this->assertSame(0, $code, implode("\n", $out));
+        $this->assertStringContainsString('all checks passed', implode("\n", $out));
+    }
 }

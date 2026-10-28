@@ -39,6 +39,13 @@ class PluginReport
     #[ORM\Column(name: 'client_ip', type: 'string', length: 45, nullable: true)]
     private $clientIp;
 
+    /**
+     * Mail client account the message was in when that is not the mailbox of
+     * the token (Thunderbird plugin 1.3.0+, informational, sent by the client).
+     */
+    #[ORM\Column(name: 'reported_from', type: 'string', length: 255, nullable: true)]
+    private $reportedFrom;
+
     /** Fingerprints recorded in the shared spam DB. */
     #[ORM\Column(name: 'signals', type: 'integer')]
     private $signals = 0;
@@ -79,6 +86,13 @@ class PluginReport
 
     public function getClientIp() { return $this->clientIp; }
     public function setClientIp($ip) { $this->clientIp = $ip !== null ? substr($ip, 0, 45) : null; return $this; }
+
+    public function getReportedFrom() { return $this->reportedFrom; }
+    public function setReportedFrom($v)
+    {
+        $this->reportedFrom = ($v === null || $v === '') ? null : mb_substr((string)$v, 0, 255);
+        return $this;
+    }
 
     public function getSignals() { return $this->signals; }
     public function setSignals($n) { $this->signals = (int)$n; return $this; }

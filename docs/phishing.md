@@ -23,6 +23,20 @@ forward it (e.g. to CERT Polska).
    sender's INBOX mail to SPAM (a background job, [jobs.md](jobs.md)).
 3. The same message reported again by the same account (same SHA-256) only
    increments `report_count`.
+   **From another Thunderbird account** (plugin 1.3.0+): when the message is in
+   a Thunderbird account that has no login of its own and the plugin is set to
+   *zgłaszaj tylko do administratora* (default), the request is authenticated
+   with another account's login and carries `"scope": "report_only"` and
+   `reported_from` (that account's addresses). The report is stored with
+   `reported_from` and `report_only = 1`, shared fingerprints are recorded,
+   but step 2's blacklist rule, Bayes training and retroactive pass are
+   **skipped** - the authenticating mailbox (`account_email`) only vouches for
+   the request. The list shows *z konta: … (tylko zgłoszenie)* under the
+   mailbox, the detail page explains it and warns that **Filtrowanie** rules
+   would go to the authenticating mailbox. In the plugin's *traktuj jak
+   podpiętą skrzynkę* mode the report is learned as before and
+   `reported_from` is stored for information only. Requests without `scope`
+   (older plugins, Outlook) behave as before.
 4. The client files the message as junk, like a spam report (Outlook cannot
    move mail; it shows the junk hint instead).
 

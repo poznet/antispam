@@ -22,8 +22,8 @@ Page: **Przegląd → Dziennik audytu** (`/audit`, ROLE_ADMIN only).
 | `spambox.restore` | restore from the legacy SPAM / QUARANTINE folder | message number, folder |
 | `spam.release`, `spam.whitelist` ("Przywróć i zawsze akceptuj") | user area SPAM folder `/my/spam` | message id (IMAP UID / Maildir name), sender, mailbox address; `source: my`, `mailbox_id` (`imap-<id>` / `ssh-<id>`), `ok` (failed / refused attempts too) |
 | `plugin.login`, `plugin.login_failed` | plugin login (`/api/plugin/login`) | mailbox address typed / logged in |
-| `plugin.report` | spam / not-spam report from a plugin | sender, mailbox; verdict, learned rules; actor = plugin account (or anonymous) |
-| `plugin.phishing` | phishing report from a plugin | phishing report id, sender, mailbox; duplicate, client |
+| `plugin.report` | spam / not-spam report from a plugin | sender, mailbox; verdict, learned rules, `scope: report_only` and `reported_from` (message from another mail client account, plugin 1.3.0+; only when set); actor = plugin account (or anonymous) |
+| `plugin.phishing` | phishing report from a plugin | phishing report id, sender, mailbox; duplicate, client, `scope` / `reported_from` as for `plugin.report` |
 | `phishing.update`, `phishing.block`, `phishing.delete`, `phishing.eml_download`, `phishing.forward` | `/phishing/*` | report id, sender, mailbox; status from/to, blocked value, rule id; forward result, recipients, resend/bulk |
 | `backup.export`, `backup.import` | Kopia zapasowa | file name, with/without secrets, format; import mode, sections, created/updated/deleted/skipped counts |
 | `settings.save` | Filtr spamu, Wspólna baza spamu, Raport kwarantanny, Wtyczki pocztowe, Konfiguracja (stara), Lista CERT, Przekazywanie phishingu (`phishing_forward`), "Wymagaj 2FA dla administratorów" (`2fa_policy`, `required`), Logowanie OAuth (`oauth`) | `target_id` = page; submitted field **names**, `secrets_changed` = names of secret fields that were set or cleared |

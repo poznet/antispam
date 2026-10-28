@@ -66,6 +66,7 @@
                     <td class="pp-cell-wrap">
                         {% if r.accountEmail %}{{ r.accountEmail }}
                         {% else %}<span class="text-muted">niezalogowany</span>{% endif %}
+                        {% if r.reportedFrom %}<br><small class="text-warning" title="Wiadomość z innego konta w programie pocztowym">z konta: {{ r.reportedFrom }}</small>{% endif %}
                         {% if r.clientIp %}<br><small class="text-muted">{{ r.clientIp }}</small>{% endif %}
                     </td>
                     <td class="pp-cell-wrap">{{ r.sender }}</td>

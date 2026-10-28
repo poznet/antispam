@@ -53,7 +53,7 @@ class PluginApiController extends AbstractController
     /** Phishing reports (full messages up to 10 MiB each) per account and hour. */
     const PHISHING_RATE_LIMIT = 30;
 
-    const PLUGIN_VERSION = '1.2.1';
+    const PLUGIN_VERSION = '1.3.0';
 
     /**
      * The Thunderbird .xpi. Default: the uploaded generic package (e.g. the
@@ -143,6 +143,11 @@ class PluginApiController extends AbstractController
             'anonymous_reports' => $this->plugin->isAnonymousReportEnabled(),
             'check_enabled' => $this->plugin->isCheckEnabled(),
             'phishing_reports' => true,
+            // "scope" accepted by /report and /phishing (report_only: message
+            // from another mail client account, nothing learned for the
+            // token's mailbox). Missing on servers before plugin 1.3.0.
+            'report_only' => true,
+            'report_scopes' => PluginService::SCOPES,
             'phishing_max_bytes' => PhishingReportService::MAX_RAW_BYTES,
             // Largest message source (decoded) the plugins should send in one request -
             // reflects the body limit of a proxy in front of antispam (plugin.max_upload_kb).
@@ -218,8 +223,12 @@ class PluginApiController extends AbstractController
     }
 
     /**
-     * User verdict on a message. POST {"raw_base64": "...", "verdict": "spam|ham"}
+     * User verdict on a message. POST {"raw_base64": "...", "verdict": "spam|ham",
+     * "scope": "mailbox|report_only", "reported_from": "a@b.pl"}.
      * Token optional for "spam" (anonymous report), required for "ham".
+     * scope report_only (spam only): the message was in another mail client
+     * account - shared fingerprints only, no rules / retroactive pass for the
+     * token's mailbox. No scope = mailbox (plugins before 1.3.0).
      */
     #[Route('/api/plugin/report', name: 'antispam_plugin_api_report', methods: ['POST'])]
     public function reportAction(Request $request)
@@ -240,6 +249,14 @@ class PluginApiController extends AbstractController
             // Anonymous "not spam" would let spammers whitelist themselves.
             return new JsonResponse(['error' => 'login required for not-spam reports'], 401);
         }
+        if (($scope = PluginService::scopeFrom($data)) === null) {
+            return new JsonResponse(['error' => 'invalid scope'], 400);
+        }
+        if ($verdict === PluginService::VERDICT_HAM && $scope === PluginService::SCOPE_REPORT_ONLY) {
+            // "Not spam" only means something for the mailbox the message is in.
+            return new JsonResponse(['error' => 'not-spam reports need the login of the mailbox the message is in', 'message' => 'Zgłoszenie „to nie spam” wymaga zalogowania konta, w którym jest wiadomość.'], 400);
+        }
+        $reportedFrom = PluginService::reportedFromValue($data['reported_from'] ?? null);
         if (($raw = $this->rawFrom($data)) instanceof JsonResponse) {
             return $raw;
         }
@@ -248,11 +265,13 @@ class PluginApiController extends AbstractController
             return new JsonResponse(['error' => 'rate limit exceeded'], 429);
         }
 
-        $result = $this->plugin->learn($raw, $verdict, $account, $this->clientIp($request));
+        $result = $this->plugin->learn($raw, $verdict, $account, $this->clientIp($request), 'plugin', $scope, $reportedFrom);
         $result['authenticated'] = $account !== null;
-        $this->audit('plugin.report', targetType: 'message', label: (string)($result['sender'] ?? ''), mailbox: $account?->getEmail(), details: ['verdict' => $verdict, 'rules' => $result['rules'] ?? []],
+        // Mailbox whose rules the report taught (null: anonymous or report_only).
+        $result['mailbox'] = $account && $scope === PluginService::SCOPE_MAILBOX ? $account->getEmail() : null;
+        $this->audit('plugin.report', targetType: 'message', label: (string)($result['sender'] ?? ''), mailbox: $account?->getEmail(), details: $this->scopeDetails(['verdict' => $verdict, 'rules' => $result['rules'] ?? []], $scope, $reportedFrom),
             actor: $account ? $account->getEmail() : 'wtyczka (anonim)', actorType: $account ? AuditLog::ACTOR_PLUGIN : AuditLog::ACTOR_ANONYMOUS);
-        if ($account) {
+        if ($account && $scope === PluginService::SCOPE_MAILBOX) {
             $this->applyRetroactive($account, $result);
         }
         return new JsonResponse($result);
@@ -262,8 +281,12 @@ class PluginApiController extends AbstractController
      * Phishing attempt: handled like a spam report (sender blacklisted, shared
      * fingerprints) and the full message is kept for the admin on the
      * "Zgłoszenia phishingu" page. POST {"raw_base64": "...", "client":
-     * "thunderbird|outlook", "truncated": bool}. Login required - the message
-     * content is stored.
+     * "thunderbird|outlook", "truncated": bool, "scope": "mailbox|report_only",
+     * "reported_from": "a@b.pl"}. Login required - the message content is
+     * stored. scope report_only: the message was in another mail client account
+     * (reported_from); the token only authenticates - the copy is stored and
+     * the shared fingerprints recorded, but no rules / retroactive pass for the
+     * token's mailbox.
      */
     #[Route('/api/plugin/phishing', name: 'antispam_plugin_api_phishing', methods: ['POST'])]
     public function phishingAction(Request $request)
@@ -276,6 +299,10 @@ class PluginApiController extends AbstractController
             return new JsonResponse(['error' => 'login required'], 401);
         }
         $data = json_decode($request->getContent(), true);
+        if (($scope = PluginService::scopeFrom($data)) === null) {
+            return new JsonResponse(['error' => 'invalid scope'], 400);
+        }
+        $reportedFrom = PluginService::reportedFromValue(is_array($data) ? ($data['reported_from'] ?? null) : null);
         if (($raw = $this->rawFrom($data, PhishingReportService::MAX_RAW_BYTES)) instanceof JsonResponse) {
             return $raw;
         }
@@ -287,19 +314,34 @@ class PluginApiController extends AbstractController
         }
 
         try {
-            $stored = $this->phishing->submit($raw, $account, (string)($data['client'] ?? ''), $this->clientIp($request), !empty($data['truncated']));
+            $stored = $this->phishing->submit($raw, $account, (string)($data['client'] ?? ''), $this->clientIp($request), !empty($data['truncated']), $scope === PluginService::SCOPE_REPORT_ONLY, $reportedFrom);
         } catch (\OverflowException $e) {
             // The admin has to review / delete older reports of this mailbox first.
             return new JsonResponse(['error' => 'phishing report quota exceeded'], 507);
         }
-        $result = $this->plugin->learn($raw, PluginService::VERDICT_SPAM, $account, $this->clientIp($request), 'phishing');
+        $result = $this->plugin->learn($raw, PluginService::VERDICT_SPAM, $account, $this->clientIp($request), 'phishing', $scope, $reportedFrom);
         $result['authenticated'] = true;
         $result['phishing_id'] = $stored['id'];
-        $this->audit('plugin.phishing', targetType: 'phishing', targetId: $stored['id'], label: (string)($result['sender'] ?? ''), mailbox: $account->getEmail(), details: ['duplicate' => (bool)$stored['duplicate'], 'client' => is_scalar($data['client'] ?? null) ? mb_substr((string)$data['client'], 0, 20) : ''],
+        $result['mailbox'] = $scope === PluginService::SCOPE_MAILBOX ? $account->getEmail() : null;
+        $this->audit('plugin.phishing', targetType: 'phishing', targetId: $stored['id'], label: (string)($result['sender'] ?? ''), mailbox: $account->getEmail(), details: $this->scopeDetails(['duplicate' => (bool)$stored['duplicate'], 'client' => is_scalar($data['client'] ?? null) ? mb_substr((string)$data['client'], 0, 20) : ''], $scope, $reportedFrom),
             actor: $account->getEmail(), actorType: AuditLog::ACTOR_PLUGIN);
         $result['duplicate'] = $stored['duplicate'];
-        $this->applyRetroactive($account, $result);
+        if ($scope === PluginService::SCOPE_MAILBOX) {
+            $this->applyRetroactive($account, $result);
+        }
         return new JsonResponse($result);
+    }
+
+    /** Audit details plus the report scope / foreign account, recorded only when they differ from the default. */
+    private function scopeDetails(array $details, string $scope, ?string $reportedFrom): array
+    {
+        if ($scope !== PluginService::SCOPE_MAILBOX) {
+            $details['scope'] = $scope;
+        }
+        if ($reportedFrom !== null) {
+            $details['reported_from'] = $reportedFrom;
+        }
+        return $details;
     }
 
     /**

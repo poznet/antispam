@@ -52,7 +52,7 @@ class PhishingReportService
      *
      * @throws \OverflowException when the account's storage quota is used up
      */
-    public function submit($raw, Account $account, $client = null, $clientIp = null, $truncated = false)
+    public function submit($raw, Account $account, $client = null, $clientIp = null, $truncated = false, $reportOnly = false, $reportedFrom = null)
     {
         $repo = $this->em->getRepository(PhishingReport::class);
         $existing = $repo->findOneBy(['accountEmail' => $account->getEmail(), 'sha256' => hash('sha256', (string)$raw)]);
@@ -80,7 +80,9 @@ class PhishingReportService
             ->setSubject($msg->getSubject() ?: null)
             ->setMessageId(trim($msg->getHeader('message-id'), " <>") ?: null)
             ->setConnectingIp($msg->getConnectingIp())
-            ->setTruncated($truncated);
+            ->setTruncated($truncated)
+            ->setReportOnly($reportOnly)
+            ->setReportedFrom($reportedFrom);
         $this->em->persist($report);
         $this->em->flush();
 

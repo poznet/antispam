@@ -19,6 +19,30 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 ## [Unreleased]
 
 ### Added
+- Thunderbird plugin **1.3.0: one login per Thunderbird account.** The settings
+  page lists the Thunderbird accounts with their own login / logout / test;
+  every report, phishing report, not-spam, check and connection test uses the
+  token of the account the message is in, on-arrival checks run on each
+  logged-in account, a `401` drops only that account's login. The 1.2.x login
+  moves to the account with that e-mail on upgrade (else it stays as the
+  "general" default login). New option **Wiadomości z kont bez logowania w
+  antyspamie**: *zgłaszaj tylko do administratora* (default - spam / phishing
+  authenticated with another login but with `"scope": "report_only"`: shared
+  fingerprints and the phishing copy only, no rules, Bayes or retroactive pass
+  for any mailbox; "To nie spam" disabled there), *traktuj jak podpiętą
+  skrzynkę* (1.2 behaviour) or *wyłączone* (local junk marking only). Menu
+  titles and notifications say which mailbox a report goes to. Server:
+  `scope` / `reported_from` on `/api/plugin/report` and `/phishing` (no scope =
+  old behaviour), `report_only` in `/api/plugin/status`, audit details
+  `scope` / `reported_from`, `/phishing` and *Zgłoszenia z wtyczek* show the
+  foreign account. New columns `antispam_phishing_report.reported_from` /
+  `report_only`, `antispam_plugin_report.reported_from` (migration
+  `Version20261028212227`). See `docs/thunderbird.md` ("Several Thunderbird
+  accounts").
+- Thunderbird plugin 1.3.0 event log: 200 entries with expandable details
+  (account, folder, subject, sender, size, login / mode used, HTTP status,
+  duration and the server's answer, local junk / move results, exceptions),
+  **Kopiuj** and **Pobierz .txt**; no tokens, passwords or message content.
 - Background job queue (**Przegląd → Zadania w tle**, `/jobs`): heavy panel actions
   no longer run inside the HTTP request (the first "Skanuj" of a big mailbox ended in
   `504 Gateway Timeout`). Queued: account **Skanuj**, **Wdróż**, **Synchronizuj**,
@@ -102,6 +126,18 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   `RUN_MIGRATIONS_STRICT=true` stops the container when the upgrade fails (default:
   loud error, start anyway). `antispam:doctor` `schema` now fails on pending
   migrations and warns on entity changes without a migration. See `docs/migrations.md`.
+
+### Fixed
+- Thunderbird plugin 1.3.0: after the first report following a restart, later
+  clicks (spam, phishing) did nothing - only *Menu: …* was logged. Clicks ran
+  in a strict queue and Thunderbird API calls were awaited without a time
+  limit, so one call that never settled (junk flag, move to the IMAP Junk
+  folder, notification) blocked every later click. Every call now has a time
+  limit and is logged as *Zadanie zawieszone na kroku …*, notifications and
+  the badge are not awaited, the local junk filing runs side by side with the
+  server request and each job has a watchdog. A menu click with an empty
+  `selectedMessages` falls back to the tab's selection / displayed message
+  instead of silently doing nothing.
 
 ## [2.0.0] - 2026-10-28 (current)
 

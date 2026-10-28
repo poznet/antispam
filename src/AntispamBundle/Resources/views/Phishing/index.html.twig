@@ -47,7 +47,8 @@
                 <tr>
                     <td><input type="checkbox" name="ids[]" value="{{ r.id }}" form="phishing-bulk" aria-label="Zaznacz zgłoszenie #{{ r.id }}" {% if r.forwardedAt or r.status == 'false_positive' %}disabled{% endif %}></td>
                     <td style="white-space:nowrap;">{{ r.lastReportedAt|date('Y-m-d H:i') }}{% if r.reportCount > 1 %} <span class="badge" title="Zgłoszona kilka razy">×{{ r.reportCount }}</span>{% endif %}</td>
-                    <td>{{ r.accountEmail }}<br><small class="text-muted">{{ r.client ?: 'wtyczka' }}</small></td>
+                    <td>{{ r.accountEmail }}<br><small class="text-muted">{{ r.client ?: 'wtyczka' }}</small>
+                        {% if r.reportedFrom ?? null %}<br><small class="text-warning" title="Wiadomość z innego konta w programie pocztowym{{ (r.reportOnly ?? false) ? ' - tylko zgłoszenie, bez reguł dla skrzynki' : '' }}">z konta: {{ r.reportedFrom }}{% if r.reportOnly ?? false %} (tylko zgłoszenie){% endif %}</small>{% endif %}</td>
                     <td>{% if r.senderName %}{{ r.senderName }}<br>{% endif %}<small>{{ r.sender ?: '—' }}</small>
                         {% if r.replyTo and r.replyTo != r.sender %}<br><small class="text-danger">Reply-To: {{ r.replyTo }}</small>{% endif %}</td>
                     <td>{{ (r.subject ?: '(bez tematu)')[:80] }}</td>

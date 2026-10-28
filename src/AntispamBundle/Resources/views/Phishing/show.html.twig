@@ -30,6 +30,8 @@
                         {% if a.dkim_domains %}<br><small class="text-muted">DKIM d= {{ a.dkim_domains|join(', ') }}</small>{% endif %}
                     </td></tr>
                     <tr><th>Zgłoszenie</th><td>{{ report.accountEmail }} · {{ report.client ?: 'wtyczka' }} · {{ report.createdAt|date('Y-m-d H:i') }}
+                        {% if report.reportedFrom %}<br><span class="text-warning">Wiadomość z innego konta w programie pocztowym: <strong>{{ report.reportedFrom }}</strong></span>
+                            <br><small class="text-muted">{% if report.reportOnly %}Tylko zgłoszenie do administratora - wtyczka użyła logowania {{ report.accountEmail }} wyłącznie do uwierzytelnienia, dla tej skrzynki nie utworzono reguł.{% else %}Wtyczka potraktowała je jak wiadomość skrzynki {{ report.accountEmail }} (reguły utworzone dla niej).{% endif %}</small>{% endif %}
                         {% if report.reportCount > 1 %}<br><small class="text-muted">zgłoszona {{ report.reportCount }} razy, ostatnio {{ report.lastReportedAt|date('Y-m-d H:i') }}</small>{% endif %}
                         <br><small class="text-muted">{{ (report.size / 1024)|round(1) }} KiB, SHA-256 {{ report.sha256[:16] }}…</small></td></tr>
                 </table>
@@ -103,6 +105,7 @@
 
             <div class="panel panel-default">
                 <div class="panel-heading"><span class="glyphicon glyphicon-ban-circle"></span> Filtrowanie dla {{ report.accountEmail }}</div>
+                {% if report.reportOnly %}<div class="panel-body text-warning" style="padding-bottom:0;"><small>Wiadomość przyszła na {{ report.reportedFrom ?: 'inne konto' }}, nie na tę skrzynkę - reguła poniżej dotyczy skrzynki {{ report.accountEmail }}.</small></div>{% endif %}
                 <div class="panel-body">
                     <form method="post" action="{{ path('antispam_phishing_block', {id: report.id}) }}">
                         <input type="hidden" name="_token" value="{{ token }}">

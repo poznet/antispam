@@ -7,11 +7,11 @@ Server side: `PluginApiController`, `PluginService`, `RawMessageScanner`,
 
 ## Two modes
 
-| | Not logged in | Logged in (mailbox e-mail + password) |
+| | Not logged in | Logged in (mailbox e-mail + password; per Thunderbird account since 1.3.0) |
 |---|---|---|
 | Mark as spam (junk button, toolbar button, context menu) | ✔ — sender + body fingerprints go to the shared spam DB | ✔ — fingerprints **and** the sender is added to the account's e-mail blacklist (exact whitelist entry removed) |
 | Mark as not spam | — | ✔ — exact blacklist entry removed, sender whitelisted for the account |
-| Check new mail on arrival | — | ✔ — each new message in the matching mailbox is sent to antispam and marked / moved according to the decision |
+| Check new mail on arrival | — | ✔ — each new message in the logged-in Thunderbird account is sent to antispam and marked / moved according to the decision |
 | Manual "Check in antispam" | — | ✔ |
 
 Anonymous reports only ever add fingerprints (`antispam_shared_spam_signal`,
@@ -97,9 +97,53 @@ The server returns a stateless HMAC token (signed with `kernel.secret`), valid f
 changing `secret` invalidates all of them. Login is limited to 10 attempts per IP
 per 15 minutes.
 
-On-arrival checks run only for messages arriving to a Thunderbird account having
-an identity with the logged-in e-mail, so rules of one mailbox are never applied
-to another.
+## Several Thunderbird accounts (1.3.0+)
+
+Up to 1.2.x the plugin kept **one** login, and every report from **any**
+Thunderbird account was sent with it: the server learned blacklist / whitelist
+rules (and ran the retroactive pass) for the logged-in mailbox even when the
+message was in another account, and "To nie spam" from another account could
+whitelist a stranger on it.
+
+Since 1.3.0:
+
+- **Logins are per Thunderbird account.** The settings page (*Konta*) lists
+  every mail account (`messenger.accounts.list`, permission `accountsRead`)
+  with its login state; each one has its own login form (pre-filled with the
+  account's first identity), **Testuj** and **Wyloguj**. Tokens are stored in
+  `storage.local` as `logins: {<accountId>: {token, email, expires_at}}`. Every
+  request (report, phishing, not spam, check, test) uses the token of the
+  account whose folder holds the message (`folder.accountId`). A `401` drops
+  only that account's login. On-arrival checks run on each account that has
+  its own login.
+- **Upgrade from 1.2.x:** the single `token` / `email` is moved to the
+  Thunderbird account that has that e-mail as an identity. If no account
+  matches (e.g. the antispam mailbox is an alias), it is kept as the
+  **general login** (`*`, shown as *Logowanie ogólne* with a Wyloguj button):
+  it serves as the default login for accounts without their own, never for
+  checks. Nothing to do for the user - the old login keeps working for its
+  account.
+- **Accounts without their own login** follow the setting *Wiadomości z kont
+  bez logowania w antyspamie* (`foreignMode`):
+
+| Option | Spam (button, menu, junk button) | Phishing | To nie spam / Sprawdź |
+|---|---|---|---|
+| **zgłaszaj tylko do administratora** (`report_only`, default) | sent with the default login and `"scope": "report_only"` + `reported_from` (the account's addresses): shared fingerprints and the plugin report log only, **no rules, no Bayes, no retroactive pass** for any mailbox | stored for the admin (`/phishing` shows *z konta: …, tylko zgłoszenie*), authenticated with the default login | disabled (menu item greyed out, a click explains it) |
+| **traktuj jak podpiętą skrzynkę** (`linked`) | old behaviour: learned for the default login's mailbox (`reported_from` is sent for information) | as the default login's mailbox | allowed (whitelists on the default login's mailbox), manual check with its rules |
+| **wyłączone** (`off`) | nothing sent; the message is only filed locally as junk | nothing sent; filed locally as junk | "To nie spam" only clears the local junk flag; check disabled |
+
+  The **default login** is the general login if there is one, else the first
+  logged-in account in Thunderbird's account order. Without any login at all
+  `report_only` behaves like the old anonymous mode (spam reported
+  anonymously, without `reported_from`; phishing and not-spam need a login).
+- **Older server** (no `report_only` in `/api/plugin/status`): a server that
+  does not know the scope would learn rules for the default mailbox, so in
+  `report_only` mode spam from foreign accounts is sent **anonymously** and
+  phishing from them is refused with a message (update antispam, log the
+  account in, or pick another option). The connection test shows it.
+- The context menu titles say where a report of the right-clicked account goes
+  (*→ skrzynka x@y*, *→ tylko do administratora*, *→ anonimowo*), and so do
+  the notifications and the toolbar badge tooltip.
 
 ## Plugin behaviour
 
@@ -123,24 +167,49 @@ to another.
   quarantine → nothing (default); both configurable.
 - **Feedback**: explicit actions (toolbar button, context menu) show their result
   as a badge on the toolbar button (✓ / !, details in its tooltip) besides the
-  system notification. An action that needs a login ("check", "not spam") or a
-  server URL opens the plugin settings.
+  system notification, and write it to the event log. An action that needs a
+  login ("check", "not spam") or a server URL opens the plugin settings.
+- **Selection**: a menu click uses `info.selectedMessages`; when that is empty
+  or missing (1.2.1: the click silently did nothing), the tab's selection
+  (`mailTabs.getSelectedMessages`) and then the displayed message are used. "Nic
+  nie zaznaczono" is logged when there is still nothing.
 
 ## Troubleshooting
 
 **Diagnostyka (1.1.3+)** at the bottom of the plugin settings:
 
-- *Testuj połączenie* checks step by step: plugin and Thunderbird version,
-  server address, Thunderbird's permission to talk to that host, `GET
-  /api/plugin/status` (latency, server and plugin version, login state) and
-  `POST /api/plugin/ping`, which the server writes to *Dziennik audytu* as
-  `plugin.ping` - so the admin sees the plugin reached the server.
-- *Ostatnie zdarzenia wtyczki* (last 40, stored locally): every click on the
-  toolbar button / context menu, every junk / not-junk mark Thunderbird
-  reports, and the result of every request (method, path, HTTP status or
-  network error). If a click in Thunderbird adds nothing here, the click never
-  reached the plugin (typically an add-on updated while Thunderbird was
-  running - restart Thunderbird).
+- *Testuj połączenie (wszystkie konta)* - or **Testuj** on one account -
+  checks step by step: plugin and Thunderbird version, server address,
+  Thunderbird's permission to talk to that host, `GET /api/plugin/status`
+  (latency, server and plugin version, support for accounts without a login),
+  then for each tested login `GET /status` with its token and `POST
+  /api/plugin/ping`, which the server writes to *Dziennik audytu* as
+  `plugin.ping` - so the admin sees the plugin reached the server. Without any
+  login one anonymous ping is sent.
+- *Ostatnie zdarzenia wtyczki* (last 200, stored locally; 1.3.0: one summary
+  line per event, *szczegóły* expandable): every click on the toolbar button /
+  context menu with the number of selected messages, every junk / not-junk mark
+  Thunderbird reports, every request (method, path, HTTP status, duration,
+  which login was used, the server's answer: rules, signals, phishing id,
+  duplicate, retroactive pass, error), the result of each action with the
+  Thunderbird account, folder, subject, sender, size, mode (`own`,
+  `report_only`, `linked`, `off`, `anonymous`) and target mailbox, local junk
+  mark / move results (target folder), failed message reads and exceptions.
+  Tokens, passwords and message content are never logged. **Kopiuj** /
+  **Pobierz .txt** export the log for support, **Wyczyść** empties it. If a
+  click in Thunderbird adds nothing here, the click never reached the plugin
+  (typically an add-on updated while Thunderbird was running - restart
+  Thunderbird).
+- **Hung Thunderbird calls (1.3.0).** In 1.2.1 clicks ran in a strict queue
+  and every Thunderbird API call was awaited without a limit: one promise that
+  never settled (e.g. `messages.move` to the IMAP Junk folder, `messages.update`,
+  `notifications.create`) blocked every later click - "spam can be reported
+  only once after a restart", the next clicks logged only *Menu: …*. Now every
+  call has a time limit (`getRaw` 60 s, the rest 20 s) and is logged as
+  *Zadanie zawieszone na kroku …* when it runs out; notifications and the
+  badge are not awaited; the local junk filing runs side by side with the
+  server request (the report never waits for the move); each job has a
+  watchdog (clicks 3 min, background 10 min), so the queue always moves on.
 
 The settings page (*Add-ons and Themes → Antispam Pancernapanda → Preferences*,
 or the plugin opening it for a missing login) opens **in its own tab** since
@@ -149,8 +218,8 @@ could come out blank in Thunderbird 153. If loading the settings fails, the
 header says *Nie udało się wczytać ustawień wtyczki…* and **Zapisz** stays
 disabled (saving a half-loaded form would overwrite the settings with blanks).
 An expired or unknown login token is dropped once (`/api/plugin/status`
-answers `200 {"authenticated": false}`, never `401`) and the login form is
-shown with *Sesja wygasła…*.
+answers `200 {"authenticated": false}`, never `401`) - per account since
+1.3.0 - and that account's login form is shown with *Sesja wygasła…*.
 
 The settings page header shows the server URL and whether it is reachable.
 If it says *Brak połączenia z serwerem* with an `http://` URL, the `.xpi` was
@@ -182,15 +251,34 @@ JSON in / JSON out, exempt from form login. Authenticated calls send
 RFC 822 source (`raw_base64`, max 4 MiB decoded; 10 MiB for `/phishing`).
 `/status` also returns `phishing_reports`, `phishing_max_bytes` and
 `max_upload_bytes` (from `plugin.max_upload_kb`), `version` (the Thunderbird
-plugin version the server bundles) and `server_version` (the antispam release,
-`AppVersion::VERSION`).
+plugin version the server bundles), `server_version` (the antispam release,
+`AppVersion::VERSION`) and, since plugin 1.3.0, `report_only: true` +
+`report_scopes: ["mailbox", "report_only"]` (missing = older server).
+
+`/report` and `/phishing` accept (1.3.0+, both optional):
+
+- `scope`: `"mailbox"` (default, also when missing - plugins before 1.3.0 and
+  the Outlook / Apple Mail add-ins) or `"report_only"`: the message was in a
+  mail client account without its own login; the token (if any) only
+  authenticates. Shared fingerprints are recorded and the phishing copy is
+  stored, but no rules, no Bayes training and no retroactive pass for the
+  token's mailbox. `"verdict": "ham"` with `report_only` is `400`; an unknown
+  scope is `400`.
+- `reported_from`: address or list of addresses of that account
+  (informational; up to 5 valid addresses kept, 255 characters), stored on
+  the plugin report (`antispam_plugin_report.reported_from`) and the phishing
+  report (`reported_from`, `report_only`) and written to the audit log
+  (`details.scope`, `details.reported_from`).
+
+Responses of both also carry `scope` and `mailbox` (the mailbox whose rules
+the report taught; `null` for anonymous and `report_only` reports).
 
 | Method | URL | Auth | Description |
 |--------|-----|------|-------------|
 | GET | `/api/plugin/status` | optional | Feature flags, `max_upload_bytes`, whether the token is valid (`authenticated`; an invalid token is `200`, not `401`) |
 | POST | `/api/plugin/login` | — | `{email, password}` → `{token, email, expires_at}` |
-| POST | `/api/plugin/report` | optional for `spam`, required for `ham` | `{raw_base64, verdict: "spam"\|"ham"}` → `{verdict, sender, signals, rules[], authenticated, retroactive?: "scheduled"}` |
-| POST | `/api/plugin/phishing` | required | `{raw_base64 (max 10 MiB decoded), client: "thunderbird"\|"outlook", truncated: bool}` → report fields + `{phishing_id, duplicate}`. 30/h per account. See [phishing.md](phishing.md) |
+| POST | `/api/plugin/report` | optional for `spam`, required for `ham` | `{raw_base64, verdict: "spam"\|"ham", scope?, reported_from?}` → `{verdict, sender, signals, rules[], scope, mailbox, authenticated, retroactive?: "scheduled"}` |
+| POST | `/api/plugin/phishing` | required | `{raw_base64 (max 10 MiB decoded), client: "thunderbird"\|"outlook", truncated: bool, scope?, reported_from?}` → report fields + `{phishing_id, duplicate}`. 30/h per account (the authenticating one, also for `report_only`). See [phishing.md](phishing.md) |
 | POST | `/api/plugin/ping` | optional | Connection test from the settings page: `{client, client_version, app}` → `{ok, enabled, server_version, plugin_version, authenticated, email, client_ip, received_at}`. Nothing is learned; written to the audit log as `plugin.ping`. 60/h per IP |
 | POST | `/api/plugin/check` | required | `{raw_base64}` → `{decision, spam, score, spam_threshold, quarantine_threshold, reasons[], sender, subject}` |
 | GET | `/plugin/download` | — | The `.xpi` (`?build=instance` / `generic`; default: uploaded package if current, else instance) |
@@ -216,18 +304,19 @@ still reaches the panel. The plugin reads `/status` for this at most every 10
 minutes (1 minute after a failure); without it the 1.1.1 behaviour applies
 (try up to 10 MiB, fall back on `413`).
 
-The plugin (1.1.1+) files the message as junk locally before talking to the
-server, and aborts a request after 30 s (phishing upload: 120 s), so a slow or
-unreachable server no longer stalls the following clicks. A spam report that
+The plugin (1.1.1+) files the message as junk locally (since 1.3.0 side by
+side with the request, not before it), and aborts a request after 30 s
+(phishing upload: 120 s), so a slow or unreachable server no longer stalls the
+following clicks. A spam report that
 times out is reported as *prawdopodobnie przyjęte* (the server stores the
 report before it answers), not as an error. Moving to Junk passes the folder id
 to `messages.move()` (Thunderbird 121+; the MailFolder object is deprecated)
 and the folder object on 115. Clicks (button,
 context menu) have their own queue, separate from on-arrival checks, so they
-do not wait behind a batch of new mail. Filing locally first also avoids a
-race with the server: for a logged-in user a spam report blacklists the
-sender and the retroactive pass moves their mail out of INBOX on the server,
-which used to happen before Thunderbird tried to mark the same message.
+do not wait behind a batch of new mail. The junk flag is set before the
+request goes out; the retroactive pass that moves the sender's mail out of
+INBOX on the server is a background job, so it does not race with
+Thunderbird's local move.
 
 ```bash
 TOKEN=$(curl -s -X POST https://antispam.example.com/api/plugin/login \

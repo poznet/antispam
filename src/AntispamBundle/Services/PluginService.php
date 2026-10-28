@@ -27,6 +27,23 @@ class PluginService
     const VERDICT_SPAM = 'spam';
     const VERDICT_HAM = 'ham';
 
+    /**
+     * Report scopes (request field "scope", Thunderbird plugin 1.3.0+):
+     *   mailbox     - default (also when the field is missing, older plugins):
+     *                 the verdict teaches the token's mailbox (rules, Bayes,
+     *                 retroactive pass);
+     *   report_only - the message was in another mail client account without
+     *                 its own antispam login; the token only authenticates the
+     *                 request. Shared fingerprints and the phishing copy are
+     *                 kept, nothing is learned for the token's mailbox.
+     */
+    const SCOPE_MAILBOX = 'mailbox';
+    const SCOPE_REPORT_ONLY = 'report_only';
+    const SCOPES = [self::SCOPE_MAILBOX, self::SCOPE_REPORT_ONLY];
+
+    /** At most this many addresses are kept from "reported_from". */
+    const MAX_REPORTED_FROM = 5;
+
     const DEFAULT_TOKEN_TTL_DAYS = 90;
     const DEFAULT_REPORT_RATE_LIMIT = 120; // per IP per hour
     const LOGIN_RATE_LIMIT = 10;           // failed+successful attempts per IP per 15 min
@@ -207,6 +224,46 @@ class PluginService
         return true;
     }
 
+    // --- report scope ------------------------------------------------------
+
+    /**
+     * Scope of a report request; null for an unknown value (400). A missing or
+     * empty field is SCOPE_MAILBOX - the behaviour of plugins before 1.3.0.
+     */
+    public static function scopeFrom($data)
+    {
+        $scope = is_array($data) ? ($data['scope'] ?? null) : null;
+        if ($scope === null || $scope === '') {
+            return self::SCOPE_MAILBOX;
+        }
+        return is_string($scope) && in_array($scope, self::SCOPES, true) ? $scope : null;
+    }
+
+    /**
+     * Informational "reported_from" (the mail client account the message was
+     * in): a string or a list of addresses. Only valid e-mail addresses are
+     * kept, lower-cased, de-duplicated, at most MAX_REPORTED_FROM, joined with
+     * ", " and cut to 255 characters; null when nothing usable is left.
+     */
+    public static function reportedFromValue($value)
+    {
+        $items = is_array($value) ? $value : (is_string($value) ? preg_split('/[\s,;]+/', $value) : []);
+        $out = [];
+        foreach ($items as $item) {
+            if (!is_string($item)) {
+                continue;
+            }
+            $email = strtolower(trim($item));
+            if ($email !== '' && strlen($email) <= 254 && filter_var($email, FILTER_VALIDATE_EMAIL) && !in_array($email, $out, true)) {
+                $out[] = $email;
+            }
+            if (count($out) >= self::MAX_REPORTED_FROM) {
+                break;
+            }
+        }
+        return $out ? mb_substr(implode(', ', $out), 0, 255) : null;
+    }
+
     // --- learning ----------------------------------------------------------
 
     /**
@@ -222,13 +279,19 @@ class PluginService
      * Every report is logged in antispam_plugin_report (Spambox → Zgłoszenia
      * z wtyczki), kept for PluginReport::RETENTION_DAYS.
      *
-     * @return array{verdict:string, sender:string, signals:int, rules:string[]}
+     * $scope SCOPE_REPORT_ONLY: the message was in another mail client account
+     * ($reportedFrom, informational) - only the shared fingerprints are
+     * recorded; no rules and no Bayes training for $account, which just
+     * authenticated the request (it is still logged as the reporter).
+     *
+     * @return array{verdict:string, sender:string, signals:int, rules:string[], scope:string}
      */
-    public function learn($raw, $verdict, ?Account $account = null, $clientIp = null, $source = 'plugin')
+    public function learn($raw, $verdict, ?Account $account = null, $clientIp = null, $source = 'plugin', $scope = self::SCOPE_MAILBOX, $reportedFrom = null)
     {
+        $reportOnly = $scope === self::SCOPE_REPORT_ONLY;
         $msg = new RawMessageParser($raw);
         $sender = $msg->getFromAddress();
-        $result = ['verdict' => $verdict, 'sender' => $sender, 'signals' => 0, 'rules' => []];
+        $result = ['verdict' => $verdict, 'sender' => $sender, 'signals' => 0, 'rules' => [], 'scope' => $reportOnly ? self::SCOPE_REPORT_ONLY : self::SCOPE_MAILBOX];
 
         if ($verdict === self::VERDICT_SPAM) {
             $signals = $this->feed->signalsFor($sender, $msg->getBodyText());
@@ -237,7 +300,7 @@ class PluginService
             }
         }
 
-        if ($account && $sender && $this->isLearnRulesEnabled()) {
+        if ($account && !$reportOnly && $sender && $this->isLearnRulesEnabled()) {
             $owner = $account->getEmail();
             if ($verdict === self::VERDICT_SPAM) {
                 if ($this->removeExact(EmailWhitelist::class, $owner, 'whitelistemail', $sender)) {
@@ -266,7 +329,7 @@ class PluginService
 
         // Local Bayes classifier: only verdicts of a logged-in mailbox (an
         // anonymous report could be used to poison the token counts).
-        if ($account && $this->bayes) {
+        if ($account && !$reportOnly && $this->bayes) {
             $bayes = $this->bayes->learnRaw((string)$raw, $verdict === self::VERDICT_SPAM ? 'spam' : 'ham', $account->getEmail(), (string)$source);
             $result['bayes'] = !empty($bayes['learned']);
         }
@@ -277,6 +340,7 @@ class PluginService
             ->setSender($sender ?: null)
             ->setSubject($msg->getSubject() ?: null)
             ->setClientIp($clientIp ?: null)
+            ->setReportedFrom($reportedFrom ?: null)
             ->setSignals($result['signals'])
             ->setRules($result['rules']);
         $this->em->persist($log);

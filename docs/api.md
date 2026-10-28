@@ -6,7 +6,7 @@
 |--------|-----|-------------|
 | GET | `/` | Public home page (product landing) with the admin login form (`#logowanie`); logged-in admins see a link to the panel |
 | GET | `/login` | Redirects to `/#logowanie` (form_login entry point and failed-login redirect; the error is shown on the home page) |
-| POST | `/login` | Form login check (`_username`, `_password`, CSRF token `authenticate`) → `/panel` |
+| POST | `/login` | Form login check (`_username`, `_password`, CSRF token `authenticate`) → `/panel`. Throttled: 5 failed attempts per login + client IP per 15 minutes (`login_throttling`), then the form shows "too many failed login attempts" |
 | GET | `/logout` | Log out → `/` |
 | GET | `/start` | After-login redirect (ROLE_USER): admins -> `/panel`, users -> `/my/quarantine` |
 | GET | `/panel` | Admin dashboard (ROLE_ADMIN) |
@@ -41,9 +41,9 @@ a foreign mailbox key gives 403, see [users.md](users.md).
 | Method | URL | Description |
 |--------|-----|-------------|
 | GET | `/account/index` | List all accounts |
-| GET/POST | `/account/add` | Add new account form (POST needs CSRF token `account_form`) |
-| GET/POST | `/account/edit/{id}` | Edit account (POST needs CSRF token `account_form`) |
-| POST | `/account/imap-check` | IMAP connection / TLS certificate check from the account form, JSON; `mode=detect` suggests SSL/TLS or STARTTLS (CSRF token `imap_check`) |
+| GET/POST | `/account/add` | Add new account form (POST needs CSRF token `account_form`; e-mail, host names, ports and SSH user are validated) |
+| GET/POST | `/account/edit/{id}` | Edit account (POST needs CSRF token `account_form`, same validation) |
+| POST | `/account/imap-check` | IMAP connection / TLS certificate check from the account form, JSON; `mode=detect` suggests SSL/TLS or STARTTLS (CSRF token `imap_check`). With an empty password and `account[id]` (an account id, or `legacy` for *Konfiguracja → E-mail*) the stored password is used, but only against the stored host - another host is refused |
 | POST | `/account/del/{id}` | Delete account (CSRF token `account_action_{id}`) |
 | POST | `/account/test/{id}` | Test connection (IMAP or SSH) (CSRF token `account_action_{id}`) |
 | POST | `/account/deploy/{id}` | Deploy agent to hosting (SSH only) (CSRF token `account_action_{id}`) |
@@ -56,7 +56,8 @@ a foreign mailbox key gives 403, see [users.md](users.md).
 
 | Method | URL | Description |
 |--------|-----|-------------|
-| GET | `/spambox/index` | View first 20 spam messages |
+| GET | `/spambox/index` | First 20 spam messages; `?msg=<number>` picks the previewed one. The body is shown in a sandboxed iframe with its own CSP (no remote images / CSS) |
+| POST | `/spambox/restore/{folder}/{id}` | Move a message from `SPAM` / `QUARANTINE` back to INBOX (CSRF token `spambox_restore`) |
 | GET | `/spambox/quarantine` | Quarantine of every mailbox (legacy IMAP `QUARANTINE`, each IMAP account, each SSH account with a deployed agent) and the last 30 days of `quarantine` decisions from the score log (what the dashboard tile counts) |
 | POST | `/spambox/quarantine/action` | `mailbox` (`imap` / `imap-<id>` / `ssh-<id>`), `id`, `action` (`release` / `whitelist` / `delete`); CSRF token `quarantine_action` |
 | GET | `/spambox/scorelog` | Score log ("Dziennik ocen"), 50 per page. Query filters: `decision` (`ham`/`quarantine`/`spam`/`whitelisted`), `account`, `q` (sender/subject substring), `from`/`to` (`Y-m-d`), `min_score`, `page`. The decision tiles link to the matching `decision` filter |
@@ -94,13 +95,41 @@ See [phishing.md](phishing.md). CSRF token id `phishing` for all POSTs.
 | Method | URL | Description |
 |--------|-----|-------------|
 | GET/POST | `/config/email/` | Legacy email account settings, same SSL/TLS options as the account form (POST needs CSRF token `email_config`) |
-| GET/POST | `/config/spam/` | Spam processing settings |
-| GET/POST | `/config/feed/` | Shared spam feed settings |
-| GET/POST | `/config/digest/` | Quarantine digest settings, mailbox list, "send now" |
+| GET/POST | `/config/spam/` | Spam processing settings (POST needs CSRF token `spam_config`) |
+| GET/POST | `/config/feed/` | Shared spam feed settings (POST needs CSRF token `feed_config`) |
+| GET/POST | `/config/digest/` | Quarantine digest settings, mailbox list, "send now" (POST needs CSRF token `digest_config`) |
 | GET | `/config/digest/preview/{key}` | Render the digest a mailbox would get (last 7 days) |
-| GET/POST | `/config/plugin/` | Mail client plugin settings + downloads (Thunderbird, Outlook, Apple Mail) |
-| GET | `/config/uncheck-all/` | Reset all checked messages |
-| GET | `/config/reset/countes/` | Reset all rule counters |
+| GET/POST | `/config/plugin/` | Mail client plugin settings + downloads (Thunderbird, Outlook, Apple Mail) (POST needs CSRF token `plugin_config`) |
+| POST | `/config/spam/clamav-test/` | Ping clamd at the stored address (CSRF token `spam_maintenance`) |
+| POST | `/config/spam/virustotal-test/` | Check the stored VirusTotal API key (CSRF token `spam_maintenance`) |
+| POST | `/config/uncheck-all/` | Reset all checked messages (CSRF token `spam_maintenance`) |
+| POST | `/config/reset/countes/` | Reset all rule counters (CSRF token `spam_maintenance`) |
+
+Stored secrets (legacy IMAP password, VirusTotal / Safe Browsing API keys, feed
+keys) are never rendered back into the forms: the field stays empty with
+"(ustawione - zostaw puste, aby nie zmieniać)", an empty field keeps the stored
+value and the *Usuń zapisany klucz* checkbox (`<field>_clear`) removes a key.
+The legacy IMAP password is stored encrypted (`CryptoService`, like account
+passwords).
+
+## DNSBL providers (`/dnsbl`)
+
+| Method | URL | Description |
+|--------|-----|-------------|
+| GET | `/dnsbl/` | Configured providers and presets |
+| POST | `/dnsbl/add` | Add a provider: `name`, `zone` (must be a DNS name), `score` 1-50 (CSRF token `dnsbl`) |
+| POST | `/dnsbl/add-preset/{idx}` | Add one of the presets (CSRF token `dnsbl`) |
+| POST | `/dnsbl/toggle/{id}` | Enable / disable a provider (CSRF token `dnsbl`) |
+| POST | `/dnsbl/del/{id}` | Delete a provider (CSRF token `dnsbl`) |
+| GET | `/dnsbl/test?ip=` | Look an IP up at every enabled provider (read-only) |
+
+## CSRF and HTTP methods
+
+Every state-changing panel action is POST only (`methods: ['POST']`, a GET gets
+`405`) and checks a CSRF token (`_token` field, ids listed above). A missing or
+wrong token is answered with a redirect back and the flash "Nieprawidłowy token
+formularza" (`/config/email/` and the account actions answer `403`). Security
+headers per route: [deployment.md](deployment.md#security-headers).
 
 ## Shared Spam Feed API (`/api/feed`)
 

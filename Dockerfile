@@ -27,7 +27,9 @@ COPY docker/php.ini /usr/local/etc/php/conf.d/zz-antispam.ini
 
 # Apache modules + document root pointed at Symfony's public/ folder
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
+COPY docker/apache-security.conf /etc/apache2/conf-available/zz-antispam-security.conf
 RUN a2enmod rewrite headers \
+    && a2enconf zz-antispam-security \
     && sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf \
     && sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}/!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
 

@@ -4,6 +4,7 @@ namespace AntispamBundle\Controller;
 
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Services\AgentRulesExporter;
+use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\CryptoService;
 use AntispamBundle\Services\ImapFlags;
 use AntispamBundle\Services\ImapScanService;
@@ -29,6 +30,7 @@ class AccountController extends AbstractController
         private ImapScanService $imapScan,
         private CryptoService $crypto,
         private ImapTlsProbe $tlsProbe,
+        private ConfigService $config,
     ) {
     }
 
@@ -57,6 +59,10 @@ class AccountController extends AbstractController
     {
         if ($request->getMethod() === 'POST') {
             $this->checkActionToken($request, 'account_form');
+            if ($errors = self::validateAccountData($request->request->all('account'))) {
+                $this->addFlash('danger', implode(' ', $errors));
+                return $this->redirectToRoute('antispam_account_add');
+            }
             $account = $this->fillAccountFromRequest(new Account(), $request);
             $this->em->persist($account);
             $this->em->flush();
@@ -76,6 +82,10 @@ class AccountController extends AbstractController
 
         if ($request->getMethod() === 'POST') {
             $this->checkActionToken($request, 'account_form');
+            if ($errors = self::validateAccountData($request->request->all('account'))) {
+                $this->addFlash('danger', implode(' ', $errors));
+                return $this->redirectToRoute('antispam_account_edit', ['id' => $account->getId()]);
+            }
             $account = $this->fillAccountFromRequest($account, $request);
             $this->em->flush();
             return $this->redirectToRoute('antispam_account_index');
@@ -109,8 +119,17 @@ class AccountController extends AbstractController
         $options = ImapFlags::parse($flags);
         $password = (string)($data['imap_password'] ?? '');
         if ($password === '' && !empty($data['id'])) {
-            $account = $this->em->getRepository(Account::class)->find((int)$data['id']);
-            $password = $account ? (string)$this->crypto->decrypt($account->getImapPassword()) : '';
+            // The stored password is only ever sent to the stored server: a
+            // different host typed into the form (or posted by hand) would
+            // otherwise receive it in clear text after a TLS-less login.
+            [$storedHost, $storedPassword] = $this->storedImapCredentials((string)$data['id']);
+            if ($storedPassword !== '' && strcasecmp(trim($host), trim($storedHost)) !== 0) {
+                return new JsonResponse(['ok' => false, 'steps' => [[
+                    'status' => 'error',
+                    'label' => 'Zapisane hasło jest używane tylko z zapisanym serwerem IMAP (' . $storedHost . '). Aby sprawdzić inny serwer, wpisz hasło.',
+                ]], 'tls' => null, 'certificate' => null, 'capabilities' => [], 'login' => null, 'flags' => $flags]);
+            }
+            $password = $storedPassword;
         }
 
         $result = $this->tlsProbe->probe(
@@ -125,6 +144,25 @@ class AccountController extends AbstractController
         $result['flags'] = $flags;
 
         return new JsonResponse($result);
+    }
+
+    /**
+     * Host and decrypted password stored for an account id, or for `legacy`
+     * (the single mailbox of Konfiguracja → E-mail).
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function storedImapCredentials(string $id): array
+    {
+        if ($id === 'legacy') {
+            return [(string)$this->config->get('imap'), (string)$this->crypto->decrypt((string)$this->config->get('password'))];
+        }
+        $account = ctype_digit($id) ? $this->em->getRepository(Account::class)->find((int)$id) : null;
+        if (!$account) {
+            return ['', ''];
+        }
+
+        return [(string)$account->getImapHost(), (string)$this->crypto->decrypt($account->getImapPassword())];
     }
 
     #[Route('/del/{id}', name: 'antispam_account_del', methods: ['POST'])]
@@ -271,6 +309,69 @@ class AccountController extends AbstractController
         $response = new BinaryFileResponse($agentPath);
         $response->setContentDisposition(ResponseHeaderBag::DISPOSITION_ATTACHMENT, 'antispam-agent.php');
         return $response;
+    }
+
+    /**
+     * Server-side validation of the account form (add / edit). Host names and
+     * paths end up in IMAP mailbox strings and remote shell commands, so only
+     * plain values are accepted.
+     *
+     * @return string[] error messages, empty when the data is valid
+     */
+    public static function validateAccountData(array $data): array
+    {
+        $errors = [];
+        $type = (string)($data['connection_type'] ?? Account::CONNECTION_IMAP);
+        if (!in_array($type, [Account::CONNECTION_IMAP, Account::CONNECTION_SSH], true)) {
+            return ['Nieznany typ połączenia.'];
+        }
+        $email = trim((string)($data['email'] ?? ''));
+        if ($email === '' || strlen($email) > 255 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $errors[] = 'Podaj poprawny adres e-mail konta.';
+        }
+        if (mb_strlen((string)($data['name'] ?? '')) > 255) {
+            $errors[] = 'Nazwa jest za długa.';
+        }
+        $port = static fn ($v, $default) => ($v ?? '') === '' ? $default : (ctype_digit((string)$v) ? (int)$v : -1);
+        $isHost = static fn ($h) => strlen($h) <= 253 && preg_match('/^[A-Za-z0-9](?:[A-Za-z0-9.\-]*[A-Za-z0-9])?$|^\[[0-9A-Fa-f:.]+\]$/', $h);
+
+        if ($type === Account::CONNECTION_IMAP) {
+            $host = trim((string)($data['imap_host'] ?? ''));
+            if ($host === '' || !$isHost($host)) {
+                $errors[] = 'Nieprawidłowy serwer IMAP (nazwa hosta lub adres IP).';
+            }
+            $p = $port($data['imap_port'] ?? null, 993);
+            if ($p < 1 || $p > 65535) {
+                $errors[] = 'Nieprawidłowy port IMAP.';
+            }
+            if (strlen((string)($data['imap_login'] ?? '')) > 255 || preg_match('/[\x00-\x1f]/', (string)($data['imap_login'] ?? ''))) {
+                $errors[] = 'Nieprawidłowy login IMAP.';
+            }
+            // Custom flags are cleaned by ImapFlags::sanitize().
+        } else {
+            $host = trim((string)($data['ssh_host'] ?? ''));
+            if ($host === '' || !$isHost($host)) {
+                $errors[] = 'Nieprawidłowy serwer SSH (nazwa hosta lub adres IP).';
+            }
+            $p = $port($data['ssh_port'] ?? null, 22);
+            if ($p < 1 || $p > 65535) {
+                $errors[] = 'Nieprawidłowy port SSH.';
+            }
+            if (!preg_match('/^[A-Za-z0-9._@-]{1,64}$/', (string)($data['ssh_user'] ?? ''))) {
+                $errors[] = 'Nieprawidłowy użytkownik SSH.';
+            }
+            // SshService shell-escapes the paths; reject only control characters
+            // (newlines) and overlong values. The key path is confined to
+            // SSH_KEYS_DIR by SshService.
+            foreach (['ssh_key_path' => 'Ścieżka klucza SSH', 'maildir_path' => 'Ścieżka Maildir', 'agent_path' => 'Ścieżka agenta'] as $field => $label) {
+                $value = (string)($data[$field] ?? '');
+                if (strlen($value) > 255 || preg_match('/[\x00-\x1f\x7f]/', $value)) {
+                    $errors[] = $label . ': nieprawidłowa wartość.';
+                }
+            }
+        }
+
+        return $errors;
     }
 
     private function fillAccountFromRequest(Account $account, Request $request)

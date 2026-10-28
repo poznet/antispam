@@ -39,6 +39,7 @@
     </div>
 
     <form method="post">
+    <input type="hidden" name="_token" value="{{ csrf_token('feed_config') }}">
     <div class="panel panel-default">
         <div class="panel-heading"><span class="glyphicon glyphicon-transfer"></span> Udział w feedzie</div>
         <div class="panel-body">
@@ -66,7 +67,12 @@
         <div class="panel-body">
             <p class="text-muted">Inne instancje wysyłają do / pobierają z <code>/api/feed</code> na tym serwerze, podając poniższy klucz w nagłówku <code>X-Feed-Key</code>. Pozostaw puste, aby wyłączyć przychodzące API.</p>
             <label>Lokalny klucz API (klucz serwera)</label>
-            <input type="text" name="config[server_key]" class="form-control" value="{{ config.server_key }}" autocomplete="off" placeholder="długi, losowy sekret">
+            {# Stored keys are never rendered back into the form. #}
+            <input type="password" name="config[server_key]" class="form-control" value="" autocomplete="new-password"
+                   placeholder="{{ config.server_key.set ? '(ustawione' ~ (config.server_key.hint ? ' ' ~ config.server_key.hint) ~ ' - zostaw puste, aby nie zmieniać)' : 'długi, losowy sekret' }}">
+            {% if config.server_key.set %}
+                <div class="checkbox"><label><input type="checkbox" name="config[server_key_clear]" value="1"> Usuń klucz (wyłącza przychodzące API)</label></div>
+            {% endif %}
         </div>
     </div>
 
@@ -82,7 +88,11 @@
                 </div>
                 <div class="col-sm-5">
                     <label>Klucz zdalny</label>
-                    <input type="text" name="config[remote_key]" class="form-control" value="{{ config.remote_key }}" autocomplete="off" placeholder="klucz serwera huba">
+                    <input type="password" name="config[remote_key]" class="form-control" value="" autocomplete="new-password"
+                           placeholder="{{ config.remote_key.set ? '(ustawione' ~ (config.remote_key.hint ? ' ' ~ config.remote_key.hint) ~ ' - zostaw puste, aby nie zmieniać)' : 'klucz serwera huba' }}">
+                    {% if config.remote_key.set %}
+                        <div class="checkbox"><label><input type="checkbox" name="config[remote_key_clear]" value="1"> Usuń zapisany klucz</label></div>
+                    {% endif %}
                 </div>
             </div>
             {% if config.last_pull_at %}

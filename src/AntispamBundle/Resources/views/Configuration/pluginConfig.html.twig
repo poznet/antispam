@@ -62,6 +62,7 @@
     </div>
 
     <form method="post">
+    <input type="hidden" name="_token" value="{{ csrf_token('plugin_config') }}">
     <div class="panel panel-default">
         <div class="panel-heading"><span class="glyphicon glyphicon-envelope"></span> Funkcje</div>
         <div class="panel-body">

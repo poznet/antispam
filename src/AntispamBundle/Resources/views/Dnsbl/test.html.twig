@@ -12,6 +12,7 @@
     {% if ip %}
         <h4>Wyniki dla <code>{{ ip }}</code></h4>
         {% if results|length > 0 %}
+        <div class="table-responsive">
         <table class="table table-striped">
             <thead><tr><th>Dostawca</th><th>Strefa</th><th>Na liście</th><th>Odpowiedź</th></tr></thead>
             <tbody>
@@ -25,6 +26,7 @@
             {% endfor %}
             </tbody>
         </table>
+        </div>
         {% else %}
             <p class="text-muted">Brak skonfigurowanych dostawców lub nieprawidłowy adres IP.</p>
         {% endif %}

@@ -4,27 +4,41 @@
 
 {% block body %}
     {% if messages|length > 0 %}
+    {% set restore_token = csrf_token('spambox_restore') %}
     <div class="row">
         <div class="col-sm-4">
             <div class="list-group">
             {% for msg in messages %}
-                <div class="list-group-item">
-                    <small class="text-muted pull-right">{{ msg.date | date("d-m-Y") }}</small>
-                    <strong style="font-size:12px;">{{ msg.from }}</strong>
+                <div class="list-group-item{% if selected and msg.id == selected.id %} active{% endif %}">
+                    <small class="pull-right{% if not (selected and msg.id == selected.id) %} text-muted{% endif %}">{{ msg.date | date("d-m-Y") }}</small>
+                    <strong style="font-size:12px; word-break:break-all;">{{ msg.from }}</strong>
                     <p style="font-size:11px; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ msg.subject[:60] }}</p>
-                    <a href="{{ path('antispam_spambox_restore', {folder: 'SPAM', id: msg.id}) }}" class="btn btn-xs btn-success" style="margin-top:5px;">
-                        <span class="glyphicon glyphicon-arrow-up"></span> Przywróć do skrzynki
-                    </a>
+                    <form method="post" action="{{ path('antispam_spambox_restore', {folder: 'SPAM', id: msg.id}) }}" style="margin:5px 0 0;">
+                        <input type="hidden" name="_token" value="{{ restore_token }}">
+                        <a href="{{ path('antispam_spambox_index', {msg: msg.id}) }}" class="btn btn-xs btn-default">
+                            <span class="glyphicon glyphicon-eye-open"></span> Podgląd
+                        </a>
+                        <button type="submit" class="btn btn-xs btn-success">
+                            <span class="glyphicon glyphicon-arrow-up"></span> Przywróć do skrzynki
+                        </button>
+                    </form>
                 </div>
             {% endfor %}
             </div>
         </div>
         <div class="col-sm-8">
             <div class="panel panel-default">
+                {% if selected %}
+                <div class="panel-heading" style="word-break:break-word;">
+                    <strong>{{ selected.subject }}</strong><br>
+                    <small class="text-muted">{{ selected.from }}</small>
+                </div>
+                {% endif %}
                 <div class="panel-body spamboxmsgcontent">
-                    {# Untrusted HTML from the message: render it in a sandboxed
-                       iframe so scripts and forms in spam cannot reach the panel. #}
-                    <iframe sandbox="" srcdoc="{{ messages.0.content|e('html_attr') }}" style="width:100%; min-height:400px; border:0;"></iframe>
+                    {# Untrusted HTML from the message: rendered in a fully sandboxed
+                       iframe (no scripts, forms or navigation) whose document has
+                       its own CSP: remote images / CSS of the spam are not loaded. #}
+                    <iframe sandbox="" referrerpolicy="no-referrer" srcdoc="{{ preview|e('html_attr') }}" style="width:100%; min-height:400px; border:0;"></iframe>
                 </div>
             </div>
         </div>

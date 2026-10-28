@@ -37,7 +37,7 @@ The repository ships a production-ready Docker setup:
 | `RUN_MIGRATIONS` | Run `doctrine:schema:update --force` at boot | `true` |
 | `SSH_KEYS_DIR` | Directory with the SSH private keys of SSH+Maildir accounts | `var/data/ssh-keys` |
 | `ALLOW_INSECURE_DEFAULTS` | `1` lets the container start with default/empty secrets (local testing only) | `0` |
-| `SYMFONY_TRUSTED_PROXIES` | Comma-separated IPs / CIDRs whose `X-Forwarded-*` headers are trusted (Coolify's Traefik), so Symfony sees `https://` | private ranges |
+| `SYMFONY_TRUSTED_PROXIES` | Comma-separated IPs / CIDRs whose `X-Forwarded-*` headers are trusted (Coolify's Traefik, a host nginx), so Symfony sees `https://` and the real client IP (HSTS, login throttling, absolute URLs) - see [Behind a reverse proxy](#behind-a-reverse-proxy-nginx) | private ranges (compose files) |
 
 The container **refuses to start** while `APP_SECRET`, `ADMIN_PASSWORD` (or
 `ADMIN_PASSWORD_HASH`) or `DATABASE_PASSWORD` is empty or left at the default
@@ -170,6 +170,13 @@ Before exposing the instance publicly, make sure:
 - [ ] `ADMIN_PASSWORD` is strong and not `admin`.
 - [ ] `DATABASE_PASSWORD` / `DATABASE_ROOT_PASSWORD` are random.
 - [ ] The domain is served over HTTPS (Coolify handles this automatically).
+      In prod the session cookie is always `Secure` (`cookie_secure: true`
+      under `when@prod`), so logging in over plain `http://` (other than
+      `localhost`) does not work.
+- [ ] The reverse proxy is trusted (`SYMFONY_TRUSTED_PROXIES`) and sends
+      `X-Forwarded-Proto` / `X-Forwarded-For` - otherwise there is no HSTS
+      header and the login throttling counts every visitor as the proxy's IP.
+      Check: `curl -sI https://antispam.example.com/ | grep -i strict-transport`.
 - [ ] Access to the `db` service is not exposed - only the `app` service
       should be reachable from the internet.
 - [ ] Request body limit of the reverse proxy in front of antispam: nginx
@@ -186,9 +193,101 @@ Before exposing the instance publicly, make sure:
       `docker-compose.prod.yml` (the scheduler sends it) or schedule
       `antispam:digest:send` in cron.
 
-IMAP passwords in the `account` table are encrypted with a key derived from
-`APP_SECRET` (rows saved before this change stay readable as plain text until
-they are saved again). Changing `APP_SECRET` makes them unreadable: enter them
-again. The legacy single-account settings (*Ustawienia → Email*) are still
-stored in plain text. Treat access to the database (and its backups) as
-sensitive.
+IMAP passwords in the `account` table and the password of the legacy
+single-account settings (*Konfiguracja → E-mail*) are encrypted with a key
+derived from `APP_SECRET` (values saved before this change stay readable as
+plain text until they are saved again - open the page, type the password once
+and save). Changing `APP_SECRET` makes them unreadable: enter them again.
+Stored passwords and API keys (VirusTotal, Safe Browsing, feed keys) are never
+rendered back into the settings forms. The API keys themselves are kept in
+plain text in the `config` table, so treat access to the database (and its
+backups) as sensitive.
+
+### Login throttling
+
+The login form allows 5 failed attempts per login + client IP within 15 minutes
+(and 25 per IP across all logins), then answers "Zbyt wiele nieudanych prób
+logowania, spróbuj ponownie po upływie N minut" until the window passes (`login_throttling` in
+`config/packages/security.yaml`, `symfony/rate-limiter`, state in the
+`cache.rate_limiter` pool = `var/cache`). A successful login resets the
+counter; restarting the container (cache rebuild) clears it as well. The
+client IP is only correct with a trusted proxy (next section).
+
+### Behind a reverse proxy (nginx)
+
+Production runs the container behind a host nginx that terminates TLS. Symfony
+trusts `X-Forwarded-*` only from the addresses in `SYMFONY_TRUSTED_PROXIES`;
+without that it sees `http://` and the proxy's IP. The compose files default
+to `127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`, which covers nginx
+reaching the container through a published port or a Docker network (the
+request then comes from the bridge gateway, e.g. `172.17.0.1`). Narrow it to
+the real proxy address if the container is reachable from elsewhere, e.g.
+`SYMFONY_TRUSTED_PROXIES=172.17.0.1`. nginx must send the headers:
+
+```nginx
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name antispam.example.com;
+    # ssl_certificate / ssl_certificate_key ...
+
+    client_max_body_size 16m;            # phishing reports with attachments
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;  # container port 80 published as 8080
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-For   $remote_addr;   # overwrite, do not append client input
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header X-Forwarded-Port  $server_port;
+    }
+}
+
+server {
+    listen 80;
+    server_name antispam.example.com;
+    return 301 https://$host$request_uri;
+}
+```
+
+Do not add `X-Frame-Options` / CSP / HSTS in nginx as well: the app sets them
+per route (the Outlook add-in must stay frameable) and duplicate headers are
+combined by browsers in surprising ways. `server_tokens off;` in nginx hides
+its version.
+
+### Security headers
+
+Set by `AntispamBundle\EventListener\SecurityHeadersListener` on every
+response (a header the controller already set wins):
+
+| Route | Content-Security-Policy | X-Frame-Options |
+| --- | --- | --- |
+| panel, `/my`, home page `/`, `/login`, error pages | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'` | `DENY` |
+| `/q/*` (digest links; same-origin script files only, no inline JS) | `default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'` | `DENY` |
+| `/plugin/outlook/*` (task pane framed by Outlook, loads office.js from appsforoffice.microsoft.com) | none | none |
+| non-HTML responses (JSON API, downloads) | none | `DENY` |
+
+All responses: `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`
+(`/q/` pages: `no-referrer`), `Permissions-Policy: camera=(), microphone=(),
+geolocation=(), payment=()`, and in prod over https
+`Strict-Transport-Security: max-age=31536000` (no `includeSubDomains`).
+
+`'unsafe-inline'` is still allowed for scripts, so the inline code that is
+left keeps working: the two `<script>` blocks of `main.html.twig`, the
+Thunderbird / Outlook / Spambox templates noted by the UI batch and the
+`onsubmit="return confirm(...)"` of the rule list templates (Whitelist,
+DomainBlacklist, EmailBlacklist, EmailWhitelist). New code uses
+`data-confirm="..."` (`Resources/public/js/data-confirm.js`, included by each
+template that needs it) and external script files. Once the remaining inline
+code is moved out, drop `'unsafe-inline'` from `script-src` in
+`SecurityHeadersListener::POLICY_DEFAULT` (consider shipping it as
+`Content-Security-Policy-Report-Only` for a while first).
+The spam folder preview (`/spambox/index`) renders the message in a
+`sandbox=""` iframe whose document carries its own
+`default-src 'none'; img-src data:` policy, so tracking pixels and remote CSS
+of spam are never fetched.
+
+The image also sets `ServerTokens Prod`, `ServerSignature Off`,
+`TraceEnable Off`, `nosniff` for static files
+(`docker/apache-security.conf`) and `expose_php = Off` (`docker/php.ini`), so
+neither `Server` nor `X-Powered-By` reveals versions.

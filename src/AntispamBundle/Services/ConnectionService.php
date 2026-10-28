@@ -15,7 +15,8 @@ class ConnectionService
     private $config;
     private $connection;
 
-    public function __construct(ConfigService $config)
+    // CryptoService: the password is stored encrypted (legacy plain text passes through).
+    public function __construct(ConfigService $config, private ?CryptoService $crypto = null)
     {
         $this->config = $config;
     }
@@ -27,7 +28,7 @@ class ConnectionService
     {
         if ($this->connection === null) {
             $server = new Server((string)$this->config->get('imap'), (string)($this->config->get('imap_port') ?: '993'), (string)($this->config->get('imap_flags') ?: '/imap/ssl'));
-            $this->connection = $server->authenticate((string)$this->config->get('login'), (string)$this->config->get('password'));
+            $this->connection = $server->authenticate((string)$this->config->get('login'), (string)($this->crypto ? $this->crypto->decrypt((string)$this->config->get('password')) : $this->config->get('password')));
         }
 
         return $this->connection;

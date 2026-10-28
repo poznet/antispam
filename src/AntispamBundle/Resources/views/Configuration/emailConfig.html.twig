@@ -29,7 +29,12 @@
                 <div class="form-group">
                     <label class="col-sm-3 control-label">Hasło</label>
                     <div class="col-sm-6">
-                        <input type="password" class="form-control" id="imapPassword" name="config[password]" value="{{ config.password }}">
+                        {# The stored password is never rendered back (it is kept encrypted). #}
+                        <input type="password" class="form-control" id="imapPassword" name="config[password]" value="" autocomplete="new-password"
+                               maxlength="128"{% if config.password_set %} placeholder="(ustawione - zostaw puste, aby nie zmieniać)"{% endif %}>
+                        {% if config.password_set %}
+                            <p class="help-block">Hasło jest zapisane (zaszyfrowane). Zostaw pole puste, aby go nie zmieniać.</p>
+                        {% endif %}
                     </div>
                 </div>
                 <div class="form-group">
@@ -47,7 +52,7 @@
                 <div class="form-group">
                     <label class="col-sm-3 control-label">Bezpieczeństwo połączenia</label>
                     <div class="col-sm-9">
-                        {% include '@Antispam/Account/_imap_security.html.twig' with {prefix: 'config', imap_flags: config.imap_flags} %}
+                        {% include '@Antispam/Account/_imap_security.html.twig' with {prefix: 'config', imap_flags: config.imap_flags, account_id: 'legacy'} %}
                     </div>
                 </div>
                 <div class="form-group">

@@ -38,9 +38,25 @@ class DnsblController extends AbstractController
         return ['providers' => $providers, 'presets' => self::$presets];
     }
 
-    #[Route('/add', name: 'antispam_dnsbl_add')]
+    /**
+     * Every action below changes the provider list: POST only, with the
+     * `dnsbl` CSRF token rendered in Dnsbl/index.html.twig.
+     */
+    private function tokenValid(Request $request): bool
+    {
+        if ($this->isCsrfTokenValid('dnsbl', (string)$request->request->get('_token'))) {
+            return true;
+        }
+        $this->addFlash('danger', 'Nieprawidłowy token formularza, spróbuj ponownie.');
+        return false;
+    }
+
+    #[Route('/add', name: 'antispam_dnsbl_add', methods: ['POST'])]
     public function addAction(Request $request)
     {
+        if (!$this->tokenValid($request)) {
+            return $this->redirectToRoute('antispam_dnsbl_index');
+        }
         $name = trim((string)$request->request->get('name'));
         $zone = trim((string)$request->request->get('zone'));
         $score = (int)$request->request->get('score', 5);
@@ -50,6 +66,14 @@ class DnsblController extends AbstractController
             $this->addFlash('danger', 'Nazwa i strefa są wymagane');
             return $this->redirectToRoute('antispam_dnsbl_index');
         }
+        // A DNS zone (the reversed IP is prepended to it in queries).
+        if (!preg_match('/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]{2,63}$/i', $zone)) {
+            $this->addFlash('danger', 'Nieprawidłowa strefa DNS, np. zen.spamhaus.org');
+            return $this->redirectToRoute('antispam_dnsbl_index');
+        }
+        $name = mb_substr($name, 0, 255);
+        $score = max(1, min(50, $score));
+        $ttl = max(60, min(86400, $ttl));
         if ($this->em->getRepository(DnsblProvider::class)->findOneBy(['zone' => strtolower($zone)])) {
             $this->addFlash('warning', 'Ta strefa jest już skonfigurowana');
             return $this->redirectToRoute('antispam_dnsbl_index');
@@ -63,9 +87,12 @@ class DnsblController extends AbstractController
         return $this->redirectToRoute('antispam_dnsbl_index');
     }
 
-    #[Route('/add-preset/{idx}', name: 'antispam_dnsbl_add_preset')]
-    public function addPresetAction($idx)
+    #[Route('/add-preset/{idx}', name: 'antispam_dnsbl_add_preset', methods: ['POST'], requirements: ['idx' => '\d+'])]
+    public function addPresetAction($idx, Request $request)
     {
+        if (!$this->tokenValid($request)) {
+            return $this->redirectToRoute('antispam_dnsbl_index');
+        }
         $idx = (int)$idx;
         if (!isset(self::$presets[$idx])) {
             $this->addFlash('danger', 'Nie znaleziono presetu');
@@ -84,9 +111,12 @@ class DnsblController extends AbstractController
         return $this->redirectToRoute('antispam_dnsbl_index');
     }
 
-    #[Route('/toggle/{id}', name: 'antispam_dnsbl_toggle')]
-    public function toggleAction($id)
+    #[Route('/toggle/{id}', name: 'antispam_dnsbl_toggle', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function toggleAction($id, Request $request)
     {
+        if (!$this->tokenValid($request)) {
+            return $this->redirectToRoute('antispam_dnsbl_index');
+        }
         $p = $this->em->getRepository(DnsblProvider::class)->find($id);
         if ($p) {
             $p->setEnabled(!$p->isEnabled());
@@ -95,9 +125,12 @@ class DnsblController extends AbstractController
         return $this->redirectToRoute('antispam_dnsbl_index');
     }
 
-    #[Route('/del/{id}', name: 'antispam_dnsbl_del')]
-    public function delAction($id)
+    #[Route('/del/{id}', name: 'antispam_dnsbl_del', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function delAction($id, Request $request)
     {
+        if (!$this->tokenValid($request)) {
+            return $this->redirectToRoute('antispam_dnsbl_index');
+        }
         $p = $this->em->getRepository(DnsblProvider::class)->find($id);
         if ($p) {
             $this->em->remove($p);

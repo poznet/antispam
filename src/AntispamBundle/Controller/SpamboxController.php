@@ -33,11 +33,50 @@ class SpamboxController extends AbstractController
     ) {
     }
 
-    #[Route('/index', name: 'antispam_spambox_index')]
+    /**
+     * Policy of the spam preview document (Spambox/index.html.twig iframe).
+     * The srcdoc iframe also inherits the panel's CSP; this meta tag keeps
+     * remote images / CSS / fonts of the spam from loading (tracking pixels
+     * would reveal the admin's IP and that the message was opened) even if
+     * the panel policy is relaxed.
+     */
+    public const PREVIEW_CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:";
+
+    #[Route('/index', name: 'antispam_spambox_index', methods: ['GET'])]
     #[Template('@Antispam/Spambox/index.html.twig')]
-    public function indexAction()
+    public function indexAction(Request $request)
     {
-        return ['messages' => $this->loadFolder($this->inbox->getSpamFolderName())];
+        $messages = $this->loadFolder($this->inbox->getSpamFolderName());
+        // ?msg=<number> picks the previewed message; default: the first one.
+        $selected = $messages[0] ?? null;
+        foreach ($messages as $msg) {
+            if ((string)$msg['id'] === (string)$request->query->get('msg')) {
+                $selected = $msg;
+            }
+        }
+
+        return [
+            'messages' => $messages,
+            'selected' => $selected,
+            'preview' => $selected ? self::previewDocument($selected['html'], $selected['text']) : null,
+        ];
+    }
+
+    /**
+     * Untrusted message body -> srcdoc document for the sandboxed iframe, with
+     * a restrictive CSP and no Referer. Plain-text messages are escaped.
+     */
+    public static function previewDocument(?string $html, ?string $text): string
+    {
+        $head = '<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="' . self::PREVIEW_CSP . '">'
+            . '<meta name="referrer" content="no-referrer">';
+        if ($html !== null && trim($html) !== '') {
+            // Parsed before the message's own <html>/<head>, so the meta tags
+            // land in the (implied) head, where the CSP meta is honoured.
+            return $head . $html;
+        }
+
+        return $head . '<pre style="white-space:pre-wrap; font-family:inherit;">' . htmlspecialchars((string)$text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</pre>';
     }
 
     /**
@@ -151,9 +190,13 @@ class SpamboxController extends AbstractController
     }
 
     /** Move a message from SPAM or QUARANTINE back to INBOX. */
-    #[Route('/restore/{folder}/{id}', name: 'antispam_spambox_restore')]
-    public function restoreAction($folder, $id)
+    #[Route('/restore/{folder}/{id}', name: 'antispam_spambox_restore', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function restoreAction($folder, $id, Request $request)
     {
+        if (!$this->isCsrfTokenValid('spambox_restore', (string)$request->request->get('_token'))) {
+            $this->addFlash('danger', 'Nieprawidłowy token formularza, spróbuj ponownie');
+            return $this->redirectToRoute('antispam_spambox_index');
+        }
         $allowed = [
             $this->inbox->getSpamFolderName(),
             $this->inbox->getQuarantineFolderName(),
@@ -273,7 +316,8 @@ class SpamboxController extends AbstractController
                 $messages[] = [
                     'subject' => (string)$msg->getSubject(),
                     'from' => $from ? $from->getFullAddress() : '',
-                    'content' => $msg->getBodyHtml(),
+                    'html' => $msg->getBodyHtml(),
+                    'text' => $msg->getBodyText(),
                     'date' => $msg->getDate(),
                     'id' => $msg->getNumber(),
                 ];

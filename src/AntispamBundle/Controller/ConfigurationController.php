@@ -10,6 +10,7 @@ use AntispamBundle\Entity\Whitelist;
 use AntispamBundle\Services\AttachmentPolicyAnalyzer;
 use AntispamBundle\Services\ClamavService;
 use AntispamBundle\Services\ConfigService;
+use AntispamBundle\Services\CryptoService;
 use AntispamBundle\Services\ImapFlags;
 use AntispamBundle\Services\ImpersonationAnalyzer;
 use AntispamBundle\Services\MailClientPluginBuilder;
@@ -30,6 +31,12 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/config')]
 class ConfigurationController extends AbstractController
 {
+    /**
+     * Secrets are kept in the VARCHAR(255) `config.value` column; an encrypted
+     * value of this length (enc:v1: + base64(nonce + MAC + text)) still fits.
+     */
+    private const MAX_SECRET_LENGTH = 128;
+
     public function __construct(
         private EntityManagerInterface $em,
         private ConfigService $config,
@@ -40,6 +47,7 @@ class ConfigurationController extends AbstractController
         private MessageService $messages,
         private ClamavService $clamav,
         private VirusTotalService $virusTotal,
+        private CryptoService $crypto,
     ) {
     }
 
@@ -52,15 +60,30 @@ class ConfigurationController extends AbstractController
                 throw $this->createAccessDeniedException('Nieprawidłowy token CSRF');
             }
             $post = $request->request->all('config');
-            foreach (['email', 'password', 'login', 'imap', 'imap_port'] as $key) {
+            $password = (string)($post['password'] ?? '');
+            if (strlen($password) > self::MAX_SECRET_LENGTH) {
+                $this->addFlash('danger', sprintf('Hasło jest za długie (maks. %d znaków).', self::MAX_SECRET_LENGTH));
+                return $this->redirectToRoute('antispam_account_config');
+            }
+            foreach (['email', 'login', 'imap', 'imap_port'] as $key) {
                 $this->config->set($key, $post[$key] ?? '');
             }
+            // Stored encrypted (CryptoService, key derived from APP_SECRET); an
+            // empty field keeps the current password. Values saved before this
+            // change are plain text and stay readable (decrypt() passes them through).
+            if ($password !== '') {
+                $this->config->set('password', $this->crypto->encrypt($password));
+            }
             $this->config->set('imap_flags', ImapFlags::fromFormData($post));
-            $this->config->set('delete', array_key_exists('delete', $post));
+            // `delete` belongs to the spam settings page: this form has no such
+            // checkbox, so saving it used to switch "delete spam" off.
+            $this->addFlash('success', 'Ustawienia konta zapisane');
+            return $this->redirectToRoute('antispam_account_config');
         }
         $config = [
             'email' => $this->config->get('email'),
-            'password' => $this->config->get('password'),
+            // Never rendered back into the form, only whether one is stored.
+            'password_set' => (string)$this->config->get('password') !== '',
             'login' => $this->config->get('login'),
             'imap' => $this->config->get('imap'),
             'imap_port' => $this->config->get('imap_port') ?: '993',
@@ -76,6 +99,10 @@ class ConfigurationController extends AbstractController
     {
         $c = $this->config;
         if ($request->getMethod() == 'POST') {
+            if (!$this->isCsrfTokenValid('spam_config', (string)$request->request->get('_token'))) {
+                $this->addFlash('danger', 'Nieprawidłowy token formularza, spróbuj ponownie.');
+                return $this->redirectToRoute('antispam_spam_config');
+            }
             $post = $request->request->all('config');
             $c->set('delete', array_key_exists('delete', $post));
             $c->set('scoring.enabled', array_key_exists('scoring_enabled', $post));
@@ -90,7 +117,7 @@ class ConfigurationController extends AbstractController
             $c->set('scoring.clamav_max_size', $maxMib * 1048576);
             $c->set('scoring.clamav_timeout', max(1, (int)($post['clamav_timeout'] ?? ScoringService::DEFAULT_CLAMAV_TIMEOUT)));
             $c->set('scoring.vt_enabled', array_key_exists('vt_enabled', $post));
-            $c->set('scoring.vt_api_key', trim($post['vt_api_key'] ?? ''));
+            $this->setSecret('scoring.vt_api_key', $post, 'vt_api_key');
             $c->set('scoring.vt_score', max(1, (int)($post['vt_score'] ?? ScoringService::DEFAULT_VT_SCORE)));
             $c->set('scoring.vt_threshold', max(1, (int)($post['vt_threshold'] ?? ScoringService::DEFAULT_VT_THRESHOLD)));
             $c->set('scoring.vt_timeout', max(1, (int)($post['vt_timeout'] ?? ScoringService::DEFAULT_VT_TIMEOUT)));
@@ -114,7 +141,7 @@ class ConfigurationController extends AbstractController
             }
             $c->set('url.max_domains', max(1, (int)($post['url_max_domains'] ?? UrlAnalyzer::DEFAULT_CONFIG['max_domains'])));
             $c->set('url.gsb_enabled', array_key_exists('url_gsb_enabled', $post));
-            $c->set('url.gsb_api_key', trim($post['url_gsb_api_key'] ?? ''));
+            $this->setSecret('url.gsb_api_key', $post, 'url_gsb_api_key');
             $zones = UrlAnalyzer::parseZones($post['url_dbl_zones'] ?? '');
             $this->scoring->setListSetting(ScoringService::LIST_URL_DBL_ZONES, implode("\n", array_map(function ($z) {
                 return $z['zone'] . ' ' . $z['score'];
@@ -128,6 +155,7 @@ class ConfigurationController extends AbstractController
             $this->scoring->setListSetting(ScoringService::LIST_BLOCKED_EXTENSIONS, implode(', ', AttachmentPolicyAnalyzer::parseExtensions($post['blocked_extensions'] ?? '')));
 
             $this->addFlash('success', 'Ustawienia zapisane');
+            return $this->redirectToRoute('antispam_spam_config');
         }
 
         $config = [
@@ -142,7 +170,8 @@ class ConfigurationController extends AbstractController
             'clamav_max_size_mib' => (int)(($c->get('scoring.clamav_max_size') ?: ScoringService::DEFAULT_CLAMAV_MAX_SIZE) / 1048576),
             'clamav_timeout' => $c->get('scoring.clamav_timeout') ?: ScoringService::DEFAULT_CLAMAV_TIMEOUT,
             'vt_enabled' => $c->get('scoring.vt_enabled'),
-            'vt_api_key' => $c->get('scoring.vt_api_key') ?: '',
+            // API keys are never rendered back into the form, only a short hint.
+            'vt_api_key' => self::secretHint($c->get('scoring.vt_api_key')),
             'vt_score' => $c->get('scoring.vt_score') ?: ScoringService::DEFAULT_VT_SCORE,
             'vt_threshold' => $c->get('scoring.vt_threshold') ?: ScoringService::DEFAULT_VT_THRESHOLD,
             'vt_timeout' => $c->get('scoring.vt_timeout') ?: ScoringService::DEFAULT_VT_TIMEOUT,
@@ -151,6 +180,7 @@ class ConfigurationController extends AbstractController
         ];
 
         $url = $this->scoring->getUrlConfig();
+        $url['gsb_api_key'] = self::secretHint($url['gsb_api_key'] ?? null);
         $config += [
             'impersonation_enabled' => $this->scoring->isImpersonationEnabled(),
             'protect_own_domain' => $this->scoring->isProtectOwnDomain(),
@@ -261,13 +291,17 @@ class ConfigurationController extends AbstractController
     {
         $c = $this->config;
         if ($request->getMethod() == 'POST') {
+            if (!$this->isCsrfTokenValid('feed_config', (string)$request->request->get('_token'))) {
+                $this->addFlash('danger', 'Nieprawidłowy token formularza, spróbuj ponownie.');
+                return $this->redirectToRoute('antispam_feed_config');
+            }
             $post = $request->request->all('config');
             $c->set('feed.enabled', array_key_exists('enabled', $post));
             $c->set('feed.score', max(1, (int)($post['score'] ?? 6)));
             $c->set('feed.min_reports', max(1, (int)($post['min_reports'] ?? 1)));
-            $c->set('feed.server_key', trim($post['server_key'] ?? ''));
+            $this->setSecret('feed.server_key', $post, 'server_key');
             $c->set('feed.remote_url', rtrim(trim($post['remote_url'] ?? ''), '/'));
-            $c->set('feed.remote_key', trim($post['remote_key'] ?? ''));
+            $this->setSecret('feed.remote_key', $post, 'remote_key');
             $this->addFlash('success', 'Ustawienia wspólnej bazy spamu zapisane');
             return $this->redirectToRoute('antispam_feed_config');
         }
@@ -276,9 +310,9 @@ class ConfigurationController extends AbstractController
             'enabled' => $c->get('feed.enabled'),
             'score' => $c->get('feed.score') ?: 6,
             'min_reports' => $c->get('feed.min_reports') ?: 1,
-            'server_key' => $c->get('feed.server_key') ?: '',
+            'server_key' => self::secretHint($c->get('feed.server_key')),
             'remote_url' => $c->get('feed.remote_url') ?: '',
-            'remote_key' => $c->get('feed.remote_key') ?: '',
+            'remote_key' => self::secretHint($c->get('feed.remote_key')),
             'last_pull_at' => $c->get('feed.last_pull_at') ?: null,
         ];
 
@@ -299,6 +333,10 @@ class ConfigurationController extends AbstractController
     {
         $c = $this->config;
         if ($request->getMethod() == 'POST') {
+            if (!$this->isCsrfTokenValid('plugin_config', (string)$request->request->get('_token'))) {
+                $this->addFlash('danger', 'Nieprawidłowy token formularza, spróbuj ponownie.');
+                return $this->redirectToRoute('antispam_plugin_config');
+            }
             $post = $request->request->all('config');
             // Stored as '1'/'0' so an unchecked box is not mistaken for "unset" (default on).
             foreach (['enabled', 'anonymous_reports', 'check_enabled', 'learn_rules'] as $flag) {
@@ -340,16 +378,23 @@ class ConfigurationController extends AbstractController
         ];
     }
 
-    #[Route('/uncheck-all/', name: 'antispam_spam_unchekall')]
-    public function uncheckAllAction()
+    #[Route('/uncheck-all/', name: 'antispam_spam_unchekall', methods: ['POST'])]
+    public function uncheckAllAction(Request $request)
     {
+        if (!$this->checkMaintenanceToken($request)) {
+            return $this->redirectToRoute('antispam_spam_config');
+        }
         $this->messages->unCheckAll();
+        $this->addFlash('success', 'Flagi sprawdzenia zresetowane');
         return $this->redirectToRoute('antispam_spam_config');
     }
 
-    #[Route('/spam/clamav-test/', name: 'antispam_clamav_test')]
-    public function clamavTestAction()
+    #[Route('/spam/clamav-test/', name: 'antispam_clamav_test', methods: ['POST'])]
+    public function clamavTestAction(Request $request)
     {
+        if (!$this->checkMaintenanceToken($request)) {
+            return $this->redirectToRoute('antispam_spam_config');
+        }
         $c = $this->config;
         $dsn = $c->get('scoring.clamav_dsn') ?: ScoringService::DEFAULT_CLAMAV_DSN;
         $timeout = $c->get('scoring.clamav_timeout') ?: ScoringService::DEFAULT_CLAMAV_TIMEOUT;
@@ -363,9 +408,12 @@ class ConfigurationController extends AbstractController
         return $this->redirectToRoute('antispam_spam_config');
     }
 
-    #[Route('/spam/virustotal-test/', name: 'antispam_virustotal_test')]
-    public function virusTotalTestAction()
+    #[Route('/spam/virustotal-test/', name: 'antispam_virustotal_test', methods: ['POST'])]
+    public function virusTotalTestAction(Request $request)
     {
+        if (!$this->checkMaintenanceToken($request)) {
+            return $this->redirectToRoute('antispam_spam_config');
+        }
         $c = $this->config;
         $apiKey = trim((string)$c->get('scoring.vt_api_key'));
         $timeout = $c->get('scoring.vt_timeout') ?: ScoringService::DEFAULT_VT_TIMEOUT;
@@ -381,12 +429,62 @@ class ConfigurationController extends AbstractController
         return $this->redirectToRoute('antispam_spam_config');
     }
 
-    #[Route('/reset/countes/', name: 'antispam_spam_resetcounters')]
-    public function resetCountersAction()
+    #[Route('/reset/countes/', name: 'antispam_spam_resetcounters', methods: ['POST'])]
+    public function resetCountersAction(Request $request)
     {
+        if (!$this->checkMaintenanceToken($request)) {
+            return $this->redirectToRoute('antispam_spam_config');
+        }
         foreach ([Blacklist::class, Whitelist::class, EmailBlacklist::class, EmailWhitelist::class] as $entity) {
             $this->em->createQuery('UPDATE ' . $entity . ' r SET r.counter = 0')->execute();
         }
+        $this->addFlash('success', 'Liczniki reguł wyzerowane');
         return $this->redirectToRoute('antispam_spam_config');
+    }
+
+    /**
+     * Maintenance / connection-test buttons of the spam settings page: POST
+     * only (routes) with the shared `spam_maintenance` CSRF token.
+     */
+    private function checkMaintenanceToken(Request $request): bool
+    {
+        if ($this->isCsrfTokenValid('spam_maintenance', (string)$request->request->get('_token'))) {
+            return true;
+        }
+        $this->addFlash('danger', 'Nieprawidłowy token formularza, spróbuj ponownie.');
+        return false;
+    }
+
+    /**
+     * Stores an API key from the form: an empty field keeps the current value,
+     * the `<field>_clear` checkbox removes it. Stored keys are never rendered
+     * back into the form (see secretHint()).
+     */
+    private function setSecret(string $key, array $post, string $field): void
+    {
+        if (!empty($post[$field . '_clear'])) {
+            $this->config->set($key, '');
+            return;
+        }
+        $value = trim((string)($post[$field] ?? ''));
+        if ($value !== '') {
+            $this->config->set($key, $value);
+        }
+    }
+
+    /**
+     * What a form may show about a stored secret: whether it is set and, for
+     * long values, the last 4 characters (to tell keys apart) - never the value.
+     *
+     * @return array{set: bool, hint: string}
+     */
+    public static function secretHint($value): array
+    {
+        $value = (string)$value;
+        if ($value === '') {
+            return ['set' => false, 'hint' => ''];
+        }
+
+        return ['set' => true, 'hint' => strlen($value) >= 16 ? '…' . substr($value, -4) : ''];
     }
 }

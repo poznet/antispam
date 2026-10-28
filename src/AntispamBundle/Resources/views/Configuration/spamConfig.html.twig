@@ -3,7 +3,14 @@
 {% block page_title %}Ustawienia filtra antyspamowego{% endblock %}
 
 {% block body %}
+    {# Connection tests and maintenance actions submit this form (buttons with
+       form="spam-maintenance" + formaction): it cannot be nested in the main one. #}
+    <form method="post" id="spam-maintenance">
+        <input type="hidden" name="_token" value="{{ csrf_token('spam_maintenance') }}">
+    </form>
+
     <form method="post">
+    <input type="hidden" name="_token" value="{{ csrf_token('spam_config') }}">
     <div class="panel panel-default">
         <div class="panel-heading"><span class="glyphicon glyphicon-stats"></span> Ocena punktowa spamu</div>
         <div class="panel-body">
@@ -73,9 +80,9 @@
                 <div class="col-sm-4">
                     <label>Łączność</label>
                     <div>
-                        <a href="{{ path('antispam_clamav_test') }}" class="btn btn-default">
+                        <button type="submit" form="spam-maintenance" formaction="{{ path('antispam_clamav_test') }}" class="btn btn-default">
                             <span class="glyphicon glyphicon-link"></span> Testuj połączenie
-                        </a>
+                        </button>
                     </div>
                     <small class="text-muted">Sprawdza clamd pod zapisanym adresem.</small>
                 </div>
@@ -94,7 +101,12 @@
             <div class="row" style="margin-top:10px;">
                 <div class="col-sm-12">
                     <label>Klucz API</label>
-                    <input type="password" name="config[vt_api_key]" class="form-control" value="{{ config.vt_api_key }}" autocomplete="off" placeholder="Klucz API VirusTotal">
+                    {# Stored keys are never rendered back into the form. #}
+                    <input type="password" name="config[vt_api_key]" class="form-control" value="" autocomplete="new-password"
+                           placeholder="{{ config.vt_api_key.set ? '(ustawione' ~ (config.vt_api_key.hint ? ' ' ~ config.vt_api_key.hint) ~ ' - zostaw puste, aby nie zmieniać)' : 'Klucz API VirusTotal' }}">
+                    {% if config.vt_api_key.set %}
+                        <div class="checkbox"><label><input type="checkbox" name="config[vt_api_key_clear]" value="1"> Usuń zapisany klucz</label></div>
+                    {% endif %}
                 </div>
             </div>
             <div class="row" style="margin-top:10px;">
@@ -115,9 +127,9 @@
                 <div class="col-sm-2">
                     <label>Weryfikacja</label>
                     <div>
-                        <a href="{{ path('antispam_virustotal_test') }}" class="btn btn-default">
+                        <button type="submit" form="spam-maintenance" formaction="{{ path('antispam_virustotal_test') }}" class="btn btn-default">
                             <span class="glyphicon glyphicon-link"></span> Testuj
-                        </a>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -221,8 +233,12 @@
             <div class="row">
                 <div class="col-sm-8">
                     <label>Klucz API Safe Browsing</label>
-                    <input type="password" name="config[url_gsb_api_key]" class="form-control" value="{{ config.url.gsb_api_key }}" autocomplete="off" placeholder="Klucz Google Cloud z włączonym Safe Browsing API">
+                    <input type="password" name="config[url_gsb_api_key]" class="form-control" value="" autocomplete="new-password"
+                           placeholder="{{ config.url.gsb_api_key.set ? '(ustawione' ~ (config.url.gsb_api_key.hint ? ' ' ~ config.url.gsb_api_key.hint) ~ ' - zostaw puste, aby nie zmieniać)' : 'Klucz Google Cloud z włączonym Safe Browsing API' }}">
                     <small class="text-muted">Pełne adresy URL są wysyłane do Google.</small>
+                    {% if config.url.gsb_api_key.set %}
+                        <div class="checkbox"><label><input type="checkbox" name="config[url_gsb_api_key_clear]" value="1"> Usuń zapisany klucz</label></div>
+                    {% endif %}
                 </div>
                 <div class="col-sm-4">
                     <label>Punkty za trafienie</label>
@@ -298,12 +314,18 @@
     <div class="panel panel-default" style="margin-top:20px;">
         <div class="panel-heading"><span class="glyphicon glyphicon-wrench"></span> Konserwacja</div>
         <div class="panel-body">
-            <a href="{{ path('antispam_spam_unchekall') }}" class="btn btn-warning" onclick="return confirm('Zresetować wszystkie flagi sprawdzenia? Wszystkie wiadomości zostaną ponownie przetworzone przy następnym skanie.')">
+            <button type="submit" form="spam-maintenance" formaction="{{ path('antispam_spam_unchekall') }}" class="btn btn-warning"
+                    data-confirm="Zresetować wszystkie flagi sprawdzenia? Wszystkie wiadomości zostaną ponownie przetworzone przy następnym skanie.">
                 <span class="glyphicon glyphicon-refresh"></span> Resetuj flagi sprawdzenia
-            </a>
-            <a href="{{ path('antispam_spam_resetcounters') }}" class="btn btn-warning" onclick="return confirm('Wyzerować liczniki wszystkich reguł?')">
+            </button>
+            <button type="submit" form="spam-maintenance" formaction="{{ path('antispam_spam_resetcounters') }}" class="btn btn-warning"
+                    data-confirm="Wyzerować liczniki wszystkich reguł?">
                 <span class="glyphicon glyphicon-stats"></span> Zeruj liczniki
-            </a>
+            </button>
         </div>
     </div>
+{% endblock %}
+
+{% block javascripts %}
+    <script src="{{ asset('bundles/antispam/js/data-confirm.js') }}"></script>
 {% endblock %}

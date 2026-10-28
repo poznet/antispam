@@ -20,6 +20,15 @@ framework:
     mailer:
         dsn: '%env(MAILER_DSN)%'
 
+# Production is served over HTTPS only: never send the session cookie over
+# plain http. The flag does not depend on Symfony detecting https, so it also
+# works behind a TLS-terminating proxy that is not (yet) trusted. dev keeps
+# `auto` so http://localhost still works.
+when@prod:
+    framework:
+        session:
+            cookie_secure: true
+
 when@test:
     framework:
         test: true

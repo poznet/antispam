@@ -42,6 +42,13 @@ security:
                 check_path: login
                 default_target_path: antispam_start
                 enable_csrf: true
+            # Brute-force protection of the login form (symfony/rate-limiter):
+            # max 5 failed attempts per login + client IP per 15 minutes (and
+            # 25 per IP for all logins). The client IP is the real one only
+            # when the reverse proxy is trusted (SYMFONY_TRUSTED_PROXIES).
+            login_throttling:
+                max_attempts: 5
+                interval: '15 minutes'
             logout:
                 path: logout
                 target: antispam_home

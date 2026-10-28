@@ -62,7 +62,7 @@
     </div>
 
     <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-floppy-disk"></span> Zapisz</button>
-    <button type="submit" name="send_now" value="1" class="btn btn-default" onclick="return confirm('Zapisać ustawienia i wysłać teraz raporty do wszystkich skrzynek z nowymi wiadomościami w kwarantannie?')">
+    <button type="submit" name="send_now" value="1" class="btn btn-default" data-confirm="Zapisać ustawienia i wysłać teraz raporty do wszystkich skrzynek z nowymi wiadomościami w kwarantannie?">
         <span class="glyphicon glyphicon-send"></span> Zapisz i wyślij teraz
     </button>
     </form>
@@ -71,6 +71,7 @@
         <div class="panel-heading"><span class="glyphicon glyphicon-inbox"></span> Skrzynki</div>
         <div class="panel-body">
         {% if mailboxes %}
+            <div class="table-responsive">
             <table class="table table-striped">
                 <thead><tr><th>Skrzynka</th><th>Odbiorca raportu</th><th>Ostatni raport</th><th></th></tr></thead>
                 <tbody>
@@ -88,9 +89,14 @@
                 {% endfor %}
                 </tbody>
             </table>
+            </div>
         {% else %}
             <p class="text-muted">Żadna skrzynka nie ma jeszcze kwarantanny: skonfiguruj starą skrzynkę IMAP albo wdróż agenta na konto SSH.</p>
         {% endif %}
         </div>
     </div>
+{% endblock %}
+
+{% block javascripts %}
+    <script src="{{ asset('bundles/antispam/js/data-confirm.js') }}"></script>
 {% endblock %}

@@ -155,7 +155,10 @@ class WebHardeningTest extends WebTestCase
                 'attachment' => [],
             ]]],
             ['@Antispam/Configuration/feedConfig.html.twig', 1, ['config' => ['server_key' => $secret, 'remote_key' => $secret], 'stats' => []]],
-            ['@Antispam/Configuration/pluginConfig.html.twig', 1, ['config' => [], 'base_url' => 'https://antispam.test', 'outlook_ok' => true]],
+            ['@Antispam/Configuration/pluginConfig.html.twig', 2, ['config' => [], 'base_url' => 'https://antispam.test', 'outlook_ok' => true, 'thunderbird_uploaded' => null, 'thunderbird_auto_update' => true]],
+            // Settings + Thunderbird upload + removal of the uploaded package.
+            ['@Antispam/Configuration/pluginConfig.html.twig', 3, ['config' => [], 'base_url' => 'https://antispam.test', 'outlook_ok' => true, 'thunderbird_auto_update' => true,
+                'thunderbird_uploaded' => ['version' => '1.2.0', 'signed' => false, 'current' => true, 'uploaded_at' => '2026-10-28T12:00:00+01:00']]],
             ['@Antispam/Configuration/digestConfig.html.twig', 1, ['config' => [], 'errors' => [], 'mailboxes' => [['key' => 'imap', 'label' => 'IMAP', 'recipient' => 'a@b.pl', 'last_sent' => null]]]],
             ['@Antispam/Configuration/emailConfig.html.twig', 1, ['config' => ['password_set' => true, 'imap_flags' => '/imap/ssl'], 'imap_tls' => ['encryption' => 'ssl', 'validate_cert' => true]]],
             ['@Antispam/Dnsbl/index.html.twig', 4, [

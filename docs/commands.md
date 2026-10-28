@@ -225,3 +225,21 @@ a check fails; `--strict` also fails on warnings; `--format=json` for scripts.
 php bin/console antispam:doctor
 php bin/console antispam:doctor --strict
 ```
+
+## Mail Client Plugins
+
+### antispam:plugin:build
+
+Builds the Thunderbird `.xpi` to a file (reproducible: same source + URL =
+same bytes). See [plugin-distribution.md](plugin-distribution.md).
+
+```bash
+php bin/console antispam:plugin:build --generic            # no server URL, for addons.thunderbird.net
+php bin/console antispam:plugin:build                      # instance build with plugin.public_url
+php bin/console antispam:plugin:build --server=https://antispam.example.pl -o /tmp/tb.xpi
+```
+
+Default output: `build/antispam-thunderbird-<version>[-instance].xpi`; prints
+the path and sha256. `bin/build-thunderbird-xpi --generic|--server=URL
+[--output=FILE]` does the same without booting Symfony (no database, used by
+CI).

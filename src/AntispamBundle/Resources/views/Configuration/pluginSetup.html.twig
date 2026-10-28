@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="color-scheme" content="light dark">
+    <title>Konfiguracja wtyczki &middot; Antispam Pancernapanda</title>
+    <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}">
+    <link rel="stylesheet" href="{{ asset('bundles/antispam/vendor/fonts/fonts.css') }}">
+    <script src="{{ asset('bundles/antispam/js/theme-init.js') }}"></script>
+    <style>
+        :root { --bg: #f4f7fc; --surface: #fff; --surface-2: #f8fafc; --border: #e3e8f0; --text: #060735; --muted: #636a8a; --accent: #005bba; --ok: #0f8a5f; color-scheme: light; }
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) { --bg: #04052a; --surface: #0b0d40; --surface-2: #10134a; --border: #1d2163; --text: #e8ecfa; --muted: #8b93bd; --accent: #1fd7fd; --ok: #34d399; color-scheme: dark; }
+        }
+        :root[data-theme="dark"] { --bg: #04052a; --surface: #0b0d40; --surface-2: #10134a; --border: #1d2163; --text: #e8ecfa; --muted: #8b93bd; --accent: #1fd7fd; --ok: #34d399; color-scheme: dark; }
+        * { box-sizing: border-box; }
+        body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 32px 16px;
+               background: var(--bg); color: var(--text); font: 15px/1.6 'Open Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+        .box { width: 100%; max-width: 560px; padding: 28px; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; }
+        .brand { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 18px; font: 700 15px/1.2 Montserrat, sans-serif; }
+        h1 { margin: 0 0 12px; font: 700 20px/1.3 Montserrat, sans-serif; }
+        h2 { margin: 22px 0 6px; font: 700 15px/1.3 Montserrat, sans-serif; }
+        .url { display: flex; gap: 8px; }
+        .url input { flex: 1; min-width: 0; padding: 10px 12px; font: 600 15px/1.2 ui-monospace, Menlo, monospace; color: var(--text);
+                     background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; }
+        button { padding: 10px 14px; font: 600 14px/1.2 'Open Sans', sans-serif; color: #fff; background: var(--accent); border: 0; border-radius: 10px; cursor: pointer; }
+        a { color: var(--accent); }
+        ol { padding-left: 20px; margin: 6px 0; } li + li { margin-top: 4px; }
+        .muted { color: var(--muted); font-size: 13px; } .ok { color: var(--ok); }
+    </style>
+</head>
+<body>
+<main class="box">
+    <div class="brand"><img src="{{ asset('bundles/antispam/img/pp-shield.png') }}" alt="" width="32" height="32"> Antispam Pancernapanda</div>
+    <h1>Konfiguracja wtyczki pocztowej</h1>
+    <p>Adres serwera antyspamu - wklej go w ustawieniach wtyczki, jeśli o niego poprosi:</p>
+    <div class="url">
+        <input type="text" id="server" value="{{ server }}" readonly aria-label="Adres serwera antyspamu">
+        <button type="button" id="copy">Kopiuj</button>
+    </div>
+    <p id="copied" class="muted ok" hidden>Skopiowano.</p>
+    <p class="muted">Możesz też wkleić adres tej strony - wtyczka sama wytnie z niego adres serwera.</p>
+
+    <h2>Thunderbird</h2>
+    <ol>
+        <li><a href="{{ path('antispam_plugin_download', {v: version}) }}">Pobierz wtyczkę</a> (lub zainstaluj „Antispam Pancernapanda” z katalogu dodatków Thunderbirda).</li>
+        <li>Thunderbird: <em>Dodatki i motywy → ⚙ → Zainstaluj dodatek z pliku…</em></li>
+        <li>Jeśli otworzy się karta ustawień z pytaniem o adres serwera - wklej adres powyżej i kliknij <em>Zapisz ustawienia</em>, zaakceptuj prośbę o dostęp do serwera.</li>
+        <li>Opcjonalnie zaloguj się adresem skrzynki i hasłem wtyczki (lub hasłem IMAP).</li>
+    </ol>
+    <h2>Apple Mail</h2>
+    <p class="muted">W aplikacji „Antispam Pancernapanda” wklej adres w polu <em>Serwer antyspamu</em> i kliknij <em>Zapisz</em>.</p>
+    <h2>Outlook</h2>
+    <p class="muted">Dodatek Outlook ma adres serwera w manifeście - instaluje go administrator lub użytkownik z pliku manifestu od administratora.</p>
+</main>
+<script>
+    (function () {
+        var input = document.getElementById('server');
+        input.addEventListener('focus', function () { input.select(); });
+        document.getElementById('copy').addEventListener('click', function () {
+            input.select();
+            var done = function () { document.getElementById('copied').hidden = false; };
+            if (navigator.clipboard) { navigator.clipboard.writeText(input.value).then(done, function () { document.execCommand('copy'); done(); }); }
+            else { document.execCommand('copy'); done(); }
+        });
+    })();
+</script>
+</body>
+</html>

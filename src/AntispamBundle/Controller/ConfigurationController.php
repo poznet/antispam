@@ -21,12 +21,16 @@ use AntispamBundle\Services\PluginService;
 use AntispamBundle\Services\QuarantineDigestService;
 use AntispamBundle\Services\QuarantineService;
 use AntispamBundle\Services\ScoringService;
+use AntispamBundle\Services\ThunderbirdPluginBuilder;
 use AntispamBundle\Services\UrlAnalyzer;
 use AntispamBundle\Services\VirusTotalService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
@@ -52,6 +56,7 @@ class ConfigurationController extends AbstractController
         private ClamavService $clamav,
         private VirusTotalService $virusTotal,
         private CryptoService $crypto,
+        private ThunderbirdPluginBuilder $thunderbird,
         private ?BayesService $bayes = null,
     ) {
     }
@@ -411,7 +416,65 @@ class ConfigurationController extends AbstractController
             'config' => $config,
             'base_url' => $baseUrl,
             'outlook_ok' => MailClientPluginBuilder::isOutlookCompatible($baseUrl),
+            'thunderbird_uploaded' => $this->thunderbird->uploadedBuild(),
+            'thunderbird_auto_update' => str_starts_with($baseUrl, 'https://'),
         ];
+    }
+
+    /**
+     * Upload of the generic Thunderbird package (e.g. the file
+     * addons.thunderbird.net serves after review). Checked by
+     * ThunderbirdPluginBuilder::storeUpload(): our add-on id, the bundled
+     * version, no baked-in server URL. /plugin/download then serves it.
+     */
+    #[Route('/plugin/thunderbird-upload', name: 'antispam_plugin_thunderbird_upload', methods: ['POST'])]
+    public function pluginThunderbirdUploadAction(Request $request)
+    {
+        if (!$this->isCsrfTokenValid('plugin_thunderbird_upload', (string)$request->request->get('_token'))) {
+            $this->addFlash('danger', 'Nieprawidłowy token formularza, spróbuj ponownie.');
+            return $this->redirectToRoute('antispam_plugin_config');
+        }
+        $file = $request->files->get('xpi');
+        if (!$file instanceof UploadedFile || !$file->isValid()) {
+            $this->addFlash('danger', 'Nie wybrano pliku .xpi albo przesyłanie się nie powiodło.');
+            return $this->redirectToRoute('antispam_plugin_config');
+        }
+        try {
+            $info = $this->thunderbird->storeUpload($file->getPathname(), $file->getClientOriginalName());
+        } catch (\InvalidArgumentException $e) {
+            $this->addFlash('danger', 'Nie wgrano wtyczki: ' . $e->getMessage());
+            return $this->redirectToRoute('antispam_plugin_config');
+        }
+        $this->audit('settings.save', targetType: 'settings', targetId: 'plugin.thunderbird_upload', label: 'Wtyczka Thunderbird (wgrana)',
+            details: ['version' => $info['version'], 'signed' => $info['signed'], 'sha256' => $info['sha256']]);
+        $this->addFlash('success', 'Wgrano wtyczkę Thunderbird ' . $info['version'] . ($info['signed'] ? ' (podpisaną)' : '') . ' - pobieranie wydaje teraz ten plik.');
+        return $this->redirectToRoute('antispam_plugin_config');
+    }
+
+    #[Route('/plugin/thunderbird-upload/delete', name: 'antispam_plugin_thunderbird_upload_delete', methods: ['POST'])]
+    public function pluginThunderbirdUploadDeleteAction(Request $request)
+    {
+        if (!$this->isCsrfTokenValid('plugin_thunderbird_upload_delete', (string)$request->request->get('_token'))) {
+            $this->addFlash('danger', 'Nieprawidłowy token formularza, spróbuj ponownie.');
+            return $this->redirectToRoute('antispam_plugin_config');
+        }
+        $this->thunderbird->removeUpload();
+        $this->audit('settings.save', targetType: 'settings', targetId: 'plugin.thunderbird_upload', label: 'Wtyczka Thunderbird (wgrana)', details: ['removed' => true]);
+        $this->addFlash('success', 'Usunięto wgraną wtyczkę - pobieranie wydaje znów wersję z adresem tego serwera.');
+        return $this->redirectToRoute('antispam_plugin_config');
+    }
+
+    /** The uploaded package as stored (admin check before / after the store review). */
+    #[Route('/plugin/thunderbird-uploaded.xpi', name: 'antispam_plugin_thunderbird_uploaded', methods: ['GET'])]
+    public function pluginThunderbirdUploadedAction()
+    {
+        $info = $this->thunderbird->uploadedBuild();
+        if (!$info) {
+            throw $this->createNotFoundException();
+        }
+        $response = new BinaryFileResponse($info['path'], 200, ['Content-Type' => 'application/x-xpinstall', 'Cache-Control' => 'private, no-store'], false);
+        $response->setContentDisposition(ResponseHeaderBag::DISPOSITION_ATTACHMENT, 'antispam-thunderbird-uploaded-' . $info['version'] . '.xpi');
+        return $response;
     }
 
     #[Route('/uncheck-all/', name: 'antispam_spam_unchekall', methods: ['POST'])]

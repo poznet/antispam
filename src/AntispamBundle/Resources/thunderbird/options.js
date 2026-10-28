@@ -33,15 +33,6 @@ function setLoaded(value) {
   $("save").disabled = !value;
 }
 
-function originPattern(url) {
-  try {
-    const u = new URL(url);
-    return u.protocol + "//" + u.hostname + "/*";
-  } catch (e) {
-    return null;
-  }
-}
-
 function renderAccount(s) {
   $("loggedIn").hidden = !s.token;
   $("loggedOut").hidden = !!s.token;
@@ -66,6 +57,11 @@ async function refresh() {
     $("server").value = s.server || "";
     renderAccount(s);
     setLoaded(true);
+    renderSetup(s);
+    if (!s.server) {
+      setState("Podaj adres serwera antyspamu (sekcja „Pierwsze uruchomienie” poniżej).", true);
+      return;
+    }
 
     try {
       const st = await send({ cmd: "status" });
@@ -93,6 +89,49 @@ async function refresh() {
   }
 }
 
+/**
+ * First run without a server address (generic build): the "Pierwsze
+ * uruchomienie" box on top asks for it; the bundled-address hint below the
+ * server field is shown only for the instance build.
+ */
+function renderSetup(s) {
+  $("setup").hidden = !!s.server;
+  $("serverHint").textContent = s.bundledServer
+    ? "Ustawiony automatycznie przy pobraniu wtyczki (" + s.bundledServer + "). Zmieniaj tylko, jeśli antyspam działa pod innym adresem."
+    : "Adres podaje administrator antyspamu (strona „Konfiguracja wtyczki”: https://…/plugin/setup). Możesz wkleić cały link.";
+}
+
+/**
+ * Save the server address. Must be called synchronously from a click handler:
+ * permissions.request() is allowed only while handling user input.
+ */
+function saveServer(raw, extra, msgEl) {
+  const server = normalizeServer(raw);
+  if (raw.trim() && !server) {
+    show(msgEl, "Nieprawidłowy adres - podaj np. https://antispam.example.pl", false);
+    return;
+  }
+  const pattern = server ? originPattern(server) : null;
+  const granted = pattern
+    ? ext.permissions.request({ origins: [pattern] }).catch(() => false)
+    : Promise.resolve(true);
+
+  granted.then(async ok => {
+    try {
+      await ext.storage.local.set(Object.assign({ server }, extra));
+      show(msgEl, ok ? "Zapisano" + (server ? " - " + server : "") : "Zapisano, ale bez zgody na połączenie z serwerem", ok);
+    } catch (e) {
+      show(msgEl, "Nie zapisano: " + errorText(e), false);
+    }
+    refresh();
+  });
+}
+
+$("setupForm").addEventListener("submit", ev => {
+  ev.preventDefault();
+  saveServer($("setupServer").value, {}, $("setupMsg"));
+});
+
 $("loginForm").addEventListener("submit", async ev => {
   ev.preventDefault();
   try {
@@ -117,25 +156,10 @@ $("logout").addEventListener("click", async () => {
 
 $("save").addEventListener("click", () => {
   if (!loaded) return;
-  const server = $("server").value.trim().replace(/\/+$/, "");
-  const pattern = server ? originPattern(server) : null;
-  // permissions.request must run synchronously inside the click handler.
-  const granted = pattern
-    ? ext.permissions.request({ origins: [pattern] }).catch(() => false)
-    : Promise.resolve(true);
-
-  granted.then(async ok => {
-    const values = { server };
-    for (const f of FLAGS) values[f] = $(f).checked;
-    for (const f of SELECTS) values[f] = $(f).value;
-    try {
-      await ext.storage.local.set(values);
-      show($("saveMsg"), ok ? "Zapisano" : "Zapisano, ale bez zgody na połączenie z serwerem", ok);
-    } catch (e) {
-      show($("saveMsg"), "Nie zapisano: " + errorText(e), false);
-    }
-    refresh();
-  });
+  const values = {};
+  for (const f of FLAGS) values[f] = $(f).checked;
+  for (const f of SELECTS) values[f] = $(f).value;
+  saveServer($("server").value, values, $("saveMsg"));
 });
 
 function stepItem(ok, title, text) {

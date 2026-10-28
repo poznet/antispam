@@ -43,6 +43,19 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   step) for database users; `ADMIN_TOTP_SECRET` for the env admin; admin reset and
   "Wymagaj 2FA dla administratorów"; `antispam:2fa:secret`.
 - Agent 3.1: `spam-list` / `spam-release` (redeploy SSH accounts: Konta → Wdróż).
+- Distributable plugin builds (`docs/plugin-distribution.md`): generic Thunderbird
+  `.xpi` without a server URL for addons.thunderbird.net (`/plugin/download?build=generic`,
+  `bin/build-thunderbird-xpi`, `antispam:plugin:build`; reproducible), upload of the
+  reviewed package in *Wtyczki pocztowe* (validated: add-on id, version, no baked-in
+  server; `/plugin/download` serves it while current), self-hosted updates of the
+  instance build (`update_url`, `/plugin/thunderbird/updates.json`, https only), public
+  setup page `/plugin/setup`, GitHub workflow `thunderbird-plugin.yml` (build, lint,
+  optional ATN submission with `ATN_API_KEY` / `ATN_API_SECRET`), Apple Mail
+  `scripts/build-and-notarize.sh` (Developer ID + notarytool).
+- Thunderbird plugin 1.2.0: first-run setup when the package has no server address
+  (settings open on install, *Pierwsze uruchomienie* box, pasted setup / panel links are
+  cut to the base URL), connection test shows the build kind. Apple Mail app: same URL
+  normalisation.
 - Audit actions `spam.release`, `spam.whitelist`, `auth.2fa_*`.
 - New nullable 2FA columns on `antispam_user` (migration `Version20261028135851`).
 

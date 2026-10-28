@@ -14,7 +14,7 @@ class AccessControlTest extends KernelTestCase
 {
     public static function publicPaths(): array
     {
-        return [['/logout'], ['/login'], ['/'], ['/api/plugin/status'], ['/plugin/download'], ['/q/abc'], ['/health'], ['/metrics']];
+        return [['/logout'], ['/login'], ['/'], ['/api/plugin/status'], ['/plugin/download'], ['/plugin/thunderbird/updates.json'], ['/plugin/setup'], ['/q/abc'], ['/health'], ['/metrics']];
     }
 
     #[DataProvider('publicPaths')]
@@ -50,7 +50,9 @@ class AccessControlTest extends KernelTestCase
     public function testAdminAreaStaysAdmin()
     {
         self::bootKernel();
-        [$attributes] = self::getContainer()->get('security.access_map')->getPatterns(Request::create('/logout-not-really'));
-        $this->assertSame(['ROLE_ADMIN'], $attributes);
+        foreach (['/logout-not-really', '/plugin/setupx', '/config/plugin/thunderbird-upload', '/config/plugin/thunderbird-uploaded.xpi'] as $path) {
+            [$attributes] = self::getContainer()->get('security.access_map')->getPatterns(Request::create($path));
+            $this->assertSame(['ROLE_ADMIN'], $attributes, $path);
+        }
     }
 }

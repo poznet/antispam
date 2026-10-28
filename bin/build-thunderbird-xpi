@@ -1,0 +1,49 @@
+#!/usr/bin/env php
+<?php
+/*
+ * Builds the Thunderbird plugin (.xpi) without booting Symfony or a database
+ * (CI, release machine). See docs/plugin-distribution.md.
+ *
+ *   bin/build-thunderbird-xpi --generic [--output=build/antispam-thunderbird-1.2.0.xpi]
+ *   bin/build-thunderbird-xpi --server=https://antispam.example.pl [--output=...]
+ *
+ * --generic: no config.json, no update_url - the package for
+ *            addons.thunderbird.net (one build for every instance).
+ * --server:  instance build (same as GET /plugin/download?build=instance).
+ * Prints the output path, version and sha256. Builds are reproducible
+ * (sorted entries, fixed timestamps), so CI and a local build can be compared.
+ */
+
+require_once dirname(__DIR__) . '/src/AntispamBundle/Services/ThunderbirdPluginBuilder.php';
+
+use AntispamBundle\Services\ThunderbirdPluginBuilder;
+
+$opts = getopt('', ['generic', 'server:', 'output:', 'help']);
+if (isset($opts['help']) || (!isset($opts['generic']) && !isset($opts['server']))) {
+    fwrite(STDERR, "Usage: bin/build-thunderbird-xpi --generic|--server=URL [--output=FILE]\n");
+    exit(isset($opts['help']) ? 0 : 2);
+}
+if (isset($opts['generic'], $opts['server'])) {
+    fwrite(STDERR, "--generic and --server are exclusive\n");
+    exit(2);
+}
+$server = null;
+if (isset($opts['server'])) {
+    $server = rtrim((string)$opts['server'], '/');
+    $p = parse_url($server);
+    if (!$p || !in_array($p['scheme'] ?? '', ['http', 'https'], true) || empty($p['host'])) {
+        fwrite(STDERR, "--server must be an http(s) URL\n");
+        exit(2);
+    }
+}
+
+$builder = new ThunderbirdPluginBuilder();
+$version = $builder->version();
+$output = $opts['output'] ?? dirname(__DIR__) . '/build/antispam-thunderbird-' . $version . ($server === null ? '' : '-instance') . '.xpi';
+if (!is_dir(dirname($output)) && !mkdir(dirname($output), 0775, true)) {
+    fwrite(STDERR, 'Cannot create ' . dirname($output) . "\n");
+    exit(1);
+}
+$builder->build($server, $output);
+printf("%s\nversion %s, %s build, sha256 %s\n", $output, $version,
+    $server === null ? 'generic' : 'instance (' . $server . ')', hash_file('sha256', $output));

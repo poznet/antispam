@@ -52,7 +52,12 @@ Klucze `NSExtension` z `project.yml` porównaj z szablonem Xcode.
 - **Własny Mac / testy:** uruchom z Xcode, potem *Mail → Ustawienia → Rozszerzenia* → włącz „Antispam Pancernapanda”.
 - **Dla użytkowników poza App Store:** *Organizer → Distribute App → Developer ID*,
   notaryzacja (`notarytool`), rozpakowany `.app` do `/Applications`. Bez notaryzacji
-  Gatekeeper zablokuje aplikację.
+  Gatekeeper zablokuje aplikację. Całość robi skrypt
+  `scripts/build-and-notarize.sh` (zmienne `TEAM_ID`, `NOTARY_PROFILE`, `MAKE_DMG=1`;
+  `--unsigned` = tylko sprawdzenie kompilacji) – opis w pliku skryptu.
+- **Jedna podpisana aplikacja dla wielu serwerów:** zbuduj z kodu z repozytorium
+  (bez wpisanego adresu) – użytkownik wkleja adres serwera lub link `…/plugin/setup`
+  w oknie aplikacji.
 - **Mac App Store:** możliwe (rozszerzenia Mail są tam wyświetlane), wymaga przeglądu Apple.
 
 ## Adres serwera

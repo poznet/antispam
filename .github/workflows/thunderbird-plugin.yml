@@ -1,0 +1,104 @@
+# Thunderbird plugin: reproducible generic build + web-ext lint, optional
+# submission to addons.thunderbird.net (ATN). See docs/plugin-distribution.md.
+#
+# Runs on tags "thunderbird-v*" (e.g. thunderbird-v1.2.0), on manual dispatch
+# and on pull requests touching the plugin. The build and lint steps need no
+# secrets. Submission runs only on a tag AND when the repository secrets
+# ATN_API_KEY / ATN_API_SECRET exist (ATN Developer Hub -> API keys); without
+# them the job just builds, lints and uploads the .xpi as an artifact.
+name: Thunderbird plugin
+
+on:
+  push:
+    tags: ['thunderbird-v*']
+  pull_request:
+    paths:
+      - 'src/AntispamBundle/Resources/thunderbird/**'
+      - 'src/AntispamBundle/Services/ThunderbirdPluginBuilder.php'
+      - 'bin/build-thunderbird-xpi'
+      - 'tests/js/**'
+      - '.github/workflows/thunderbird-plugin.yml'
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'ATN channel when submitting (listed / unlisted)'
+        default: listed
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ATN_API_KEY: ${{ secrets.ATN_API_KEY }}
+      ATN_API_SECRET: ${{ secrets.ATN_API_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: zip, json
+          tools: none
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Version check (manifest, PluginApiController, tag)
+        run: |
+          set -euo pipefail
+          MANIFEST=$(php -r 'echo json_decode(file_get_contents("src/AntispamBundle/Resources/thunderbird/manifest.json"), true)["version"];')
+          CONTROLLER=$(sed -n "s/.*const PLUGIN_VERSION = '\([^']*\)'.*/\1/p" src/AntispamBundle/Controller/PluginApiController.php)
+          echo "manifest $MANIFEST, PLUGIN_VERSION $CONTROLLER"
+          test "$MANIFEST" = "$CONTROLLER"
+          if [[ "$GITHUB_REF" == refs/tags/thunderbird-v* ]]; then
+            test "${GITHUB_REF#refs/tags/thunderbird-v}" = "$MANIFEST" || { echo "tag does not match manifest version"; exit 1; }
+          fi
+          echo "VERSION=$MANIFEST" >> "$GITHUB_ENV"
+
+      - name: Syntax check and first-run test (node)
+        run: |
+          for f in src/AntispamBundle/Resources/thunderbird/*.js; do node --check "$f"; done
+          node tests/js/thunderbird-first-run.mjs
+
+      - name: Build generic .xpi (reproducible)
+        run: |
+          php bin/build-thunderbird-xpi --generic --output="build/antispam-thunderbird-$VERSION.xpi"
+          # Second build must be byte-identical.
+          php bin/build-thunderbird-xpi --generic --output=build/check.xpi >/dev/null
+          cmp "build/antispam-thunderbird-$VERSION.xpi" build/check.xpi
+          rm build/check.xpi
+          mkdir -p build/src && unzip -q "build/antispam-thunderbird-$VERSION.xpi" -d build/src
+          test ! -e build/src/config.json
+
+      - name: web-ext lint
+        # addons-linter knows Firefox APIs only: the Thunderbird permissions
+        # (accountsRead, messagesRead, ...) come out as 4 warnings; errors fail.
+        run: npx --yes web-ext@8 lint --source-dir=build/src --no-config-discovery --warnings-as-errors=false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: antispam-thunderbird-${{ env.VERSION }}
+          path: build/antispam-thunderbird-${{ env.VERSION }}.xpi
+
+      - name: Submit to addons.thunderbird.net
+        if: startsWith(github.ref, 'refs/tags/thunderbird-v') && env.ATN_API_KEY != '' && env.ATN_API_SECRET != ''
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.ATN_API_KEY }}
+          WEB_EXT_API_SECRET: ${{ secrets.ATN_API_SECRET }}
+          WEB_EXT_AMO_BASE_URL: https://addons.thunderbird.net/api/v4/
+          CHANNEL: ${{ github.event.inputs.channel || 'listed' }}
+        # ATN reviews the version; the reviewed file is downloaded from ATN and
+        # can be uploaded in the panel (Wtyczki pocztowe -> Wgraj wersję ogólną).
+        run: |
+          npx --yes web-ext@8 sign --source-dir=build/src --channel="$CHANNEL" \
+            --artifacts-dir=build/signed --approval-timeout=0 || {
+              echo "::warning::web-ext sign against ATN failed - upload build/antispam-thunderbird-$VERSION.xpi in the ATN Developer Hub by hand (docs/plugin-distribution.md)"; exit 0; }
+
+      - name: Note when submission is skipped
+        if: startsWith(github.ref, 'refs/tags/thunderbird-v') && (env.ATN_API_KEY == '' || env.ATN_API_SECRET == '')
+        run: echo "::notice::ATN_API_KEY / ATN_API_SECRET not set - built and linted only; upload the artifact to ATN by hand."

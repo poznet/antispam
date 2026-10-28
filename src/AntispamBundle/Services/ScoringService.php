@@ -315,7 +315,7 @@ class ScoringService
         // Quarantine/spam get their outcome once the message has been moved.
         $outcome = in_array($decision, [SpamScoreLog::DECISION_HAM, SpamScoreLog::DECISION_WHITELISTED], true)
             ? SpamScoreLog::OUTCOME_NONE : null;
-        $event->setScoreLog($this->logDecision($event->getEmail(), $score, $decision, $reasons, $sender, $subject, SpamScoreLog::SOURCE_SCAN, $outcome));
+        $event->setScoreLog($this->logDecision($event->getEmail(), $score, $decision, $reasons, $sender, $subject, SpamScoreLog::SOURCE_SCAN, $outcome, $event->isInitialScan()));
 
         return $decision;
     }
@@ -343,7 +343,7 @@ class ScoringService
      *
      * @return SpamScoreLog|null null when logging is disabled
      */
-    public function logDecision($accountEmail, $score, $decision, array $reasons, $sender = null, $subject = null, $source = null, $outcome = null)
+    public function logDecision($accountEmail, $score, $decision, array $reasons, $sender = null, $subject = null, $source = null, $outcome = null, $initialScan = false)
     {
         if (!$this->isLoggingEnabled()) {
             return null;
@@ -356,7 +356,8 @@ class ScoringService
             ->setDecision($decision)
             ->setReasons($reasons)
             ->setSource($source)
-            ->setOutcome($outcome);
+            ->setOutcome($outcome)
+            ->setInitialScan($initialScan);
         $this->em->persist($log);
         $this->em->flush();
         return $log;

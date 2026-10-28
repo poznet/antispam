@@ -68,6 +68,10 @@ class SpamScoreLog
     #[ORM\Column(name: 'outcome', type: 'string', length: 16, nullable: true)]
     private $outcome;
 
+    /** Logged during the first scan of a newly connected mailbox - left out of stats and the dashboard. */
+    #[ORM\Column(name: 'initial_scan', type: 'boolean', options: ['default' => false])]
+    private $initialScan = false;
+
     public function __construct()
     {
         $this->scoredAt = new \DateTime();
@@ -116,4 +120,7 @@ class SpamScoreLog
 
     public function getOutcome() { return $this->outcome; }
     public function setOutcome($outcome) { $this->outcome = $outcome; return $this; }
+
+    public function isInitialScan() { return $this->initialScan; }
+    public function setInitialScan($initialScan) { $this->initialScan = (bool)$initialScan; return $this; }
 }

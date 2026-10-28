@@ -252,8 +252,7 @@ class AccountController extends AbstractController
                 $scanResult = $this->imapScan->scanAccount($account);
             }
 
-            $account->setLastScanAt(new \DateTime());
-            $account->setLastScanResult(json_encode($scanResult));
+            $account->markScanned($scanResult);
             $this->em->flush();
 
             $result['success'] = true;

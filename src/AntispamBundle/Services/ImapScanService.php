@@ -40,7 +40,7 @@ class ImapScanService
     {
         $connection = $this->connect($account);
         try {
-            return $this->scan($connection, $account->getEmail(), (bool)$account->getDeleteSpam());
+            return $this->scan($connection, $account->getEmail(), (bool)$account->getDeleteSpam(), $account->getLastScanAt() === null);
         } finally {
             $connection->close();
         }
@@ -54,10 +54,11 @@ class ImapScanService
 
     /**
      * @param bool|null $deleteSpam null = global "delete" setting
+     * @param bool $initialScan first scan of a newly connected mailbox (kept out of stats)
      *
      * @return array counters + 'errors' (list of strings, at most 20)
      */
-    public function scan(ConnectionInterface $connection, $email, ?bool $deleteSpam): array
+    public function scan(ConnectionInterface $connection, $email, ?bool $deleteSpam, bool $initialScan = false): array
     {
         $stats = ['total' => 0, 'checked' => 0, 'skipped' => 0, 'whitelisted' => 0, 'blacklisted' => 0,
                   'quarantined' => 0, 'moved_to_spam' => 0, 'errors' => []];
@@ -66,6 +67,7 @@ class ImapScanService
             $stats['total']++;
             try {
                 $event = new MessageEvent($msg, $email, $connection, $deleteSpam);
+                $event->setInitialScan($initialScan);
                 $this->dispatcher->dispatch($event, 'antispam.check.message');
 
                 if ($event->isCheckedbefore()) {

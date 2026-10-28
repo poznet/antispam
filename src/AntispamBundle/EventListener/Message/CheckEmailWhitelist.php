@@ -47,8 +47,10 @@ class CheckEmailWhitelist
             return;
         }
 
-        $match->setCounter($match->getCounter() + 1);
-        $this->em->flush();
+        if (!$event->isInitialScan()) {
+            $match->setCounter($match->getCounter() + 1);
+            $this->em->flush();
+        }
         $this->ms->setAsChecked($msg);
         $event->setWhitelist(true);
         $event->stopPropagation();

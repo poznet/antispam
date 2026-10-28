@@ -52,8 +52,10 @@ class CheckBlacklist
             return;
         }
 
-        $match->setCounter($match->getCounter() + 1);
-        $this->em->flush();
+        if (!$event->isInitialScan()) {
+            $match->setCounter($match->getCounter() + 1);
+            $this->em->flush();
+        }
 
         if ($this->scoring && $this->scoring->isScoringEnabled()) {
             $event->setSpamscore($event->getSpamscore() + $match->getScore());

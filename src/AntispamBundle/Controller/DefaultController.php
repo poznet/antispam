@@ -32,7 +32,7 @@ class DefaultController extends AbstractController
             + count($this->em->getRepository(EmailBlacklist::class)->findAll());
 
         $recentScans = array_filter($accounts, function ($a) {
-            return $a->getLastScanAt() !== null;
+            return $a->getLastScanAt() !== null && empty($a->getLastScanResultDecoded()['initial']);
         });
         usort($recentScans, function ($a, $b) {
             return $b->getLastScanAt() <=> $a->getLastScanAt();

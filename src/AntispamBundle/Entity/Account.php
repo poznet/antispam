@@ -153,6 +153,20 @@ class Account
         return $this;
     }
 
+    /**
+     * Store a finished scan. The first one after connecting the mailbox is
+     * flagged 'initial' so the dashboard leaves it out.
+     */
+    public function markScanned(array $result)
+    {
+        if ($this->lastScanAt === null) {
+            $result['initial'] = true;
+        }
+        $this->lastScanAt = new \DateTime();
+        $this->lastScanResult = json_encode($result);
+        return $this;
+    }
+
     public function getLastScanResultDecoded()
     {
         return $this->lastScanResult ? json_decode($this->lastScanResult, true) : null;

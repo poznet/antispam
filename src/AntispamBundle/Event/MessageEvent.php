@@ -28,6 +28,8 @@ class MessageEvent extends Event
     private $deleteSpam;
     /** SpamScoreLog entry for this message, so later listeners can record where it went. */
     private $scoreLog;
+    /** First scan of a newly connected mailbox: decide and move as usual, but keep it out of stats and rule hit counters. */
+    private $initialScan = false;
 
     public function __construct(MessageInterface $message, $email = null, ?ConnectionInterface $connection = null, ?bool $deleteSpam = null)
     {
@@ -35,6 +37,16 @@ class MessageEvent extends Event
         $this->email = $email;
         $this->connection = $connection;
         $this->deleteSpam = $deleteSpam;
+    }
+
+    public function isInitialScan(): bool
+    {
+        return $this->initialScan;
+    }
+
+    public function setInitialScan(bool $initialScan)
+    {
+        $this->initialScan = $initialScan;
     }
 
     public function getConnection(): ?ConnectionInterface

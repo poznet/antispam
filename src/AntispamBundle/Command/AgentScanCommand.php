@@ -49,8 +49,7 @@ class AgentScanCommand extends Command
                 $result = $this->imapScan->scanAccount($account);
             }
 
-            $account->setLastScanAt(new \DateTime());
-            $account->setLastScanResult(json_encode($result));
+            $account->markScanned($result);
             $this->em->flush();
 
             $output->writeln('<info>Scan completed:</info>');

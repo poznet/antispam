@@ -150,6 +150,19 @@ Every processed message (when `scoring.log_enabled = true`) appends a row to
 reasons. Browse it under **Mailboxes → Score Log** to audit "why was this
 flagged".
 
+### First scan of a new mailbox
+
+The first scan after a mailbox is connected (`Account.lastScanAt` still null)
+works through the whole existing INBOX backlog, so it is kept out of the
+numbers: messages are scored and moved as usual, but their log rows get
+`initial_scan = 1` and are skipped by `statsByDecision()` / `dailyCounts()`
+(dashboard tiles, 14-day chart, Spambox stats), rule hit counters
+(`counter` on white/blacklists, "top blacklist" on the dashboard) are not
+bumped, and the scan result is stored with `"initial": true` so it does not
+show in the dashboard's "Ostatnie skany". The rows stay visible in the score
+log, marked "pierwszy skan". SSH accounts only get the `initial` result flag
+(the agent scores on the server and does not write the score log).
+
 ## Agent CLI flags
 
 ```

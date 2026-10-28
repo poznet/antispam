@@ -93,6 +93,7 @@ class SpamScoreLogRepository extends EntityRepository
     {
         $qb = $this->createQueryBuilder('l')
             ->select('l.decision AS decision, COUNT(l.id) AS cnt')
+            ->andWhere('l.initialScan = false')
             ->groupBy('l.decision');
         if ($since) {
             $qb->andWhere('l.scoredAt >= :since')->setParameter('since', $since);
@@ -111,6 +112,7 @@ class SpamScoreLogRepository extends EntityRepository
         $rows = $this->createQueryBuilder('l')
             ->select("SUBSTRING(l.scoredAt, 1, 10) AS day, l.decision AS decision, COUNT(l.id) AS cnt")
             ->andWhere('l.scoredAt >= :since')
+            ->andWhere('l.initialScan = false')
             ->setParameter('since', $since)
             ->groupBy('day, decision')
             ->orderBy('day', \SortDirection::Ascending)

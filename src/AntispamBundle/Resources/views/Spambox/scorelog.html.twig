@@ -73,7 +73,7 @@
                         {% elseif l.decision == 'quarantine' %}<span class="label label-warning">kwarantanna</span>
                         {% elseif l.decision == 'whitelisted' %}<span class="label label-info">whitelista</span>
                         {% else %}<span class="label label-success">ham</span>{% endif %}
-                        {% if l.source %}<br><small class="text-muted">{{ sourceLabels[l.source]|default(l.source) }}{% if l.outcome and l.outcome != 'none' %}, {{ outcomeLabels[l.outcome]|default(l.outcome) }}{% endif %}</small>{% endif %}
+                        {% if l.source %}<br><small class="text-muted">{{ sourceLabels[l.source]|default(l.source) }}{% if l.outcome and l.outcome != 'none' %}, {{ outcomeLabels[l.outcome]|default(l.outcome) }}{% endif %}{% if l.initialScan %}, pierwszy skan (poza statystyką){% endif %}</small>{% endif %}
                     </td>
                     <td>
                         {% for r in l.reasonsDecoded %}

@@ -58,7 +58,10 @@ Message-ID, valid for every mailbox) are still honoured until purged.
 **Robustness:** every IMAP connection gets c-client timeouts (open 20 s,
 read/write 60 s, `ImapScanService::applyImapTimeouts()`); a mailbox is
 scanned by one process at a time (`flock` on `var/data/locks/imap-scan-*.lock`,
-a second scan fails with "Skanowanie tej skrzynki już trwa"); a failed flush
+a second scan gets `ScanLockedException` "Skanowanie tej skrzynki już trwa" -
+scan-all skips the mailbox, a panel scan job waits and retries); a scan can be
+limited to a deadline / message count and continues from the cursor next time
+(background scan jobs in batches, scan-all `SCAN_MAX_SECONDS`, [jobs.md](jobs.md)); a failed flush
 that closes the EntityManager is reset after the message, so one bad message
 does not fail the rest of the run; each message's score-log row is detached
 from the unit of work after processing.
@@ -155,6 +158,9 @@ Additional tables:
   255-character values. See `protection.md`.
 - `antispam_bayes_token`, `antispam_bayes_message` — hashed token counts and
   learned-message fingerprints of the optional Bayes classifier. See `bayes.md`.
+- `antispam_job` — background job queue (heavy panel operations run by
+  `antispam:jobs:work`): type, payload, status, progress, result, dedupe key.
+  See `jobs.md`.
 - `antispam_cron_run` — runs of periodic commands started through
   `antispam:cron:run` (command, start/end, exit code, output), kept 14 days.
   See `spam-handling.md`.

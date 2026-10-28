@@ -94,4 +94,20 @@ class PurgeCommandTest extends TestCase
         $this->assertCount(4, $this->subjects());
         $this->assertCount(1, $this->em->getRepository(DnsblCache::class)->findAll());
     }
+
+    public function testOldFinishedJobsArePurged()
+    {
+        $queue = new \AntispamBundle\Services\Jobs\JobQueue($this->em->getConnection(), $this->em);
+        $old = $queue->enqueue(\AntispamBundle\Entity\BackgroundJob::TYPE_CERT_SYNC)->id;
+        $active = $queue->enqueue(\AntispamBundle\Entity\BackgroundJob::TYPE_ACCOUNT_SCAN)->id;
+        $this->em->getConnection()->executeStatement("UPDATE antispam_job SET created_at = ?", [(new \DateTime('-45 days'))->format('Y-m-d H:i:s')]);
+        $this->em->getConnection()->update('antispam_job', ['status' => 'done'], ['id' => $old]);
+
+        $this->assertStringContainsString('would delete 1 finished job', $this->purge(['--dry-run' => true])->getDisplay());
+        $this->assertStringContainsString('deleted 1 finished job', $this->purge()->getDisplay());
+        $this->assertSame([$active], array_map('intval', $this->em->getConnection()->fetchFirstColumn('SELECT id FROM antispam_job')), 'queued jobs survive');
+
+        $this->config->set(\AntispamBundle\Entity\BackgroundJob::CONFIG_RETENTION, '0');
+        $this->assertStringContainsString('keep forever', $this->purge()->getDisplay());
+    }
 }

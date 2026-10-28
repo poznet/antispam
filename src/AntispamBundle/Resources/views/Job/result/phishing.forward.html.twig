@@ -1,0 +1,11 @@
+{# Bulk forward of phishing reports. #}
+{% set c = result.counts|default({}) %}
+<div class="alert {{ c.failed|default(0) ? 'alert-danger' : (c.sent|default(0) ? 'alert-success' : 'alert-warning') }}">
+    Wysłano: <strong>{{ c.sent|default(0) }}</strong>, pominięto: <strong>{{ c.skipped|default(0) }}</strong>, błędy: <strong>{{ c.failed|default(0) }}</strong>.
+</div>
+{% if result.errors|default([])|length > 0 %}
+    <ul class="list-group">
+    {% for e in result.errors %}<li class="list-group-item"><small>{{ e }}</small></li>{% endfor %}
+    </ul>
+{% endif %}
+<a href="{{ path('antispam_phishing_index') }}" class="btn btn-default"><span class="glyphicon glyphicon-alert"></span> Zgłoszenia phishingu</a>

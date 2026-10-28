@@ -100,6 +100,11 @@ services:
       - PHISHING_FORWARD_INTERVAL=${PHISHING_FORWARD_INTERVAL:-10}
       - DIGEST_HOUR=${DIGEST_HOUR:-7}
       - PURGE_HOUR=${PURGE_HOUR:-3}
+      # Background job worker (docs/jobs.md): runs scans / deploys / syncs queued in the panel
+      - JOBS_WORKER=${JOBS_WORKER:-on}
+      - JOBS_JOB_TIMEOUT=${JOBS_JOB_TIMEOUT:-3900}
+      - JOBS_BATCH_SECONDS=${JOBS_BATCH_SECONDS:-120}
+      - SCAN_MAX_SECONDS=${SCAN_MAX_SECONDS:-600}
     depends_on:
       db:
         condition: service_healthy

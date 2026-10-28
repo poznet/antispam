@@ -3,7 +3,7 @@
 namespace AntispamBundle\Controller;
 
 use AntispamBundle\Entity\EmailBlacklist;
-use AntispamBundle\Services\RetroactiveSpamService;
+use AntispamBundle\Services\DeferredRetroactivePass;
 use AntispamBundle\Services\RuleOwnership;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
@@ -15,11 +15,12 @@ use Symfony\Component\Routing\Attribute\Route;
 class EmailBlacklistController extends AbstractController
 {
     use AuditTrait;
+    use JobQueueTrait;
 
     public function __construct(
         private EntityManagerInterface $em,
         private RuleOwnership $ownership,
-        private RetroactiveSpamService $retroactive,
+        private DeferredRetroactivePass $retroactive,
     ) {
     }
 
@@ -75,10 +76,8 @@ class EmailBlacklistController extends AbstractController
         $this->audit('rule.add', targetType: 'email_blacklist', targetId: $entry->getId(), label: $email, mailbox: $owner, details: ['pattern_type' => $patternType, 'score' => $entry->getScore()]);
 
         // Mail from this sender that is already in INBOX goes to SPAM too.
-        $summary = RetroactiveSpamService::describe($this->retroactive->applyRule($entry));
-        if ($summary) {
-            $this->addFlash('info', $summary);
-        }
+        // Checked in the background (an IMAP/SSH login per mailbox), docs/jobs.md.
+        $this->flashRetroactive($this->retroactive->queue($entry));
         return $this->redirectToRoute('antispam_emailblacklist_index');
     }
 

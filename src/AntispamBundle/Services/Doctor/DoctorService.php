@@ -14,6 +14,7 @@ use AntispamBundle\Services\ClamavService;
 use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\CryptoService;
 use AntispamBundle\Services\Database\DatabaseUpgrader;
+use AntispamBundle\Services\Jobs\JobQueue;
 use AntispamBundle\Services\OAuth\OAuthSettings;
 use AntispamBundle\Services\RuleOwnership;
 use AntispamBundle\Services\ScoringService;
@@ -81,6 +82,7 @@ class DoctorService
             'mailer' => [fn() => $this->checkMailer(), true],
             'public_url' => [fn() => $this->checkPublicUrls(), true],
             'cron' => [fn() => $this->checkCron(), true],
+            'jobs' => [fn() => $this->checkJobs(), true],
             'accounts_scanned' => [fn() => $this->checkAccountsScanned(), true],
             'ssh_agents' => [fn() => $this->checkSshAgents(), true],
             'stored_passwords' => [fn() => $this->checkStoredPasswords(), true],
@@ -303,6 +305,26 @@ class DoctorService
         }
 
         return DoctorCheck::ok('cron', sprintf('Scheduler is running (last job %s, %d min ago).', $last->getCommand(), $age));
+    }
+
+    /** Background job queue (docs/jobs.md): is a worker picking jobs up? */
+    private function checkJobs(): DoctorCheck
+    {
+        $stats = (new JobQueue($this->em->getConnection(), $this->em))->stats();
+        $hint = 'Docker: the scheduler service runs the worker (JOBS_WORKER=on, docker compose logs scheduler). '
+            . 'Without Docker: crontab "* * * * * php bin/console antispam:jobs:run --once" or a supervised "antispam:jobs:work".';
+        if ($stats['oldest_queued_at'] !== null) {
+            $age = (int)floor((time() - $stats['oldest_queued_at']->getTimestamp()) / 60);
+            if ($age > JobQueue::STUCK_WARN_MINUTES) {
+                return DoctorCheck::warn('jobs', sprintf('%d background job(s) queued, the oldest has been waiting %d minutes - no worker (antispam:jobs:work) is running.', $stats['queued'], $age), $hint);
+            }
+        }
+        if ($stats['failed_24h'] > 0) {
+            $last = $stats['last_failed'];
+            return DoctorCheck::warn('jobs', sprintf('%d background job(s) failed in the last 24 h (last: #%d %s - %s).', $stats['failed_24h'], $last['id'] ?? 0, $last['type'] ?? '', self::oneLine(mb_substr((string)($last['error'] ?? ''), 0, 200))),
+                'See Przegląd → Zadania w tle for the error of each job.');
+        }
+        return DoctorCheck::ok('jobs', sprintf('Background job queue OK (%d queued, %d running).', $stats['queued'], $stats['running']));
     }
 
     private function checkAccountsScanned(): DoctorCheck

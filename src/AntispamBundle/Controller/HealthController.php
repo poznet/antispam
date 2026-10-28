@@ -2,10 +2,12 @@
 
 namespace AntispamBundle\Controller;
 
+use AntispamBundle\Entity\BackgroundJob;
 use AntispamBundle\Services\HealthAlerter;
 use AntispamBundle\Services\HealthMetrics;
 use AntispamBundle\Services\HealthService;
 use AntispamBundle\Services\HealthSettings;
+use AntispamBundle\Services\Jobs\JobQueue;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -26,6 +28,7 @@ use Symfony\Contracts\Cache\ItemInterface;
 class HealthController extends AbstractController
 {
     use AuditTrait;
+    use JobQueueTrait;
 
     const PUBLIC_CACHE_TTL = 30;
     const PUBLIC_CACHE_KEY = 'antispam_health_public';
@@ -36,6 +39,7 @@ class HealthController extends AbstractController
         private HealthAlerter $alerter,
         private HealthMetrics $metrics,
         private CacheInterface $cache,
+        private ?JobQueue $jobs = null,
     ) {
     }
 
@@ -70,9 +74,19 @@ class HealthController extends AbstractController
         return $this->noStore(new Response($body, Response::HTTP_OK, ['Content-Type' => 'text/plain; version=0.0.4; charset=utf-8']));
     }
 
+    /** ?job=ID shows the report of a finished "full check" job instead of a quick check. */
     #[Route('/system/status', name: 'antispam_system_status', methods: ['GET'])]
-    public function statusAction(): Response
+    public function statusAction(?Request $request = null): Response
     {
+        $jobId = $request ? $request->query->getInt('job') : 0;
+        if ($jobId > 0 && $this->jobs) {
+            $job = $this->jobs->find($jobId);
+            $report = $job && $job->getType() === BackgroundJob::TYPE_HEALTH_FULL ? $job->getResult() : null;
+            if (is_array($report) && isset($report['checks'], $report['status'])) {
+                return $this->renderPage($report);
+            }
+            $this->addFlash('warning', 'Wynik pełnego sprawdzenia nie jest (jeszcze) dostępny - poniżej szybkie sprawdzenie.');
+        }
         return $this->renderPage($this->health->run(false));
     }
 
@@ -83,7 +97,11 @@ class HealthController extends AbstractController
             $this->addFlash('danger', 'Nieprawidłowy token formularza - odśwież stronę i spróbuj ponownie.');
             return $this->redirectToRoute('antispam_system_status');
         }
-        // IMAP logins and SSH agent queries take seconds per account.
+        // IMAP logins and SSH agent queries take seconds per account: background job.
+        if ($this->jobs) {
+            $queued = $this->jobs->enqueue(BackgroundJob::TYPE_HEALTH_FULL, dedupeKey: BackgroundJob::TYPE_HEALTH_FULL);
+            return $this->redirectToJob($queued, 'Pełne sprawdzenie stanu');
+        }
         @set_time_limit(600);
         return $this->renderPage($this->health->run(true));
     }

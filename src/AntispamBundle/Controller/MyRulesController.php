@@ -22,7 +22,7 @@ use Symfony\Component\Routing\Attribute\Route;
  * Ownership is checked server-side on every write: the owner of a new rule
  * must be one of MailboxAccess::accountEmails(), and a rule is only deleted
  * when its stored owner is one of them (no IDOR through the id). Changes of
- * SSH mailboxes reach the agent through DeferredAgentSync after the response.
+ * SSH mailboxes reach the agent through DeferredAgentSync (a background job).
  *
  * A new blacklist rule is NOT applied retroactively to mail already in INBOX
  * (unlike the admin forms): see docs/users.md.

@@ -27,8 +27,9 @@
 {% set nav = [
     {section: 'Przegląd'},
     {label: 'Pulpit',               icon: 'dashboard',    path: 'antispam_index',                match: ['antispam_index']},
-    {label: 'Konta',                icon: 'cloud',        path: 'antispam_account_index',        match: ['antispam_account_index', 'antispam_account_add', 'antispam_account_edit', 'antispam_account_test', 'antispam_account_scan', 'antispam_account_deploy', 'antispam_account_sync', 'antispam_account_health']},
-    {label: 'Logi crona',           icon: 'time',         path: 'antispam_cron_logs',            match: ['antispam_cron_logs']},
+    {label: 'Konta',                icon: 'cloud',        path: 'antispam_account_index',        match: ['antispam_account_index', 'antispam_account_add', 'antispam_account_edit', 'antispam_account_test']},
+    {label: 'Zadania w tle',        icon: 'tasks',        path: 'antispam_job_index',            match: ['antispam_job_index', 'antispam_job_show']},
+    {label: 'Logi crona',          icon: 'time',         path: 'antispam_cron_logs',            match: ['antispam_cron_logs']},
     {label: 'Stan systemu',         icon: 'heart',        path: 'antispam_system_status',        match: ['antispam_system_status', 'antispam_system_status_check']},
     {label: 'Dziennik audytu',      icon: 'eye-open',     path: 'antispam_audit_index',          match: ['antispam_audit_index']},
     {section: 'Skrzynki'},

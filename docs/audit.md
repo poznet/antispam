@@ -36,6 +36,7 @@ Page: **Przegląd → Dziennik audytu** (`/audit`, ROLE_ADMIN only).
 | `user.password_change` | own password (`/my/password`) | user |
 | `dnsbl.add`, `dnsbl.toggle`, `dnsbl.delete` | `/dnsbl/*` | provider id, zone; name, score, enabled |
 | `cert.sync` | manual "Pobierz teraz" on `/cert/` | result message; `ok` |
+| `job.cancel` | **Anuluj** on a background job page (`/jobs/{id}`) | job id, label, mailbox; job type, `state` (`cancelled` / `cancel_requested`) |
 | `bayes.trained` | `antispam:bayes:train` | folders, mailbox; learned / skipped / failed per verdict |
 | `bayes.reset` | "Wyczyść bazę Bayesa" on Filtr spamu | deleted rows |
 
@@ -116,3 +117,11 @@ INSERT INTO config (name, value) VALUES ('audit.retention_days', '730');
 `Tests/Services/AuditLoggerTest.php` (SQLite: actor / IP / secrets / failures /
 purge / CSV / filters), `Tests/Controller/AuditTrailTest.php` (every area writes
 its entry), `Tests/Security/AuditAccessTest.php` (ROLE_ADMIN only, wiring, page render).
+
+## Actions run as background jobs
+
+`account.deploy`, `account.sync`, `cert.sync` and the bulk `phishing.forward` run in the
+background job worker ([jobs.md](jobs.md)). Their entries are written when the job
+finishes, with the user who clicked as the actor (copied to the job when it was queued)
+and `job: <id>` in the details; the IP column is empty (the worker has no request).
+

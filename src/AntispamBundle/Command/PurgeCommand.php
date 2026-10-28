@@ -3,11 +3,13 @@
 namespace AntispamBundle\Command;
 
 use AntispamBundle\Entity\AuditLog;
+use AntispamBundle\Entity\BackgroundJob;
 use AntispamBundle\Entity\DnsblCache;
 use AntispamBundle\Entity\DnsblProvider;
 use AntispamBundle\Entity\SpamScoreLog;
 use AntispamBundle\Services\AuditLogger;
 use AntispamBundle\Services\ConfigService;
+use AntispamBundle\Services\Jobs\JobQueue;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -27,6 +29,8 @@ use Symfony\Component\Console\Output\OutputInterface;
  *     fingerprints older than `bayes.message_retention_days` (365), tokens
  *     seen once and untouched for `bayes.token_retention_days` (180), rows of
  *     deleted mailboxes
+ *   - antispam_job: finished background jobs older than `jobs.retention_days`
+ *     (default 30, 0 = keep forever); queued / running jobs are never deleted
  *
  * Run daily, e.g. through the cron log wrapper (the Docker scheduler does):
  *
@@ -89,6 +93,9 @@ class PurgeCommand extends Command
         $this->purgeAuditLog($dryRun, $output);
         // --- end audit log
 
+        // --- Background jobs (antispam_job): own retention, not affected by --days.
+        $this->purgeJobs($dryRun, $output);
+
         // --- Bayes classifier (docs/bayes.md): own retention, not affected by --days.
         if ($this->bayes && !$dryRun) {
             try {
@@ -103,6 +110,21 @@ class PurgeCommand extends Command
         // --- end Bayes
 
         return Command::SUCCESS;
+    }
+
+    /** Finished background jobs older than `jobs.retention_days` (default 30, 0 = keep forever). */
+    private function purgeJobs(bool $dryRun, OutputInterface $output): void
+    {
+        $v = $this->config->get(BackgroundJob::CONFIG_RETENTION);
+        $days = $v === null || $v === '' || !is_numeric($v) ? BackgroundJob::DEFAULT_RETENTION_DAYS : max(0, (int)$v);
+        if ($days === 0) {
+            $output->writeln('Background jobs: retention 0 (keep forever), nothing deleted.');
+            return;
+        }
+        $before = new \DateTime('-' . $days . ' days');
+        $queue = new JobQueue($this->em->getConnection(), $this->em);
+        $n = $dryRun ? $queue->countFinishedBefore($before) : $queue->purgeFinishedBefore($before);
+        $output->writeln(sprintf('Background jobs: %s %d finished job(s) older than %d days.', $dryRun ? 'would delete' : 'deleted', $n, $days));
     }
 
     /** Audit log rows older than `audit.retention_days` (default 365, 0 = keep forever). */

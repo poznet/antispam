@@ -344,4 +344,20 @@ class DoctorServiceTest extends TestCase
         $this->assertSame(DoctorCheck::OK, $check->status);
         $this->assertStringContainsString('1 spam / 1 ham', $check->message);
     }
+
+    public function testJobQueue()
+    {
+        $queue = new \AntispamBundle\Services\Jobs\JobQueue($this->em->getConnection(), $this->em);
+        $this->assertSame(DoctorCheck::OK, $this->checks()['jobs']->status);
+
+        $id = $queue->enqueue(\AntispamBundle\Entity\BackgroundJob::TYPE_ACCOUNT_SCAN)->id;
+        $this->em->getConnection()->update('antispam_job', ['available_at' => (new \DateTime('-30 minutes'))->format('Y-m-d H:i:s')], ['id' => $id]);
+        $check = $this->checks()['jobs'];
+        $this->assertSame(DoctorCheck::WARN, $check->status);
+        $this->assertStringContainsString('no worker', $check->message);
+        $this->assertStringContainsString('antispam:jobs:run --once', $check->hint);
+
+        $this->em->getConnection()->update('antispam_job', ['status' => 'failed', 'error' => 'boom', 'finished_at' => (new \DateTime())->format('Y-m-d H:i:s')], ['id' => $id]);
+        $this->assertStringContainsString('failed in the last 24 h', $this->checks()['jobs']->message);
+    }
 }

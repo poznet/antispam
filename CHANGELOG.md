@@ -19,6 +19,25 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 ## [Unreleased]
 
 ### Added
+- Background job queue (**Przegląd → Zadania w tle**, `/jobs`): heavy panel actions
+  no longer run inside the HTTP request (the first "Skanuj" of a big mailbox ended in
+  `504 Gateway Timeout`). Queued: account **Skanuj**, **Wdróż**, **Synchronizuj**,
+  **Stan**; the retroactive pass of a new blacklist rule (rule forms, Phishing →
+  Zablokuj, plugin reports - replaces the `kernel.terminate` pass); user-area agent
+  rule syncs; **Synchronizuj teraz** of the CERT list; **Wyślij teraz** of the
+  quarantine digest; bulk phishing forward; the full health check. The button
+  redirects to a job page with live progress and the same result view as before;
+  dedupe (a second click returns the running job), cancel, "w kolejce / trwa" badges
+  on the account list. Worker `antispam:jobs:work` (alias `antispam:jobs:run --once`
+  for cron) runs continuously in the Docker `scheduler` (`JOBS_WORKER`,
+  `JOBS_JOB_TIMEOUT`, `JOBS_BATCH_SECONDS`), recovers jobs of a dead worker, per-job
+  time limit (image now has `pcntl`). Big first IMAP scans run in resumable batches
+  (cursor after each batch, kept "initial" until finished); `scan-all` shares the
+  per-mailbox lock, skips busy mailboxes instead of failing and gives each IMAP
+  mailbox at most `SCAN_MAX_SECONDS` (600) per run. Health check / doctor `jobs`,
+  `antispam_jobs_*` metrics, `antispam:purge` drops finished jobs after
+  `jobs.retention_days` (30). New table `antispam_job` (migration
+  `Version20261028201942`). See `docs/jobs.md`.
 - Optional local learned classifier (naive Bayes, Robinson / chi-square,
   off by default; Ustawienia → Filtr spamu): learns from plugin spam / not-spam
   and phishing reports, quarantine and SPAM releases and

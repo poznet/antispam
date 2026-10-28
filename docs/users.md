@@ -115,10 +115,10 @@ owned by the mailbox address - see [scoring.md](scoring.md#rule-ownership).
   move. Moving existing mail in bulk stays an admin action.
 - **SSH+Maildir accounts**: the agent only knows synced rules. After every change
   `Services\DeferredAgentSync` pushes the rules (`AgentRulesExporter` + `import-rules`)
-  to every deployed SSH account with that address **after the response has been sent**
-  (`kernel.terminate`, same early-close handling as `DeferredRetroactivePass`); the user
-  is told it takes a few seconds. A failed sync is only logged
-  (`antispam: deferred agent rules sync failed`); the next admin sync / deploy sends the
+  to every deployed SSH account with that address in a **background job** (`account.sync`,
+  one pending sync per account, [jobs.md](jobs.md)); the user is told it takes a few
+  seconds. A failed sync is a failed job (visible on **Zadania w tle** and in the health
+  check `jobs`), not shown to the user; the next admin sync / deploy sends the
   rules again. IMAP accounts read rules from the database on every scan.
 - **Ownership / IDOR**: delete takes `list` + `id`; the rule is looked up in that list
   only and deleted only when its stored owner is one of the user's mailbox e-mails - a

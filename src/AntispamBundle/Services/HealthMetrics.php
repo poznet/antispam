@@ -33,6 +33,9 @@ class HealthMetrics
             if (str_starts_with($check['key'], 'cron:') && isset($check['details']['age_seconds'])) {
                 $cronAges[] = [['command' => substr($check['key'], 5)], $check['details']['age_seconds']];
             }
+            if ($check['key'] === 'jobs') {
+                $jobs = $check['details'];
+            }
             if ($check['key'] === 'db' && isset($check['details']['size_bytes'])) {
                 $dbSize = $check['details']['size_bytes'];
             }
@@ -51,6 +54,12 @@ class HealthMetrics
             $this->metric($out, 'antispam_metrics_activity_error', 'gauge', '1 when the 24h activity counters could not be read.', [[[], 1]]);
         }
 
+        if (isset($jobs)) {
+            $this->metric($out, 'antispam_jobs_queued', 'gauge', 'Background jobs waiting in the queue.', [[[], (int)($jobs['queued'] ?? 0)]]);
+            $this->metric($out, 'antispam_jobs_running', 'gauge', 'Background jobs being run by a worker.', [[[], (int)($jobs['running'] ?? 0)]]);
+            $this->metric($out, 'antispam_jobs_failed_24h', 'gauge', 'Background jobs that failed in the last 24 hours.', [[[], (int)($jobs['failed_24h'] ?? 0)]]);
+            $this->metric($out, 'antispam_jobs_oldest_queued_age_seconds', 'gauge', 'Seconds the oldest due job has been waiting (0 = none).', [[[], (int)($jobs['oldest_queued_age_seconds'] ?? 0)]]);
+        }
         if (isset($dbSize)) {
             $this->metric($out, 'antispam_database_size_bytes', 'gauge', 'Size of the application database.', [[[], $dbSize]]);
         }

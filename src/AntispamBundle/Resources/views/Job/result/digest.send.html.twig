@@ -1,0 +1,21 @@
+{# "Wyślij teraz" of the quarantine digest. #}
+{% if result.rows|default([])|length > 0 %}
+<div class="table-responsive">
+<table class="table table-bordered">
+    <thead><tr><th>Skrzynka</th><th>Odbiorca</th><th>Wiadomości</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for row in result.rows %}
+        <tr class="{{ row.status in ['error', 'rejected'] ? 'danger' : '' }}">
+            <td class="pp-mono">{{ row.key }}</td>
+            <td>{{ row.recipient }}</td>
+            <td>{{ row.count }}</td>
+            <td>{{ row.status }}{% if row.error %} <small class="text-muted">({{ row.error }})</small>{% endif %}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+    <div class="alert alert-info">Brak skrzynek, do których można wysłać raport.</div>
+{% endif %}
+<a href="{{ path('antispam_digest_config') }}" class="btn btn-default"><span class="glyphicon glyphicon-envelope"></span> Raport kwarantanny</a>

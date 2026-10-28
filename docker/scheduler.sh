@@ -19,6 +19,18 @@
 #   JOB_TIMEOUT         seconds after which a job is killed (default 3600) - a hung run
 #                       would otherwise hold its flock and every later tick would skip
 #
+# Background job worker (docs/jobs.md) - runs what the panel queues (Skanuj, Wdróż,
+# Synchronizuj, new rule -> existing mail, CERT sync...). Runs continuously next to
+# the ticks, polls the queue every 2 s and is restarted whenever it exits:
+#   JOBS_WORKER             on | off (default on)
+#   JOBS_WORKER_TIME_LIMIT  seconds after which the worker exits to be restarted fresh (default 3600)
+#   JOBS_JOB_TIMEOUT        seconds one background job may run before it is killed (default 3900 -
+#                           the SSH agent scan may take 3600)
+#   JOBS_BATCH_SECONDS      length of one batch of a big IMAP scan; the job re-queues itself
+#                           and continues from the cursor (default 120)
+#   SCAN_MAX_SECONDS        time budget of one IMAP mailbox per scan-all run (default 600); the
+#                           rest of a huge INBOX is scanned on the next run
+#
 # Feed sync, CERT sync and the digest are no-ops while disabled in the panel settings.
 set -e
 
@@ -28,6 +40,12 @@ APP_DIR=/var/www/html
 : "${CERT_SYNC_INTERVAL:=6}"
 : "${PHISHING_FORWARD_INTERVAL:=10}"
 : "${JOB_TIMEOUT:=3600}"
+: "${JOBS_WORKER:=on}"
+: "${JOBS_WORKER_TIME_LIMIT:=3600}"
+: "${JOBS_JOB_TIMEOUT:=3900}"
+: "${JOBS_BATCH_SECONDS:=120}"
+: "${SCAN_MAX_SECONDS:=600}"
+export SCAN_MAX_SECONDS
 DIGEST_HOUR=${DIGEST_HOUR-7}
 [ "$DIGEST_HOUR" = off ] && DIGEST_HOUR=
 PURGE_HOUR=${PURGE_HOUR-3}
@@ -46,7 +64,27 @@ run() {
     ) 9>"/tmp/antispam-${name}.lock" &
 }
 
-echo "[scheduler] started: scan every ${SCAN_INTERVAL}m, feed sync every ${FEED_SYNC_INTERVAL}m, CERT sync every ${CERT_SYNC_INTERVAL}h, digest at ${DIGEST_HOUR:-off}:00"
+# Background job worker: a supervised loop (restarted when it exits or dies),
+# guarded by its own flock so a second copy never starts. `timeout` is the hard
+# backstop: the worker stops taking jobs after JOBS_WORKER_TIME_LIMIT, then the
+# last job may take up to JOBS_JOB_TIMEOUT.
+start_worker() {
+    (
+        flock -n 8 || { echo "[scheduler] job worker already running"; exit 0; }
+        while true; do
+            runuser -u www-data -- timeout -k 30 $(( JOBS_WORKER_TIME_LIMIT + JOBS_JOB_TIMEOUT + 60 )) \
+                php "${APP_DIR}/bin/console" antispam:jobs:work --no-debug \
+                    --time-limit="$JOBS_WORKER_TIME_LIMIT" --job-timeout="$JOBS_JOB_TIMEOUT" --batch-seconds="$JOBS_BATCH_SECONDS" \
+                || echo "[scheduler] job worker exited with $?"
+            sleep 2
+        done
+    ) 8>/tmp/antispam-jobs-worker.lock &
+}
+if [ "$JOBS_WORKER" != off ]; then
+    start_worker
+fi
+
+echo "[scheduler] started: scan every ${SCAN_INTERVAL}m, feed sync every ${FEED_SYNC_INTERVAL}m, CERT sync every ${CERT_SYNC_INTERVAL}h, digest at ${DIGEST_HOUR:-off}:00, job worker ${JOBS_WORKER}"
 
 while true; do
     MINUTE=$(date +%-M)
@@ -54,6 +92,8 @@ while true; do
     TICK=$(( HOUR * 60 + MINUTE ))
 
     if [ "$SCAN_INTERVAL" -gt 0 ] && [ $(( TICK % SCAN_INTERVAL )) -eq 0 ]; then
+        # No arguments: the cron log / health checks match the plain command name;
+        # the per-mailbox time budget comes from SCAN_MAX_SECONDS (environment).
         run scan antispam:agent:scan-all
     fi
     if [ "$FEED_SYNC_INTERVAL" -gt 0 ] && [ $(( TICK % FEED_SYNC_INTERVAL )) -eq 0 ]; then

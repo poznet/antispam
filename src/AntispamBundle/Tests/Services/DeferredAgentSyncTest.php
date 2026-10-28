@@ -3,86 +3,85 @@
 namespace AntispamBundle\Tests\Services;
 
 use AntispamBundle\Entity\Account;
+use AntispamBundle\Entity\BackgroundJob;
 use AntispamBundle\Services\AgentRulesExporter;
 use AntispamBundle\Services\DeferredAgentSync;
+use AntispamBundle\Services\Jobs\Handler\AccountSyncHandler;
 use AntispamBundle\Services\SshService;
-use AntispamBundle\Tests\Security\MailboxAccessTest;
-use AntispamBundle\Tests\Support\InMemoryRepository;
-use Doctrine\ORM\EntityManagerInterface;
+use AntispamBundle\Tests\Support\JobsDatabase;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
-use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpKernel\Event\ResponseEvent;
-use Symfony\Component\HttpKernel\HttpKernelInterface;
 
+/**
+ * Rule changes in the user area push the rules to SSH agents through a
+ * background job (one pending sync per account), never in the request.
+ */
 class DeferredAgentSyncTest extends TestCase
 {
-    private array $accounts;
+    private JobsDatabase $db;
+    /** @var array<int, Account> */
+    private array $accounts = [];
 
     protected function setUp(): void
     {
-        $this->accounts = [
-            5 => MailboxAccessTest::account(5, 'jan@ssh.pl', Account::CONNECTION_SSH)->setAgentDeployed(true),
-            6 => MailboxAccessTest::account(6, 'jan@ssh.pl', Account::CONNECTION_SSH)->setAgentDeployed(false),
-            7 => MailboxAccessTest::account(7, 'jan@ssh.pl', Account::CONNECTION_IMAP),
-            8 => MailboxAccessTest::account(8, 'ola@ssh.pl', Account::CONNECTION_SSH)->setAgentDeployed(true),
-        ];
+        $this->db = new JobsDatabase();
+        foreach ([
+            ['jan@ssh.pl', Account::CONNECTION_SSH, true],
+            ['jan@ssh.pl', Account::CONNECTION_SSH, false],
+            ['jan@ssh.pl', Account::CONNECTION_IMAP, false],
+            ['ola@ssh.pl', Account::CONNECTION_SSH, true],
+        ] as [$email, $type, $deployed]) {
+            $a = (new Account())->setName($email)->setEmail($email)->setConnectionType($type)->setAgentDeployed($deployed);
+            $this->db->em->persist($a);
+            $this->accounts[] = $a;
+        }
+        $this->db->em->flush();
     }
 
-    private function service(SshService $ssh, ?LoggerInterface $logger = null): DeferredAgentSync
+    private function exporter(): AgentRulesExporter
     {
-        $em = $this->createMock(EntityManagerInterface::class);
-        $em->method('getRepository')->willReturn(new InMemoryRepository(array_values($this->accounts)));
-        $em->method('find')->willReturnCallback(fn($class, $id) => $this->accounts[$id] ?? null);
-        $em->method('isOpen')->willReturn(true);
         $exporter = $this->createMock(AgentRulesExporter::class);
         $exporter->method('export')->willReturnCallback(fn($email) => ['owner' => $email]);
-        return new DeferredAgentSync($em, $ssh, $exporter, $logger);
+        return $exporter;
     }
 
-    public function testOnlyDeployedSshAccountsOfTheOwnerAreSyncedAfterTheResponse()
+    public function testOnlyDeployedSshAccountsOfTheOwnerAreQueued()
     {
-        $ssh = $this->createMock(SshService::class);
-        $ssh->expects($this->once())->method('syncRules')
-            ->with($this->accounts[5], json_encode(['owner' => 'jan@ssh.pl']))
-            ->willReturn(['success' => true]);
-        $sync = $this->service($ssh);
-
-        $this->assertSame(1, $sync->deferForOwner('JAN@ssh.pl'));
+        $sync = new DeferredAgentSync($this->db->em, $this->db->queue);
+        $this->assertSame(1, $sync->deferForOwner('jan@ssh.pl'));
         $this->assertSame(0, $sync->deferForOwner('*'), 'global rules are never pushed from the user area');
-        $this->assertTrue($sync->hasPending());
+        $this->assertFalse($sync->defer($this->accounts[2]), 'IMAP accounts read the database');
 
-        $response = new Response('ok');
-        $sync->onResponse(new ResponseEvent($this->createMock(HttpKernelInterface::class), new Request(), HttpKernelInterface::MAIN_REQUEST, $response));
-        $this->assertSame('2', $response->headers->get('Content-Length'));
-        $this->assertSame('close', $response->headers->get('Connection'));
-
-        $this->assertSame(1, $sync->runPending());
-        $this->assertFalse($sync->hasPending());
-        $this->assertSame(0, $sync->runPending(), 'runs once');
+        $this->assertSame(1, $sync->deferForOwner('jan@ssh.pl'), 'a second change is accepted ...');
+        $jobs = $this->db->em->getConnection()->fetchAllAssociative('SELECT type, account_id, payload FROM antispam_job');
+        $this->assertSame([[
+            'type' => BackgroundJob::TYPE_ACCOUNT_SYNC, 'account_id' => $this->accounts[0]->getId(), 'payload' => '{"background":true}',
+        ]], $jobs, '... but only one sync per account waits in the queue');
     }
 
-    public function testFailuresAreLoggedNotThrown()
+    public function testChangeDuringARunningSyncQueuesAnotherOne()
     {
+        $sync = new DeferredAgentSync($this->db->em, $this->db->queue);
+        $sync->defer($this->accounts[0]);
         $ssh = $this->createMock(SshService::class);
-        $ssh->method('syncRules')->willReturnOnConsecutiveCalls(['success' => false, 'error' => 'agent old'], $this->throwException(new \RuntimeException('down')));
-        $logger = $this->createMock(LoggerInterface::class);
-        $logger->expects($this->once())->method('warning');
-        $logger->expects($this->once())->method('error');
-        $sync = $this->service($ssh, $logger);
-        $sync->defer($this->accounts[5]);
-        $sync->defer($this->accounts[8]);
+        // While the first sync runs (it may have exported the old rules), the user changes a rule again.
+        $ssh->method('syncRules')->willReturnCallback(function () use ($sync) {
+            $sync->defer($this->accounts[0]);
+            return ['success' => true];
+        });
+        $worker = $this->db->worker([new AccountSyncHandler($this->db->em, $ssh, $this->exporter())]);
 
-        $this->assertSame(0, $sync->runPending());
+        $this->assertSame('done', $worker->runNext()['status']);
+        $this->assertSame('queued', $this->db->row(2)['status'], 'sync jobs are not exclusive while running');
     }
 
-    public function testNothingPendingLeavesTheResponseAlone()
+    public function testFailedBackgroundSyncIsAFailedJob()
     {
-        $sync = $this->service($this->createMock(SshService::class));
-        $response = new Response('ok');
-        $sync->onResponse(new ResponseEvent($this->createMock(HttpKernelInterface::class), new Request(), HttpKernelInterface::MAIN_REQUEST, $response));
-        $this->assertFalse($response->headers->has('Connection'));
-        $this->assertFalse($sync->defer($this->accounts[7]), 'IMAP accounts read the database');
+        (new DeferredAgentSync($this->db->em, $this->db->queue))->defer($this->accounts[3]);
+        $ssh = $this->createMock(SshService::class);
+        $ssh->expects($this->once())->method('syncRules')->with($this->accounts[3], json_encode(['owner' => 'ola@ssh.pl']))
+            ->willReturn(['success' => false, 'error' => 'agent old']);
+
+        $this->assertSame('failed', $this->db->worker([new AccountSyncHandler($this->db->em, $ssh, $this->exporter())])->runNext()['status']);
+        $this->assertStringContainsString('agent old', $this->db->row(1)['error']);
     }
 }

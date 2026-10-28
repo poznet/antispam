@@ -3,13 +3,14 @@
 namespace AntispamBundle\Controller;
 
 use AntispamBundle\Entity\Account;
-use AntispamBundle\Services\AgentRulesExporter;
+use AntispamBundle\Entity\BackgroundJob;
 use AntispamBundle\Services\AuditLogger;
 use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\CryptoService;
 use AntispamBundle\Services\ImapFlags;
 use AntispamBundle\Services\ImapScanService;
 use AntispamBundle\Services\ImapTlsProbe;
+use AntispamBundle\Services\Jobs\JobQueue;
 use AntispamBundle\Services\MailboxSettingsResolver;
 use AntispamBundle\Services\OAuth\OAuthSettings;
 use AntispamBundle\Services\SshService;
@@ -23,15 +24,25 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\Routing\Attribute\Route;
 
+/**
+ * Mailbox accounts. Scan, agent deploy, rules sync and agent health run as
+ * background jobs (docs/jobs.md): the buttons queue a job and redirect to its
+ * page, so no panel request waits for a mailbox or an SSH server.
+ */
 #[Route('/account')]
 class AccountController extends AbstractController
 {
     use AuditTrait;
+    use JobQueueTrait;
+
+    /** "Test" stays synchronous, with short IMAP timeouts so it cannot hang the request. */
+    const TEST_IMAP_OPEN_TIMEOUT = 10;
+    const TEST_IMAP_READ_TIMEOUT = 20;
 
     public function __construct(
         private EntityManagerInterface $em,
         private SshService $ssh,
-        private AgentRulesExporter $rulesExporter,
+        private JobQueue $jobs,
         private ImapScanService $imapScan,
         private CryptoService $crypto,
         private ImapTlsProbe $tlsProbe,
@@ -64,7 +75,7 @@ class AccountController extends AbstractController
     public function indexAction()
     {
         $accounts = $this->em->getRepository(Account::class)->findAll();
-        return ['accounts' => $accounts];
+        return ['accounts' => $accounts, 'active_jobs' => $this->jobs->activeByAccount(), 'job_types' => BackgroundJob::TYPES];
     }
 
     #[Route('/add', name: 'antispam_account_add')]
@@ -236,7 +247,7 @@ class AccountController extends AbstractController
         } else {
             try {
                 // Password (ext-imap) or OAuth2 XOAUTH2 (socket client), see ImapScanService::connect().
-                $connection = $this->imapScan->connect($account);
+                $connection = $this->imapScan->connect($account, self::TEST_IMAP_OPEN_TIMEOUT, self::TEST_IMAP_READ_TIMEOUT);
                 $result['success'] = true;
                 $result['messages'][] = $account->isOAuth()
                     ? 'Połączenie IMAP działa (OAuth2, ' . OAuthSettings::LABELS[$account->getOAuthProvider()] . ', użytkownik ' . $account->getOAuthImapUser() . ')'
@@ -253,41 +264,9 @@ class AccountController extends AbstractController
     }
 
     #[Route('/deploy/{id}', name: 'antispam_account_deploy', methods: ['POST'])]
-    #[Template('@Antispam/Account/deploy.html.twig')]
     public function deployAction($id, Request $request)
     {
-        $this->checkActionToken($request, 'account_action_' . $id);
-        $account = $this->em->getRepository(Account::class)->find($id);
-        $result = ['success' => false, 'messages' => []];
-
-        if (!$account || !$account->isSsh()) {
-            $result['messages'][] = 'Nie znaleziono konta lub konto nie jest typu SSH';
-            return ['account' => $account, 'result' => $result];
-        }
-
-        try {
-            $deployResult = $this->ssh->deployAgent($account);
-            $result['deploy_result'] = $deployResult;
-            if (($deployResult['success'] ?? null) === true) {
-                $account->setAgentDeployed(true);
-                $this->em->flush();
-                $result['success'] = true;
-                $result['messages'][] = 'Agent został wdrożony (' . ($deployResult['remote_path'] ?? '') . ', wersja ' . ($deployResult['agent_version'] ?? '?') . ')';
-                // Settings (thresholds, switches) and rules live in the agent's
-                // per-account database: push them right away.
-                $sync = $this->ssh->syncRules($account, json_encode($this->rulesExporter->export($account->getEmail(), $account)));
-                $result['messages'][] = ($sync['success'] ?? false) === true
-                    ? 'Reguły i ustawienia zostały zsynchronizowane'
-                    : 'Synchronizacja reguł nie powiodła się: ' . ($sync['error'] ?? 'nieznany błąd') . ' - użyj przycisku Synchronizuj.';
-            } else {
-                $result['messages'][] = 'Wdrożenie nie powiodło się: ' . ($deployResult['error'] ?? 'test agenta nie przeszedł');
-            }
-        } catch (\Exception $e) {
-            $result['messages'][] = 'Wdrożenie nie powiodło się: ' . $e->getMessage();
-        }
-        $this->audit('account.deploy', targetType: 'account', targetId: $id, label: $account->getName(), mailbox: $account->getEmail(), details: ['ok' => $result['success']]);
-
-        return ['account' => $account, 'result' => $result];
+        return $this->queueAccountJob($id, $request, BackgroundJob::TYPE_ACCOUNT_DEPLOY, 'Wdrożenie agenta', true);
     }
 
     /**
@@ -310,77 +289,39 @@ class AccountController extends AbstractController
     }
 
     #[Route('/sync/{id}', name: 'antispam_account_sync', methods: ['POST'])]
-    #[Template('@Antispam/Account/sync.html.twig')]
     public function syncAction($id, Request $request)
     {
-        $this->checkActionToken($request, 'account_action_' . $id);
-        $account = $this->em->getRepository(Account::class)->find($id);
-        $result = ['success' => false, 'messages' => []];
-
-        if (!$account || !$account->isSsh()) {
-            $result['messages'][] = 'Nie znaleziono konta lub konto nie jest typu SSH';
-            return ['account' => $account, 'result' => $result];
-        }
-
-        try {
-            $rules = $this->rulesExporter->export($account->getEmail(), $account);
-            $sshService = $this->ssh;
-            $syncResult = $sshService->syncRules($account, json_encode($rules));
-            $result['sync_result'] = $syncResult;
-            if (($syncResult['success'] ?? null) === true) {
-                $result['success'] = true;
-                $result['messages'][] = 'Reguły zostały zsynchronizowane';
-            } else {
-                $result['messages'][] = 'Synchronizacja nie powiodła się: ' . ($syncResult['error'] ?? 'nieznany błąd');
-            }
-            if (!empty($syncResult['agent_warning'])) {
-                $result['messages'][] = $syncResult['agent_warning'];
-            }
-        } catch (\Exception $e) {
-            $result['messages'][] = 'Synchronizacja nie powiodła się: ' . $e->getMessage();
-        }
-        $this->audit('account.sync', targetType: 'account', targetId: $id, label: $account->getName(), mailbox: $account->getEmail(), details: ['ok' => $result['success']]);
-
-        return ['account' => $account, 'result' => $result];
+        return $this->queueAccountJob($id, $request, BackgroundJob::TYPE_ACCOUNT_SYNC, 'Synchronizacja reguł', true);
     }
 
+    /**
+     * "Skanuj": queued, never run in the request - a first scan reads the
+     * whole INBOX and used to end in a 504 from the proxy. The worker scans
+     * big mailboxes in batches (docs/jobs.md).
+     */
     #[Route('/scan/{id}', name: 'antispam_account_scan', methods: ['POST'])]
-    #[Template('@Antispam/Account/scan.html.twig')]
     public function scanAction($id, Request $request)
+    {
+        return $this->queueAccountJob($id, $request, BackgroundJob::TYPE_ACCOUNT_SCAN, 'Skanowanie');
+    }
+
+    /** Queue an account job (dedupe: one active job of a type per account) and show its page. */
+    private function queueAccountJob($id, Request $request, string $type, string $what, bool $sshOnly = false)
     {
         $this->checkActionToken($request, 'account_action_' . $id);
         $account = $this->em->getRepository(Account::class)->find($id);
-        $result = ['success' => false, 'messages' => []];
-
-        if (!$account) {
-            $result['messages'][] = 'Nie znaleziono konta';
-            return ['account' => $account, 'result' => $result];
+        if (!$account || ($sshOnly && !$account->isSsh())) {
+            $this->addFlash('danger', $sshOnly ? 'Nie znaleziono konta lub konto nie jest typu SSH' : 'Nie znaleziono konta');
+            return $this->redirectToRoute('antispam_account_index');
         }
-
-        try {
-            if ($account->isSsh()) {
-                $scanResult = $this->ssh->runScan($account);
-                // An error answer (timeout, old agent, lock) is not a scan.
-                if (!isset($scanResult['total'])) {
-                    throw new \RuntimeException((string)($scanResult['error'] ?? 'nieprawidłowa odpowiedź agenta'));
-                }
-                if (!empty($scanResult['agent_warning'])) {
-                    $scanResult['errors'][] = $scanResult['agent_warning'];
-                }
-            } else {
-                $scanResult = $this->imapScan->scanAccount($account);
-            }
-
-            $account->markScanned($scanResult);
-            $this->em->flush();
-
-            $result['success'] = true;
-            $result['scan_result'] = $scanResult;
-        } catch (\Exception $e) {
-            $result['messages'][] = 'Skanowanie nie powiodło się: ' . $e->getMessage();
+        if ($type === BackgroundJob::TYPE_ACCOUNT_SCAN && $account->isSsh() && !$account->getAgentDeployed()) {
+            $this->addFlash('warning', 'Agent nie jest wdrożony na serwerze - najpierw użyj przycisku Wdróż.');
+            return $this->redirectToRoute('antispam_account_index');
         }
-
-        return ['account' => $account, 'result' => $result];
+        $queued = $this->jobs->enqueue($type, [], $account,
+            label: $what . ': ' . ($account->getName() ?: $account->getEmail()),
+            dedupeKey: $type . ':' . $account->getId());
+        return $this->redirectToJob($queued, $what . ' ' . $account->getEmail());
     }
 
     #[Route('/download-agent', name: 'antispam_account_download_agent')]
@@ -515,28 +456,8 @@ class AccountController extends AbstractController
     }
 
     #[Route('/health/{id}', name: 'antispam_account_health', methods: ['POST'])]
-    #[Template('@Antispam/Account/health.html.twig')]
     public function healthAction($id, Request $request)
     {
-        $this->checkActionToken($request, 'account_action_' . $id);
-        $account = $this->em->getRepository(Account::class)->find($id);
-        $result = ['success' => false, 'messages' => []];
-        if (!$account || !$account->isSsh()) {
-            $result['messages'][] = 'Nie znaleziono konta lub konto nie jest typu SSH';
-            return ['account' => $account, 'result' => $result];
-        }
-        try {
-            $health = $this->ssh->runHealth($account);
-            $result['success'] = !isset($health['success']) || $health['success'] !== false;
-            $result['health'] = $health;
-            foreach (['error', 'agent_warning'] as $k) {
-                if (!empty($health[$k])) {
-                    $result['messages'][] = $health[$k];
-                }
-            }
-        } catch (\Exception $e) {
-            $result['messages'][] = 'Sprawdzenie stanu agenta nie powiodło się: ' . $e->getMessage();
-        }
-        return ['account' => $account, 'result' => $result];
+        return $this->queueAccountJob($id, $request, BackgroundJob::TYPE_ACCOUNT_HEALTH, 'Stan agenta', true);
     }
 }

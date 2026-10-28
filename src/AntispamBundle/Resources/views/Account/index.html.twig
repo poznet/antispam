@@ -73,6 +73,10 @@
                     {% else %}
                         <span class="text-muted">Nigdy</span>
                     {% endif %}
+                    {# Background jobs of this account (docs/jobs.md) #}
+                    {% for j in active_jobs[account.id]|default([]) %}
+                        <br><a href="{{ path('antispam_job_show', {id: j.id}) }}" class="label label-{{ j.status == 'running' ? 'info' : 'default' }}" title="{{ j.label }}{{ j.progress ? ' - ' ~ j.progress : '' }}">{{ job_types[j.type]|default(j.type) }}: {{ j.status == 'running' ? 'trwa' : 'w kolejce' }}</a>
+                    {% endfor %}
                 </td>
                 <td class="pp-row-actions">
                     {# Actions are POST + CSRF token; the buttons share one form. Below 1200 px only the icons show (pp-btn-text). #}

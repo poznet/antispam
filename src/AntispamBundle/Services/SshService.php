@@ -25,6 +25,8 @@ class SshService
 {
     const CONNECT_TIMEOUT = 15;
     const DEFAULT_TIMEOUT = 60;
+    /** Read timeout of each command of the panel's synchronous "Test" (keeps the request short). */
+    const TEST_TIMEOUT = 20;
 
     /** Per-command read timeouts (seconds). Initial scans of big mailboxes are slow. */
     const TIMEOUTS = [
@@ -126,7 +128,7 @@ class SshService
             $ssh = $this->connect($account);
             $result['messages'][] = 'SSH connection OK';
             $result['messages'][] = 'Host key: ' . $account->getSshHostKey();
-            $ssh->setTimeout(self::DEFAULT_TIMEOUT);
+            $ssh->setTimeout(self::TEST_TIMEOUT);
 
             $output = $ssh->exec('php -v 2>&1 | head -1');
             $result['messages'][] = 'PHP: ' . trim((string)$output);

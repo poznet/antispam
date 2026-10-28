@@ -34,7 +34,14 @@ use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
  *                             -> only mail that arrived since the last scan
  *                                (minus a day); older mail is never touched
  * Markers (MessageService) still guard against double processing above the
- * cursor. One scan per mailbox at a time (file lock in var/data/locks).
+ * cursor. One scan per mailbox at a time (file lock in var/data/locks, a busy
+ * lock throws ScanLockedException).
+ *
+ * A scan can be limited (`$maxMessages` / `$deadline`, used by background
+ * jobs and scan-all): a whole-INBOX or incremental pass then stops after the
+ * limit and stores the cursor at the last processed UID, so the next call
+ * continues where this one stopped ('remaining' in the result). A big first
+ * scan therefore never has to fit into one job / cron time limit.
  */
 class ImapScanService
 {
@@ -87,17 +94,19 @@ class ImapScanService
      * (Microsoft 365 / Google, docs/oauth.md). Both return the same ddeboer
      * ConnectionInterface, so callers do not care which one they got.
      */
-    public function connect(Account $account): ConnectionInterface
+    public function connect(Account $account, ?int $openTimeout = null, ?int $readTimeout = null): ConnectionInterface
     {
+        $openTimeout = $openTimeout ?? self::IMAP_OPEN_TIMEOUT;
+        $readTimeout = $readTimeout ?? self::IMAP_READ_TIMEOUT;
         if ($account->isOAuth()) {
-            return $this->connectOAuth($account);
+            return $this->connectOAuth($account, $openTimeout, $readTimeout);
         }
-        self::applyImapTimeouts();
+        self::applyImapTimeouts($openTimeout, $readTimeout);
         $server = new Server($account->getImapHost(), $account->getImapPort(), $account->getImapFlags());
         return $server->authenticate($account->getImapLogin(), (string)$this->crypto->decrypt($account->getImapPassword()));
     }
 
-    private function connectOAuth(Account $account): ConnectionInterface
+    private function connectOAuth(Account $account, int $openTimeout, int $readTimeout): ConnectionInterface
     {
         if ($this->oauthTokens === null) {
             throw new \RuntimeException('Logowanie OAuth nie jest dostępne w tym kontekście.');
@@ -105,8 +114,8 @@ class ImapScanService
         [$host, $port, $encryption, $validate] = self::oauthEndpoint($account);
         $user = $account->getOAuthImapUser();
 
-        $attempt = function () use ($account, $host, $port, $encryption, $validate, $user): SocketConnection {
-            $client = new ImapClient(self::IMAP_READ_TIMEOUT, self::IMAP_OPEN_TIMEOUT);
+        $attempt = function () use ($account, $host, $port, $encryption, $validate, $user, $openTimeout, $readTimeout): SocketConnection {
+            $client = new ImapClient($readTimeout, $openTimeout);
             $client->connect($host, $port, $encryption, $validate);
             try {
                 $client->authenticateXoauth2($user, $this->oauthTokens->getAccessToken($account));
@@ -157,9 +166,18 @@ class ImapScanService
         return $this->config->get('imap') && $this->config->get('login');
     }
 
-    public function scanAccount(Account $account): array
+    /**
+     * @param int|null   $maxMessages at most this many messages in this call (null = all)
+     * @param float|null $deadline    microtime(true) after which no further message is started
+     *
+     * @return array scan() counters + 'remaining' (messages left for the next call, 0 = done)
+     *               and 'initial' (true while the first scan of the mailbox is in progress)
+     *
+     * @throws ScanLockedException another process is scanning this mailbox
+     */
+    public function scanAccount(Account $account, ?int $maxMessages = null, ?float $deadline = null): array
     {
-        $lock = $this->lock('account-' . strtolower((string)$account->getEmail()) . '-' . $account->getId());
+        $lock = $this->lock(self::accountLockName($account));
         try {
             $connection = $this->connect($account);
             try {
@@ -168,18 +186,25 @@ class ImapScanService
                 // apply to every listener of the pipeline while it runs.
                 $settings = $this->mailboxSettings?->forAccount($account);
                 $cursor = null;
-                $run = function () use ($connection, $account, $settings, $since, &$cursor) {
-                    return $this->scan($connection, $account->getEmail(), $settings ? $settings->deleteSpam : (bool)$account->getDeleteSpam(), $account->getLastScanAt() === null, $account->getImapCursor(), $since, $cursor);
+                $run = function () use ($connection, $account, $settings, $since, &$cursor, $maxMessages, $deadline) {
+                    return $this->scan($connection, $account->getEmail(), $settings ? $settings->deleteSpam : (bool)$account->getDeleteSpam(), $account->getLastScanAt() === null, $account->getImapCursor(), $since, $cursor, $maxMessages, $deadline);
                 };
                 $stats = $settings ? $this->mailboxSettings->within($settings, $run) : $run();
             } finally {
                 $connection->close();
             }
             $this->saveAccountCursor($account, $cursor);
+            $stats['initial'] = $account->getLastScanAt() === null;
             return $stats;
         } finally {
             $this->unlock($lock);
         }
+    }
+
+    /** Name of the per-mailbox scan lock (shared by the panel jobs and scan-all). */
+    public static function accountLockName(Account $account): string
+    {
+        return 'account-' . strtolower((string)$account->getEmail()) . '-' . $account->getId();
     }
 
     /** The mailbox from the "E-mail" settings page (`antispam:go`). */
@@ -209,15 +234,20 @@ class ImapScanService
      *        received since then is scanned; null = the whole INBOX (first scan)
      * @param array|null $newCursor receives the cursor to store for the next scan
      *        (null when the server reports no UIDVALIDITY)
+     * @param int|null $maxMessages / $deadline stop early (whole-INBOX and incremental
+     *        passes with a UIDVALIDITY only - a "since" pass is short and must not
+     *        leave a cursor below older mail); the cursor then points at the last
+     *        processed UID and 'remaining' says how many are left
      *
      * @return array counters ('total' = messages in INBOX when the scan started,
      *               'checked' = new messages run through the pipeline, 'skipped' =
-     *               looked at but already checked) + 'errors' (at most 20 strings)
+     *               looked at but already checked, 'remaining' = not reached
+     *               because of the limit) + 'errors' (at most 20 strings)
      */
-    public function scan(ConnectionInterface $connection, $email, ?bool $deleteSpam, bool $initialScan = false, ?array $cursor = null, ?\DateTimeInterface $since = null, ?array &$newCursor = null): array
+    public function scan(ConnectionInterface $connection, $email, ?bool $deleteSpam, bool $initialScan = false, ?array $cursor = null, ?\DateTimeInterface $since = null, ?array &$newCursor = null, ?int $maxMessages = null, ?float $deadline = null): array
     {
         $stats = ['total' => 0, 'checked' => 0, 'skipped' => 0, 'whitelisted' => 0, 'blacklisted' => 0,
-                  'quarantined' => 0, 'moved_to_spam' => 0, 'errors' => []];
+                  'quarantined' => 0, 'moved_to_spam' => 0, 'remaining' => 0, 'errors' => []];
 
         $inbox = $connection->getMailbox('INBOX');
         try {
@@ -229,10 +259,19 @@ class ImapScanService
         $uidNext = (int)($status->uidnext ?? 0);
 
         list($mode, $uids) = $this->selectMessages($inbox, $cursor, $validity, $uidNext, $since);
+        $limited = ($maxMessages !== null || $deadline !== null) && $validity > 0 && $mode !== self::MODE_SINCE;
 
         $firstFailed = null;
         $maxUid = 0;
+        $done = 0;
+        $partial = false;
         foreach ($uids as $uid) {
+            if ($limited && $done > 0 && (($maxMessages !== null && $done >= $maxMessages) || ($deadline !== null && microtime(true) >= $deadline))) {
+                $partial = true;
+                $stats['remaining'] = count($uids) - $done;
+                break;
+            }
+            $done++;
             $maxUid = max($maxUid, $uid);
             $event = null;
             try {
@@ -269,7 +308,9 @@ class ImapScanService
         // new ones looked at; 'checked' are the new ones run through the pipeline.
         $stats['total'] = isset($status->messages) ? (int)$status->messages : count($uids);
 
-        $newCursor = $this->nextCursor($mode, $cursor, $validity, $uidNext, $maxUid, $firstFailed);
+        $newCursor = $partial
+            ? $this->partialCursor($cursor, $validity, $maxUid, $firstFailed)
+            : $this->nextCursor($mode, $cursor, $validity, $uidNext, $maxUid, $firstFailed);
         $this->messages->purgeIfDue();
 
         return $stats;
@@ -328,6 +369,14 @@ class ImapScanService
             ? self::uidsOf($inbox->getMessages(new Since($since)))
             : self::uidsOf($inbox->getMessages());
         return [$mode, self::sorted($uids)];
+    }
+
+    /** Cursor after a pass stopped by its limit: the rest (above the last processed UID) is the next call's. */
+    private function partialCursor(?array $cursor, $validity, $maxUid, $firstFailed)
+    {
+        $last = $cursor !== null && (int)$cursor['uidvalidity'] === (int)$validity ? (int)$cursor['last_uid'] : 0;
+        $next = $firstFailed !== null ? max($last, $firstFailed - 1) : max($last, $maxUid);
+        return ['uidvalidity' => $validity, 'last_uid' => (int)$next, 'scanned_at' => time()];
     }
 
     private function nextCursor($mode, ?array $cursor, $validity, $uidNext, $maxUid, $firstFailed)
@@ -414,7 +463,7 @@ class ImapScanService
         }
         if (!flock($handle, LOCK_EX | LOCK_NB)) {
             fclose($handle);
-            throw new \RuntimeException('Skanowanie tej skrzynki już trwa w innym procesie - pominięto.');
+            throw new ScanLockedException();
         }
         return $handle;
     }

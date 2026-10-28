@@ -1,0 +1,10 @@
+{# Retroactive pass of a new blacklist rule. #}
+<div class="alert {{ result.errors|default([])|length > 0 ? 'alert-warning' : 'alert-success' }}">
+    <strong>Przeniesiono do SPAM: {{ result.moved|default(0) }}</strong>
+    <p style="margin-top:6px;">{{ result.summary|default('') }}</p>
+</div>
+{% if result.errors|default([])|length > 0 %}
+    <ul class="list-group">
+    {% for e in result.errors %}<li class="list-group-item"><small>{{ e }}</small></li>{% endfor %}
+    </ul>
+{% endif %}

@@ -370,4 +370,84 @@ class ImapScanServiceTest extends TestCase
         });
         return $dispatcher;
     }
+
+    // ---- batches (background scan jobs, scan-all time budget) ---------------
+
+    public function testFirstScanInBatchesContinuesFromTheCursorUntilDone()
+    {
+        $this->fill(1, 25);
+        $scan = $this->service($this->messages());
+
+        $stats = $scan->scan($this->connection(), 'box@firma.pl', false, true, null, null, $cursor, 10);
+        $this->assertSame(range(1, 10), $this->processed);
+        $this->assertSame(15, $stats['remaining']);
+        $this->assertSame(10, $cursor['last_uid'], 'the cursor points at the last processed message');
+
+        $stats = $scan->scan($this->connection(), 'box@firma.pl', false, true, $cursor, null, $cursor, 10);
+        $this->assertSame(['ALL', 'UID 11:*'], $this->requests, 'the second batch reads only what is above the cursor');
+        $this->assertSame(5, $stats['remaining']);
+
+        $stats = $scan->scan($this->connection(), 'box@firma.pl', false, true, $cursor, null, $cursor, 10);
+        $this->assertSame(0, $stats['remaining']);
+        $this->assertSame(range(1, 25), $this->processed, 'every message exactly once');
+        $this->assertSame(25, $cursor['last_uid']);
+    }
+
+    public function testBatchStoppedByTheDeadlineStillProcessesOneMessage()
+    {
+        $this->fill(1, 3);
+        $stats = $this->service($this->messages())->scan($this->connection(), 'box@firma.pl', false, true, null, null, $cursor, null, microtime(true) - 1);
+        $this->assertSame([1], $this->processed, 'an expired deadline cannot stall the scan forever');
+        $this->assertSame(2, $stats['remaining']);
+        $this->assertSame(1, $cursor['last_uid']);
+    }
+
+    public function testFailedMessageInABatchIsRetriedByTheNextBatch()
+    {
+        $this->fill(1, 6);
+        $this->failing = [2];
+        $scan = $this->service($this->messages());
+        $scan->scan($this->connection(), 'box@firma.pl', false, true, null, null, $cursor, 4);
+        $this->assertSame(1, $cursor['last_uid'], 'the cursor stays below the failed message');
+
+        $this->failing = [];
+        $scan->scan($this->connection(), 'box@firma.pl', false, true, $cursor, null, $cursor, 10);
+        $this->assertSame([1, 3, 4, 2, 5, 6], $this->processed, 'the failed one is retried, done ones are skipped by their markers');
+        $this->assertSame(6, $cursor['last_uid']);
+    }
+
+    public function testSincePassIsNeverCutShort()
+    {
+        $this->fill(1, 5);
+        $stats = $this->service($this->messages())->scan($this->connection(), 'box@firma.pl', false, false, null, new \DateTimeImmutable('-1 day'), $cursor, 2);
+        $this->assertSame(0, $stats['remaining'], 'a "since" pass must not leave a cursor below older mail');
+        $this->assertSame(range(1, 5), $this->processed);
+    }
+
+    public function testScanAccountReportsInitialAndThrowsScanLockedWhenBusy()
+    {
+        $this->fill(1, 4);
+        $account = (new Account())->setEmail('box@firma.pl');
+        $scan = $this->getMockBuilder(ImapScanService::class)
+            ->setConstructorArgs([$this->dispatcherWithCounter(), $this->createMock(ConnectionService::class), $this->createMock(ConfigService::class),
+                $this->createMock(CryptoService::class), $this->messages(), null, $this->tmp . '/locks'])
+            ->onlyMethods(['connect'])
+            ->getMock();
+        $scan->method('connect')->willReturn($this->connection());
+
+        $stats = $scan->scanAccount($account, 3);
+        $this->assertTrue($stats['initial']);
+        $this->assertSame(1, $stats['remaining']);
+        $this->assertSame(3, $account->getImapLastUid());
+
+        $held = fopen($this->tmp . '/locks/imap-scan-' . sha1(ImapScanService::accountLockName($account)) . '.lock', 'c'); // dir made by the first scan
+        flock($held, LOCK_EX | LOCK_NB);
+        try {
+            $this->expectException(\AntispamBundle\Services\ScanLockedException::class);
+            $scan->scanAccount($account);
+        } finally {
+            flock($held, LOCK_UN);
+            fclose($held);
+        }
+    }
 }

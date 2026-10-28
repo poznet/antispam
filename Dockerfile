@@ -12,13 +12,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ssh \
     && rm -rf /var/lib/apt/lists/*
 
-# PHP extensions needed by Antispam (IMAP mode, MySQL, intl, zip for the Thunderbird .xpi)
+# PHP extensions needed by Antispam (IMAP mode, MySQL, intl, zip for the Thunderbird .xpi,
+# pcntl for the background job worker's per-job time limit and clean shutdown)
 RUN docker-php-ext-configure imap --with-kerberos --with-imap-ssl \
     && docker-php-ext-install -j"$(nproc)" \
         pdo_mysql \
         imap \
         intl \
         zip \
+        pcntl \
         opcache
 
 # Production-ready PHP config

@@ -1,0 +1,6 @@
+{# Full health check: the report is shown on the "Stan systemu" page. #}
+{% set problems = result.checks|default([])|filter(c => c.status in ['warn', 'fail']) %}
+<div class="alert {{ result.status|default('') == 'ok' ? 'alert-success' : (result.status|default('') == 'fail' ? 'alert-danger' : 'alert-warning') }}">
+    Stan ogólny: <strong>{{ result.status|default('?') }}</strong> - problemów: {{ problems|length }}.
+</div>
+<a href="{{ path('antispam_system_status', {job: job.id}) }}" class="btn btn-primary"><span class="glyphicon glyphicon-heart"></span> Pokaż pełny raport</a>

@@ -307,9 +307,9 @@ class PluginApiController extends AbstractController
      * It logs in to the mailbox (IMAP/SSH), so it has its own, tighter limit;
      * over the limit the rule still applies to new mail on the next scan.
      *
-     * The pass runs after the response is sent (DeferredRetroactivePass), so
-     * a slow mailbox never delays the plugin; how many messages it moved is
-     * not known here - "retroactive": "scheduled" only says it will run.
+     * The pass is a background job (DeferredRetroactivePass, docs/jobs.md),
+     * so a slow mailbox never delays the plugin; how many messages it moved
+     * is not known here - "retroactive": "scheduled" only says it will run.
      */
     private function applyRetroactive(Account $account, array &$result)
     {

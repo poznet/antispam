@@ -8,7 +8,8 @@ use AntispamBundle\Controller\EmailWhitelistController;
 use AntispamBundle\Entity\Blacklist;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Entity\EmailWhitelist;
-use AntispamBundle\Services\RetroactiveSpamService;
+use AntispamBundle\Services\DeferredRetroactivePass;
+use AntispamBundle\Services\Jobs\EnqueueResult;
 use AntispamBundle\Tests\Support\RuleFixtures;
 use PHPUnit\Framework\TestCase;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -155,8 +156,9 @@ class RuleListControllersTest extends TestCase
     public function testPanelAddWithoutLegacyMailboxStoresGlobalRule()
     {
         $db = new RuleFixtures($this, null, ['jan@firma.pl']);
-        $retro = $this->createMock(RetroactiveSpamService::class);
-        $retro->method('applyRule')->willReturn(['moved' => 0, 'errors' => [], 'skipped' => null]);
+        $retro = $this->createMock(DeferredRetroactivePass::class);
+        // The pass over mail already in INBOX is queued, never run in the request.
+        $retro->expects($this->once())->method('queue')->with($this->isInstanceOf(Blacklist::class))->willReturn(new EnqueueResult(7, true));
         $controller = new DomainBlacklistController($db->em, $db->ownership(), $retro);
         $this->wire($controller);
 
@@ -164,6 +166,7 @@ class RuleListControllersTest extends TestCase
 
         $this->assertCount(1, $db->persisted);
         $this->assertSame('*', $db->persisted[0]->getEmail(), 'no legacy mailbox: NOT NULL column gets the global owner, not null');
+        $this->assertStringContainsString('zadanie #7', $this->session->getFlashBag()->get('info')[0]);
     }
 
     public function testPanelAddUsesSelectedMailboxAndDedupesPerOwner()

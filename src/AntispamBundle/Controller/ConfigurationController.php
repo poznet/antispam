@@ -38,6 +38,7 @@ use Symfony\Component\Routing\Attribute\Route;
 class ConfigurationController extends AbstractController
 {
     use AuditTrait;
+    use JobQueueTrait;
 
     /**
      * Secrets are kept in the VARCHAR(255) `config.value` column; an encrypted
@@ -58,6 +59,7 @@ class ConfigurationController extends AbstractController
         private CryptoService $crypto,
         private ThunderbirdPluginBuilder $thunderbird,
         private ?BayesService $bayes = null,
+        private ?\AntispamBundle\Services\Jobs\JobQueue $jobs = null,
     ) {
     }
 
@@ -263,12 +265,15 @@ class ConfigurationController extends AbstractController
                 $errors = $this->digest->configurationErrors();
                 if ($errors) {
                     $this->addFlash('danger', implode(' ', $errors));
-                } else {
+                } elseif ($this->jobs) {
                     // "Send now": every mailbox not switched off on its own, whatever its send hour.
-                    foreach ($this->digest->sendAll(null, null, false, true, false, true) as $row) {
-                        $type = $row['status'] === 'error' || $row['status'] === 'rejected' ? 'danger' : 'info';
-                        $this->addFlash($type, sprintf('%s → %s: wiadomości: %d, status: %s%s', $row['key'], $row['recipient'], $row['count'], $row['status'], $row['error'] ? ' (' . $row['error'] . ')' : ''));
-                    }
+                    // Reads every quarantine (IMAP / SSH) - a background job (docs/jobs.md).
+                    $this->addFlash('success', 'Ustawienia raportu kwarantanny zapisane');
+                    $queued = $this->jobs->enqueue(\AntispamBundle\Entity\BackgroundJob::TYPE_DIGEST_SEND, dedupeKey: \AntispamBundle\Entity\BackgroundJob::TYPE_DIGEST_SEND);
+                    $this->flashQueued($queued, 'Wysyłka raportów kwarantanny');
+                    return $this->redirectToRoute('antispam_job_show', ['id' => $queued->id]);
+                } else {
+                    $this->addFlash('danger', 'Kolejka zadań w tle jest niedostępna.');
                 }
             } else {
                 $this->addFlash('success', 'Ustawienia raportu kwarantanny zapisane');

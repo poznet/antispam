@@ -1,0 +1,17 @@
+{# Result of an agent deploy job (formerly Account/deploy.html.twig). #}
+{% if result.success|default(false) %}
+    <div class="alert alert-success"><strong>Agent został wdrożony!</strong></div>
+{% else %}
+    <div class="alert alert-danger"><strong>Wdrożenie nie powiodło się</strong></div>
+{% endif %}
+
+<ul class="list-group">
+{% for message in result.messages|default([]) %}
+    <li class="list-group-item">{{ message }}</li>
+{% endfor %}
+</ul>
+
+{% if result.deploy_result is defined %}
+    <h4>Wynik testu agenta:</h4>
+    <pre>{{ result.deploy_result|json_encode(constant('JSON_PRETTY_PRINT')) }}</pre>
+{% endif %}

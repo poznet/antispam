@@ -444,4 +444,35 @@ class HealthServiceTest extends TestCase
         $this->assertSame('degraded', HealthService::overallStatus([$c('fail'), $c('warn', true)]));
         $this->assertSame('fail', HealthService::overallStatus([$c('ok'), $c('fail', true)]));
     }
+
+    private function withJobs(array $stats): HealthService
+    {
+        $jobs = $this->createMock(\AntispamBundle\Services\Jobs\JobQueue::class);
+        $jobs->method('stats')->willReturn($stats + ['queued' => 0, 'running' => 0, 'oldest_queued_at' => null, 'failed_24h' => 0, 'last_failed' => null]);
+        $s = new HealthService($this->data, $this->settings, $this->scoring, $this->clamav, $this->cert, $this->feed, $this->ssh, $this->imap, $jobs);
+        $s->setNow(new \DateTimeImmutable(self::NOW));
+        return $s;
+    }
+
+    public function testJobQueueCheck()
+    {
+        $this->assertSame('ok', $this->check($this->withJobs(['queued' => 1])->run(), 'jobs')['status']);
+
+        $waiting = $this->check($this->withJobs(['queued' => 3, 'oldest_queued_at' => new \DateTimeImmutable('2026-10-28 11:45:00')])->run(), 'jobs');
+        $this->assertSame('warn', $waiting['status']);
+        $this->assertStringContainsString('worker', $waiting['message']);
+        $this->assertSame(900, $waiting['details']['oldest_queued_age_seconds']);
+
+        $stuck = $this->check($this->withJobs(['queued' => 3, 'oldest_queued_at' => new \DateTimeImmutable('2026-10-28 10:00:00')])->run(), 'jobs');
+        $this->assertSame('fail', $stuck['status']);
+        $this->assertFalse($stuck['critical'], 'a stuck queue degrades, the panel itself still works');
+
+        $failed = $this->check($this->withJobs(['failed_24h' => 2, 'last_failed' => ['id' => 9, 'label' => 'Skanowanie: Jan', 'error' => 'login failed']])->run(), 'jobs');
+        $this->assertSame('warn', $failed['status']);
+        $this->assertStringContainsString('#9 Skanowanie: Jan: login failed', $failed['message']);
+
+        $metrics = (new \AntispamBundle\Services\HealthMetrics($this->data))->render($this->withJobs(['queued' => 3, 'oldest_queued_at' => new \DateTimeImmutable('2026-10-28 10:00:00')])->run());
+        $this->assertStringContainsString('antispam_jobs_queued 3', $metrics);
+        $this->assertStringContainsString('antispam_jobs_oldest_queued_age_seconds 7200', $metrics);
+    }
 }

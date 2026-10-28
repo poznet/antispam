@@ -2,8 +2,10 @@
 
 namespace AntispamBundle\Controller;
 
+use AntispamBundle\Entity\BackgroundJob;
 use AntispamBundle\Services\CertHoleService;
 use AntispamBundle\Services\ConfigService;
+use AntispamBundle\Services\Jobs\JobQueue;
 use AntispamBundle\Services\ScoringService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
@@ -16,6 +18,7 @@ use Symfony\Component\Routing\Attribute\Route;
 class CertController extends AbstractController
 {
     use AuditTrait;
+    use JobQueueTrait;
 
     const PER_PAGE = 50;
 
@@ -24,6 +27,7 @@ class CertController extends AbstractController
         private CertHoleService $cert,
         private ConfigService $config,
         private ScoringService $scoring,
+        private JobQueue $jobs,
     ) {
     }
 
@@ -93,14 +97,8 @@ class CertController extends AbstractController
         if (!$this->isCsrfTokenValid('cert_config', (string)$request->request->get('_token'))) {
             throw $this->createAccessDeniedException('Nieprawidłowy token CSRF');
         }
-        @set_time_limit(300);
-        $result = $this->cert->sync();
-        $this->audit('cert.sync', targetType: 'cert', label: mb_substr((string)$result['message'], 0, 200), details: ['ok' => (bool)$result['ok']]);
-        if ($result['ok']) {
-            $this->addFlash('success', $result['message']);
-        } else {
-            $this->addFlash('danger', 'Synchronizacja nieudana: ' . $result['message']);
-        }
-        return $this->redirectToRoute('antispam_cert_index');
+        // Download + replace of the whole list: background job (docs/jobs.md).
+        $queued = $this->jobs->enqueue(BackgroundJob::TYPE_CERT_SYNC, dedupeKey: BackgroundJob::TYPE_CERT_SYNC);
+        return $this->redirectToJob($queued, 'Synchronizacja listy CERT');
     }
 }

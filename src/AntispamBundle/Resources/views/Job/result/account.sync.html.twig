@@ -1,0 +1,17 @@
+{# Result of a rules sync job (formerly Account/sync.html.twig). #}
+{% if result.success|default(false) %}
+    <div class="alert alert-success"><strong>Reguły zostały zsynchronizowane!</strong></div>
+{% else %}
+    <div class="alert alert-danger"><strong>Synchronizacja nie powiodła się</strong></div>
+{% endif %}
+
+<ul class="list-group">
+{% for message in result.messages|default([]) %}
+    <li class="list-group-item">{{ message }}</li>
+{% endfor %}
+</ul>
+
+{% if result.sync_result is defined %}
+    <h4>Wynik synchronizacji:</h4>
+    <pre>{{ result.sync_result|json_encode(constant('JSON_PRETTY_PRINT')) }}</pre>
+{% endif %}

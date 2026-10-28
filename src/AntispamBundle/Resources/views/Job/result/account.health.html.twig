@@ -1,0 +1,15 @@
+{# Result of an agent health job (formerly Account/health.html.twig). #}
+{% if result.success|default(false) %}
+    <div class="alert alert-success">Agent odpowiada</div>
+    <div class="table-responsive">
+    <table class="table table-bordered">
+    {% for k, v in result.health|default({}) %}
+        <tr><th style="width:30%;">{{ k }}</th><td><pre style="margin:0;">{{ v is iterable ? v|json_encode : v }}</pre></td></tr>
+    {% endfor %}
+    </table>
+    </div>
+{% else %}
+    <div class="alert alert-danger">
+        {% for m in result.messages|default([]) %}{{ m }}<br>{% endfor %}
+    </div>
+{% endif %}

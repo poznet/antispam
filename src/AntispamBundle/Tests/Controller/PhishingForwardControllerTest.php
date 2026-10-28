@@ -3,12 +3,15 @@
 namespace AntispamBundle\Tests\Controller;
 
 use AntispamBundle\Controller\PhishingController;
+use AntispamBundle\Entity\BackgroundJob;
 use AntispamBundle\Entity\Config;
 use AntispamBundle\Entity\PhishingReport;
 use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\PhishingForwardService;
 use AntispamBundle\Services\PhishingReportService;
-use AntispamBundle\Services\RetroactiveSpamService;
+use AntispamBundle\Services\DeferredRetroactivePass;
+use AntispamBundle\Services\Jobs\Handler\PhishingForwardHandler;
+use AntispamBundle\Services\Jobs\JobQueue;
 use AntispamBundle\Services\ScoringService;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\ORM\EntityManager;
@@ -46,9 +49,12 @@ class PhishingForwardControllerTest extends TestCase
         (new SchemaTool($this->em))->createSchema([
             $this->em->getClassMetadata(Config::class),
             $this->em->getClassMetadata(PhishingReport::class),
+            $this->em->getClassMetadata(BackgroundJob::class),
         ]);
         $this->sent = [];
     }
+
+    private PhishingForwardService $forwarder;
 
     private function controller(): PhishingController
     {
@@ -63,8 +69,10 @@ class PhishingForwardControllerTest extends TestCase
             }
         };
         $forwarder = new PhishingForwardService($config, $mailer, $this->em, new PhishingReportService($this->em));
+        $this->forwarder = $forwarder;
         $controller = new PhishingController($this->em, new PhishingReportService($this->em),
-            $this->createMock(RetroactiveSpamService::class), $this->createMock(ScoringService::class), $forwarder);
+            $this->createMock(DeferredRetroactivePass::class), $this->createMock(ScoringService::class), $forwarder,
+            new JobQueue($this->em->getConnection(), $this->em));
 
         $csrf = $this->createMock(CsrfTokenManagerInterface::class);
         $csrf->method('isTokenValid')->willReturnCallback(fn(CsrfToken $t) => in_array($t->getId(), ['phishing', 'phishing_forward_settings'], true) && $t->getValue() === 'good');
@@ -135,12 +143,27 @@ class PhishingForwardControllerTest extends TestCase
         $this->em->flush();
 
         $controller = $this->controller();
-        $controller->forwardBulkAction(Request::create('/x', 'POST', ['_token' => 'good', 'ids' => [$a->getId(), $copy->getId(), $b->getId()]]));
+        $response = $controller->forwardBulkAction(Request::create('/x', 'POST', ['_token' => 'good', 'ids' => [$a->getId(), $copy->getId(), $b->getId()]]));
+        $this->assertSame('/antispam_job_show', $response->getTargetUrl(), 'the request only queues the e-mails');
+        $this->assertSame([], $this->sent);
+        $this->assertNotEmpty($this->session->getFlashBag()->get('success'));
+
+        $this->assertSame(['counts' => ['sent' => 2, 'failed' => 0, 'skipped' => 1], 'errors' => []], $this->runJobs());
         $this->assertCount(2, $this->sent);
-        $this->assertStringContainsString('Wysłano: 2, pominięto: 1', $this->session->getFlashBag()->get('success')[0]);
 
         $controller->forwardBulkAction(Request::create('/x', 'POST', ['_token' => 'good', 'ids' => [$a->getId(), $b->getId()]]));
+        $this->runJobs();
         $this->assertCount(2, $this->sent, 'bulk never resends');
+    }
+
+    /** Runs the newest queued job (the bulk forward) with its handler, returns the result. */
+    private function runJobs(): array
+    {
+        $db = $this->em->getConnection();
+        $row = $db->fetchAssociative('SELECT * FROM antispam_job ORDER BY id DESC LIMIT 1');
+        $this->assertSame(BackgroundJob::TYPE_PHISHING_FORWARD, $row['type']);
+        $context = new \AntispamBundle\Services\Jobs\JobContext($db, (int)$row['id'], $row['type'], json_decode($row['payload'], true), [], null, null, null, null, microtime(true) + 60);
+        return (new PhishingForwardHandler($this->em, $this->forwarder))->handle($context);
     }
 
     public function testBulkRequiresCsrfToken()

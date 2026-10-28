@@ -44,9 +44,31 @@ Scans every mailbox: SSH accounts with a deployed agent, IMAP accounts and the
 legacy mailbox (if configured). Prints per-mailbox counters (new, spam,
 quarantine, whitelisted) and per-message errors. Exits non-zero when any
 mailbox failed. Suitable for cron.
+
+A mailbox being scanned by another process (a panel scan job, the agent's own
+lock) or with an active panel scan job is **skipped**, not counted as a
+failure. Each IMAP mailbox gets at most `--max-seconds` per run (default env
+`SCAN_MAX_SECONDS` or 600, `0` = no limit); the rest of a huge INBOX is scanned
+on the next run from the cursor ("N left for the next run"). See [jobs.md](jobs.md).
 ```bash
 php bin/console antispam:agent:scan-all
+php bin/console antispam:agent:scan-all --max-seconds=0   # no per-mailbox limit
 ```
+
+## Background Jobs
+
+### antispam:jobs:work (alias antispam:jobs:run)
+Runs the jobs queued by the panel (scan, agent deploy / sync / health,
+retroactive rule pass, CERT sync, digest "send now", bulk phishing forward,
+full health check). Loops and polls every 2 s; recovers jobs whose worker
+died; every job gets a time limit. See [jobs.md](jobs.md).
+```bash
+php bin/console antispam:jobs:work --time-limit=3600   # long-running (Docker scheduler, systemd)
+php bin/console antispam:jobs:run --once                # crontab: * * * * *
+```
+Options: `--once`, `--time-limit=N` (stop starting jobs after N s), `--memory-limit=256`,
+`--sleep=2`, `--job-timeout=N` (env `JOBS_JOB_TIMEOUT`, default 3900), `--batch-seconds=N`
+(env `JOBS_BATCH_SECONDS`, default 120 - length of one IMAP scan batch).
 
 ## Rules
 
@@ -84,6 +106,8 @@ TTL (at least 24 h). Retention comes from the config key
 is no panel field yet - set it with `--days` per run or in the `config` table.
 Audit log rows (`antispam_audit_log`) older than `audit.retention_days` (default
 365, `0` = forever; not affected by `--days`) are deleted too, see [audit.md](audit.md).
+Finished background jobs (`antispam_job`) older than `jobs.retention_days`
+(default 30, `0` = forever) are deleted, queued / running ones never ([jobs.md](jobs.md#retention)).
 The Bayes classifier's old fingerprints, rare stale tokens and rows of deleted
 mailboxes go as well (own retention, skipped with `--dry-run`, see [bayes.md](bayes.md#storage-and-housekeeping)).
 ```bash

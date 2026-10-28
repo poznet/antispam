@@ -96,17 +96,17 @@ rule is added:
 `RetroactiveSpamService::applyRule()` moves matching INBOX messages from the
 last 30 days (every rule type) to `SPAM` in every mailbox owned by the rule's account e-mail (a
 global rule - owner **Wszystkie skrzynki**, `*` - goes through every account
-and the legacy mailbox, one after another in the same request; see
-[scoring.md](scoring.md#rule-ownership)). The
-panel shows how many were moved. For a plugin report the pass runs after the
-response has been sent (`DeferredRetroactivePass` on `kernel.terminate`; the
-usual IMAP timeouts apply and `set_time_limit(0)` keeps mod_php's
-`max_execution_time` from cutting the pass short), so the plugin is not kept
-waiting; the API only answers
-`"retroactive": "scheduled"` and the result goes to the application log and
-the score log. On Apache + mod_php (the Docker image) such a response gets
-`Content-Length` + `Connection: close` and no mod_deflate, so the client sees
-its end before the script finishes.
+and the legacy mailbox, one after another; see
+[scoring.md](scoring.md#rule-ownership)). The pass is a **background job**
+(`rule.retroactive`, queued by `DeferredRetroactivePass`, one pending pass per
+rule, see [jobs.md](jobs.md)): the rule form answers at once with "Poczta, która
+już jest w skrzynce, zostanie sprawdzona ... w tle - zadanie #N" and the job page
+(**Przegląd → Zadania w tle**) shows how many were moved, skipped mailboxes and
+errors. The same job runs for **Phishing → Zablokuj** and for a plugin report;
+there the API only answers `"retroactive": "scheduled"` and the result goes to
+the job, the application log and the score log. (Up to 2.0.0 the plugin pass
+ran on `kernel.terminate` after the response and the panel pass inside the
+request.)
 
 Rules and limits:
 
@@ -141,7 +141,15 @@ Rules and limits:
 
 `antispam:agent:scan-all` scans **every** mailbox: SSH accounts through the
 agent, IMAP accounts and the legacy mailbox through the IMAP pipeline. SSH
-accounts without a deployed agent are skipped.
+accounts without a deployed agent are skipped, and so are mailboxes busy with a
+panel scan job (shared per-mailbox lock, [jobs.md](jobs.md#concurrency-with-the-scheduled-scan)).
+An IMAP mailbox gets at most `SCAN_MAX_SECONDS` (600) per run; a huge first scan
+continues on the next run.
+
+"Skanuj" in the panel does not run the scan in the request: it queues a
+background job ([jobs.md](jobs.md)), which needs the job worker - the Docker
+`scheduler` runs it; on a plain server add the `antispam:jobs:run --once` line
+below.
 
 Wrap periodic commands in `antispam:cron:run` to keep a log of them:
 
@@ -165,7 +173,11 @@ runs every job through `antispam:cron:run`. On a plain server:
 0 7 * * *   php /path/to/bin/console antispam:cron:run antispam:digest:send
 0 0-6,8-23 * * * php /path/to/bin/console antispam:cron:run antispam:digest:send -- --scheduled-only
 41 3 * * *  php /path/to/bin/console antispam:cron:run antispam:purge
+* * * * *   php /path/to/bin/console antispam:jobs:run --once
 ```
+
+(The job worker is not wrapped in `antispam:cron:run` - it would fill the cron
+log with a run per minute; its jobs are listed on **Zadania w tle**.)
 
 `antispam:purge` keeps the tables that grow with every message bounded: score
 log rows older than `scorelog.retention_days` (default **180**, `0` = keep

@@ -4,6 +4,8 @@ namespace AntispamBundle\Tests\Controller;
 
 use AntispamBundle\Command\RulesMakeGlobalCommand;
 use AntispamBundle\Controller\AccountController;
+use AntispamBundle\Services\Jobs\Handler\CertSyncHandler;
+use AntispamBundle\Tests\Support\JobsDatabase;
 use AntispamBundle\Controller\BulkImportController;
 use AntispamBundle\Controller\CertController;
 use AntispamBundle\Controller\ConfigurationController;
@@ -391,11 +393,18 @@ class AuditTrailTest extends TestCase
     public function testManualCertSync()
     {
         $cert = $this->createMock(CertHoleService::class);
-        $cert->method('sync')->willReturn(['ok' => true, 'message' => 'Pobrano 1000 domen']);
-        $controller = $this->wire($this->make(CertController::class, ['cert' => $cert]));
-
+        $cert->expects($this->never())->method('sync'); // not in the request
+        $jobs = new JobsDatabase();
+        $controller = $this->wire($this->make(CertController::class, ['cert' => $cert, 'jobs' => $jobs->queue]));
         $controller->syncAction($this->post([]));
-        $this->assertSame(['cert.sync', 'Pobrano 1000 domen', ['ok' => true]], [$this->audit->last()['action'], $this->audit->last()['label'], $this->audit->last()['details']]);
+
+        // The worker runs the sync and audits it on behalf of the requester.
+        $cert = $this->createMock(CertHoleService::class);
+        $cert->method('sync')->willReturn(['ok' => true, 'message' => 'Pobrano 1000 domen']);
+        $jobs->update(1, ['requested_by' => 'admin', 'requested_by_type' => 'env_admin']);
+        $this->assertSame(['id' => 1, 'status' => 'done'], $jobs->worker([new CertSyncHandler($cert)], $this->audit)->runNext());
+        $last = $this->audit->last();
+        $this->assertSame(['cert.sync', 'Pobrano 1000 domen', ['ok' => true, 'job' => 1], 'admin', 'env_admin'], [$last['action'], $last['label'], $last['details'], $last['actor'], $last['actorType']]);
     }
 
     public function testRulesMakeGlobalCommand()

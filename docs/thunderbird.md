@@ -24,8 +24,9 @@ themselves).
 When a logged-in spam report creates a new blacklist rule, mail from that
 sender already in the account's INBOX on the server (last 30 days) is moved to
 `SPAM` as well. This retroactive pass logs in to the mailbox (IMAP/SSH), so
-since 1.1.2 it runs **after** the response has been sent
-(`DeferredRetroactivePass`, `kernel.terminate`): the response says
+since 1.1.2 it does not run in the request: it is queued as a background job
+(`DeferredRetroactivePass` → `rule.retroactive`, [jobs.md](jobs.md); up to 2.0.0 it ran on
+`kernel.terminate`): the response says
 `"retroactive": "scheduled"` instead of the former `moved_existing` count, and
 the plugin never waits for the mailbox. See
 [spam-handling.md](spam-handling.md#retroactive-blacklist).

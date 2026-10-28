@@ -2,12 +2,14 @@
 
 namespace AntispamBundle\Controller;
 
+use AntispamBundle\Entity\BackgroundJob;
 use AntispamBundle\Entity\Blacklist;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Entity\PhishingReport;
+use AntispamBundle\Services\DeferredRetroactivePass;
+use AntispamBundle\Services\Jobs\JobQueue;
 use AntispamBundle\Services\PhishingForwardService;
 use AntispamBundle\Services\PhishingReportService;
-use AntispamBundle\Services\RetroactiveSpamService;
 use AntispamBundle\Services\ScoringService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
@@ -26,15 +28,17 @@ use Symfony\Component\Routing\Attribute\Route;
 class PhishingController extends AbstractController
 {
     use AuditTrait;
+    use JobQueueTrait;
 
     private const PER_PAGE = 50;
 
     public function __construct(
         private EntityManagerInterface $em,
         private PhishingReportService $phishing,
-        private RetroactiveSpamService $retroactive,
+        private DeferredRetroactivePass $retroactive,
         private ScoringService $scoring,
         private PhishingForwardService $forwarder,
+        private JobQueue $jobs,
     ) {
     }
 
@@ -146,10 +150,7 @@ class PhishingController extends AbstractController
             $this->em->flush();
             $this->audit('phishing.block', targetType: 'phishing', targetId: $id, label: $rule instanceof Blacklist ? $rule->getHost() : $rule->getBlacklistemail(), mailbox: $owner, details: ['what' => $what, 'rule_id' => $rule->getId(), 'score' => $score]);
             $this->addFlash('success', 'Dodano regułę blacklisty dla ' . $owner . '.');
-            $summary = RetroactiveSpamService::describe($this->retroactive->applyRule($rule));
-            if ($summary) {
-                $this->addFlash('info', $summary);
-            }
+            $this->flashRetroactive($this->retroactive->queue($rule));
         }
         return $this->redirectToRoute('antispam_phishing_show', ['id' => $id]);
     }
@@ -208,41 +209,19 @@ class PhishingController extends AbstractController
     public function forwardBulkAction(Request $request)
     {
         $this->checkToken($request);
-        $ids = array_slice(array_unique(array_filter(array_map('intval', (array)$request->request->all('ids')))), 0, self::PER_PAGE);
+        $ids = array_slice(array_values(array_unique(array_filter(array_map('intval', (array)$request->request->all('ids'))))), 0, self::PER_PAGE);
         if (!$ids) {
             $this->addFlash('warning', 'Nie zaznaczono żadnego zgłoszenia.');
             return $this->redirectToRoute('antispam_phishing_index');
         }
-
-        $counts = ['sent' => 0, 'failed' => 0, 'skipped' => 0];
-        $errors = [];
-        $sent = [];
-        foreach ($ids as $id) {
-            $report = $this->em->getRepository(PhishingReport::class)->find($id);
-            if (!$report) {
-                continue;
-            }
-            if (isset($sent[$report->getSha256()])) {
-                $counts['skipped']++;
-                continue;
-            }
-            $result = $this->forwarder->forward($report);
-            $this->audit('phishing.forward', targetType: 'phishing', targetId: $id, label: $report->getSender(), mailbox: $report->getAccountEmail(), details: ['status' => $result['status'], 'to' => $report->getForwardedTo(), 'bulk' => true, 'error' => $result['error'] ?? null]);
-            $counts[$result['status']]++;
-            if ($result['status'] === 'sent') {
-                $sent[$report->getSha256()] = true;
-            } elseif ($result['error']) {
-                $errors[$result['error']] = '#' . $id . ': ' . $result['error'];
-            }
+        if ($errors = $this->forwarder->configurationErrors()) {
+            $this->addFlash('warning', 'Nie wysłano: ' . implode(' ', $errors));
+            return $this->redirectToRoute('antispam_phishing_index');
         }
-
-        $this->addFlash($counts['failed'] ? 'danger' : ($counts['sent'] ? 'success' : 'warning'), sprintf(
-            'Wysłano: %d, pominięto: %d, błędy: %d.', $counts['sent'], $counts['skipped'], $counts['failed']
-        ));
-        foreach (array_slice($errors, 0, 5) as $e) {
-            $this->addFlash('info', $e);
-        }
-        return $this->redirectToRoute('antispam_phishing_index');
+        // One e-mail per report: sent by the background worker (docs/jobs.md).
+        $queued = $this->jobs->enqueue(BackgroundJob::TYPE_PHISHING_FORWARD, ['ids' => $ids],
+            label: sprintf('Wysyłka zgłoszeń phishingu (%d)', count($ids)));
+        return $this->redirectToJob($queued, 'Wysyłka zgłoszeń');
     }
 
     #[Route('/forward-settings', name: 'antispam_phishing_forward_settings', methods: ['GET', 'POST'])]

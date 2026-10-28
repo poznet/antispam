@@ -32,6 +32,7 @@ not `fail`.
 | `scheduler` (critical) | age of the newest run in the cron log (`antispam_cron_run`); no runs at all = `warn` | yes | yes |
 | `cron:<command>` | per scheduler job (scan-all, health:check, feed:sync, cert:sync, digest:send, purge): late start (`warn` > 2x interval + 5 min, `fail` > 4x + 15 min), last run failed (`warn`), 3 failed runs in a row (`fail`), run without end > 2 h (`warn`). The interval is the median gap between the last runs (falls back to the scheduler defaults), so a custom `SCAN_INTERVAL` needs no setting. No runs in 14 days = `skip` | yes | yes |
 | `account:<id>` | last **successful** scan age (`Account.lastScanAt`; failed scans do not update it) vs **Maks. wiek skanu** (default 60 min) = `fail`; never scanned / SSH agent not deployed / errors or "outdated agent" warning in the last scan result = `warn` | yes | + IMAP login (IMAP accounts) or `health` command of the agent (SSH accounts: reachability, agent version) |
+| `jobs` | background job queue ([jobs.md](jobs.md)): oldest *due* queued job waiting > 10 min = `warn`, > 60 min = `fail` (worker `antispam:jobs:work` not running); jobs failed in the last 24 h = `warn` with the last error. Not critical | yes | yes |
 | `clamav` | `PING` to clamd (3 s timeout) when ClamAV scanning is enabled | yes | yes |
 | `cert` | CERT list: never synced or last success > 72 h = `fail`; > 18 h, or the last attempt failed = `warn` | yes | yes |
 | `feed` | shared feed with a remote hub: last **successful** `antispam:feed:sync` in the cron log > 2 h `warn`, > 24 h `fail` | yes | yes |
@@ -44,7 +45,9 @@ endpoint. When the database is down only `db`, `disk` and `versions` run.
 
 The quick check costs a handful of queries plus the ClamAV ping. The full one
 logs in to every IMAP account and queries every SSH agent (seconds per
-account), so it runs only on demand: **Sprawdź teraz** on the page, `/health?token=…&full=1`
+account), so it runs only on demand: **Sprawdź teraz** on the page (queued as a
+background job `health.full`; the job page links to the report,
+`/system/status?job={id}`), `/health?token=…&full=1`
 or `antispam:health:check --full`.
 
 The legacy mailbox from *Konfiguracja → E-mail* has no per-account scan time
@@ -190,5 +193,9 @@ display; the other fields are for custom receivers (n8n, Zabbix, own scripts).
   Not needed when the token is set on the page.
 - `HEALTH_CHECK_INTERVAL` (optional, scheduler service, minutes, default 15).
 - `MAILER_DSN` must be set for e-mail alerts.
+- The `jobs` check needs the background job worker running (scheduler
+  `JOBS_WORKER=on`, or `antispam:jobs:run --once` in cron), see [jobs.md](jobs.md).
+  Metrics: `antispam_jobs_queued`, `antispam_jobs_running`, `antispam_jobs_failed_24h`,
+  `antispam_jobs_oldest_queued_age_seconds`.
 - The scheduler intervals are not needed by the app container: the expected
   interval of every job is inferred from the cron log.

@@ -112,9 +112,21 @@ on **Przegląd → Logi crona** (see [spam-handling.md](spam-handling.md)).
 | `DIGEST_HOUR` | `antispam:digest:send` daily at HH:00, container time = UTC (`off` = off); every other full hour `antispam:digest:send --scheduled-only` for mailboxes with their own send hour | `7` |
 | `PURGE_HOUR` | `antispam:purge` (score log retention, expired DNSBL cache) daily at HH:41, UTC (`off` = off) | `3` |
 | `JOB_TIMEOUT` | any job running longer is killed (`timeout -k 30`), so a hung run cannot hold its flock and block every later tick | `3600` s |
+| `SCAN_MAX_SECONDS` | time budget of one IMAP mailbox per `scan-all` run; the rest of a huge INBOX is scanned on the next run | `600` s |
+| `JOBS_WORKER` | background job worker `antispam:jobs:work` (runs what the panel queues: Skanuj, Wdróż, Synchronizuj, new rule → existing mail, CERT sync...), started next to the ticks and restarted when it exits (`off` = none) | `on` |
+| `JOBS_WORKER_TIME_LIMIT` | the worker exits after N s and is restarted fresh | `3600` |
+| `JOBS_JOB_TIMEOUT` | one background job may run N s | `3900` |
+| `JOBS_BATCH_SECONDS` | length of one batch of a big IMAP scan job | `120` |
 
 The feed sync, the CERT list sync, the phishing forward and the digest do nothing while they are disabled in the panel
-settings, so leaving them on is safe. The scheduler's output is in the
+settings, so leaving them on is safe.
+
+**Background jobs.** Heavy panel buttons only queue a job (table `antispam_job`); the worker in the
+`scheduler` service runs it within ~2 s ([jobs.md](jobs.md)). Without the `scheduler` (plain
+`docker-compose.yml`, or no Docker) nothing runs them - add `* * * * * php bin/console antispam:jobs:run --once`
+to the crontab or run `antispam:jobs:work` under systemd / supervisord. A stuck queue shows up in
+*Stan systemu* (check `jobs`), `/metrics` and `antispam:doctor`. The image includes `pcntl` for the
+per-job time limit. The scheduler's output is in the
 `scheduler` service logs in Coolify.
 
 ### ClamAV

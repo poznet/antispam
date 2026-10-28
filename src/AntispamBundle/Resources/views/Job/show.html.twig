@@ -1,0 +1,76 @@
+{% extends '@Antispam/main.html.twig' %}
+
+{% block title %}{{ job.typeLabel }} #{{ job.id }}{% endblock %}
+{% block page_title %}{{ job.label }}{% endblock %}
+
+{% block body %}
+    {% set status_class = {queued: 'default', running: 'info', done: 'success', failed: 'danger', cancelled: 'warning'} %}
+
+    <div class="panel panel-default" id="jobStatus"
+         data-job-status-url="{{ path('antispam_job_status', {id: job.id}) }}"
+         data-job-active="{{ job.active ? '1' : '0' }}">
+        <div class="panel-body">
+            <p style="margin-bottom:10px;">
+                <span class="label label-{{ status_class[job.status] ?? 'default' }}" data-job-field="status_label">{{ job.statusLabel }}</span>
+                <strong style="margin-left:6px;">{{ job.typeLabel }}</strong>
+                <span class="text-muted">#{{ job.id }}</span>
+                {% if job.mailbox %}<span class="text-muted"> &middot; {{ job.mailbox }}</span>{% endif %}
+            </p>
+
+            {% if job.active %}
+                <p data-job-field="progress">{{ job.progress ?: (job.status == 'queued' ? 'Czeka na wolny proces w tle...' : 'Trwa...') }}</p>
+                <div class="progress" style="margin-bottom:10px;{{ job.percent is null ? 'display:none;' : '' }}" data-job-field="bar-wrap">
+                    <div class="progress-bar progress-bar-striped active" role="progressbar" data-job-field="bar"
+                         aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ job.percent ?? 0 }}" style="width: {{ job.percent ?? 0 }}%;">{{ job.percent ?? 0 }}%</div>
+                </div>
+                <p class="text-muted small">Zadanie wykonuje się w tle - ta strona odświeży się sama, możesz ją też zamknąć i wrócić później (Przegląd → Zadania w tle).</p>
+                {% if job.status == 'queued' and stats.oldest_queued_at and stats.oldest_queued_at|date('U') < ('now'|date('U') - stuck_minutes * 60) %}
+                    <div class="alert alert-warning">
+                        Zadania czekają w kolejce dłużej niż {{ stuck_minutes }} min - proces w tle (<code>antispam:jobs:work</code>) prawdopodobnie nie działa.
+                        W Dockerze uruchamia go usługa <code>scheduler</code>; bez Dockera dodaj do crontaba <code>* * * * * php bin/console antispam:jobs:run --once</code> (docs/jobs.md).
+                    </div>
+                {% endif %}
+                {% if job.cancelRequested %}
+                    <p class="text-warning">Anulowanie zgłoszone - zadanie zatrzyma się przy najbliższej okazji.</p>
+                {% else %}
+                    <form method="post" action="{{ path('antispam_job_cancel', {id: job.id}) }}" style="display:inline;">
+                        <input type="hidden" name="_token" value="{{ csrf_token('job_cancel_' ~ job.id) }}">
+                        <button type="submit" class="btn btn-default btn-sm" data-confirm="Anulować to zadanie?"><span class="glyphicon glyphicon-stop"></span> Anuluj</button>
+                    </form>
+                {% endif %}
+            {% elseif job.progress and job.status != 'done' %}
+                <p class="text-muted">Ostatni postęp: {{ job.progress }}</p>
+            {% endif %}
+
+            <table class="table table-condensed" style="margin:10px 0 0;">
+                <tr><th style="width:180px;">Zlecił</th><td>{{ job.requestedBy ?: '—' }}</td></tr>
+                <tr><th>Dodane</th><td>{{ job.createdAt|date('Y-m-d H:i:s') }}</td></tr>
+                {% if job.startedAt %}<tr><th>Start</th><td>{{ job.startedAt|date('Y-m-d H:i:s') }}</td></tr>{% endif %}
+                {% if job.finishedAt %}<tr><th>Koniec</th><td>{{ job.finishedAt|date('Y-m-d H:i:s') }} ({{ job.duration }} s)</td></tr>{% endif %}
+                {% if job.attempts > 1 %}<tr><th>Przebiegi</th><td>{{ job.attempts }}{% if job.interruptions %} (przerwane: {{ job.interruptions }}){% endif %}</td></tr>{% endif %}
+            </table>
+        </div>
+    </div>
+
+    {% if job.status == 'failed' %}
+        <div class="alert alert-danger"><strong>Zadanie nie powiodło się:</strong> {{ job.error }}</div>
+    {% elseif job.status == 'cancelled' %}
+        <div class="alert alert-warning">{{ job.error ?: 'Zadanie anulowane.' }}</div>
+    {% endif %}
+
+    {% if result is not null and job.finished %}
+        {% include ['@Antispam/Job/result/' ~ job.type ~ '.html.twig', '@Antispam/Job/result/_generic.html.twig'] %}
+    {% endif %}
+
+    <p style="margin-top:15px;">
+        {% if job.accountId %}
+            <a href="{{ path('antispam_account_index') }}" class="btn btn-default"><span class="glyphicon glyphicon-arrow-left"></span> Powrót do kont</a>
+        {% endif %}
+        <a href="{{ path('antispam_job_index') }}" class="btn btn-default"><span class="glyphicon glyphicon-tasks"></span> Zadania w tle</a>
+    </p>
+{% endblock %}
+
+{% block javascripts %}
+    <script src="{{ asset('bundles/antispam/js/data-confirm.js') }}"></script>
+    <script src="{{ asset('bundles/antispam/js/job-status.js') }}"></script>
+{% endblock %}

@@ -88,6 +88,7 @@ class AuditLogger
         'cert.sync' => 'Lista CERT: synchronizacja',
         'bayes.trained' => 'Bayes: nauka (ręczna / konsola)',
         'bayes.reset' => 'Bayes: wyczyszczenie bazy',
+        'job.cancel' => 'Zadanie w tle: anulowanie',
     ];
 
     public function __construct(
@@ -237,8 +238,8 @@ class AuditLogger
         return $out;
     }
 
-    /** @return array{0: string, 1: string, 2: ?string} actor, actor type, role */
-    private function currentActor(): array
+    /** @return array{0: string, 1: string, 2: ?string} actor, actor type, role (also used for job requesters) */
+    public function currentActor(): array
     {
         $user = $this->tokens->getToken()?->getUser();
         if ($user instanceof User) {

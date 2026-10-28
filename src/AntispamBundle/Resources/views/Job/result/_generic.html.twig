@@ -1,0 +1,3 @@
+{# Fallback for a job type without its own result template. #}
+<h4>Wynik:</h4>
+<pre>{{ result|json_encode(constant('JSON_PRETTY_PRINT') b-or constant('JSON_UNESCAPED_UNICODE')) }}</pre>

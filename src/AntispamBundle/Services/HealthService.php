@@ -5,6 +5,7 @@ namespace AntispamBundle\Services;
 use AntispamBundle\Controller\PluginApiController;
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\CronRun;
+use AntispamBundle\Services\Jobs\JobQueue;
 
 /**
  * Health checks of the whole installation, used by /health, /metrics, the
@@ -70,6 +71,7 @@ class HealthService
         private SpamSignalService $feed,
         private SshService $ssh,
         private ImapScanService $imap,
+        private ?JobQueue $jobs = null,
     ) {
     }
 
@@ -92,6 +94,9 @@ class HealthService
             $checks[] = $this->guard('scheduler', 'cron', 'Scheduler (cron)', true, fn() => $this->checkScheduler());
             foreach (self::JOBS as $command => $job) {
                 $checks[] = $this->guard('cron:' . $command, 'cron', $job['label'], false, fn() => $this->checkJob($command, $job['interval']));
+            }
+            if ($this->jobs) {
+                $checks[] = $this->guard('jobs', 'cron', 'Kolejka zadań w tle', false, fn() => $this->checkJobQueue());
             }
             $accounts = [];
             try {
@@ -241,6 +246,41 @@ class HealthService
         }
 
         $message = $problems ? ucfirst(implode('; ', $problems)) : 'OK, ostatnio ' . self::formatAge($age) . ' temu';
+        return [$status, $message, $details];
+    }
+
+    /**
+     * Background job queue (docs/jobs.md): a job waiting longer than
+     * JobQueue::STUCK_* minutes means no worker (antispam:jobs:work) runs;
+     * failed jobs of the last 24 h are a warning.
+     */
+    private function checkJobQueue(): array
+    {
+        $stats = $this->jobs->stats($this->now());
+        $age = $stats['oldest_queued_at'] ? $this->ageSeconds($stats['oldest_queued_at']) : null;
+        $details = [
+            'queued' => $stats['queued'],
+            'running' => $stats['running'],
+            'failed_24h' => $stats['failed_24h'],
+            'oldest_queued_age_seconds' => $age,
+        ];
+        $status = self::OK;
+        $problems = [];
+        if ($age !== null && $age > JobQueue::STUCK_FAIL_MINUTES * 60) {
+            $status = self::FAIL;
+            $problems[] = 'najstarsze zadanie czeka ' . self::formatAge($age) . ' - worker (antispam:jobs:work) nie działa';
+        } elseif ($age !== null && $age > JobQueue::STUCK_WARN_MINUTES * 60) {
+            $status = self::WARN;
+            $problems[] = 'najstarsze zadanie czeka ' . self::formatAge($age) . ' - worker (antispam:jobs:work) nie działa albo jest zajęty długim zadaniem';
+        }
+        if ($stats['failed_24h'] > 0) {
+            $status = self::worst($status, self::WARN);
+            $last = $stats['last_failed'];
+            $problems[] = sprintf('%d zadań zakończonych błędem w ciągu 24 h (ostatnie #%d %s: %s)', $stats['failed_24h'], $last['id'] ?? 0, $last['label'] ?? '', mb_substr((string)($last['error'] ?? ''), 0, 200));
+        }
+        $message = $problems
+            ? ucfirst(implode('; ', $problems))
+            : sprintf('OK - w kolejce %d, w trakcie %d', $stats['queued'], $stats['running']);
         return [$status, $message, $details];
     }
 

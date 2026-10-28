@@ -29,7 +29,7 @@ a foreign mailbox key gives 403, see [users.md](users.md).
 | POST | `/my/spam/action` | `mailbox` (`imap-<id>` / `ssh-<id>`, must be assigned), `id`, `action` (`release` / `whitelist` = release + exact e-mail whitelist rule), optional `uidvalidity` (IMAP); CSRF token `my_spam_action`. `whitelist` is refused for high-risk / unscored / unlisted messages |
 | GET | `/my/scorelog` | Own score log (same template and filters as `/spambox/scorelog`; `account` is limited to the user's mailboxes) |
 | GET | `/my/rules` | Own sender rules (4 lists) of the user's mailboxes |
-| POST | `/my/rules/add` | `list` (`whitelist` / `email_whitelist` / `blacklist` / `email_blacklist`), `owner` (an own mailbox e-mail; `*` or foreign -> 403), `value`, `pattern_type` (`exact` / `wildcard`; regex refused); CSRF token `my_rules`. SSH mailboxes: agent rules sync after the response |
+| POST | `/my/rules/add` | `list` (`whitelist` / `email_whitelist` / `blacklist` / `email_blacklist`), `owner` (an own mailbox e-mail; `*` or foreign -> 403), `value`, `pattern_type` (`exact` / `wildcard`; regex refused); CSRF token `my_rules`. SSH mailboxes: agent rules sync as a background job ([jobs.md](jobs.md)) |
 | POST | `/my/rules/delete` | `list`, `id`; a rule of another mailbox or a global rule -> 403; CSRF token `my_rules` |
 | GET/POST | `/my/password` | Change own password (database users only; CSRF token `my_password`); logs out afterwards |
 | GET | `/my/2fa` | Own 2FA: status, setup with a local SVG QR code (pending secret kept in the session), backup codes |
@@ -57,11 +57,11 @@ a foreign mailbox key gives 403, see [users.md](users.md).
 | GET/POST | `/account/edit/{id}` | Edit account (POST needs CSRF token `account_form`, same validation) |
 | POST | `/account/imap-check` | IMAP connection / TLS certificate check from the account form, JSON; `mode=detect` suggests SSL/TLS or STARTTLS (CSRF token `imap_check`). With an empty password and `account[id]` (an account id, or `legacy` for *Konfiguracja → E-mail*) the stored password is used, but only against the stored host - another host is refused |
 | POST | `/account/del/{id}` | Delete account (CSRF token `account_action_{id}`) |
-| POST | `/account/test/{id}` | Test connection (IMAP or SSH) (CSRF token `account_action_{id}`) |
-| POST | `/account/deploy/{id}` | Deploy agent to hosting (SSH only) (CSRF token `account_action_{id}`) |
-| POST | `/account/sync/{id}` | Sync rules to hosting (SSH only) (CSRF token `account_action_{id}`) |
-| POST | `/account/scan/{id}` | Run spam scan (CSRF token `account_action_{id}`) |
-| POST | `/account/health/{id}` | Agent health check (SSH only, CSRF token `account_action_{id}`) |
+| POST | `/account/test/{id}` | Test connection (IMAP or SSH), synchronous with short timeouts (IMAP 10 s open / 20 s read, SSH 15 s + 20 s per command) (CSRF token `account_action_{id}`) |
+| POST | `/account/deploy/{id}` | Queue an agent deploy + rules push (SSH only) → `/jobs/{id}` (CSRF token `account_action_{id}`) |
+| POST | `/account/sync/{id}` | Queue a rules sync (SSH only) → `/jobs/{id}` (CSRF token `account_action_{id}`) |
+| POST | `/account/scan/{id}` | Queue a spam scan → `/jobs/{id}`; a second click while one is queued / running returns the same job (CSRF token `account_action_{id}`) |
+| POST | `/account/health/{id}` | Queue an agent health check (SSH only) → `/jobs/{id}` (CSRF token `account_action_{id}`) |
 | GET | `/account/oauth/connect/{id}?_token=` | Start the OAuth consent (Microsoft 365 / Google): state + PKCE in the session, redirect to the provider. GET because CSP `form-action 'self'` blocks a cross-origin form post (CSRF token `account_action_{id}` in the query) - see [oauth.md](oauth.md) |
 | GET | `/account/oauth/callback` | Redirect URI registered at the provider; validates `state` (session, single use, 15 min), exchanges the code, stores the tokens |
 | POST | `/account/oauth/disconnect/{id}` | Delete the account's OAuth tokens (CSRF token `account_action_{id}`) |
@@ -89,10 +89,10 @@ See [phishing.md](phishing.md). CSRF token id `phishing` for all POSTs.
 | GET | `/phishing/` | List, filters `?status=new\|confirmed\|reported\|false_positive`, `?account=`, `?q=`, `?page=` |
 | GET | `/phishing/{id}` | Analysis: headers, auth results, red flags, links, attachments, body |
 | POST | `/phishing/{id}/update` | `status`, `note` |
-| POST | `/phishing/{id}/block` | `what=sender\|domain` - blacklist rule for the reporting mailbox + retroactive pass |
+| POST | `/phishing/{id}/block` | `what=sender\|domain` - blacklist rule for the reporting mailbox + retroactive pass (background job) |
 | GET | `/phishing/{id}/eml` | Original message as `.eml` download |
 | POST | `/phishing/{id}/forward` | E-mail the original (message/rfc822) + analysis to CERT Polska / SOC; `resend=1` required when already sent |
-| POST | `/phishing/forward` | Bulk forward, `ids[]` (already sent / false positives skipped, never resends) |
+| POST | `/phishing/forward` | Bulk forward, `ids[]` (already sent / false positives skipped, never resends) - queued as a background job → `/jobs/{id}` |
 | GET/POST | `/phishing/forward-settings` | Forward settings: recipients, sender, CC, note, reporter address, size limit, automatic mode (CSRF id `phishing_forward_settings`) |
 | POST | `/phishing/{id}/delete` | Delete the report and its content |
 
@@ -104,6 +104,17 @@ See [audit.md](audit.md).
 |--------|-----|-------------|
 | GET | `/audit` | "Dziennik audytu", 50 per page; filters `from`/`to` (`Y-m-d`), `actor`, `action` (key or group `rule.`), `mailbox`, `page` |
 | GET | `/audit/export.csv` | Same filters as CSV (UTF-8 BOM, `;`), newest 50 000 rows |
+
+## Background jobs (`/jobs`, ROLE_ADMIN)
+
+Heavy panel operations run in the background worker (`antispam:jobs:work`), see [jobs.md](jobs.md).
+
+| Method | URL | Description |
+|--------|-----|-------------|
+| GET | `/jobs/` | "Zadania w tle": last 200 jobs, filters `?status=active\|queued\|running\|done\|failed\|cancelled`, `?type=` |
+| GET | `/jobs/{id}` | Job page: status, progress, requester, times, result (auto-refresh while active via `job-status.js`) |
+| GET | `/jobs/{id}/status` | JSON `{id, status, status_label, finished, progress, done, total, percent, duration, cancel_requested}`, `Cache-Control: no-store` |
+| POST | `/jobs/{id}/cancel` | Cancel (queued: at once; running: at the next check) (CSRF token `job_cancel_{id}`) |
 
 ## Cron log (`/cron`)
 
@@ -118,7 +129,7 @@ See [audit.md](audit.md).
 |--------|-----|-------------|
 | GET | `/cert/` | Status, settings form, domain lookup `?q=domain-or-url` (subdomains of listed domains match), paginated view `?page=N` |
 | POST | `/cert/` | Save enabled/score (CSRF token `cert_config`) |
-| POST | `/cert/sync` | Download the list now (CSRF token `cert_config`) |
+| POST | `/cert/sync` | Queue a download of the list → `/jobs/{id}` (CSRF token `cert_config`) |
 
 ## Configuration (`/config`)
 

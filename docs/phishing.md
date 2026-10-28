@@ -20,7 +20,7 @@ forward it (e.g. to CERT Polska).
    raw source in a blob) and also handles it as a spam report:
    `PluginService::learn()` puts the sender on the account's e-mail blacklist,
    records shared-feed fingerprints and the retroactive pass moves that
-   sender's INBOX mail to SPAM (after the response has been sent).
+   sender's INBOX mail to SPAM (a background job, [jobs.md](jobs.md)).
 3. The same message reported again by the same account (same SHA-256) only
    increments `report_count`.
 4. The client files the message as junk, like a spam report (Outlook cannot

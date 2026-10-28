@@ -126,7 +126,7 @@ healthcheck allows 5); until then the test fails. clamd needs about
 1.5-2 GB of RAM. Port 3310 is only reachable inside the stack, so it serves
 the server-side scans (IMAP accounts, legacy mailbox, mail client plugins).
 SSH agents get the same DSN with their settings but cannot reach it from
-another server - they report the error and treat the attachment as clean.
+another server - the connection fails and the attachment is treated as clean (no virus scan, no penalty).
 For agents, run clamd on the mail server and use a separate install there.
 
 ### Updating

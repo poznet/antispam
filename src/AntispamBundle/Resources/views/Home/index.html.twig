@@ -55,7 +55,7 @@
             <li><a href="#scoring">Scoring</a></li>
             <li><a href="#tryby">IMAP i agent</a></li>
             <li><a href="#baza">Wspólna baza</a></li>
-            <li><a href="#thunderbird">Thunderbird</a></li>
+            <li><a href="#thunderbird">Wtyczki</a></li>
             <li><a href="#faq">FAQ</a></li>
         </ul>
         <div class="nav-cta">
@@ -141,7 +141,7 @@
     <div class="wrap strip-inner">
         <span class="strip-label">Pod maską</span>
         <ul class="strip-items">
-            <li>IMAP</li><li>SSH + Maildir</li><li>SPF · DKIM · DMARC</li><li>Spamhaus i inne DNSBL</li><li>ClamAV</li><li>VirusTotal</li><li>Thunderbird 115+</li><li>Docker / Coolify</li>
+            <li>IMAP</li><li>SSH + Maildir</li><li>SPF · DKIM · DMARC</li><li>Spamhaus i inne DNSBL</li><li>ClamAV</li><li>VirusTotal</li><li>Thunderbird 115+</li><li>Outlook</li><li>Docker / Coolify</li>
         </ul>
     </div>
 </div>
@@ -476,7 +476,7 @@
             <div class="tb-toast"><img src="{{ shield }}" alt=""><div><b>Antyspam: SPAM</b><span>Wynik 16 · przeniesiono do folderu Spam</span></div></div>
         </div>
         <div class="reveal">
-            <span class="eyebrow">Wtyczka Thunderbird</span>
+            <span class="eyebrow">Wtyczki Thunderbird i Outlook</span>
             <h2>Antyspam bezpośrednio w kliencie poczty</h2>
             <p style="margin-top:16px;font-size:18px;color:var(--muted)">Wtyczka do Thunderbirda 115+ łączy klienta poczty z antyspamem. Pobierasz ją jako gotowy plik <code>.xpi</code> z adresem serwera już w środku, więc nic nie trzeba konfigurować.</p>
             <table class="tb-table">
@@ -489,9 +489,14 @@
                     <tr><td>Ręczne „Sprawdź w Antyspamie”</td><td class="no">–</td><td class="yes">✓</td></tr>
                 </tbody>
             </table>
-            <p style="margin-top:22px"><a class="btn btn-primary" href="{{ path('antispam_plugin_download') }}">
+            <p class="hero-actions" style="margin-top:22px"><a class="btn btn-primary" href="{{ path('antispam_plugin_download') }}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                Pobierz wtyczkę (.xpi)</a></p>
+                Wtyczka Thunderbird (.xpi)</a>
+                <a class="btn btn-outline" href="{{ path('antispam_plugin_outlook_manifest') }}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                Dodatek do Outlooka (.xml)</a></p>
+            <p style="margin-top:14px;font-size:15px;color:var(--muted)"><strong>Outlook</strong> (nowy i klasyczny z Microsoft 365, w przeglądarce i na Macu): Pobierz dodatki → Moje dodatki → Dodaj dodatek niestandardowy → Dodaj z pliku. Panel „Antyspam” przy wiadomości pozwala zgłosić spam, oznaczyć „To nie spam” i sprawdzić wiadomość.<br>
+                <strong>Apple Mail</strong> – wkrótce.</p>
         </div>
     </div>
 </section>

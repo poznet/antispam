@@ -25,7 +25,7 @@ See `docs/` directory for detailed documentation:
 - `docs/accounts.md` - account management: IMAP/SSH config, SSH keys, deploy
 - `docs/commands.md` - CLI commands reference
 - `docs/api.md` - web controller endpoints
-- `docs/deployment.md` - Docker / Coolify deployment guide
+- `docs/deployment.md` - Docker / Coolify deployment guide; "Releasing": version in `AntispamBundle\AppVersion::VERSION` (+ `CHANGELOG.md`, plugin/agent bump rules, build arg `GIT_COMMIT` -> `REVISION`)
 - `docs/scoring.md` - scoring pipeline, DNSBL, regex/wildcard patterns, rule ownership (per-mailbox vs global `*` rules)
 - `docs/protection.md` - impersonation/BEC, link protection, attachment policy (web + agent)
 - `docs/spam-handling.md` - where spam goes (move vs delete), quarantine semantics, retroactive blacklist, cron log (`antispam:cron:run`, `/cron/logs`)

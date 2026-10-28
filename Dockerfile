@@ -48,6 +48,13 @@ RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 # Copy the rest of the application
 COPY . .
 
+# Commit the image is built from (.git is dockerignored, so it must come in as a
+# build arg). Coolify: compose passes GIT_COMMIT=${SOURCE_COMMIT}; see
+# docs/deployment.md "Releasing". Declared this late so a new commit only
+# invalidates the layers below. Read by AntispamBundle\AppVersion.
+ARG GIT_COMMIT=unknown
+RUN printf '%s\n' "${GIT_COMMIT}" > REVISION
+
 # Finalize autoload and publish bundle assets now that the source is present
 RUN composer dump-autoload --no-dev --optimize --classmap-authoritative \
     && composer run-script --no-dev post-install-cmd \

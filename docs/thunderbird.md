@@ -148,7 +148,9 @@ JSON in / JSON out, exempt from form login. Authenticated calls send
 `Authorization: Bearer <token>`. Messages are sent as the base64 of the raw
 RFC 822 source (`raw_base64`, max 4 MiB decoded; 10 MiB for `/phishing`).
 `/status` also returns `phishing_reports`, `phishing_max_bytes` and
-`max_upload_bytes` (from `plugin.max_upload_kb`).
+`max_upload_bytes` (from `plugin.max_upload_kb`), `version` (the Thunderbird
+plugin version the server bundles) and `server_version` (the antispam release,
+`AppVersion::VERSION`).
 
 | Method | URL | Auth | Description |
 |--------|-----|------|-------------|

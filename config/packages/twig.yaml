@@ -1,5 +1,8 @@
 twig:
     strict_variables: '%kernel.debug%'
+    globals:
+        # App version (+ build commit) - shown in the panel footer for admins.
+        antispam_version: '@AntispamBundle\AppVersion'
 
 when@test:
     twig:

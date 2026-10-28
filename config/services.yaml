@@ -3,6 +3,8 @@ parameters:
     # ssh_key_path is resolved against it). Override with SSH_KEYS_DIR.
     antispam.default_ssh_keys_dir: '%kernel.project_dir%/var/data/ssh-keys'
     antispam.ssh_keys_dir: '%env(default:antispam.default_ssh_keys_dir:SSH_KEYS_DIR)%'
+    # Application version (semver) - single source: AntispamBundle\AppVersion::VERSION.
+    antispam.version: !php/const AntispamBundle\AppVersion::VERSION
 
 services:
     _defaults:
@@ -16,6 +18,10 @@ services:
             - '../src/AntispamBundle/{Entity,Event,Resources,Tests}/'
             - '../src/AntispamBundle/EventListener/Message/AttachmentExtractorTrait.php'
             - '../src/AntispamBundle/Services/{DomainHelper,PatternMatcher,RawMessageParser}.php'
+
+    # App version + build commit (REVISION file written by the Dockerfile).
+    AntispamBundle\AppVersion:
+        arguments: ['%kernel.project_dir%']
 
     # Config check (`antispam:check`)
     AntispamBundle\EventListener\CheckConfig\CheckEmailData:

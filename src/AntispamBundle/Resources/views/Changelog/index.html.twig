@@ -1,0 +1,29 @@
+{% extends '@Antispam/main.html.twig' %}
+
+{% block title %}Co nowego{% endblock %}
+
+{% block page_title %}Co nowego{% endblock %}
+
+{% block body %}
+    <div class="panel panel-default">
+        <div class="panel-body">
+            <p style="margin:0">
+                Wersja aplikacji: <strong>{{ version.version }}</strong>
+                &middot; commit: <code>{{ version.commit ?? 'nieznany' }}</code>
+                {% if agent_version %}&middot; agent SSH+Maildir w panelu: <strong>{{ agent_version }}</strong>{% endif %}
+                &middot; wtyczka Thunderbird: <strong>{{ constant('AntispamBundle\\Controller\\PluginApiController::PLUGIN_VERSION') }}</strong>
+            </p>
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-body pp-changelog">
+            {% if changelog_html is not null %}
+                {# SimpleMarkdown escapes every piece of text; only its own tags remain. #}
+                {{ changelog_html|raw }}
+            {% else %}
+                <p class="text-muted">Brak pliku CHANGELOG.md w tej instalacji.</p>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

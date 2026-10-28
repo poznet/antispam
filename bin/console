@@ -1,6 +1,7 @@
 #!/usr/bin/env php
 <?php
 
+use AntispamBundle\AppVersion;
 use App\Kernel;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
 
@@ -17,5 +18,9 @@ require_once dirname(__DIR__).'/vendor/autoload_runtime.php';
 return function (array $context) {
     $kernel = new Kernel($context['APP_ENV'], (bool) $context['APP_DEBUG']);
 
-    return new Application($kernel);
+    $application = new Application($kernel);
+    $application->setName('Antispam Pancernapanda');
+    $application->setVersion((new AppVersion(dirname(__DIR__)))->full());
+
+    return $application;
 };

@@ -140,6 +140,13 @@ changes are picked up without a manual migration step. If you do not want
 that behaviour (for example because you manage schema via
 `doctrine-migrations`), set `RUN_MIGRATIONS=false`.
 
+To check which release a host runs: the panel footer (admins) shows
+`wersja 2.0.0 (abc1234)` and links to *Co nowego* (`/changelog`);
+`GET /api/plugin/status` returns `server_version`; in the container
+`php bin/console --version` prints `Antispam Pancernapanda 2.0.0 (abc1234)`.
+A commit of `nieznany` / no hash means the image was built without
+`GIT_COMMIT` (see [Releasing](#releasing)).
+
 ### Rotating the admin password
 
 Change `ADMIN_PASSWORD` in Coolify's env variables screen and redeploy (or
@@ -292,3 +299,62 @@ The image also sets `ServerTokens Prod`, `ServerSignature Off`,
 `TraceEnable Off`, `nosniff` for static files
 (`docker/apache-security.conf`) and `expose_php = Off` (`docker/php.ini`), so
 neither `Server` nor `X-Powered-By` reveals versions.
+
+## Releasing
+
+The version lives in one place: `AntispamBundle\AppVersion::VERSION`
+(`src/AntispamBundle/AppVersion.php`, [semver](https://semver.org)). It is
+exposed as the container parameter `antispam.version` and the Twig global
+`antispam_version` (`version`, `commit`, `full`). Other code (exports, health
+checks) should read the parameter or the constant, never parse `CHANGELOG.md`.
+
+1. **Pick the number.** MAJOR for changes an operator or user must act on or
+   will notice (roles, rule semantics, agent protocol, removed settings,
+   incompatible API fields); MINOR for new features and additive API fields;
+   PATCH for fixes only.
+2. **Bump** `AppVersion::VERSION`.
+3. **Update `CHANGELOG.md`** ([Keep a Changelog](https://keepachangelog.com)):
+   move the *Unreleased* entries into a new `## [x.y.z] - YYYY-MM-DD` section,
+   move the `(current)` marker to it and leave an empty *Unreleased* on top.
+   Group under *Added / Changed / Deprecated / Removed / Fixed / Security*.
+4. **Mail client plugins** have their own versions; bump them only when the
+   plugin code or manifest changed:
+   - Thunderbird: `version` in `Resources/thunderbird/manifest.json` **and**
+     `PluginApiController::PLUGIN_VERSION` (same value - it is the `?v=` cache
+     buster of the `.xpi` link and `version` in `/api/plugin/status`).
+   - Outlook: `<Version>` in `Resources/outlook/manifest.xml` (four parts,
+     `1.1.0.0`; Outlook caches add-ins by it).
+   - New `/api/plugin` response fields are additive; a plugin must keep
+     working against an older server (missing field = feature off).
+5. **SSH+Maildir agent:** bump `AGENT_VERSION` in
+   `Resources/agent/antispam-agent.php` whenever the agent script changes.
+   The panel compares every agent answer with the bundled version
+   (`SshService::bundledAgentVersion()`) and asks to redeploy an older agent
+   (*Konta → Wdróż*).
+6. **Verify:** `vendor/bin/phpunit`, `bin/console lint:container`,
+   `bin/console lint:twig src/AntispamBundle/Resources/views templates`,
+   `docker build .`.
+7. **Commit and tag** on `master`: `git commit -m "Release x.y.z"`,
+   `git tag -a vx.y.z -m "x.y.z"`, `git push --follow-tags`. Then redeploy in
+   Coolify and confirm `server_version` / the footer on the host.
+
+### Build commit (`GIT_COMMIT` / Coolify `SOURCE_COMMIT`)
+
+`.git` is not in the Docker build context (`.dockerignore`), so the commit
+comes in as the build arg `GIT_COMMIT` (default `unknown`) and is written to
+`/var/www/html/REVISION`; `AppVersion` accepts only a hex hash from it and
+shows the first 7 characters. Both compose files pass
+`GIT_COMMIT: ${GIT_COMMIT:-${SOURCE_COMMIT:-unknown}}`.
+
+- **Coolify** provides the deployed commit as the predefined variable
+  `SOURCE_COMMIT`, but excludes it from Docker builds by default to keep the
+  build cache. Set *Advanced → Build → Source commit availability* to
+  *Available during build* on the resource (Coolify docs, *Environment
+  variables → Predefined variables*). Otherwise the panel shows commit
+  `nieznany` - the version number is still correct.
+- **Plain Docker / compose:**
+  `docker build --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) .` or
+  `GIT_COMMIT=$(git rev-parse --short HEAD) docker compose build`.
+
+The `ARG` is declared after `COPY . .`, so a new commit only rebuilds the last
+layers.

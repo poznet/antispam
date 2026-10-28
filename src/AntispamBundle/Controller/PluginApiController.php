@@ -2,6 +2,7 @@
 
 namespace AntispamBundle\Controller;
 
+use AntispamBundle\AppVersion;
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Services\DeferredRetroactivePass;
@@ -92,6 +93,9 @@ class PluginApiController extends AbstractController
         return new JsonResponse([
             'enabled' => $this->plugin->isEnabled(),
             'version' => self::PLUGIN_VERSION,
+            // Version of this antispam server (AppVersion), lets plugins and
+            // admins tell which release a host runs.
+            'server_version' => AppVersion::VERSION,
             'anonymous_reports' => $this->plugin->isAnonymousReportEnabled(),
             'check_enabled' => $this->plugin->isCheckEnabled(),
             'phishing_reports' => true,

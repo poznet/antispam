@@ -82,6 +82,7 @@ See [phishing.md](phishing.md). CSRF token id `phishing` for all POSTs.
 | Method | URL | Description |
 |--------|-----|-------------|
 | GET | `/cron/logs` | Runs recorded by `antispam:cron:run` (last 200), filters `?command=…`, `?failed=1`. See [spam-handling.md](spam-handling.md) |
+| GET | `/changelog` | *Co nowego* (admin): running version, build commit, bundled agent / Thunderbird plugin versions and `CHANGELOG.md` rendered as HTML; linked from the footer version. See [deployment.md](deployment.md#releasing) |
 
 ## CERT list (`/cert`)
 
@@ -164,7 +165,7 @@ Full reference: **[thunderbird.md](thunderbird.md)**, clients:
 
 | Method | URL | Description |
 |--------|-----|-------------|
-| GET | `/api/plugin/status` | Feature flags, `max_upload_bytes` + token validity (`authenticated`, always 200) |
+| GET | `/api/plugin/status` | Feature flags, `server_version`, `max_upload_bytes` + token validity (`authenticated`, always 200) |
 | POST | `/api/plugin/login` | Mailbox e-mail + plugin/IMAP password → token |
 | POST | `/api/plugin/report` | User verdict (`spam` anonymous or logged in, `ham` logged in) |
 | POST | `/api/plugin/check` | Score a raw message (logged in) |

@@ -4,6 +4,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Commit shown in the panel (REVISION). Coolify: SOURCE_COMMIT with
+        # Advanced > Build > Source commit availability = "Available during build".
+        # Elsewhere export GIT_COMMIT before building (docs/deployment.md "Releasing").
+        GIT_COMMIT: ${GIT_COMMIT:-${SOURCE_COMMIT:-unknown}}
     restart: unless-stopped
     volumes:
       - app-logs:/var/www/html/var/log
@@ -60,6 +65,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Commit shown in the panel (REVISION). Coolify: SOURCE_COMMIT with
+        # Advanced > Build > Source commit availability = "Available during build".
+        # Elsewhere export GIT_COMMIT before building (docs/deployment.md "Releasing").
+        GIT_COMMIT: ${GIT_COMMIT:-${SOURCE_COMMIT:-unknown}}
     restart: unless-stopped
     command: ["/usr/local/bin/scheduler.sh"]
     volumes:

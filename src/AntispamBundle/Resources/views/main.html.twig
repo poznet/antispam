@@ -149,6 +149,7 @@
 
     <footer class="pp-footer">
         <span><strong>Antispam Pancernapanda</strong> &mdash; pancerna ochrona Twojej skrzynki przed spamem</span>
+        {% if is_granted('ROLE_ADMIN') %}<span class="pp-version"><a href="{{ path('antispam_changelog') }}" title="Co nowego - commit {{ antispam_version.commit ?? 'nieznany' }}">wersja {{ antispam_version.full }}</a></span>{% endif %}
         <span>&copy; {{ 'now'|date('Y') }} <a href="https://pancernapanda.pl">pancernapanda.pl</a></span>
     </footer>
 </div>

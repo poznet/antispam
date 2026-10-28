@@ -80,19 +80,31 @@ class SpamScoreLog
     public function getId() { return $this->id; }
 
     public function getAccountEmail() { return $this->accountEmail; }
-    public function setAccountEmail($e) { $this->accountEmail = $e; return $this; }
+    public function setAccountEmail($e) { $this->accountEmail = self::clip($e, 255); return $this; }
 
     public function getSender() { return $this->sender; }
-    public function setSender($s) { $this->sender = $s; return $this; }
+    public function setSender($s) { $this->sender = self::clip($s, 255); return $this; }
 
     public function getSubject() { return $this->subject; }
     public function setSubject($s)
     {
-        if ($s !== null && strlen($s) > 500) {
-            $s = substr($s, 0, 500);
-        }
-        $this->subject = $s;
+        $this->subject = self::clip($s, 500);
         return $this;
+    }
+
+    /**
+     * Valid UTF-8 cut to $chars characters. A value longer than its column or
+     * a byte cut through a multi-byte character makes MariaDB (strict mode)
+     * reject the INSERT, which closes the EntityManager for the rest of the
+     * scan. QuarantineService matches log rows on the same clipped subject.
+     */
+    public static function clip($value, $chars)
+    {
+        if ($value === null) {
+            return null;
+        }
+        $value = mb_scrub((string)$value, 'UTF-8');
+        return mb_strlen($value, 'UTF-8') > $chars ? mb_substr($value, 0, $chars, 'UTF-8') : $value;
     }
 
     public function getScore() { return $this->score; }

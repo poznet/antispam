@@ -28,9 +28,6 @@ use Symfony\Contracts\Service\ResetInterface;
  */
 class DeferredRetroactivePass implements EventSubscriberInterface, ResetInterface
 {
-    /** IMAP open/read/write timeout for the deferred pass, seconds. */
-    const IMAP_TIMEOUT = 20;
-
     /** @var array<int, true> EmailBlacklist ids */
     private array $pending = [];
 
@@ -103,12 +100,12 @@ class DeferredRetroactivePass implements EventSubscriberInterface, ResetInterfac
 
         // The response is already out: neither the client going away nor a
         // slow mailbox may cut the pass short / hang the worker forever.
+        // Under mod_php max_execution_time would otherwise kill the pass half
+        // way; every IMAP step is bounded by the c-client timeouts instead
+        // and the pass by RetroactiveSpamService's candidate/move caps.
         ignore_user_abort(true);
-        if (\function_exists('imap_timeout')) {
-            foreach ([IMAP_OPENTIMEOUT, IMAP_READTIMEOUT, IMAP_WRITETIMEOUT, IMAP_CLOSETIMEOUT] as $type) {
-                @imap_timeout($type, self::IMAP_TIMEOUT);
-            }
-        }
+        @set_time_limit(0);
+        ImapScanService::applyImapTimeouts();
 
         $done = 0;
         foreach ($ids as $id) {

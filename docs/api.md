@@ -99,7 +99,7 @@ See [phishing.md](phishing.md). CSRF token id `phishing` for all POSTs.
 | GET/POST | `/config/digest/` | Quarantine digest settings, mailbox list, "send now" |
 | GET | `/config/digest/preview/{key}` | Render the digest a mailbox would get (last 7 days) |
 | GET/POST | `/config/plugin/` | Mail client plugin settings + downloads (Thunderbird, Outlook, Apple Mail) |
-| GET | `/config/uncheck-all/` | Reset all checked messages |
+| GET | `/config/uncheck-all/` | Reset all checked messages (markers) and the IMAP cursors - the next scan reads every INBOX in full |
 | GET | `/config/reset/countes/` | Reset all rule counters |
 
 ## Shared Spam Feed API (`/api/feed`)

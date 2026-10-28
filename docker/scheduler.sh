@@ -10,6 +10,8 @@
 #   FEED_SYNC_INTERVAL  minutes between antispam:feed:sync      (default 15, 0 = off)
 #   CERT_SYNC_INTERVAL  hours between antispam:cert:sync     (default 6, 0 = off); runs at minute 17
 #   DIGEST_HOUR         hour (container time, UTC) for antispam:digest:send (default 7, "off" = off)
+#   JOB_TIMEOUT         seconds after which a job is killed (default 3600) - a hung run
+#                       would otherwise hold its flock and every later tick would skip
 #
 # Feed sync, CERT sync and the digest are no-ops while disabled in the panel settings.
 set -e
@@ -18,6 +20,7 @@ APP_DIR=/var/www/html
 : "${SCAN_INTERVAL:=5}"
 : "${FEED_SYNC_INTERVAL:=15}"
 : "${CERT_SYNC_INTERVAL:=6}"
+: "${JOB_TIMEOUT:=3600}"
 DIGEST_HOUR=${DIGEST_HOUR-7}
 [ "$DIGEST_HOUR" = off ] && DIGEST_HOUR=
 
@@ -27,7 +30,7 @@ run() {
     (
         flock -n 9 || { echo "[scheduler] $name still running, skipping"; exit 0; }
         echo "[scheduler] $(date '+%F %T') start $name"
-        runuser -u www-data -- php "${APP_DIR}/bin/console" antispam:cron:run "$1" --no-debug \
+        runuser -u www-data -- timeout -k 30 "$JOB_TIMEOUT" php "${APP_DIR}/bin/console" antispam:cron:run "$1" --no-debug \
             || echo "[scheduler] $name exited with $?"
         echo "[scheduler] $(date '+%F %T') done $name"
     ) 9>"/tmp/antispam-${name}.lock" &

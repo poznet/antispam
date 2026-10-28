@@ -19,6 +19,6 @@ class SetAsChecked
 
     public function set(MessageEvent $event)
     {
-        $this->ms->setAsChecked($event->getMessage());
+        $this->ms->setAsChecked($event->getMessage(), $event->getEmail());
     }
 }

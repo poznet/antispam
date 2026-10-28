@@ -24,6 +24,45 @@ Antispam is a Symfony 7.4 web application for filtering spam from email accounts
   (Ustawienia → E-mail); `MessageEvent` carries the message's own connection
 - All processing happens on the Symfony server
 
+#### Incremental INBOX scan
+
+Each IMAP mailbox keeps a **UID cursor**: INBOX `UIDVALIDITY` + the highest
+UID already run through the pipeline (`antispam_account.imap_uid_validity` /
+`imap_last_uid`; the legacy mailbox uses the config key `imap.legacy_cursor`,
+`"uidvalidity:last_uid:unix time"`). A scan picks its messages like this:
+
+| Situation | Messages scanned |
+|-----------|------------------|
+| cursor valid (normal case) | only UIDs above the cursor (`UID FETCH n:*`) |
+| first scan of a new mailbox (`lastScanAt` null; legacy: no cursor and no markers) | the whole INBOX (initial clean-up, kept out of stats) |
+| cursor `0/0` - set by *Zresetuj flagi sprawdzenia* (`/config/uncheck-all/`) | the whole INBOX once |
+| no cursor but scanned before (upgrade from a version without cursors), or `UIDVALIDITY` changed, or the IMAP host/port/login was edited | only mail received since the last scan minus one day (`SEARCH SINCE`; legacy mailbox: 4 days) - **older mail is never touched** |
+| server reports no `UIDVALIDITY` | "since the last scan" every time, no cursor |
+
+The cursor advances to the highest UID processed; when a message throws
+(e.g. a failed move) it stays just below that UID, so the message is retried
+on the next run (messages above it are skipped by their markers). In a
+"since" pass the cursor jumps past everything that existed when the pass
+started, failures included, because mail above a failed UID may be old.
+`total` in a scan result is the INBOX size, `checked` the new messages.
+
+**Markers** (`MessageService`, `var/data/checked/v2/<2 hex>/<sha1>`) record
+processed messages per mailbox: sha1(account e-mail + Message-ID), or of the
+raw header block for mail without a Message-ID (such mail used to be treated
+as "already checked" and was never filtered). They are needed only above the
+cursor (mail released from quarantine re-enters INBOX with a new UID, retried
+failures), so markers older than 90 days are purged once a day after a scan
+(`MessageService::purgeIfDue()`). Pre-v2 markers (file named after the
+Message-ID, valid for every mailbox) are still honoured until purged.
+
+**Robustness:** every IMAP connection gets c-client timeouts (open 20 s,
+read/write 60 s, `ImapScanService::applyImapTimeouts()`); a mailbox is
+scanned by one process at a time (`flock` on `var/data/locks/imap-scan-*.lock`,
+a second scan fails with "Skanowanie tej skrzynki już trwa"); a failed flush
+that closes the EntityManager is reset after the message, so one bad message
+does not fail the rest of the run; each message's score-log row is detached
+from the unit of work after processing.
+
 ### SSH+Maildir Mode
 - Connects to hosting server via SSH (phpseclib)
 - Deploys a standalone PHP agent script
@@ -57,7 +96,23 @@ ham/quarantine/spam.
 | -99999   | SetAsChecked           | Mark as processed                     |
 
 (Attachment listeners `CheckAttachments` (99975) and `CheckAttachmentsVirusTotal`
-(99973) run between DNSBL and the decision when enabled.)
+(99973) run between DNSBL and the decision when enabled. The order is pinned by
+`MessagePipelineTest::testListenerOrder`.)
+
+All white/blacklists match the **From:** address (domain lists: its domain),
+the same address the score log, impersonation check, retroactive pass and
+plugin scanner use - not the `Sender:` header, which a spammer could set to a
+whitelisted domain. Rule hit counters are incremented in SQL
+(`counter = counter + 1`), so parallel scans do not lose hits.
+
+`CheckHeaders`, `CheckDnsbl` and `CheckImpersonation` read the **raw header
+block** (`imap_fetchheader`, one fetch per message): `imap_headerinfo()` has no
+`Received`, `Authentication-Results` or `Received-SPF` lines, so before this
+SPF/DKIM/DMARC, the own-domain spoof check and DNSBL never fired for IMAP.
+
+A failed move to `QUARANTINE` is rethrown by `ApplyScoreDecision` (like a
+failed move to `SPAM` in `MoveToSpam`): the message is not marked as checked,
+the cursor stays below it and the next scan tries again.
 
 See `scoring.md` for scoring thresholds, pattern types and DNSBL configuration,
 `protection.md` for impersonation / link / attachment-policy rules, and `feed.md`

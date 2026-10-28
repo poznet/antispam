@@ -21,7 +21,6 @@ use AntispamBundle\Services\RetroactiveSpamService;
 use AntispamBundle\Services\ScoringService;
 use AntispamBundle\Services\SshService;
 use AntispamBundle\Tests\Support\RuleFixtures;
-use Ddeboer\Imap\Message\Headers;
 use Ddeboer\Imap\MessageInterface;
 use PHPUnit\Framework\TestCase;
 

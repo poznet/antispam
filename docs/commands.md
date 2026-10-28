@@ -9,7 +9,7 @@ php bin/console antispam:check
 ```
 
 ### antispam:go
-Runs spam filtering on INBOX of the legacy mailbox from Ustawienia → E-mail
+Runs spam filtering on INBOX of the legacy mailbox from Ustawienia → Konfiguracja (stara)
 (also included in `antispam:agent:scan-all`).
 ```bash
 php bin/console antispam:go
@@ -90,7 +90,7 @@ php bin/console antispam:cert:sync --force
 ### antispam:feed:sync
 Pushes locally detected spam fingerprints to the configured shared-feed hub and
 pulls everyone else's. Suitable for cron. Requires the shared feed to be enabled
-with a remote hub configured (**Settings → Shared Spam Feed**). See
+with a remote hub configured (**Ustawienia → Wspólna baza spamu**). See
 [feed.md](feed.md).
 ```bash
 php bin/console antispam:feed:sync

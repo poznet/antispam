@@ -15,7 +15,7 @@ with an Apple Developer account builds and distributes the app.
 
 Source: `src/AntispamBundle/Resources/applemail/` (build instructions in its
 `README.md`, in Polish, shipped inside the zip). Download:
-`GET /plugin/apple-mail/source.zip` (public; linked from *Konfiguracja →
+`GET /plugin/apple-mail/source.zip` (public; linked from *Ustawienia →
 Wtyczki pocztowe*), built by `MailClientPluginBuilder::appleMailSourceZip()`,
 which replaces `__ANTISPAM_SERVER__` in `Shared/ServerConfig.swift`.
 

@@ -28,7 +28,7 @@ X-Feed-Key: <feed.server_key of the receiving instance>
 ```
 
 The key is compared against the receiving instance's `feed.server_key` config
-value (Settings → Shared Spam Feed) using a constant-time comparison.
+value (Ustawienia → Wspólna baza spamu) using a constant-time comparison.
 
 | Condition                                   | Status | Body |
 |---------------------------------------------|--------|------|

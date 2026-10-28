@@ -6,8 +6,8 @@ one-click actions:
 
 | Button | Effect |
 |--------|--------|
-| **Dostarcz** (Deliver) | Moves the message back to INBOX |
-| **Zawsze akceptuj** (Always accept) | Delivers it and adds an exact e-mail whitelist rule for the sender |
+| **Przywróć** (Restore) | Moves the message back to INBOX |
+| **Zawsze akceptuj** (Always accept) | Restores it to INBOX and adds an exact e-mail whitelist rule for the sender |
 | **Usuń** (Delete) | Deletes the message permanently |
 
 Users can recover false positives themselves, without logging in or calling support.
@@ -30,7 +30,7 @@ recipient clicks link ─► GET  /q/{token}   confirmation page (nothing happen
 
 | Key | Source | Recipient |
 |-----|--------|-----------|
-| `imap` | Legacy IMAP account (Settings → Legacy Account Config), folder `QUARANTINE` | *Recipient for the legacy IMAP mailbox*, or the configured IMAP e-mail |
+| `imap` | Legacy IMAP account (Ustawienia → Konfiguracja (stara)), folder `QUARANTINE` | *Recipient for the legacy IMAP mailbox*, or the configured IMAP e-mail |
 | `imap-<id>` | Every IMAP account (Konta), folder `QUARANTINE` | The account e-mail |
 | `ssh-<id>` | Every SSH account with a deployed agent, `~/Maildir/.QUARANTINE` | The account e-mail |
 
@@ -74,7 +74,7 @@ sender and subject is used.
 
 ## Configuration
 
-**Settings → Quarantine Digest** (`/config/digest/`):
+**Ustawienia → Raport kwarantanny** (`/config/digest/`):
 
 | Setting | Config key | Default |
 |---------|------------|---------|

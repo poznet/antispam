@@ -115,7 +115,7 @@ settings, so leaving them on is safe. The scheduler's output is in the
 
 Both compose files include a `clamav` service (clamd + freshclam, which
 updates signatures on its own). To use it, in the panel open
-**Konfiguracja → Spam**:
+**Ustawienia → Filtr spamu**:
 
 1. *Skanowanie załączników (ClamAV)* → *Adres clamd*: `tcp://clamav:3310`;
 2. turn on ClamAV scanning in the scoring section and save;
@@ -176,7 +176,7 @@ Before exposing the instance publicly, make sure:
       700 KiB of a message by default (~0.95 MB request), which fits. To accept
       whole phishing reports with attachments (up to 10 MiB), raise it, e.g.
       `client_max_body_size 16m;` (Traefik in Coolify has no default limit),
-      and then raise **Maks. wysyłana wiadomość** in *Konfiguracja → Wtyczki
+      and then raise **Maks. wysyłana wiadomość** in *Ustawienia → Wtyczki
       pocztowe* to match (`plugin.max_upload_kb`, published to the plugins as
       `max_upload_bytes`). See [thunderbird.md](thunderbird.md#http-api-apiplugin).
 - [ ] If you use the [quarantine digest](quarantine-digest.md), `/q/` must be

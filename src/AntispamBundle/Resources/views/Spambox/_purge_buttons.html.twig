@@ -14,8 +14,8 @@
         <input type="hidden" name="mode" value="high_risk">
         <input type="hidden" name="shown" value="{{ mailbox.high_risk_count }}">
         <button type="submit" class="btn btn-xs btn-warning"
-                title="Trwale usuwa wiadomości oznaczone jako wysokie ryzyko (phishing, podszywanie się, złośliwe załączniki i linki, brak zapisanej oceny)"
-                data-confirm="Trwale usunąć wiadomości wysokiego ryzyka z kwarantanny skrzynki {{ mailbox.label }}? Na liście: {{ mailbox.high_risk_count }}{{ more }}. Ryzyko zostanie sprawdzone ponownie w chwili usuwania, pozostałe wiadomości zostaną w kwarantannie. Usuniętych wiadomości nie da się odzyskać.">
+                title="Trwale usuwa wiadomości oznaczone jako wysokie ryzyko (phishing, podszywanie się, złośliwe załączniki i linki); wiadomości bez zapisanej oceny zostają"
+                data-confirm="Trwale usunąć wiadomości wysokiego ryzyka z kwarantanny skrzynki {{ mailbox.label }}? Na liście: {{ mailbox.high_risk_count }}{{ more }}. Ryzyko zostanie sprawdzone ponownie w chwili usuwania, pozostałe wiadomości (także te bez zapisanej oceny) zostaną w kwarantannie. Usuniętych wiadomości nie da się odzyskać.">
             <span class="glyphicon glyphicon-fire" aria-hidden="true"></span> Usuń wszystkie wysokiego ryzyka
         </button>
     </form>

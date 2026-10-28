@@ -131,7 +131,7 @@ class SpamboxController extends AbstractController
     {
         $risky = 0;
         foreach ($items as $item) {
-            $risky += !empty($item['high_risk']) ? 1 : 0;
+            $risky += QuarantineDigestService::isPurgeableHighRisk($item['reasons'] ?? []) ? 1 : 0;
         }
         return ['high_risk_count' => $risky, 'capped' => count($items) >= $limit];
     }

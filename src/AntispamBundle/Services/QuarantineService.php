@@ -342,7 +342,7 @@ class QuarantineService
             $risky = [];
             foreach (array_chunk($items, 200) as $chunk) {
                 foreach ($this->attachImapScores($chunk, $accountEmail) as $item) {
-                    if (QuarantineDigestService::isHighRisk($item['reasons'])) {
+                    if (QuarantineDigestService::isPurgeableHighRisk($item['reasons'])) {
                         $risky[] = $item;
                     } else {
                         $out['skipped']++;

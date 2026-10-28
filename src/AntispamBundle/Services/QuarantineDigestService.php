@@ -288,10 +288,10 @@ class QuarantineDigestService
      * (QuarantineService::REASON_SCORE_UNKNOWN: no score log row found) counts
      * too - without the reasons we can't tell, so fail closed.
      *
-     * The same definition hides "Zawsze akceptuj" and selects the messages of
-     * "Usuń wszystkie wysokiego ryzyka" (QuarantineService::purge()); the SSH
-     * agent's quarantine-purge uses an identical pattern (AGENT_HIGH_RISK_PATTERN,
-     * AgentParityTest).
+     * This definition hides "Zawsze akceptuj". "Usuń wszystkie wysokiego
+     * ryzyka" uses isPurgeableHighRisk() instead, which does NOT count
+     * score_unknown; the SSH agent's quarantine-purge uses an identical pattern
+     * (AGENT_HIGH_RISK_PATTERN, AgentParityTest).
      */
     public const HIGH_RISK_PATTERN = '/^(score_unknown$|impersonation_|lookalike_domain|internal_domain_spoof|display_name_embedded_address|attachment_|clamav|virustotal|url_safebrowsing|url_dbl|cert_hole)/';
 
@@ -300,6 +300,24 @@ class QuarantineDigestService
         foreach ($reasons as $r) {
             $rule = (string)($r['rule'] ?? '');
             if (preg_match(self::HIGH_RISK_PATTERN, $rule)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * High risk for the bulk deletion ("Usuń wszystkie wysokiego ryzyka"): a
+     * real high-risk reason only. A message without a score log row
+     * (score_unknown) is NOT deleted - permanent deletion must not fail closed,
+     * or a mailbox with score logging off / purged rows would lose its whole
+     * quarantine.
+     */
+    public static function isPurgeableHighRisk(array $reasons): bool
+    {
+        foreach ($reasons as $r) {
+            $rule = (string)($r['rule'] ?? '');
+            if ($rule !== QuarantineService::REASON_SCORE_UNKNOWN && preg_match(self::HIGH_RISK_PATTERN, $rule)) {
                 return true;
             }
         }

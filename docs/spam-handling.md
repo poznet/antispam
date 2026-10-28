@@ -76,18 +76,20 @@ The admin page also has **Usuń wszystkie wysokiego ryzyka (wszystkie skrzynki)*
 above the mailboxes (when there are 2+ mailboxes and some high-risk messages):
 one job per mailbox, then the job list filtered to `quarantine.purge`.
 
-- **High risk** is exactly the rule that hides *Zawsze akceptuj*:
-  `QuarantineDigestService::isHighRisk()` (`HIGH_RISK_PATTERN`): a reason
+- **High risk** = a real high-risk reason, the same pattern that hides *Zawsze
+  akceptuj* (`QuarantineDigestService::HIGH_RISK_PATTERN`): a reason
   `impersonation_*`, `lookalike_domain`, `internal_domain_spoof`,
   `display_name_embedded_address`, `attachment_*`, `clamav*`, `virustotal*`,
-  `url_safebrowsing*`, `url_dbl*`, `cert_hole*`, **or no score log row**
-  (`score_unknown`, fail closed). Consequence: with score logging off
-  (`scoring.log_enabled`) or after `antispam:purge` removed the rows, every IMAP
-  quarantine message counts as high risk, so the high-risk button deletes them
-  all - the page shows them with the *wysokie ryzyko* label, so the count in
-  the confirmation says so. The SSH agent uses the same pattern
+  `url_safebrowsing*`, `url_dbl*`, `cert_hole*`
+  (`QuarantineDigestService::isPurgeableHighRisk()`). A message **without a
+  score log row** (`score_unknown`) is **kept**: it still carries the *wysokie
+  ryzyko* label and has no *Zawsze akceptuj* (that check fails closed), but
+  permanent deletion does not - otherwise a mailbox with score logging off
+  (`scoring.log_enabled`) or with rows removed by `antispam:purge` would lose its
+  whole quarantine. Such messages are counted as skipped and are removed only by
+  *Usuń wszystko z kwarantanny*. The SSH agent uses the same pattern
   (`AGENT_HIGH_RISK_PATTERN`, kept equal by `AgentParityTest`) on its own
-  `score_log`; no row = high risk there too.
+  `score_log`; no row = kept there too.
 - **Background job** `quarantine.purge` ([jobs.md](jobs.md)), payload mailbox
   key + mode `high_risk` / `all`; one per mailbox and mode while queued /
   running (dedupe key `quarantine.purge:<key>:<mode>`). The button redirects to

@@ -2744,8 +2744,9 @@ function quarantineIsHighRisk($row)
 /**
  * Bulk permanent deletion from .QUARANTINE only (agent 3.4+, panel job
  * quarantine.purge): --mode=all deletes every message, --mode=high_risk only
- * those quarantineIsHighRisk() selects, judged now from the agent's own
- * score_log. Only files present in .QUARANTINE/new and /cur at this moment are
+ * messages with a score_log row that quarantineIsHighRisk() selects, judged now
+ * from the agent's own score_log (no row = unknown = kept: deletion never fails
+ * closed). Only files present in .QUARANTINE/new and /cur at this moment are
  * touched - INBOX and .SPAM never are.
  */
 function quarantinePurge($maildirPath, $dbPath, array $options)
@@ -2777,7 +2778,8 @@ function quarantinePurge($maildirPath, $dbPath, array $options)
                 $scoreStmt->bindValue(':f', agentBaseId($file));
                 $res = $scoreStmt->execute();
                 $row = $res ? $res->fetchArray(SQLITE3_ASSOC) : false;
-                if (!quarantineIsHighRisk($row)) {
+                // No score_log row = unknown: kept (bulk deletion never fails closed).
+                if (!$row || !quarantineIsHighRisk($row)) {
                     $out['skipped']++;
                     continue;
                 }

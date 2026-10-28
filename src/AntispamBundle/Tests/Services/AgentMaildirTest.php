@@ -283,14 +283,15 @@ class AgentMaildirTest extends TestCase
         $this->assertFalse(\quarantinePurge($this->maildir(), $this->db(), ['mode' => 'nope'])['success']);
 
         $res = \quarantinePurge($this->maildir(), $this->db(), ['mode' => 'high_risk']);
-        $this->assertSame(['success' => true, 'mode' => 'high_risk', 'total' => 3, 'deleted' => 2, 'skipped' => 1, 'failed' => 0], $res);
+        $this->assertSame(['success' => true, 'mode' => 'high_risk', 'total' => 3, 'deleted' => 1, 'skipped' => 2, 'failed' => 0], $res);
         $this->assertFileDoesNotExist($this->maildir() . '/.QUARANTINE/new/1.M1.host');
-        $this->assertFileDoesNotExist($this->maildir() . '/.QUARANTINE/new/3.M1.host');
+        $this->assertFileExists($this->maildir() . '/.QUARANTINE/new/3.M1.host', 'no score_log row = unknown, kept');
         $this->assertFileExists($this->maildir() . '/.QUARANTINE/cur/2.M1.host:2,S');
 
         $res = \quarantinePurge($this->maildir(), $this->db(), ['mode' => 'all']);
-        $this->assertSame([1, 1], [$res['total'], $res['deleted']]);
+        $this->assertSame([2, 2], [$res['total'], $res['deleted']]);
         $this->assertFileDoesNotExist($this->maildir() . '/.QUARANTINE/cur/2.M1.host:2,S');
+        $this->assertFileDoesNotExist($this->maildir() . '/.QUARANTINE/new/3.M1.host');
         $this->assertFileExists($this->maildir() . '/new/4.M1.host', 'INBOX is never touched');
         $this->assertFileExists($this->maildir() . '/.SPAM/new/5.M1.host', '.SPAM is never touched');
     }

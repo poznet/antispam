@@ -41,8 +41,9 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   lists the quarantine when it runs and re-evaluates each message - only mail
   still in the quarantine is deleted, INBOX / SPAM are never opened. "High
   risk" = the rule that hides *Zawsze akceptuj*
-  (`QuarantineDigestService::isHighRisk()`, now `HIGH_RISK_PATTERN`), including
-  messages without a score log row. Users may purge only their own mailboxes
+  (`HIGH_RISK_PATTERN`, `QuarantineDigestService::isPurgeableHighRisk()`); a
+  message without a score log row (`score_unknown`) is kept - it is deleted only
+  by *Usuń wszystko*. Users may purge only their own mailboxes
   (checked again when the job runs) and see the result on the new user-area job
   page `/my/jobs/{id}`; the admin job pages stay admin-only. Audit
   `quarantine.purge_queued` / `quarantine.purge` (counts deleted / skipped /

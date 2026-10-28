@@ -2,6 +2,7 @@
 
 namespace AntispamBundle\Tests\Services;
 
+use AntispamBundle\Controller\SpamboxController;
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\AuditLog;
 use AntispamBundle\Entity\BackgroundJob;
@@ -15,6 +16,7 @@ use AntispamBundle\Services\ImapScanService;
 use AntispamBundle\Services\InboxService;
 use AntispamBundle\Services\Jobs\Handler\QuarantinePurgeHandler;
 use AntispamBundle\Services\MessageService;
+use AntispamBundle\Services\QuarantineDigestService;
 use AntispamBundle\Services\QuarantinePurge;
 use AntispamBundle\Services\QuarantineService;
 use AntispamBundle\Services\SshService;
@@ -127,14 +129,26 @@ class QuarantinePurgeTest extends TestCase
             $this->message(1, 'ceo@evil.pl', 'Przelew', true),
             $this->message(2, 'news@sklep.pl', 'Promocja', false),
             $this->message(3, 'x@att.pl', 'Faktura', true),
-            $this->message(4, 'who@unknown.pl', 'Hej', true), // no own score row = score_unknown = high risk
+            $this->message(4, 'who@unknown.pl', 'Hej', false), // no own score row = score_unknown: kept (deletion never fails closed)
         ]);
 
         $r = $this->service()->purge($this->key($this->imap), QuarantineService::PURGE_HIGH_RISK);
 
-        $this->assertSame(['total' => 4, 'deleted' => 3, 'skipped' => 1, 'failed' => 0, 'errors' => []], $r);
+        $this->assertSame(['total' => 4, 'deleted' => 2, 'skipped' => 2, 'failed' => 0, 'errors' => []], $r);
         $this->assertSame(['QUARANTINE'], array_values(array_unique($this->opened)), 'only the quarantine folder is opened');
         $this->assertSame(1, $this->expunges);
+    }
+
+    public function testPurgeableHighRiskIgnoresMissingScore()
+    {
+        $unknown = [['rule' => QuarantineService::REASON_SCORE_UNKNOWN, 'score' => 0]];
+        $this->assertTrue(QuarantineDigestService::isHighRisk($unknown), '"Zawsze akceptuj" still fails closed');
+        $this->assertFalse(QuarantineDigestService::isPurgeableHighRisk($unknown), 'bulk deletion does not');
+        $this->assertTrue(QuarantineDigestService::isPurgeableHighRisk([['rule' => 'clamav:Eicar', 'score' => 100]]));
+        $this->assertFalse(QuarantineDigestService::isPurgeableHighRisk([['rule' => 'dkim_fail', 'score' => 4]]));
+
+        $counts = SpamboxController::purgeCounts([['reasons' => $unknown, 'high_risk' => true], ['reasons' => [['rule' => 'lookalike_domain']], 'high_risk' => true]], 100);
+        $this->assertSame(1, $counts['high_risk_count'], 'the button count matches what the job deletes');
     }
 
     public function testAllModeDeletesEverythingAndCountsFailures()

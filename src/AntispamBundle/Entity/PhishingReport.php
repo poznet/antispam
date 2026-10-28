@@ -131,22 +131,22 @@ class PhishingReport
     public function setClientIp($v) { $this->clientIp = $v; return $this; }
 
     public function getSender() { return $this->sender; }
-    public function setSender($v) { $this->sender = $v !== null ? mb_substr($v, 0, 255, 'UTF-8') : null; return $this; }
+    public function setSender($v) { $this->sender = self::clip($v, 255); return $this; }
 
     public function getSenderName() { return $this->senderName; }
-    public function setSenderName($v) { $this->senderName = $v !== null ? mb_substr($v, 0, 255, 'UTF-8') : null; return $this; }
+    public function setSenderName($v) { $this->senderName = self::clip($v, 255); return $this; }
 
     public function getReplyTo() { return $this->replyTo; }
-    public function setReplyTo($v) { $this->replyTo = $v !== null ? mb_substr($v, 0, 255, 'UTF-8') : null; return $this; }
+    public function setReplyTo($v) { $this->replyTo = self::clip($v, 255); return $this; }
 
     public function getReturnPath() { return $this->returnPath; }
-    public function setReturnPath($v) { $this->returnPath = $v !== null ? mb_substr($v, 0, 255, 'UTF-8') : null; return $this; }
+    public function setReturnPath($v) { $this->returnPath = self::clip($v, 255); return $this; }
 
     public function getSubject() { return $this->subject; }
-    public function setSubject($v) { $this->subject = $v !== null ? mb_substr($v, 0, 512, 'UTF-8') : null; return $this; }
+    public function setSubject($v) { $this->subject = self::clip($v, 512); return $this; }
 
     public function getMessageId() { return $this->messageId; }
-    public function setMessageId($v) { $this->messageId = $v !== null ? mb_substr($v, 0, 255, 'UTF-8') : null; return $this; }
+    public function setMessageId($v) { $this->messageId = self::clip($v, 255); return $this; }
 
     public function getConnectingIp() { return $this->connectingIp; }
     public function setConnectingIp($v) { $this->connectingIp = $v; return $this; }
@@ -165,6 +165,12 @@ class PhishingReport
         }
         $this->status = $v;
         return $this;
+    }
+
+    /** Hostile mail may carry invalid UTF-8 - store it scrubbed and cut to the column size. */
+    private static function clip($v, $length)
+    {
+        return $v === null ? null : mb_substr(mb_scrub((string)$v, 'UTF-8'), 0, $length, 'UTF-8');
     }
 
     public function getNote() { return $this->note; }

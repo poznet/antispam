@@ -15,8 +15,12 @@ class RawMessageParser
 {
     /** Guard against pathological nesting in hostile MIME trees. */
     const MAX_DEPTH = 8;
+    /** ...and against a flat tree of thousands of tiny parts / header lines. */
+    const MAX_PARTS = 500;
+    const MAX_HEADER_LINES = 2000;
 
     private $headerBlock = '';
+    private $partsSeen = 0;
     private $body = '';
     private $headers = [];
 
@@ -32,11 +36,15 @@ class RawMessageParser
         return $this->headerBlock;
     }
 
-    /** First value of a header, unfolded and MIME-decoded ('' when absent). */
+    /**
+     * First value of a header, unfolded and MIME-decoded ('' when absent).
+     * Always valid UTF-8 (raw 8-bit bytes become '?'), so it can be stored in
+     * utf8mb4 columns and escaped by Twig.
+     */
     public function getHeader($name)
     {
         $values = $this->headers[strtolower($name)] ?? [];
-        return $values ? self::decodeWords($values[0]) : '';
+        return $values ? mb_scrub(self::decodeWords($values[0]), 'UTF-8') : '';
     }
 
     /**
@@ -48,12 +56,12 @@ class RawMessageParser
     {
         $out = [];
         $unfolded = preg_replace('/\r?\n[ \t]+/', ' ', $this->headerBlock);
-        foreach (preg_split('/\r?\n/', $unfolded) as $line) {
+        foreach (preg_split('/\r?\n/', $unfolded, self::MAX_HEADER_LINES + 1) as $i => $line) {
             $colon = strpos($line, ':');
-            if ($colon === false || $colon === 0) {
+            if ($i >= self::MAX_HEADER_LINES || $colon === false || $colon === 0) {
                 continue;
             }
-            $out[] = ['name' => trim(substr($line, 0, $colon)), 'value' => self::decodeWords(trim(substr($line, $colon + 1)))];
+            $out[] = ['name' => mb_scrub(trim(substr($line, 0, $colon)), 'UTF-8'), 'value' => mb_scrub(self::decodeWords(trim(substr($line, $colon + 1))), 'UTF-8')];
         }
         return $out;
     }
@@ -122,6 +130,7 @@ class RawMessageParser
     {
         $plain = null;
         $html = null;
+        $this->partsSeen = 0;
         $this->walk($this->headers, $this->body, 0, $plain, $html);
         if ($plain !== null && trim($plain) !== '') {
             return $plain;
@@ -141,13 +150,14 @@ class RawMessageParser
     public function getParts()
     {
         $out = ['text' => '', 'html' => '', 'attachments' => []];
+        $this->partsSeen = 0;
         $this->collect($this->headers, $this->body, 0, $out);
         return $out;
     }
 
     private function collect(array $headers, $body, $depth, array &$out)
     {
-        if ($depth > self::MAX_DEPTH) {
+        if ($depth > self::MAX_DEPTH || ++$this->partsSeen > self::MAX_PARTS) {
             return;
         }
         $contentType = $headers['content-type'][0] ?? 'text/plain';
@@ -186,7 +196,7 @@ class RawMessageParser
 
     private function walk(array $headers, $body, $depth, &$plain, &$html)
     {
-        if ($depth > self::MAX_DEPTH || ($plain !== null && $html !== null)) {
+        if ($depth > self::MAX_DEPTH || ($plain !== null && $html !== null) || ++$this->partsSeen > self::MAX_PARTS) {
             return;
         }
         $contentType = $headers['content-type'][0] ?? 'text/plain';

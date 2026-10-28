@@ -73,7 +73,7 @@
                                 <p><button type="submit" name="what" value="sender" class="btn btn-sm btn-default">Zablokuj adres {{ report.sender }}</button></p>
                             {% endif %}
                             {% if a.from_host and not a.freemail %}
-                                <p><button type="submit" name="what" value="domain" class="btn btn-sm btn-danger" onclick="return confirm('Zablokować całą domenę {{ a.from_host|e('js') }} dla tej skrzynki?');">Zablokuj domenę {{ a.from_host }}</button></p>
+                                <p><button type="submit" name="what" value="domain" class="btn btn-sm btn-danger" onclick="return confirm('Zablokować całą domenę nadawcy dla tej skrzynki?');">Zablokuj domenę {{ a.from_host }}</button></p>
                             {% elseif a.freemail %}
                                 <p class="text-muted"><small>{{ a.from_host }} to darmowa poczta - zablokuj tylko adres.</small></p>
                             {% endif %}

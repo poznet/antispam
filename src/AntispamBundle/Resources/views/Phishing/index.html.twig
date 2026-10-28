@@ -3,6 +3,7 @@
 {% block page_title %}Zgłoszenia phishingu{% endblock %}
 
 {% block body %}
+    {% set token = csrf_token('phishing') %}
     <p class="text-muted">
         Wiadomości oznaczone we wtyczce (Thunderbird, Outlook) jako <strong>próba wyłudzenia</strong>. Każda jest też traktowana jak zgłoszenie spamu
         (nadawca trafia na blacklistę skrzynki), a tu zostaje pełna treść z nagłówkami: można ją przejrzeć, dodać reguły i pobrać jako .eml
@@ -40,7 +41,13 @@
                         {% if r.replyTo and r.replyTo != r.sender %}<br><small class="text-danger">Reply-To: {{ r.replyTo }}</small>{% endif %}</td>
                     <td>{{ (r.subject ?: '(bez tematu)')[:80] }}</td>
                     <td><span class="label label-{{ {new: 'warning', confirmed: 'danger', reported: 'info', false_positive: 'default'}[r.status] }}">{{ statuses[r.status] }}</span></td>
-                    <td class="text-right"><a href="{{ path('antispam_phishing_show', {id: r.id}) }}" class="btn btn-xs btn-default"><span class="glyphicon glyphicon-search"></span> Analiza</a></td>
+                    <td class="text-right" style="white-space:nowrap;">
+                        <a href="{{ path('antispam_phishing_show', {id: r.id}) }}" class="btn btn-xs btn-default"><span class="glyphicon glyphicon-search"></span> Analiza</a>
+                        <form method="post" action="{{ path('antispam_phishing_delete', {id: r.id}) }}" style="display:inline;" onsubmit="return confirm('Usunąć zgłoszenie razem z treścią wiadomości?');">
+                            <input type="hidden" name="_token" value="{{ token }}">
+                            <button type="submit" class="btn btn-xs btn-danger" title="Usuń"><span class="glyphicon glyphicon-trash"></span></button>
+                        </form>
+                    </td>
                 </tr>
             {% endfor %}
             </tbody>

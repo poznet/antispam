@@ -17,6 +17,13 @@ class PhishingReportService
     /** Full source incl. attachments; must fit post_max_size once base64-encoded. */
     const MAX_RAW_BYTES = 10485760; // 10 MiB
     const MAX_LINKS = 300;
+    /**
+     * Stored phishing sources per mailbox. Any plugin user can report, so
+     * without a cap one token could fill the disk (30 x 10 MiB per hour).
+     */
+    const MAX_STORED_BYTES_PER_ACCOUNT = 524288000; // 500 MiB
+    /** ...and in total, so several accounts cannot fill the disk together. */
+    const MAX_STORED_BYTES_TOTAL = 5368709120; // 5 GiB
 
     const CLIENTS = ['thunderbird', 'outlook', 'applemail'];
 
@@ -42,6 +49,8 @@ class PhishingReportService
      * only bumps the counter.
      *
      * @return array{id:int, duplicate:bool}
+     *
+     * @throws \OverflowException when the account's storage quota is used up
      */
     public function submit($raw, Account $account, $client = null, $clientIp = null, $truncated = false)
     {
@@ -51,6 +60,11 @@ class PhishingReportService
             $existing->reportedAgain();
             $this->em->flush();
             return ['id' => $existing->getId(), 'duplicate' => true];
+        }
+
+        if ($repo->storedBytes($account->getEmail()) + strlen((string)$raw) > self::MAX_STORED_BYTES_PER_ACCOUNT
+            || $repo->storedBytes() + strlen((string)$raw) > self::MAX_STORED_BYTES_TOTAL) {
+            throw new \OverflowException('phishing report storage quota exceeded');
         }
 
         $msg = new RawMessageParser($raw);
@@ -79,7 +93,7 @@ class PhishingReportService
     {
         $msg = new RawMessageParser($report->getRaw());
         $parts = $msg->getParts();
-        $fromHost = $msg->getFromHost();
+        $fromHost = mb_scrub($msg->getFromHost(), 'UTF-8');
 
         $auth = [];
         foreach (array_merge($msg->getHeaders('authentication-results'), $msg->getHeaders('arc-authentication-results')) as $line) {

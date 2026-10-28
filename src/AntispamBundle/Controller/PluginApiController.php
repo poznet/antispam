@@ -180,7 +180,9 @@ class PluginApiController extends AbstractController
         if (!$account) {
             return new JsonResponse(['error' => 'login required'], 401);
         }
-        if (!$this->plugin->hit('phishing', 'acc:' . $account->getId(), self::PHISHING_RATE_LIMIT, 3600)) {
+        // Also counts against the spam report budget: it feeds learn() / the shared feed too.
+        if (!$this->plugin->hit('phishing', 'acc:' . $account->getId(), self::PHISHING_RATE_LIMIT, 3600)
+            || !$this->plugin->hit('report', 'acc:' . $account->getId(), $this->plugin->getReportRateLimit(), 3600)) {
             return new JsonResponse(['error' => 'rate limit exceeded'], 429);
         }
 
@@ -189,7 +191,12 @@ class PluginApiController extends AbstractController
             return $raw;
         }
 
-        $stored = $this->phishing->submit($raw, $account, (string)($data['client'] ?? ''), $this->clientIp($request), !empty($data['truncated']));
+        try {
+            $stored = $this->phishing->submit($raw, $account, (string)($data['client'] ?? ''), $this->clientIp($request), !empty($data['truncated']));
+        } catch (\OverflowException $e) {
+            // The admin has to review / delete older reports of this mailbox first.
+            return new JsonResponse(['error' => 'phishing report quota exceeded'], 507);
+        }
         $result = $this->plugin->learn($raw, PluginService::VERDICT_SPAM, $account, $this->clientIp($request));
         $result['authenticated'] = true;
         $result['phishing_id'] = $stored['id'];

@@ -83,4 +83,19 @@ class PhishingReportServiceTest extends TestCase
         $this->assertFalse(PhishingReportService::isFreemail('bank-pl.top'));
         $this->assertSame('evil.top', PhishingReportService::domainOf('a@Evil.TOP'));
     }
+
+    public function testHostileInputIsBounded()
+    {
+        $raw = "From: <x@\xB1bank.pl>\r\nSubject: \xFF\xFEzle\r\nContent-Type: multipart/mixed; boundary=b\r\n\r\n"
+            . str_repeat("--b\r\nContent-Type: a/b\r\n\r\nx\r\n", 3000) . "--b--\r\n";
+        $msg = new RawMessageParser($raw);
+        $this->assertLessThanOrEqual(RawMessageParser::MAX_PARTS, count($msg->getParts()['attachments']));
+
+        $r = (new PhishingReport())->setRaw($raw)->setSender($msg->getFromAddress())->setSubject($msg->getSubject());
+        $this->assertTrue(mb_check_encoding($r->getSender(), 'UTF-8'));
+        $this->assertTrue(mb_check_encoding($r->getSubject(), 'UTF-8'));
+
+        $headers = "From: a@b.pl\r\n" . str_repeat("X-A: 1\r\n", 5000) . "\r\nbody";
+        $this->assertCount(RawMessageParser::MAX_HEADER_LINES, (new RawMessageParser($headers))->getHeaderList());
+    }
 }

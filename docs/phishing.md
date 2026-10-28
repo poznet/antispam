@@ -24,7 +24,16 @@ forward it (e.g. to CERT Polska).
 4. The client files the message as junk, like a spam report (Outlook cannot
    move mail; it shows the junk hint instead).
 
-Rate limit: 30 reports per account per hour (`phishing` bucket).
+Rate limit: 30 reports per account per hour (`phishing` bucket). Storage
+quota: 500 MiB of stored sources per mailbox and 5 GiB in total
+(`PhishingReportService::MAX_STORED_BYTES_PER_ACCOUNT` / `_TOTAL`); over it
+the API answers `507` until the admin deletes older reports (also possible
+straight from the list). A phishing report also counts against the account's
+spam-report limit, since it is learned as spam too.
+
+Hostile input: sender / subject fields are scrubbed to valid UTF-8 before
+they are stored, and the parser stops after 500 MIME parts and 2000 header
+lines, so a crafted message cannot make its own analysis page fail.
 Retention: reports not re-reported for 365 days are purged when a new one
 arrives.
 

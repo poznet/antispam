@@ -131,7 +131,8 @@ RFC 822 source (`raw_base64`, max 4 MiB decoded; 10 MiB for `/phishing`).
 | GET | `/plugin/download` | — | The `.xpi` |
 
 Errors: `400` bad payload, `401` login required / bad credentials / expired token,
-`403` feature disabled, `413` message too large, `429` rate limit.
+`403` feature disabled, `413` message too large, `429` rate limit, `507`
+phishing storage quota of the mailbox used up.
 
 ```bash
 TOKEN=$(curl -s -X POST https://antispam.example.com/api/plugin/login \

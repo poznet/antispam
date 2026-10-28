@@ -55,6 +55,16 @@ class PhishingReportRepository extends EntityRepository
         return array_column($this->createQueryBuilder('r')->select('DISTINCT r.accountEmail AS a')->orderBy('a')->getQuery()->getArrayResult(), 'a');
     }
 
+    /** Total size of the stored sources of one mailbox, or of all of them. */
+    public function storedBytes($accountEmail = null)
+    {
+        $qb = $this->createQueryBuilder('r')->select('COALESCE(SUM(r.size), 0)');
+        if ($accountEmail !== null) {
+            $qb->where('r.accountEmail = :a')->setParameter('a', $accountEmail);
+        }
+        return (int)$qb->getQuery()->getSingleScalarResult();
+    }
+
     public function purgeOlderThan(\DateTime $before)
     {
         return $this->createQueryBuilder('r')->delete()

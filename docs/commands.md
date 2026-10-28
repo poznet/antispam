@@ -44,6 +44,22 @@ mailbox failed. Suitable for cron.
 php bin/console antispam:agent:scan-all
 ```
 
+## Rules
+
+### antispam:rules:make-global
+Turns the white/black list rules of one mailbox into global rules
+("Wszystkie skrzynki", owner `*`, see [scoring.md](scoring.md#rule-ownership)).
+For installs from the single-mailbox days, where every panel rule belonged to
+the legacy mailbox from the "E-mail" settings and never reached IMAP/SSH accounts.
+A rule that already exists globally is removed and its hit counter added to
+the global one. SSH agents need a sync afterwards.
+```bash
+php bin/console antispam:rules:make-global --dry-run          # preview
+php bin/console antispam:rules:make-global                    # legacy mailbox
+php bin/console antispam:rules:make-global --owner=jan@firma.pl
+php bin/console antispam:agent:sync                           # push to SSH agents
+```
+
 ## Cron Log
 
 ### antispam:cron:run

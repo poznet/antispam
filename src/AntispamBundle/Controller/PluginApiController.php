@@ -53,7 +53,7 @@ class PluginApiController extends AbstractController
     /** Phishing reports (full messages up to 10 MiB each) per account and hour. */
     const PHISHING_RATE_LIMIT = 30;
 
-    const PLUGIN_VERSION = '1.3.1';
+    const PLUGIN_VERSION = '1.3.2';
 
     /**
      * The Thunderbird .xpi. Default: the uploaded generic package (e.g. the

@@ -187,6 +187,10 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   migrations and warns on entity changes without a migration. See `docs/migrations.md`.
 
 ### Fixed
+- Thunderbird plugin 1.3.2: "Brak folderu Śmieci na koncie" on IMAP accounts whose
+  spam folder carries no junk flag. The plugin now also takes a folder named
+  Spam / Junk / Śmieci / Wiadomości-śmieci (any level, e.g. INBOX.Spam), and when
+  none exists it logs the account's folder list and how to point Thunderbird at one.
 - Thunderbird plugin 1.3.1: the connection test showed ✗ for "wersja Thunderbirda" and
   "Zgoda na połączenie z serwerem" (and "undefined" next to the plugin version) although
   both were fine - the test's own step() shadowed the new time-limit helper. Reports

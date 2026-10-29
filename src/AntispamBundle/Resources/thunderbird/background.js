@@ -570,6 +570,47 @@ async function rawAfterMove(message, rawPromise) {
   }
 }
 
+// Junk folder names used when no folder carries the junk flag (IMAP servers
+// that do not advertise \Junk, or a folder Thunderbird has not adopted yet).
+const JUNK_NAME_RE = /^(junk|junk e-?mail|spam|bulk mail|śmieci|wiadomości[- ]śmieci|niechciane|spam[- ]?box)$/i;
+
+/** Every folder of an account, flattened (empty list when it cannot be read). */
+async function accountFolders(accountId) {
+  try {
+    const acc = await step("foldery konta (accounts.get)", () => messenger.accounts.get(accountId, true));
+    if (acc && acc.folders && acc.folders.length) {
+      const out = [];
+      const stack = [...acc.folders];
+      while (stack.length) {
+        const f = stack.shift();
+        out.push(f);
+        stack.push(...(f.subFolders || []));
+      }
+      return out;
+    }
+    if (acc && acc.rootFolder && messenger.folders && messenger.folders.getSubFolders) {
+      const out = [];
+      const stack = [...(await step("foldery konta (folders.getSubFolders)", () => messenger.folders.getSubFolders(acc.rootFolder.id || acc.rootFolder, true)) || [])];
+      while (stack.length) {
+        const f = stack.shift();
+        out.push(f);
+        stack.push(...(f.subFolders || []));
+      }
+      return out;
+    }
+  } catch (e) {
+    logEvent("local", false, "Nie udało się odczytać folderów konta: " + errorText(e));
+  }
+  return [];
+}
+
+/** Last path segment ("INBOX.Spam", "/INBOX/Spam" -> "Spam"). */
+function folderBaseName(f) {
+  const name = (f.name || "").trim();
+  if (name) return name;
+  return String(f.path || "").split(/[\/.]/).filter(Boolean).pop() || "";
+}
+
 async function findJunkFolder(accountId) {
   try {
     if (messenger.folders && messenger.folders.query) {
@@ -578,15 +619,20 @@ async function findJunkFolder(accountId) {
     }
   } catch (e) { /* older Thunderbird */ }
 
-  try {
-    const acc = await step("foldery konta (accounts.get)", () => messenger.accounts.get(accountId, true));
-    const stack = [...((acc && acc.folders) || [])];
-    while (stack.length) {
-      const f = stack.shift();
-      if ((f.specialUse || []).includes("junk") || f.type === "junk") return f;
-      stack.push(...(f.subFolders || []));
-    }
-  } catch (e) { /* ignore */ }
+  const folders = await accountFolders(accountId);
+  const flagged = folders.find(f => (f.specialUse || []).includes("junk") || f.type === "junk");
+  if (flagged) return flagged;
+
+  // No junk flag anywhere: take a folder named like one (Spam, Junk, Śmieci...).
+  const named = folders.find(f => JUNK_NAME_RE.test(folderBaseName(f)));
+  if (named) {
+    logEvent("local", true, "Folder Śmieci nie jest oznaczony na koncie - używam folderu " + (named.path || named.name) + " (dopasowanie po nazwie)");
+    return named;
+  }
+  logEvent("local", false, "Nie znaleziono folderu Śmieci/Spam/Junk na koncie", {
+    foldery: folders.map(f => f.path || f.name).slice(0, 40).join(", ") || "(brak listy)",
+    rada: "W Thunderbirdzie: Ustawienia konta > Ustawienia niechcianej poczty > \"Przenoś nowe wiadomości niechciane do\" - wskaż folder, albo załóż folder Spam na serwerze",
+  });
   return null;
 }
 
@@ -607,7 +653,7 @@ async function setJunk(message, junk) {
 async function moveToJunk(message) {
   const junk = await findJunkFolder(folderAccountId(message.folder));
   if (!junk) {
-    logEvent("local", false, "Brak folderu Śmieci na koncie - wiadomość nie została przeniesiona", { temat: message.subject || "" });
+    logEvent("local", false, "Brak folderu Śmieci na koncie - wiadomość została oznaczona jako śmieci, ale nie przeniesiona", { temat: message.subject || "" });
     return false;
   }
   if (message.folder && junk.path === message.folder.path) return true;

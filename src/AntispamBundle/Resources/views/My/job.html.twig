@@ -25,6 +25,14 @@
                     <span class="job-progress-label" data-job-field="bar-label">{{ job.percentLabel ?? '0%' }}</span>
                 </div>
                 <p class="text-muted small">Usuwanie wykonuje się w tle - ta strona odświeży się sama, możesz ją też zamknąć.</p>
+                {% if job.cancelRequested %}
+                    <p class="text-warning">Anulowanie zgłoszone - zadanie zatrzyma się przy najbliższej okazji.</p>
+                {% else %}
+                    <form method="post" action="{{ path('antispam_my_job_cancel', {id: job.id}) }}" style="display:inline;">
+                        <input type="hidden" name="_token" value="{{ csrf_token('my_job_cancel_' ~ job.id) }}">
+                        <button type="submit" class="btn btn-default btn-sm" data-confirm="Anulować to zadanie? Wiadomości już usunięte nie wrócą."><span class="glyphicon glyphicon-stop"></span> Anuluj</button>
+                    </form>
+                {% endif %}
             {% endif %}
 
             <table class="table table-condensed" style="margin:10px 0 0;">

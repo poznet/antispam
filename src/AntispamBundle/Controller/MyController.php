@@ -168,6 +168,28 @@ class MyController extends AbstractController
         return ['job' => $job, 'result' => $job->getResult(), 'is_admin' => $this->access->isAdmin($this->getUser())];
     }
 
+    /** Cancel an own job (same rules as the job page: own quarantine purge jobs only). */
+    #[Route('/jobs/{id}/cancel', name: 'antispam_my_job_cancel', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function jobCancelAction(int $id, Request $request)
+    {
+        if (!$this->isCsrfTokenValid('my_job_cancel_' . $id, (string)$request->request->get('_token'))) {
+            throw $this->createAccessDeniedException('Nieprawidłowy token CSRF');
+        }
+        $job = $this->ownJob($id);
+        $state = $this->jobs->cancel($id);
+        if ($state === BackgroundJob::STATUS_CANCELLED) {
+            $this->addFlash('success', 'Zadanie anulowane.');
+        } elseif ($state !== null) {
+            $this->addFlash('info', 'Zadanie zostanie przerwane przy najbliższej okazji.');
+        } else {
+            $this->addFlash('warning', 'Zadanie już się zakończyło.');
+        }
+        if ($state !== null) {
+            $this->audit('job.cancel', targetType: 'job', targetId: $id, label: $job->getLabel(), mailbox: $job->getMailbox(), details: ['type' => $job->getType(), 'state' => $state, 'source' => 'my']);
+        }
+        return $this->redirectToRoute('antispam_my_job_show', ['id' => $id]);
+    }
+
     /** Polled by job-status.js on /my/jobs/{id}. */
     #[Route('/jobs/{id}/status', name: 'antispam_my_job_status', requirements: ['id' => '\d+'], methods: ['GET'])]
     public function jobStatusAction(int $id): JsonResponse

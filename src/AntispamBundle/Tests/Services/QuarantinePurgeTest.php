@@ -221,6 +221,17 @@ class QuarantinePurgeTest extends TestCase
         $this->assertNotNull($r['rule']);
     }
 
+    public function testPurgeStopsWhenTheProgressCallbackSaysCancelled()
+    {
+        $messages = [];
+        for ($i = 1; $i <= 120; $i++) {
+            $messages[] = $this->message($i, 'a@b.pl', 's', $i <= 50);
+        }
+        $this->inFolder($messages);
+        $r = $this->service()->purge($this->key($this->imap), QuarantineService::PURGE_ALL, fn () => false);
+        $this->assertSame([120, 50, 70, true], [$r['total'], $r['deleted'], $r['skipped'], $r['cancelled']]);
+    }
+
     public function testAllModeDeletesEverythingAndCountsFailures()
     {
         $bad = $this->createMock(MessageInterface::class);

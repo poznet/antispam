@@ -60,9 +60,13 @@ times. While the job is queued / running `Resources/public/js/job-status.js`
 polls `/jobs/{id}/status` every 2 s (no inline script - CSP) and reloads the
 page when it ends; the result is rendered by
 `Resources/views/Job/result/<type>.html.twig` (the former
-`Account/scan|deploy|sync|health.html.twig` content). **Anuluj** cancels a
-queued job at once; a running one stops at its next check (a batched scan after
-the current batch; a single SSH command finishes). The account list shows a
+`Account/scan|deploy|sync|health.html.twig` content). **Anuluj** (job page and,
+since 2.1.0, every active row of the job list) cancels a queued job at once; a
+running one stops at its next check. The worker exposes the running job through
+`Jobs\JobCancellation` (asked at most every 5 s), so an IMAP scan / rescan
+batch stops **at the next message** - the rescan keeps its cursor and the
+account's progress, a later rescan continues it - and a quarantine purge stops
+within 50 messages (counts so far kept). A single SSH agent command finishes. The account list shows a
 "Skanowanie skrzynki: w kolejce / trwa" badge per account with an active job.
 
 Access: `ROLE_ADMIN` only (`#[IsGranted]` + the `^/` access rule). The one
@@ -70,8 +74,9 @@ user-area job is the quarantine purge from `/my/quarantine`: it gets its own
 page in the user area, `/my/jobs/{id}` (+ `/my/jobs/{id}/status` for
 `job-status.js`, `MyController`), which shows only `quarantine.purge` jobs of a
 mailbox the user owns **and** queued by that user (`requested_by` = login,
-`requested_by_type` = `user`); anything else is a 404. No cancel there, raw
-error text only for admins. A click while an admin's purge of the same mailbox
+`requested_by_type` = `user`); anything else is a 404. **Anuluj** there too
+(`/my/jobs/{id}/cancel`, own jobs only, audit `job.cancel` with `source: my`),
+raw error text only for admins. A click while an admin's purge of the same mailbox
 and mode is queued does not open that job (flash on `/my/quarantine` instead).
 
 ## Worker

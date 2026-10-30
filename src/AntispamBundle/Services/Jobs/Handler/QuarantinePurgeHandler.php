@@ -66,6 +66,7 @@ class QuarantinePurgeHandler implements JobHandlerInterface
             });
             $result = $this->quarantine->purge($key, $mode, function (int $done, int $total) use ($context) {
                 $context->progress(sprintf('Usunięto %d z %d', $done, $total), $done, $total);
+                return !$context->isCancelRequested();
             }, $minScore);
         } catch (\Throwable $e) {
             $this->audit($context, $key, $mode, $source, null, $e->getMessage());
@@ -73,6 +74,11 @@ class QuarantinePurgeHandler implements JobHandlerInterface
         }
 
         $this->audit($context, $key, $mode, $source, $result, null);
+        if (!empty($result['cancelled'])) {
+            // "Anuluj" mid-way: the worker ends a continued job with a cancel request as cancelled, keeping this result.
+            $context->continueLater(['result' => $result + ['key' => $key, 'mode' => $mode, 'source' => $source, 'min_score' => $minScore]]);
+            return [];
+        }
         $context->progress('Zakończone', (int)$result['deleted'], (int)$result['deleted']);
         return $result + ['key' => $key, 'mode' => $mode, 'source' => $source, 'shown' => $payload['shown'] ?? null, 'min_score' => $minScore];
     }

@@ -30,7 +30,7 @@ class JobsDatabase
     }
 
     /** @param iterable<\AntispamBundle\Services\Jobs\JobHandlerInterface> $handlers */
-    public function worker(iterable $handlers, ?AuditLogger $audit = null, iterable $runtimeCaches = []): JobWorker
+    public function worker(iterable $handlers, ?AuditLogger $audit = null, iterable $runtimeCaches = [], ?\AntispamBundle\Services\Jobs\JobCancellation $cancellation = null): JobWorker
     {
         $em = $this->em;
         $registry = new class($em) implements ManagerRegistry {
@@ -47,7 +47,7 @@ class JobsDatabase
             public function getRepository(string $persistentObject, ?string $persistentManagerName = null): \Doctrine\Persistence\ObjectRepository { return $this->em->getRepository($persistentObject); }
             public function getManagerForClass(string $class): ?\Doctrine\Persistence\ObjectManager { return $this->em; }
         };
-        return new JobWorker($this->em->getConnection(), $registry, $handlers, null, $audit, $runtimeCaches);
+        return new JobWorker($this->em->getConnection(), $registry, $handlers, null, $audit, $runtimeCaches, $cancellation);
     }
 
     /** Raw row of a job. */

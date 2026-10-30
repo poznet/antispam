@@ -73,6 +73,7 @@ class ImapScanService
         private ?MailboxSettingsResolver $mailboxSettings = null,
         private ?OAuthTokenManager $oauthTokens = null,
         private ?LoggerInterface $logger = null,
+        private ?Jobs\JobCancellation $cancellation = null,
     ) {
     }
 
@@ -271,7 +272,7 @@ class ImapScanService
         $done = 0;
         $partial = false;
         foreach ($uids as $uid) {
-            if ($limited && $done > 0 && (($maxMessages !== null && $done >= $maxMessages) || ($deadline !== null && microtime(true) >= $deadline))) {
+            if ($limited && $done > 0 && (($maxMessages !== null && $done >= $maxMessages) || ($deadline !== null && microtime(true) >= $deadline) || $this->cancelRequested())) {
                 $partial = true;
                 $stats['remaining'] = count($uids) - $done;
                 break;
@@ -425,7 +426,7 @@ class ImapScanService
                 $chunk = $queue ? self::RESCAN_LIST_CHUNK : min($chunk * 4, self::RESCAN_LIST_CHUNK_MAX);
                 continue;
             }
-            if ($done > 0 && (($maxMessages !== null && $done >= $maxMessages) || ($deadline !== null && microtime(true) >= $deadline))) {
+            if ($done > 0 && (($maxMessages !== null && $done >= $maxMessages) || ($deadline !== null && microtime(true) >= $deadline) || $this->cancelRequested())) {
                 $stats['remaining'] = max(count($queue), $left - $done);
                 $stats['cursor'] = ['uidvalidity' => $validity, 'last_uid' => $maxUid, 'until_uid' => $until, 'left' => $stats['remaining']];
                 break;
@@ -644,6 +645,12 @@ class ImapScanService
             flock($handle, LOCK_UN);
             fclose($handle);
         }
+    }
+
+    /** "Anuluj" on the running job: stop like at the batch deadline (the cursor is kept). */
+    private function cancelRequested(): bool
+    {
+        return $this->cancellation !== null && $this->cancellation->isRequested();
     }
 
     /**

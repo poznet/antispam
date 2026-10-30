@@ -3,6 +3,7 @@
 namespace AntispamBundle\Tests\Services\Jobs;
 
 use AntispamBundle\Entity\BackgroundJob;
+use AntispamBundle\Services\Jobs\JobCancellation;
 use AntispamBundle\Services\Jobs\JobContext;
 use AntispamBundle\Services\Jobs\JobHandlerInterface;
 use AntispamBundle\Services\Jobs\JobWorker;
@@ -81,6 +82,27 @@ class JobWorkerTest extends TestCase
         $w->runNext();
 
         $this->assertSame([1, 2], $seen);
+    }
+
+    public function testCancellationIsVisibleInsideTheRunningJob()
+    {
+        $cancellation = new JobCancellation();
+        $id = $this->db->queue->enqueue(BackgroundJob::TYPE_CERT_SYNC)->id;
+        $seen = [];
+        $w = $this->db->worker([new ExclusiveTestHandler(function (JobContext $c) use ($cancellation, &$seen, $id) {
+            $seen[] = $cancellation->isRequested();
+            $this->db->queue->cancel($id); // "Anuluj" while it runs
+            $seen[] = $cancellation->isRequested(); // throttled: not asked again yet
+            (fn () => $this->lastCheck = 0.0)->call($cancellation); // CHECK_SECONDS later
+            $seen[] = $cancellation->isRequested();
+            $c->continueLater(['done' => 1]);
+            return [];
+        })], null, [], $cancellation);
+        $w->configure(0, 60);
+
+        $this->assertSame('cancelled', $w->runNext()['status']);
+        $this->assertSame([false, false, true], $seen);
+        $this->assertFalse($cancellation->isRequested(), 'nothing outside a job');
     }
 
     public function testExceptionFailsTheJobWithItsMessage()

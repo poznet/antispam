@@ -201,6 +201,12 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   the mailbox as the actor (`plugin`), trigger "wtyczka pocztowa".
 
 ### Changed
+- **Cancelling background jobs.** *Anuluj* on every active row of *Zadania w
+  tle* (not only on the job page) and on the user's own job page `/my/jobs/{id}`.
+  A running IMAP scan / full rescan now stops at the next message (cancel checked
+  every 5 s, `Jobs\JobCancellation`) instead of after the current 2-minute batch;
+  the rescan keeps its progress for a later resume. A quarantine purge stops
+  within 50 messages. A single SSH agent command still finishes.
 - **Full mailbox rescan: several times faster, and it continues after a failure.**
   Measured before: ~1.7 s per message on a 30 390-message Interia INBOX (~14 h).
   - Later batches list only the next 500 UIDs (`FETCH a:b`) instead of every

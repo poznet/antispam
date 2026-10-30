@@ -88,14 +88,16 @@ class JobController extends AbstractController
         if ($state === BackgroundJob::STATUS_CANCELLED) {
             $this->addFlash('success', 'Zadanie anulowane.');
         } elseif ($state !== null) {
-            $this->addFlash('info', 'Zadanie zostanie przerwane przy najbliższej okazji (skan - po bieżącej partii; pojedyncze polecenie dokończy się).');
+            $this->addFlash('info', 'Zadanie zostanie przerwane w ciągu kilku sekund (skan IMAP zatrzymuje się po bieżącej wiadomości, ponowny skan zachowuje postęp; polecenie agenta SSH dokończy się).');
         } else {
             $this->addFlash('warning', 'Zadanie już się zakończyło.');
         }
         if ($state !== null) {
             $this->audit('job.cancel', targetType: 'job', targetId: $id, label: $job->getLabel(), mailbox: $job->getMailbox(), details: ['type' => $job->getType(), 'state' => $state]);
         }
-        return $this->redirectToRoute('antispam_job_show', ['id' => $id]);
+        return $request->request->get('return') === 'list'
+            ? $this->redirectToRoute('antispam_job_index')
+            : $this->redirectToRoute('antispam_job_show', ['id' => $id]);
     }
 
     public static function statusData(BackgroundJob $job): array

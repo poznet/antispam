@@ -48,6 +48,7 @@ class JobWorker
         private ?AuditLogger $audit = null,
         /** @var iterable<RuntimeCacheInterface> rules / settings cached for the process lifetime */
         #[AutowireIterator('antispam.runtime_cache')] private iterable $runtimeCaches = [],
+        private ?JobCancellation $cancellation = null,
     ) {
         foreach ($handlers as $handler) {
             $this->handlers[$handler::type()] = $handler;
@@ -251,6 +252,7 @@ class JobWorker
         }
 
         $this->armTimeout($id);
+        $this->cancellation?->begin($context);
         try {
             $result = $handler->handle($context);
             $error = null;
@@ -259,6 +261,7 @@ class JobWorker
             $error = $e->getMessage() !== '' ? $e->getMessage() : get_class($e);
             $this->logger?->error('antispam: background job failed', ['job' => $id, 'type' => $row['type'], 'exception' => $e]);
         } finally {
+            $this->cancellation?->end();
             $this->disarmTimeout();
         }
 

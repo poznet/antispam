@@ -46,7 +46,7 @@
     <div class="panel panel-default">
         <div class="table-responsive">
         <table class="table table-striped" style="margin-bottom:0;">
-            <thead><tr><th>#</th><th>Dodane</th><th>Zadanie</th><th>Zlecił</th><th>Status</th><th>Czas</th></tr></thead>
+            <thead><tr><th>#</th><th>Dodane</th><th>Zadanie</th><th>Zlecił</th><th>Status</th><th>Czas</th><th></th></tr></thead>
             <tbody>
             {% for job in jobs %}
                 <tr>
@@ -59,6 +59,19 @@
                     <td>{{ job.requestedBy ?: '—' }}</td>
                     <td><span class="label label-{{ status_class[job.status] ?? 'default' }}">{{ job.statusLabel }}</span></td>
                     <td>{{ job.duration is not null ? job.duration ~ ' s' : '—' }}</td>
+                    <td class="pp-cell-nowrap">
+                        {% if job.active %}
+                            {% if job.cancelRequested %}
+                                <small class="text-warning">przerywanie…</small>
+                            {% else %}
+                            <form method="post" action="{{ path('antispam_job_cancel', {id: job.id}) }}" style="margin:0">
+                                <input type="hidden" name="_token" value="{{ csrf_token('job_cancel_' ~ job.id) }}">
+                                <input type="hidden" name="return" value="list">
+                                <button type="submit" class="btn btn-default btn-xs" data-confirm="Zakończyć zadanie #{{ job.id }} ({{ job.label }})?{{ job.status == 'running' ? ' Skan zatrzyma się w ciągu kilku sekund; ponowny skan zachowa postęp i można go później wznowić.' : '' }}"><span class="glyphicon glyphicon-stop" aria-hidden="true"></span> Anuluj</button>
+                            </form>
+                            {% endif %}
+                        {% endif %}
+                    </td>
                 </tr>
             {% endfor %}
             </tbody>

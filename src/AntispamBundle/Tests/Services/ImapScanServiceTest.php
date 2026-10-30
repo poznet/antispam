@@ -10,6 +10,7 @@ use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\ConnectionService;
 use AntispamBundle\Services\CryptoService;
 use AntispamBundle\Services\ImapScanService;
+use AntispamBundle\Services\Jobs\JobCancellation;
 use AntispamBundle\Services\MessageService;
 use Ddeboer\Imap\ConnectionInterface;
 use Ddeboer\Imap\Exception\InvalidSearchCriteriaException;
@@ -597,6 +598,23 @@ class ImapScanServiceTest extends TestCase
         $stats = $this->service($this->messages())->rescan($this->connection(), 'box@firma.pl', ['uidvalidity' => 777, 'last_uid' => 4, 'until_uid' => 10], 2);
         $this->assertSame([5, 6], $this->processed);
         $this->assertSame(4, $stats['remaining']);
+    }
+
+    public function testRescanStopsAtTheNextMessageWhenTheJobIsCancelled()
+    {
+        // "Anuluj" stops a running batch within seconds, keeping the cursor (not after 2 minutes).
+        $this->fill(1, 10);
+        $cancel = new class extends JobCancellation {
+            public int $asked = 0;
+            public function isRequested(): bool { return ++$this->asked >= 3; }
+        };
+        $base = $this->service($this->messages());
+        $scan = new ImapScanService((fn () => $this->dispatcher)->call($base), $this->createMock(ConnectionService::class), $this->createMock(ConfigService::class),
+            $this->createMock(CryptoService::class), $this->messages(), null, $this->tmp . '/locks', cancellation: $cancel);
+
+        $stats = $scan->rescan($this->connection(), 'box@firma.pl', null, null, microtime(true) + 600);
+        $this->assertSame([1, 2, 3], $this->processed);
+        $this->assertSame(['last_uid' => 3, 'left' => 7], ['last_uid' => $stats['cursor']['last_uid'], 'left' => $stats['cursor']['left']]);
     }
 
     public function testRescanSkipsAFailingMessageAndStartsOverAfterUidValidityChange()

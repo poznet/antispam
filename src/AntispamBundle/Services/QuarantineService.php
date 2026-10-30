@@ -278,7 +278,8 @@ class QuarantineService
      * Only the quarantine folder is opened (IMAP: getQuarantineFolderName(),
      * refused if it ever named INBOX / SPAM; SSH: the agent's .QUARANTINE).
      *
-     * @param callable|null $progress fn(int $done, int $total): heartbeat / progress of a long IMAP pass
+     * @param callable|null $progress fn(int $done, int $total): heartbeat / progress of a long IMAP pass;
+     *                                returning false stops the deletion ('cancelled' => true)
      *
      * @return array{total:int, deleted:int, skipped:int, failed:int, errors:string[]}
      *
@@ -380,8 +381,11 @@ class QuarantineService
                 $connection->expunge();
                 $flagged = 0;
             }
-            if ($progress && ($i + 1) % 50 === 0) {
-                $progress($i + 1, $total);
+            // The callback returns false when the job was cancelled: stop, keep the rest.
+            if ($progress && ($i + 1) % 50 === 0 && $progress($i + 1, $total) === false) {
+                $out['cancelled'] = true;
+                $out['skipped'] += $total - $i - 1;
+                break;
             }
         }
         if ($flagged > 0) {

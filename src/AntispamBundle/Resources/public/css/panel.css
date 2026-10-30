@@ -640,6 +640,10 @@ a.list-group-item { color: var(--text-2); }
 .pagination > .active > a, .pagination > .active > span { background: var(--accent); border-color: var(--accent); }
 .progress { background: var(--surface-3); border-radius: 999px; box-shadow: none; height: 8px; }
 .progress-bar { background: var(--grad); box-shadow: none; }
+/* Background job progress (Zadania w tle): tall, with the label over the whole
+   track - readable at 0.5 % too, where the bar itself is a few pixels wide. */
+.progress.job-progress { position: relative; height: 22px; margin-bottom: 10px; }
+.job-progress-label { position: absolute; left: 0; right: 0; top: 0; text-align: center; font-size: 12px; font-weight: 600; line-height: 22px; color: var(--text); }
 
 /* ---------- Modals ---------- */
 .modal-content { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lg); }

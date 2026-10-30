@@ -55,6 +55,16 @@ class MessageEvent extends Event
         $this->initialScan = $initialScan;
     }
 
+    /**
+     * Rescan of a message already on a blacklist: the verdict is final (a
+     * blacklist hit is spam), so the costly content checks (headers, links,
+     * attachments, DNS, Bayes) are skipped - they only add reasons.
+     */
+    public function isDecidedInRescan(): bool
+    {
+        return $this->rescan && $this->blacklist;
+    }
+
     public function isRescan(): bool
     {
         return $this->rescan;

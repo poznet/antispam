@@ -231,7 +231,10 @@ How it runs (job `account.rescan`, [jobs.md](jobs.md)):
   - IMAP: the set of messages is fixed when the rescan starts (the UIDs the
     server lists then: `SEARCH ALL`, or `FETCH 1:*` when SEARCH answers with
     nothing although `STATUS` counts messages; a non-empty INBOX that cannot be
-    listed fails the job instead of "finishing" with 0 checked); the rescan has **its own cursor** in the job state - the
+    listed fails the job instead of "finishing" with 0 checked). Later batches
+    list only the next 500 UIDs at a time (`FETCH a:b`, wider over UID gaps),
+    never everything above the cursor - on a 30 000-message INBOX that listing
+    alone took most of every batch. The rescan has **its own cursor** in the job state - the
     account's incremental scan cursor and its last scan are not touched, so
     the regular scan (scan-all, **Skanuj**) goes on between two batches and
     handles the mail that arrives meanwhile. A changed UIDVALIDITY restarts
@@ -240,6 +243,32 @@ How it runs (job `account.rescan`, [jobs.md](jobs.md)):
     remembers the progress in its own database (`rescan_done`), the first
     batch passes `--reset`. An older agent fails the job with "nie obsługuje
     polecenia "rescan" ... wdróż go ponownie (Konta → Wdróż)".
+- **Interrupted rescans continue** (2.1.0):
+  - a failed batch (connection drop, IMAP timeout, a `STATUS` without
+    UIDVALIDITY) is retried from the same cursor after 1, 2, 5, 10 and 15 min
+    (*Błąd przebiegu ... ponowna próba N/5*); the job fails only after that. A
+    `STATUS` failure no longer restarts the rescan from the first message. An
+    agent that does not know `rescan` fails at once (needs *Wdróż*, not time);
+  - the progress is also stored on the account after every batch
+    (`antispam_account.rescan_progress`: cursor + counters so far + job). A new
+    rescan - panel button, weekly schedule, Thunderbird plugin - after a
+    failed, cancelled or killed one **continues from there**, and its result
+    adds up the counters of both parts. The account list shows *Niedokończony
+    ponowny skan: sprawdzono N, zostało M* with **zacznij od nowa** (also on the
+    account form), which drops the progress. SSH: the resumed job does not pass
+    `--reset`, the agent continues its own `rescan_done` progress. A changed
+    UIDVALIDITY still starts over. The progress is cleared when a rescan
+    completes.
+- **Cheaper checks** (2.1.0): DNSBL (the IP that delivered the message) is not
+  looked up in a rescan - today's reputation says nothing about old mail and
+  it cost DNS per message. Link domains are not looked up on the URI lists /
+  Google Safe Browsing either while **Ustawienia → Filtr spamu → Ponowny skan
+  całej skrzynki bez sprawdzania domen z linków** is on (default; config
+  `rescan.skip_url_lookups`); the other link heuristics, the CERT list and the
+  shared feed still run. A message already on a blacklist (spam anyway) skips
+  the content checks - headers, links, attachments, CERT, feed, Bayes - so
+  nothing but its envelope is fetched. Each batch logs its timing
+  (`antispam: rescan batch`: seconds, listing seconds, messages, seconds per message).
 - **Markers ignored, then set again**: a message is re-evaluated even if it
   was checked before; afterwards the normal scan skips it as usual.
 - **Same lock as the scan**: while the scheduled scan (or the agent) scans the

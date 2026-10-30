@@ -145,12 +145,101 @@ class AccountRescanJobTest extends TestCase
         $imap = $this->createMock(ImapScanService::class);
         $imap->method('rescanAccount')->willThrowException(new \RuntimeException('IMAP login failed'));
 
-        $this->assertSame('failed', $this->worker($imap)->runNext()['status']);
+        $worker = $this->worker($imap);
+        // Retried AccountRescanHandler::RETRY_DELAYS times, then failed.
+        for ($i = 0; $i < count(AccountRescanHandler::RETRY_DELAYS); $i++) {
+            $this->assertSame('queued', $worker->runNext()['status']);
+            $this->assertStringContainsString('ponowna próba ' . ($i + 1) . '/', $this->db->row($id)['progress']);
+            $this->db->update($id, ['available_at' => (new \DateTime('-1 second'))->format('Y-m-d H:i:s')]);
+        }
+        $this->assertSame('failed', $worker->runNext()['status']);
         $this->assertSame('IMAP login failed', $this->db->row($id)['error']);
         $account = $this->freshAccount();
         $this->assertNotNull($account->getLastRescanAt(), 'a failed rescan still counts for the weekly schedule');
         $this->assertSame('IMAP login failed', $account->getLastRescanResultDecoded()['error']);
         $this->assertFalse($this->audits[1][1][4]['ok']);
+    }
+
+    public function testFailedBatchIsRetriedFromTheSameCursor()
+    {
+        $id = $this->scheduler()->enqueue($this->account)->id;
+        $cursors = [];
+        $calls = 0;
+        $imap = $this->createMock(ImapScanService::class);
+        $imap->method('rescanAccount')->willReturnCallback(function ($a, $cursor) use (&$cursors, &$calls) {
+            $cursors[] = $cursor;
+            if (++$calls === 2) {
+                throw new \RuntimeException('Connection reset by peer');
+            }
+            return $calls === 1
+                ? ['total' => 10, 'checked' => 4, 'remaining' => 6, 'errors' => [], 'cursor' => ['uidvalidity' => 777, 'last_uid' => 4, 'until_uid' => 10, 'left' => 6]]
+                : ['total' => 10, 'checked' => 6, 'remaining' => 0, 'errors' => [], 'cursor' => null];
+        });
+        $worker = $this->worker($imap);
+
+        $this->assertSame('queued', $worker->runNext()['status']);
+        $this->assertSame('queued', $worker->runNext()['status'], 'connection error: retried, not failed');
+        $this->assertNull($worker->runNext(), 'after a delay');
+        $this->db->update($id, ['available_at' => (new \DateTime('-1 second'))->format('Y-m-d H:i:s')]);
+        $this->assertSame('done', $worker->runNext()['status']);
+
+        $this->assertSame(4, $cursors[1]['last_uid']);
+        $this->assertSame(4, $cursors[2]['last_uid'], 'the retry continues from the same place');
+        $this->assertSame(10, json_decode($this->db->row($id)['result'], true)['scan_result']['checked']);
+        $this->assertNull($this->freshAccount()->getRescanProgress(), 'cleared when complete');
+    }
+
+    public function testNewRescanContinuesAnUnfinishedOne()
+    {
+        // First job: one batch, then cancelled (or failed / killed).
+        $first = $this->scheduler()->enqueue($this->account)->id;
+        $cursors = [];
+        $imap = $this->createMock(ImapScanService::class);
+        $imap->method('rescanAccount')->willReturnCallback(function ($a, $cursor) use (&$cursors) {
+            $cursors[] = $cursor;
+            return $cursor === null
+                ? ['total' => 10, 'checked' => 4, 'moved_to_spam' => 1, 'remaining' => 6, 'errors' => [], 'cursor' => ['uidvalidity' => 777, 'last_uid' => 4, 'until_uid' => 10, 'left' => 6]]
+                : ['total' => 10, 'checked' => 6, 'moved_to_spam' => 2, 'remaining' => 0, 'errors' => [], 'cursor' => null];
+        });
+        $worker = $this->worker($imap);
+        $worker->runNext();
+        $this->db->update($first, ['status' => 'failed', 'active_key' => null]);
+        $progress = $this->freshAccount()->getRescanProgress();
+        $this->assertSame([4, $first], [$progress['cursor']['last_uid'], $progress['job']]);
+
+        $second = $this->scheduler()->enqueue($this->freshAccount())->id;
+        $this->assertSame('done', $worker->runNext()['status']);
+        $this->assertSame(4, $cursors[1]['last_uid'], 'continued, not from UID 1');
+        $sum = json_decode($this->db->row($second)['result'], true)['scan_result'];
+        $this->assertSame([10, 3], [$sum['checked'], $sum['moved_to_spam']], 'counters of both parts');
+        $this->assertNull($this->freshAccount()->getRescanProgress());
+    }
+
+    public function testRestartIgnoresTheUnfinishedRescan()
+    {
+        $this->account->setRescanProgress(['cursor' => ['uidvalidity' => 777, 'last_uid' => 4, 'until_uid' => 10, 'left' => 6], 'result' => ['checked' => 4], 'job' => 1]);
+        $this->db->em->flush();
+        $this->scheduler()->enqueue($this->account, RescanScheduler::TRIGGER_PANEL, true);
+        $cursors = [];
+        $imap = $this->createMock(ImapScanService::class);
+        $imap->method('rescanAccount')->willReturnCallback(function ($a, $cursor) use (&$cursors) {
+            $cursors[] = $cursor;
+            return ['total' => 10, 'checked' => 10, 'remaining' => 0, 'errors' => [], 'cursor' => null];
+        });
+        $this->assertSame('done', $this->worker($imap)->runNext()['status']);
+        $this->assertSame([null], $cursors);
+    }
+
+    public function testSshResumeDoesNotResetTheAgent()
+    {
+        $this->account->setConnectionType(Account::CONNECTION_SSH)->setAgentDeployed(true)
+            ->setRescanProgress(['cursor' => null, 'result' => ['checked' => 100, 'remaining' => 50], 'job' => 3]);
+        $this->db->em->flush();
+        $this->scheduler()->enqueue($this->account);
+        $ssh = $this->createMock(SshService::class);
+        $ssh->expects($this->once())->method('runRescan')->with($this->anything(), false)
+            ->willReturn(['success' => true, 'rescan' => true, 'total' => 150, 'checked' => 50, 'remaining' => 0]);
+        $this->assertSame('done', $this->worker($this->createMock(ImapScanService::class), $ssh)->runNext()['status']);
     }
 
     public function testSshRescanResetsOnTheFirstBatchOnly()

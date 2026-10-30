@@ -58,6 +58,9 @@ class ImapScanService
     const MODE_INCREMENTAL = 'incremental';
     const MODE_FULL = 'full';
     const MODE_SINCE = 'since';
+    /** Full rescan: UIDs listed per FETCH a:b round trip (and the widest window over UID gaps). */
+    const RESCAN_LIST_CHUNK = 500;
+    const RESCAN_LIST_CHUNK_MAX = 50000;
 
     public function __construct(
         private EventDispatcherInterface $dispatcher,
@@ -337,17 +340,26 @@ class ImapScanService
 
     /**
      * One batch of a full rescan (see rescanAccount()). The set of messages is
-     * fixed when the rescan starts: UIDs up to UIDNEXT - 1 at that moment
+     * fixed when the rescan starts: the UIDs the server lists then
      * ('until_uid' in the cursor); newer mail is left to the regular scan. A
      * message that fails is reported and skipped (it keeps its earlier
      * verdict), so a broken message never stalls the rescan. When the
      * mailbox's UIDVALIDITY changed between two batches the rescan starts
      * again from the oldest message.
+     *
+     * Later batches list only the next RESCAN_LIST_CHUNK UIDs at a time
+     * (FETCH a:b), never "everything above the cursor": on a 30 000-message
+     * INBOX that listing alone took most of every 2-minute batch. The cursor
+     * carries 'left' (messages of the set not checked yet) for the progress.
+     *
+     * @throws \RuntimeException STATUS unreadable (no UIDVALIDITY): the batch
+     *                           fails, the cursor is kept, the caller retries
      */
     public function rescan(ConnectionInterface $connection, $email, ?array $cursor = null, ?int $maxMessages = null, ?float $deadline = null): array
     {
         $stats = ['total' => 0, 'checked' => 0, 'skipped' => 0, 'whitelisted' => 0, 'blacklisted' => 0,
                   'quarantined' => 0, 'moved_to_spam' => 0, 'remaining' => 0, 'errors' => [], 'cursor' => null];
+        $t0 = microtime(true);
 
         $inbox = $connection->getMailbox('INBOX');
         try {
@@ -357,46 +369,68 @@ class ImapScanService
         }
         $validity = (int)($status->uidvalidity ?? 0);
         $uidNext = (int)($status->uidnext ?? 0);
+        $inMailbox = (int)($status->messages ?? 0);
+        if ($validity <= 0) {
+            // Without UIDVALIDITY the cursor cannot be trusted - and starting over
+            // on a transient STATUS failure would re-check 30 000 messages.
+            throw new \RuntimeException('Serwer IMAP nie podał UIDVALIDITY skrzynki (STATUS) - przebieg ponownego skanu przerwany, postęp zachowany.');
+        }
 
-        if ($cursor !== null && ($validity <= 0 || (int)($cursor['uidvalidity'] ?? -1) !== $validity)) {
+        if ($cursor !== null && (int)($cursor['uidvalidity'] ?? -1) !== $validity) {
             $stats['errors'][] = 'Zmienił się UIDVALIDITY skrzynki - ponowny skan zaczyna się od początku.';
             $cursor = null;
         }
         $last = $cursor !== null ? (int)$cursor['last_uid'] : 0;
-        $until = $cursor !== null ? (int)$cursor['until_uid'] : PHP_INT_MAX;
-        $inMailbox = (int)($status->messages ?? 0);
 
-        if ($last === 0) {
-            $uids = $this->allUids($inbox, $inMailbox);
-        } else {
-            try {
-                $uids = self::uidsOf($inbox->getMessageSequence(($last + 1) . ':*'));
-            } catch (InvalidSearchCriteriaException $e) {
-                $uids = [];
-            }
-        }
-        $uids = self::sorted(array_filter($uids, function ($uid) use ($last, $until) {
-            return $uid > $last && $uid <= $until;
-        }));
         if ($cursor === null) {
-            // The set of the rescan: what the server listed now. Not UIDNEXT -
+            // The set of the rescan: what the server lists now. Not UIDNEXT -
             // a STATUS below the real UIDs would leave nothing to check.
-            $until = $uids ? max($uids) : 0;
-            if (!$uids && $inMailbox > 0) {
+            $queue = self::sorted($this->allUids($inbox, $inMailbox));
+            if (!$queue && $inMailbox > 0) {
                 throw new \RuntimeException(sprintf('Serwer IMAP nie podał listy wiadomości: STATUS zgłasza %d wiadomości w INBOX (UIDNEXT %d), a SEARCH ALL i FETCH 1:* nie zwróciły żadnego UID - nic nie sprawdzono.', $inMailbox, $uidNext));
             }
+            $until = $queue ? max($queue) : 0;
+            $left = count($queue);
+            $next = $until + 1; // everything is listed already
+        } else {
+            $until = (int)$cursor['until_uid'];
+            // Cursors of rescans started before 'left' existed: estimate from the UID span.
+            $left = isset($cursor['left']) ? (int)$cursor['left']
+                : (int)round($inMailbox * max(0, $until - $last) / max(1, $until));
+            $queue = [];
+            $next = $last + 1;
         }
-        // Without UIDVALIDITY a later batch could not tell the same UIDs apart: one pass.
-        $limited = ($maxMessages !== null || $deadline !== null) && $validity > 0;
+        $listSeconds = microtime(true) - $t0;
 
         $maxUid = $last;
         $done = 0;
-        foreach ($uids as $uid) {
-            if ($limited && $done > 0 && (($maxMessages !== null && $done >= $maxMessages) || ($deadline !== null && microtime(true) >= $deadline))) {
-                $stats['remaining'] = count($uids) - $done;
-                $stats['cursor'] = ['uidvalidity' => $validity, 'last_uid' => $maxUid, 'until_uid' => $until];
+        $chunk = self::RESCAN_LIST_CHUNK;
+        while (true) {
+            if (!$queue) {
+                if ($next > $until) {
+                    break;
+                }
+                $to = min($until, $next + $chunk - 1);
+                $tl = microtime(true);
+                try {
+                    $listed = self::uidsOf($inbox->getMessageSequence($next . ':' . $to));
+                } catch (InvalidSearchCriteriaException $e) {
+                    $listed = [];
+                }
+                $listSeconds += microtime(true) - $tl;
+                $from = $next;
+                $queue = self::sorted(array_filter($listed, static fn ($uid) => $uid >= $from && $uid <= $to));
+                $next = $to + 1;
+                // Sparse UIDs (big gaps): widen the window instead of one round trip per empty chunk.
+                $chunk = $queue ? self::RESCAN_LIST_CHUNK : min($chunk * 4, self::RESCAN_LIST_CHUNK_MAX);
+                continue;
+            }
+            if ($done > 0 && (($maxMessages !== null && $done >= $maxMessages) || ($deadline !== null && microtime(true) >= $deadline))) {
+                $stats['remaining'] = max(count($queue), $left - $done);
+                $stats['cursor'] = ['uidvalidity' => $validity, 'last_uid' => $maxUid, 'until_uid' => $until, 'left' => $stats['remaining']];
                 break;
             }
+            $uid = array_shift($queue);
             $done++;
             $maxUid = max($maxUid, $uid);
             $this->processMessage($inbox, $connection, $uid, $email, false, true, true, $stats);
@@ -405,8 +439,13 @@ class ImapScanService
         if ($stats['moved_to_spam'] + $stats['quarantined'] > 0) {
             $connection->expunge();
         }
-        $stats['total'] = isset($status->messages) ? (int)$status->messages : count($uids);
+        $stats['total'] = $inMailbox ?: $done;
         $this->messages->purgeIfDue();
+
+        $elapsed = microtime(true) - $t0;
+        $stats['timing'] = ['seconds' => round($elapsed, 1), 'list_seconds' => round($listSeconds, 1), 'messages' => $done,
+            'per_message' => $done ? round(($elapsed - $listSeconds) / $done, 3) : null];
+        $this->logger?->info('antispam: rescan batch', ['mailbox' => $email] + $stats['timing']);
 
         return $stats;
     }

@@ -26,7 +26,7 @@ class CheckUrls
         if (!$this->scoring->isScoringEnabled() || !$this->scoring->isUrlCheckEnabled()) {
             return;
         }
-        if ($event->isWhitelist() || $event->isCheckedbefore()) {
+        if ($event->isWhitelist() || $event->isCheckedbefore() || $event->isDecidedInRescan()) {
             return;
         }
 
@@ -46,7 +46,12 @@ class CheckUrls
             return;
         }
 
-        $result = $this->analyzer->analyze($html, $text, $this->scoring->getUrlConfig());
+        $config = $this->scoring->getUrlConfig();
+        if ($event->isRescan() && $this->scoring->isRescanUrlLookupSkipped()) {
+            $config['dbl_enabled'] = false;
+            $config['gsb_enabled'] = false;
+        }
+        $result = $this->analyzer->analyze($html, $text, $config);
         if ($result['score'] > 0) {
             $event->setSpamscore($event->getSpamscore() + $result['score']);
             $event->addReasons($result['reasons']);

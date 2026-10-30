@@ -31,6 +31,10 @@ class CheckDnsbl
         if ($event->isWhitelist() || $event->isCheckedbefore()) {
             return;
         }
+        // Today's reputation of the IP that delivered old mail says nothing (and costs DNS per message).
+        if ($event->isRescan()) {
+            return;
+        }
 
         $ip = $this->extractIp($event);
         if (!$ip) {

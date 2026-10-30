@@ -29,7 +29,7 @@ class CheckCertHole
         if (!$this->scoring->isScoringEnabled() || !$this->cert->isEnabled()) {
             return;
         }
-        if ($event->isWhitelist() || $event->isCheckedbefore()) {
+        if ($event->isWhitelist() || $event->isCheckedbefore() || $event->isDecidedInRescan()) {
             return;
         }
 

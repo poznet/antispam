@@ -33,7 +33,7 @@ class CheckAttachments
         if (!$this->scoring->isScoringEnabled() || !$this->scoring->isClamavEnabled()) {
             return;
         }
-        if ($event->isWhitelist() || $event->isCheckedbefore()) {
+        if ($event->isWhitelist() || $event->isCheckedbefore() || $event->isDecidedInRescan()) {
             return;
         }
 

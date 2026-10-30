@@ -33,7 +33,10 @@
             wrap.style.display = '';
             bar.style.width = data.percent + '%';
             bar.setAttribute('aria-valuenow', String(data.percent));
-            bar.textContent = data.percent + '%';
+            var label = field('bar-label');
+            if (label) {
+                label.textContent = data.percent_label || (data.percent + '%');
+            }
         }
     }
 

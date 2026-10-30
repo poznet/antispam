@@ -23,7 +23,7 @@ class CheckBayes
         if (!$this->scoring->isScoringEnabled() || !$this->bayes->isEnabled()) {
             return;
         }
-        if ($event->isWhitelist() || $event->isCheckedbefore()) {
+        if ($event->isWhitelist() || $event->isCheckedbefore() || $event->isDecidedInRescan()) {
             return;
         }
 

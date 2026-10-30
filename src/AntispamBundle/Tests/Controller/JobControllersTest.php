@@ -220,6 +220,7 @@ class JobControllersTest extends TestCase
 
         $json = json_decode($controller->statusAction($id)->getContent(), true);
         $this->assertSame(['running', false, 25, 'Przetworzono 10 wiadomości, zostało 30'], [$json['status'], $json['finished'], $json['percent'], $json['progress']]);
+        $this->assertSame('25% (10 z 40)', $json['percent_label']);
 
         try {
             $controller->cancelAction($id, self::post(['_token' => 'bad']));

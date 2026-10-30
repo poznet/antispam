@@ -113,6 +113,18 @@
                     {% endif %}
                     {# Full rescan (docs/spam-handling.md#full-rescan) - never on the dashboard #}
                     {% set rescanData = account.lastRescanResultDecoded %}
+                    {% set rescanLeft = account.rescanProgress %}
+                    {% if rescanLeft %}
+                        <div class="pp-scan-stats text-warning">
+                            <span>Niedokończony ponowny skan: sprawdzono <b>{{ rescanLeft.result.checked|default(0) }}</b>, zostało <b>{{ rescanLeft.result.remaining|default('?') }}</b>
+                                {% if rescanLeft.at is defined %}({{ rescanLeft.at|date('Y-m-d H:i') }}){% endif %} - przycisk ↻ wznowi go od tego miejsca</span>
+                            <form method="post" action="{{ path('antispam_account_rescan', {id: account.id}) }}" style="display:inline;margin:0">
+                                <input type="hidden" name="_token" value="{{ csrf_token('account_action_' ~ account.id) }}">
+                                <input type="hidden" name="restart" value="1">
+                                <button type="submit" class="btn btn-link btn-xs" style="padding:0" data-confirm="Zacząć ponowny skan {{ account.email }} od początku? Dotychczasowy postęp zostanie pominięty.">zacznij od nowa</button>
+                            </form>
+                        </div>
+                    {% endif %}
                     {% if account.lastRescanAt or account.autoRescan %}
                         <div class="pp-scan-stats text-muted">
                             <span>Ponowny skan całej skrzynki:

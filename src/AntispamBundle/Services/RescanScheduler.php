@@ -47,16 +47,18 @@ class RescanScheduler
 
     /**
      * Queue a rescan of $account (or get the one already queued / running).
+     * An unfinished earlier rescan (Account::$rescanProgress) is continued
+     * unless $restart.
      * From the mail client plugin the actor is the mailbox itself (no panel user).
      */
-    public function enqueue(Account $account, string $trigger = self::TRIGGER_PANEL): EnqueueResult
+    public function enqueue(Account $account, string $trigger = self::TRIGGER_PANEL, bool $restart = false): EnqueueResult
     {
         $scheduled = $trigger === self::TRIGGER_SCHEDULE;
         $plugin = $trigger === self::TRIGGER_PLUGIN;
         [$actor, $actorType] = $scheduled ? ['harmonogram', AuditLog::ACTOR_CLI] : ($plugin ? [$account->getEmail(), AuditLog::ACTOR_PLUGIN] : [null, null]);
         $queued = $this->jobs->enqueue(
             BackgroundJob::TYPE_ACCOUNT_RESCAN,
-            ['trigger' => $trigger],
+            ['trigger' => $trigger] + ($restart ? ['restart' => true] : []),
             $account,
             label: ($scheduled ? 'Cotygodniowy ponowny skan: ' : 'Ponowny skan całej skrzynki: ') . ($account->getName() ?: $account->getEmail()),
             dedupeKey: self::dedupeKey($account),

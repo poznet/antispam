@@ -109,6 +109,7 @@ class JobController extends AbstractController
             'done' => $job->getProgressDone(),
             'total' => $job->getProgressTotal(),
             'percent' => $job->getPercent(),
+            'percent_label' => $job->getPercentLabel(),
             'duration' => $job->getDuration(),
             'cancel_requested' => $job->isCancelRequested(),
         ];

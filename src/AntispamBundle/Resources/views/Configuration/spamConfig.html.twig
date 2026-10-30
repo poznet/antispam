@@ -214,6 +214,11 @@
                 <input type="checkbox" name="config[url_dbl_enabled]" {% if config.url.dbl_enabled %}checked{% endif %}>
                 Sprawdzaj domeny z linków na listach URI (DBL)
             </label></div>
+            <div class="checkbox"><label>
+                <input type="checkbox" name="config[rescan_skip_url_lookups]" {% if config.rescan_skip_url_lookups ?? true %}checked{% endif %}>
+                Ponowny skan całej skrzynki bez sprawdzania domen z linków (listy URI, Google Safe Browsing)
+            </label>
+            <small class="help-block">Zalecane przy dużych skrzynkach: zapytania DNS dla każdej wiadomości spowalniają ponowny skan kilkukrotnie. Pozostałe sprawdzenia linków, lista CERT i wspólna baza spamu działają dalej. Listy DNSBL (adres IP nadawcy) w ponownym skanie nie są sprawdzane nigdy - dzisiejsza reputacja IP nie mówi nic o starej poczcie.</small></div>
             <div class="row">
                 <div class="col-sm-8">
                     <label>Strefy list URI</label>

@@ -328,7 +328,8 @@ class AccountController extends AbstractController
             $this->addFlash('warning', 'Agent nie jest wdrożony na serwerze - najpierw użyj przycisku Wdróż.');
             return $this->redirectToRoute('antispam_account_index');
         }
-        $queued = $this->rescans->enqueue($account, RescanScheduler::TRIGGER_PANEL);
+        // "zacznij od nowa": drop the progress of an interrupted rescan (otherwise it is continued).
+        $queued = $this->rescans->enqueue($account, RescanScheduler::TRIGGER_PANEL, $request->request->getBoolean('restart'));
         return $this->redirectToJob($queued, 'Ponowny skan całej skrzynki ' . $account->getEmail());
     }
 

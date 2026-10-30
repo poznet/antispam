@@ -111,9 +111,11 @@ class ImapScanServiceTest extends TestCase
         });
         $mailbox->method('getMessageSequence')->willReturnCallback(function ($seq) use ($resource) {
             $this->requests[] = 'UID ' . $seq;
-            $from = (int)explode(':', $seq)[0];
-            $uids = array_values(array_filter(array_keys($this->inbox), function ($u) use ($from) { return $u >= $from; }));
-            if (!$uids && $this->inbox) {
+            [$from, $to] = array_pad(explode(':', $seq), 2, '*');
+            $from = (int)$from;
+            $to = $to === '*' ? PHP_INT_MAX : (int)$to;
+            $uids = array_values(array_filter(array_keys($this->inbox), function ($u) use ($from, $to) { return $u >= $from && $u <= $to; }));
+            if (!$uids && $this->inbox && $to === PHP_INT_MAX) {
                 $uids = [max(array_keys($this->inbox))]; // "n:*" returns the newest message
             }
             return new MessageIterator($resource, $uids);
@@ -492,7 +494,7 @@ class ImapScanServiceTest extends TestCase
         $stats = $scan->rescan($this->connection(), 'box@firma.pl', null, 2);
         $this->assertSame([1, 2], $this->processed);
         $this->assertSame(3, $stats['remaining']);
-        $this->assertSame(['uidvalidity' => 777, 'last_uid' => 2, 'until_uid' => 5], $stats['cursor']);
+        $this->assertSame(['uidvalidity' => 777, 'last_uid' => 2, 'until_uid' => 5, 'left' => 3], $stats['cursor']);
 
         $this->fill(6, 6); // arrives during the rescan: the regular scan's job
         $stats = $scan->rescan($this->connection(), 'box@firma.pl', $stats['cursor'], 2);
@@ -523,7 +525,7 @@ class ImapScanServiceTest extends TestCase
         $stats = $this->service($this->messages())->rescan($this->connection(), 'box@firma.pl', null, 2);
 
         $this->assertSame([100, 101], $this->processed);
-        $this->assertSame(['uidvalidity' => 777, 'last_uid' => 101, 'until_uid' => 102], $stats['cursor']);
+        $this->assertSame(['uidvalidity' => 777, 'last_uid' => 101, 'until_uid' => 102, 'left' => 1], $stats['cursor']);
     }
 
     public function testRescanThatCannotListAFullInboxFails()
@@ -542,6 +544,59 @@ class ImapScanServiceTest extends TestCase
 
         $this->expectExceptionMessage('STATUS zgłasza 3 wiadomości w INBOX');
         $this->service($this->messages())->rescan($broken, 'box@firma.pl');
+    }
+
+    public function testRescanContinuationListsOnlyTheNextChunkOfUids()
+    {
+        // 30 000-message INBOX: never "everything above the cursor" (n:*) in a later batch.
+        $this->fill(1, 1200);
+        $scan = $this->service($this->messages());
+        $stats = $scan->rescan($this->connection(), 'box@firma.pl', null, 10);
+        $this->assertSame(1190, $stats['cursor']['left']);
+        $this->requests = [];
+
+        $stats = $scan->rescan($this->connection(), 'box@firma.pl', $stats['cursor'], 10);
+        $this->assertSame(['UID 11:510'], $this->requests);
+        $this->assertSame(range(1, 20), $this->processed);
+        $this->assertSame([1180, 20], [$stats['remaining'], $stats['cursor']['last_uid']]);
+        $this->assertSame(10, $stats['timing']['messages']);
+    }
+
+    public function testRescanWidensTheListingWindowOverUidGaps()
+    {
+        $this->fill(1, 1);
+        $this->fill(100000, 100001);
+        $scan = $this->service($this->messages());
+        $stats = $scan->rescan($this->connection(), 'box@firma.pl', null, 1);
+        $this->requests = [];
+
+        $stats = $scan->rescan($this->connection(), 'box@firma.pl', $stats['cursor']);
+        $this->assertSame([1, 100000, 100001], $this->processed);
+        $this->assertLessThan(10, count($this->requests), 'a few round trips, not 200 empty chunks');
+        $this->assertNull($stats['cursor']);
+    }
+
+    public function testRescanWithoutStatusFailsTheBatchAndKeepsTheCursor()
+    {
+        // A transient STATUS failure used to restart from UID 1 in one unlimited pass.
+        $this->fill(1, 5);
+        $this->validity = 0;
+        try {
+            $this->service($this->messages())->rescan($this->connection(), 'box@firma.pl', ['uidvalidity' => 777, 'last_uid' => 3, 'until_uid' => 5, 'left' => 2], 10);
+            $this->fail('expected an exception');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('UIDVALIDITY', $e->getMessage());
+        }
+        $this->assertSame([], $this->processed);
+    }
+
+    public function testRescanCursorWithoutLeftIsEstimated()
+    {
+        // Rescans queued before this version carry no 'left'.
+        $this->fill(1, 10);
+        $stats = $this->service($this->messages())->rescan($this->connection(), 'box@firma.pl', ['uidvalidity' => 777, 'last_uid' => 4, 'until_uid' => 10], 2);
+        $this->assertSame([5, 6], $this->processed);
+        $this->assertSame(4, $stats['remaining']);
     }
 
     public function testRescanSkipsAFailingMessageAndStartsOverAfterUidValidityChange()

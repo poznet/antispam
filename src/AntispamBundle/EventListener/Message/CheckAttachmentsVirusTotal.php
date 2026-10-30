@@ -38,7 +38,7 @@ class CheckAttachmentsVirusTotal
         if (!$this->scoring->isScoringEnabled() || !$this->scoring->isVirusTotalEnabled()) {
             return;
         }
-        if ($event->isWhitelist() || $event->isCheckedbefore()) {
+        if ($event->isWhitelist() || $event->isCheckedbefore() || $event->isDecidedInRescan()) {
             return;
         }
 

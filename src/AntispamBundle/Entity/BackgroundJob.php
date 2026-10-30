@@ -232,6 +232,22 @@ class BackgroundJob
         return (int)max(0, min(100, floor(100 * (int)$this->progressDone / (int)$this->progressTotal)));
     }
 
+    /**
+     * Label of the progress bar: "0,5% (145 z 30 390)". One decimal below 10 %,
+     * so a big job (a 30 000-message rescan) does not sit at "0%" for an hour.
+     */
+    public function getPercentLabel(): ?string
+    {
+        if (!$this->progressTotal) {
+            return null;
+        }
+        $done = (int)$this->progressDone;
+        $total = (int)$this->progressTotal;
+        $p = max(0.0, min(100.0, 100 * $done / $total));
+        $p = $p < 10 ? floor($p * 10) / 10 : floor($p);
+        return number_format($p, $p < 10 ? 1 : 0, ',', ' ') . '% (' . number_format($done, 0, ',', ' ') . ' z ' . number_format($total, 0, ',', ' ') . ')';
+    }
+
     /** Seconds from the first start to the end (or now), null before the first start. */
     public function getDuration(): ?int
     {

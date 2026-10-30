@@ -191,6 +191,24 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   the mailbox as the actor (`plugin`), trigger "wtyczka pocztowa".
 
 ### Changed
+- **Full mailbox rescan: several times faster, and it continues after a failure.**
+  Measured before: ~1.7 s per message on a 30 390-message Interia INBOX (~14 h).
+  - Later batches list only the next 500 UIDs (`FETCH a:b`) instead of every
+    UID above the cursor (ext-imap fetched ~28 000 envelopes per 2-minute batch).
+  - No DNSBL lookups in a rescan; link domains not looked up on URI lists /
+    Safe Browsing while the new setting *Ponowny skan całej skrzynki bez
+    sprawdzania domen z linków* is on (default, `rescan.skip_url_lookups`).
+  - Blacklisted messages skip the content checks (verdict is final).
+  - Per-batch timing in the log (`antispam: rescan batch`).
+  - A failed batch is retried from the same place after 1, 2, 5, 10, 15 min;
+    a `STATUS` failure no longer restarts from the first message in one
+    unlimited pass (which ran into the job timeout).
+  - Progress is kept on the account (`rescan_progress`, **migration
+    `Version20261030190000`**): a new rescan after a failed / cancelled /
+    killed one continues from there and sums the counters; *zacznij od nowa*
+    on the account list / form drops it. SSH: no `--reset` when resuming.
+- Job progress bar: taller, the label shows "0,4% (145 z 30 390)" - one decimal
+  below 10 %, so a big rescan does not sit at "0%".
 - **A blacklist hit is always spam.** A domain or e-mail blacklist rule (exact,
   wildcard or regex) now sends the message to SPAM whatever its points and the
   mailbox's spam threshold - in the IMAP scan / rescan, the plugin `/check`, the

@@ -29,7 +29,7 @@ class CheckHeaders
         if (!$this->scoring->isScoringEnabled() || !$this->scoring->isHeaderCheckEnabled()) {
             return;
         }
-        if ($event->isWhitelist() || $event->isCheckedbefore()) {
+        if ($event->isWhitelist() || $event->isCheckedbefore() || $event->isDecidedInRescan()) {
             return;
         }
 

@@ -27,7 +27,7 @@ class CheckSharedFeed
         if (!$this->scoring->isScoringEnabled() || !$this->feed->isEnabled()) {
             return;
         }
-        if ($event->isWhitelist() || $event->isCheckedbefore()) {
+        if ($event->isWhitelist() || $event->isCheckedbefore() || $event->isDecidedInRescan()) {
             return;
         }
 

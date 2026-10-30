@@ -176,7 +176,10 @@ the deadline, stores the cursor at the last processed UID and reports
 `account.rescan` (`Handler\AccountRescanHandler`) works like the batched first
 scan, with its own progress: IMAP passes go through
 `ImapScanService::rescanAccount()` with a rescan cursor kept in the job `state`
-(`uidvalidity`, `last_uid`, `until_uid` = UIDNEXT - 1 when the rescan started),
+(`uidvalidity`, `last_uid`, `until_uid` = highest UID listed when the rescan
+started, `left` = messages not checked yet), mirrored after every batch to
+`Account::rescanProgress` so a later job continues an interrupted rescan; a
+failed batch is retried (`AccountRescanHandler::RETRY_DELAYS`),
 never the account's scan cursor; SSH passes call the agent's `rescan
 --time-limit=<batch> [--reset]` (the agent keeps its own progress). Counters are
 summed over the batches; when the last one is done the result goes to the job

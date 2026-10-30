@@ -149,6 +149,7 @@ class ConfigurationController extends AbstractController
             // Link protection
             $c->set('url.enabled', array_key_exists('url_enabled', $post));
             $c->set('url.dbl_enabled', array_key_exists('url_dbl_enabled', $post));
+            $c->set('rescan.skip_url_lookups', array_key_exists('rescan_skip_url_lookups', $post));
             foreach (['mismatch_score', 'ip_score', 'shortener_score', 'punycode_score', 'gsb_score'] as $k) {
                 $c->set('url.' . $k, max(0, (int)($post['url_' . $k] ?? UrlAnalyzer::DEFAULT_CONFIG[$k])));
             }
@@ -213,6 +214,7 @@ class ConfigurationController extends AbstractController
             'vips' => $this->scoring->getVipList(),
             'url_enabled' => $this->scoring->isUrlCheckEnabled(),
             'url' => $url,
+            'rescan_skip_url_lookups' => $this->scoring->isRescanUrlLookupSkipped(),
             'url_dbl_zones' => $this->scoring->getUrlDblZonesText(),
             'attachment_policy_enabled' => $this->scoring->isAttachmentPolicyEnabled(),
             'attachment' => $this->scoring->getAttachmentPolicyConfig(),

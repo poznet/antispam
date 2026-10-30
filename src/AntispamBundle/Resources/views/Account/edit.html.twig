@@ -193,8 +193,12 @@
 
     <form method="post" action="{{ path('antispam_account_rescan', {id: account.id}) }}" style="margin-top:15px">
         <input type="hidden" name="_token" value="{{ csrf_token('account_action_' ~ account.id) }}">
-        <button type="submit" class="btn btn-default btn-sm" data-confirm="Przeskanować całą skrzynkę odbiorczą ponownie według aktualnych reguł? Zadanie wykona się w tle; spam zostanie przeniesiony do SPAM / kwarantanny (nigdy usunięty)."><span class="glyphicon glyphicon-repeat"></span> Przeskanuj całą skrzynkę ponownie</button>
-        {% if account.lastRescanAt %}<span class="text-muted small">&nbsp; ostatnio: {{ account.lastRescanAt|date('Y-m-d H:i') }}</span>{% endif %}
+        {% set rescanLeft = account.rescanProgress %}
+        <button type="submit" class="btn btn-default btn-sm" data-confirm="{{ rescanLeft ? 'Wznowić przerwany ponowny skan od miejsca, w którym się zatrzymał?' : 'Przeskanować całą skrzynkę odbiorczą ponownie według aktualnych reguł? Zadanie wykona się w tle; spam zostanie przeniesiony do SPAM / kwarantanny (nigdy usunięty).' }}"><span class="glyphicon glyphicon-repeat"></span> {{ rescanLeft ? 'Wznów ponowny skan' : 'Przeskanuj całą skrzynkę ponownie' }}</button>
+        {% if rescanLeft %}
+            <button type="submit" name="restart" value="1" class="btn btn-link btn-sm" data-confirm="Zacząć ponowny skan od początku? Dotychczasowy postęp zostanie pominięty.">zacznij od nowa</button>
+            <span class="text-warning small">&nbsp; przerwany: sprawdzono {{ rescanLeft.result.checked|default(0) }}, zostało {{ rescanLeft.result.remaining|default('?') }}</span>
+        {% elseif account.lastRescanAt %}<span class="text-muted small">&nbsp; ostatnio: {{ account.lastRescanAt|date('Y-m-d H:i') }}</span>{% endif %}
     </form>
 
     {% if account.sshHostKey %}

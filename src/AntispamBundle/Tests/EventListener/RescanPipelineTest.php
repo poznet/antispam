@@ -4,12 +4,18 @@ namespace AntispamBundle\Tests\EventListener;
 
 use AntispamBundle\Entity\SpamScoreLog;
 use AntispamBundle\Event\MessageEvent;
+use AntispamBundle\EventListener\Message\CheckDnsbl;
+use AntispamBundle\EventListener\Message\CheckHeaders;
 use AntispamBundle\EventListener\Message\CheckIfIsAlreadyChecked;
+use AntispamBundle\EventListener\Message\CheckUrls;
 use AntispamBundle\EventListener\Message\MoveToSpam;
 use AntispamBundle\Services\ConfigService;
+use AntispamBundle\Services\DnsblService;
+use AntispamBundle\Services\HeaderAnalyzer;
 use AntispamBundle\Services\InboxService;
 use AntispamBundle\Services\MessageService;
 use AntispamBundle\Services\ScoringService;
+use AntispamBundle\Services\UrlAnalyzer;
 use AntispamBundle\Tests\Support\JobsDatabase;
 use Ddeboer\Imap\MailboxInterface;
 use Ddeboer\Imap\MessageInterface;
@@ -88,5 +94,61 @@ class RescanPipelineTest extends TestCase
         $repo = $db->em->getRepository(SpamScoreLog::class);
         $this->assertSame(1, $repo->statsByDecision(new \DateTime('-1 day'))['spam'], 'only the regular scan counts');
         $this->assertSame(1, array_sum(array_column($repo->dailyCounts(1), 'cnt')));
+    }
+
+    private function scoring(bool $skipUrlLookups = true): ScoringService
+    {
+        $scoring = $this->createMock(ScoringService::class);
+        $scoring->method('isScoringEnabled')->willReturn(true);
+        $scoring->method('isDnsblEnabled')->willReturn(true);
+        $scoring->method('isUrlCheckEnabled')->willReturn(true);
+        $scoring->method('isRescanUrlLookupSkipped')->willReturn($skipUrlLookups);
+        $scoring->method('getUrlConfig')->willReturn(['dbl_enabled' => true, 'gsb_enabled' => true]);
+        return $scoring;
+    }
+
+    public function testRescanSkipsTheDnsblLookup()
+    {
+        // Today's reputation of the IP that delivered old mail means nothing - and cost DNS per message.
+        $dnsbl = $this->createMock(DnsblService::class);
+        $dnsbl->expects($this->never())->method('scoreForIp');
+        $msg = $this->createMock(MessageInterface::class);
+        $msg->expects($this->never())->method('getRawHeaders');
+        (new CheckDnsbl($dnsbl, $this->scoring()))->check($this->rescanEvent($msg));
+    }
+
+    public function testRescanTurnsOffLinkDomainLookupsBySetting()
+    {
+        $msg = $this->createMock(MessageInterface::class);
+        $msg->method('getBodyText')->willReturn('http://example.com/x');
+        foreach ([true => [false, false], false => [true, true]] as $skip => $expected) {
+            $seen = null;
+            $analyzer = $this->createMock(UrlAnalyzer::class);
+            $analyzer->method('analyze')->willReturnCallback(function ($html, $text, $config) use (&$seen) {
+                $seen = [$config['dbl_enabled'], $config['gsb_enabled']];
+                return ['score' => 0, 'reasons' => []];
+            });
+            (new CheckUrls($analyzer, $this->scoring((bool)$skip)))->check($this->rescanEvent($msg));
+            $this->assertSame($expected, $seen, $skip ? 'setting on' : 'setting off');
+        }
+    }
+
+    public function testBlacklistedMessageInARescanSkipsTheContentChecks()
+    {
+        // The verdict is final: no body / headers are fetched from IMAP.
+        $msg = $this->createMock(MessageInterface::class);
+        $msg->expects($this->never())->method('getBodyText');
+        $msg->expects($this->never())->method('getBodyHtml');
+        $msg->expects($this->never())->method('getRawHeaders');
+        $event = $this->rescanEvent($msg);
+        $event->setBlacklist(true);
+        $event->setSpam(true);
+        $this->assertTrue($event->isDecidedInRescan());
+        (new CheckUrls($this->createMock(UrlAnalyzer::class), $this->scoring()))->check($event);
+        (new CheckHeaders($this->createMock(HeaderAnalyzer::class), $this->scoring()))->check($event);
+
+        $normal = new MessageEvent($msg, 'box@firma.pl');
+        $normal->setBlacklist(true);
+        $this->assertFalse($normal->isDecidedInRescan(), 'regular scans keep every reason');
     }
 }

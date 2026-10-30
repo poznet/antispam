@@ -98,12 +98,36 @@ class AccountScanner
         return $result;
     }
 
-    /** Stores the end of a rescan on the account (list column), never the dashboard's last scan. */
-    public function finishRescan(Account $account, array $result): void
+    /**
+     * Stores the end of a rescan on the account (list column), never the
+     * dashboard's last scan. $complete: the whole INBOX was checked - the
+     * stored progress is dropped; otherwise (failed) it stays, so the next
+     * rescan continues from it.
+     */
+    public function finishRescan(Account $account, array $result, bool $complete = false): void
     {
-        unset($result['cursor'], $result['initial']);
+        unset($result['cursor'], $result['initial'], $result['timing']);
         $account->markRescanned($result);
+        if ($complete) {
+            $this->saveRescanProgress($account, null);
+        }
         $this->em->flush();
+    }
+
+    /**
+     * Progress of an unfinished rescan (Account::$rescanProgress), saved after
+     * every batch. Plain SQL as well: after an EntityManager reset the account
+     * is detached and a flush alone would be lost.
+     */
+    public function saveRescanProgress(Account $account, ?array $progress): void
+    {
+        $account->setRescanProgress($progress);
+        if ($account->getId() === null) {
+            return;
+        }
+        $this->em->getConnection()->update('antispam_account', [
+            'rescan_progress' => $progress === null ? null : json_encode($progress, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE),
+        ], ['id' => $account->getId()]);
     }
 
     /**

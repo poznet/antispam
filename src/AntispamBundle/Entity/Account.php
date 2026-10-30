@@ -203,6 +203,15 @@ class Account
     #[ORM\Column(name: 'last_rescan_result', type: 'text', nullable: true)]
     private $lastRescanResult;
 
+    /**
+     * JSON: an unfinished full rescan - 'cursor' (IMAP: uidvalidity, last_uid,
+     * until_uid, left; null for SSH, the agent keeps its own progress), 'result'
+     * (counters so far), 'job', 'at'. Written after every batch, cleared when
+     * the rescan completes; a new rescan continues from it (docs/spam-handling.md).
+     */
+    #[ORM\Column(name: 'rescan_progress', type: 'text', nullable: true)]
+    private $rescanProgress;
+
     public function getId() { return $this->id; }
 
     public function getName() { return $this->name; }
@@ -482,6 +491,18 @@ class Account
     {
         $data = $this->lastRescanResult ? json_decode($this->lastRescanResult, true) : null;
         return is_array($data) ? $data : null;
+    }
+
+    public function getRescanProgress(): ?array
+    {
+        $data = $this->rescanProgress ? json_decode($this->rescanProgress, true) : null;
+        return is_array($data) ? $data : null;
+    }
+
+    public function setRescanProgress(?array $progress)
+    {
+        $this->rescanProgress = $progress === null ? null : json_encode($progress, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        return $this;
     }
 
     /**

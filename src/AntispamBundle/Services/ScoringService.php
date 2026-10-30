@@ -107,6 +107,17 @@ class ScoringService implements RuntimeCacheInterface
         return (bool)$this->readBool('scoring.dnsbl_enabled', true);
     }
 
+    /**
+     * Full rescan: link domains are not looked up on the URI lists (DBL) nor in
+     * Google Safe Browsing - DNS / HTTP per message was most of a 30 000-message
+     * rescan. The other link checks, the CERT list and the shared feed stay.
+     * DNSBL (connecting IP) is skipped in a rescan always.
+     */
+    public function isRescanUrlLookupSkipped(): bool
+    {
+        return (bool)$this->readBool('rescan.skip_url_lookups', true);
+    }
+
     public function isHeaderCheckEnabled()
     {
         return (bool)$this->readBool('scoring.header_check_enabled', true);

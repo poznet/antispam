@@ -228,8 +228,10 @@ How it runs (job `account.rescan`, [jobs.md](jobs.md)):
   ponownie N wiadomości, zostało M" and the final counters (checked,
   whitelisted, blacklisted, moved to spam, quarantined, failed messages).
   **Anuluj** stops it after the current batch.
-  - IMAP: the set of messages is fixed when the rescan starts (UIDs up to
-    UIDNEXT - 1); the rescan has **its own cursor** in the job state - the
+  - IMAP: the set of messages is fixed when the rescan starts (the UIDs the
+    server lists then: `SEARCH ALL`, or `FETCH 1:*` when SEARCH answers with
+    nothing although `STATUS` counts messages; a non-empty INBOX that cannot be
+    listed fails the job instead of "finishing" with 0 checked); the rescan has **its own cursor** in the job state - the
     account's incremental scan cursor and its last scan are not touched, so
     the regular scan (scan-all, **Skanuj**) goes on between two batches and
     handles the mail that arrives meanwhile. A changed UIDVALIDITY restarts

@@ -15,6 +15,7 @@ use Ddeboer\Imap\MailboxInterface;
 use Ddeboer\Imap\Search\Date\Since;
 use Ddeboer\Imap\Server;
 use Doctrine\Persistence\ManagerRegistry;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
@@ -68,6 +69,7 @@ class ImapScanService
         #[Autowire('%kernel.project_dir%/var/data/locks')] private ?string $lockDir = null,
         private ?MailboxSettingsResolver $mailboxSettings = null,
         private ?OAuthTokenManager $oauthTokens = null,
+        private ?LoggerInterface $logger = null,
     ) {
     }
 
@@ -361,10 +363,11 @@ class ImapScanService
             $cursor = null;
         }
         $last = $cursor !== null ? (int)$cursor['last_uid'] : 0;
-        $until = $cursor !== null ? (int)$cursor['until_uid'] : ($uidNext > 0 ? $uidNext - 1 : PHP_INT_MAX);
+        $until = $cursor !== null ? (int)$cursor['until_uid'] : PHP_INT_MAX;
+        $inMailbox = (int)($status->messages ?? 0);
 
         if ($last === 0) {
-            $uids = self::uidsOf($inbox->getMessages());
+            $uids = $this->allUids($inbox, $inMailbox);
         } else {
             try {
                 $uids = self::uidsOf($inbox->getMessageSequence(($last + 1) . ':*'));
@@ -375,8 +378,13 @@ class ImapScanService
         $uids = self::sorted(array_filter($uids, function ($uid) use ($last, $until) {
             return $uid > $last && $uid <= $until;
         }));
-        if ($until === PHP_INT_MAX) {
+        if ($cursor === null) {
+            // The set of the rescan: what the server listed now. Not UIDNEXT -
+            // a STATUS below the real UIDs would leave nothing to check.
             $until = $uids ? max($uids) : 0;
+            if (!$uids && $inMailbox > 0) {
+                throw new \RuntimeException(sprintf('Serwer IMAP nie podał listy wiadomości: STATUS zgłasza %d wiadomości w INBOX (UIDNEXT %d), a SEARCH ALL i FETCH 1:* nie zwróciły żadnego UID - nic nie sprawdzono.', $inMailbox, $uidNext));
+            }
         }
         // Without UIDVALIDITY a later batch could not tell the same UIDs apart: one pass.
         $limited = ($maxMessages !== null || $deadline !== null) && $validity > 0;
@@ -597,6 +605,25 @@ class ImapScanService
             flock($handle, LOCK_UN);
             fclose($handle);
         }
+    }
+
+    /**
+     * UIDs of every message in the folder. SEARCH ALL first; when it answers
+     * with nothing although STATUS counts messages (seen on a 30 000-message
+     * Interia INBOX: a "finished" rescan that checked 0), FETCH 1:* instead.
+     */
+    private function allUids(MailboxInterface $inbox, int $inMailbox): array
+    {
+        $uids = self::uidsOf($inbox->getMessages());
+        if (!$uids && $inMailbox > 0) {
+            try {
+                $uids = self::uidsOf($inbox->getMessageSequence('1:*'));
+            } catch (InvalidSearchCriteriaException $e) {
+                $uids = [];
+            }
+            $this->logger?->warning('antispam: IMAP SEARCH ALL returned no UIDs, FETCH 1:* fallback', ['messages' => $inMailbox, 'fetched' => count($uids)]);
+        }
+        return $uids;
     }
 
     private static function uidsOf(iterable $iterator)

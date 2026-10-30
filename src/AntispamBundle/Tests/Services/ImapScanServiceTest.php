@@ -12,6 +12,7 @@ use AntispamBundle\Services\CryptoService;
 use AntispamBundle\Services\ImapScanService;
 use AntispamBundle\Services\MessageService;
 use Ddeboer\Imap\ConnectionInterface;
+use Ddeboer\Imap\Exception\InvalidSearchCriteriaException;
 use Ddeboer\Imap\ImapResourceInterface;
 use Ddeboer\Imap\MailboxInterface;
 use Ddeboer\Imap\MessageInterface;
@@ -35,6 +36,8 @@ class ImapScanServiceTest extends TestCase
     private $inbox = [];
     private $validity = 777;
     private $uidNext = null;
+    /** SEARCH ALL answers with no UIDs (FETCH still works) */
+    private $searchBroken = false;
     /** @var string[] search criteria / sequences requested from the server */
     private $requests = [];
     /** @var int[] UIDs that reached the end of the pipeline */
@@ -53,6 +56,7 @@ class ImapScanServiceTest extends TestCase
         $this->failing = [];
         $this->validity = 777;
         $this->uidNext = null;
+        $this->searchBroken = false;
     }
 
     protected function tearDown(): void
@@ -103,7 +107,7 @@ class ImapScanServiceTest extends TestCase
         });
         $mailbox->method('getMessages')->willReturnCallback(function (?ConditionInterface $search = null) use ($resource) {
             $this->requests[] = $search ? $search->toString() : 'ALL';
-            return new MessageIterator($resource, array_keys($this->inbox));
+            return new MessageIterator($resource, $this->searchBroken ? [] : array_keys($this->inbox));
         });
         $mailbox->method('getMessageSequence')->willReturnCallback(function ($seq) use ($resource) {
             $this->requests[] = 'UID ' . $seq;
@@ -498,6 +502,46 @@ class ImapScanServiceTest extends TestCase
         $stats = $scan->rescan($this->connection(), 'box@firma.pl', $stats['cursor'], 2);
         $this->assertSame([1, 2, 3, 4, 5], $this->processed);
         $this->assertSame([0, null], [$stats['remaining'], $stats['cursor']]);
+    }
+
+    public function testRescanFallsBackToFetchWhenSearchAllReturnsNothing()
+    {
+        // Interia, 30 390 messages: SEARCH ALL answered with no UIDs, the job said "finished, checked 0".
+        $this->fill(1, 3);
+        $this->searchBroken = true;
+        $stats = $this->service($this->messages())->rescan($this->connection(), 'box@firma.pl');
+
+        $this->assertSame([1, 2, 3], $this->processed);
+        $this->assertContains('UID 1:*', $this->requests);
+        $this->assertSame(3, $stats['checked']);
+    }
+
+    public function testRescanIgnoresAStatusUidNextBelowTheRealUids()
+    {
+        $this->fill(100, 102);
+        $this->uidNext = 5; // broken STATUS: would have filtered out every message
+        $stats = $this->service($this->messages())->rescan($this->connection(), 'box@firma.pl', null, 2);
+
+        $this->assertSame([100, 101], $this->processed);
+        $this->assertSame(['uidvalidity' => 777, 'last_uid' => 101, 'until_uid' => 102], $stats['cursor']);
+    }
+
+    public function testRescanThatCannotListAFullInboxFails()
+    {
+        $this->fill(1, 3);
+        $this->searchBroken = true;
+        $connection = $this->connection();
+        $mailbox = $connection->getMailbox('INBOX');
+        // FETCH 1:* fails too.
+        $broken = $this->createMock(ConnectionInterface::class);
+        $inbox = $this->createMock(MailboxInterface::class);
+        $inbox->method('getStatus')->willReturnCallback(fn () => $mailbox->getStatus());
+        $inbox->method('getMessages')->willReturn(new MessageIterator($this->createMock(ImapResourceInterface::class), []));
+        $inbox->method('getMessageSequence')->willThrowException(new InvalidSearchCriteriaException('x'));
+        $broken->method('getMailbox')->willReturn($inbox);
+
+        $this->expectExceptionMessage('STATUS zgłasza 3 wiadomości w INBOX');
+        $this->service($this->messages())->rescan($broken, 'box@firma.pl');
     }
 
     public function testRescanSkipsAFailingMessageAndStartsOverAfterUidValidityChange()

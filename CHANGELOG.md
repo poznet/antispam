@@ -212,6 +212,13 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   migrations and warns on entity changes without a migration. See `docs/migrations.md`.
 
 ### Fixed
+- **Full rescan of a big IMAP INBOX "finished" without checking anything**
+  (Interia, 30 390 messages: *Sprawdzone ponownie 0*, no error). The first batch
+  took the message list from `SEARCH ALL` filtered by `STATUS UIDNEXT`; an empty
+  SEARCH answer (or a UIDNEXT below the real UIDs) left nothing to check and the
+  job reported success. Now the set is what the server lists, an empty
+  `SEARCH ALL` falls back to `FETCH 1:*`, and when even that lists nothing for a
+  non-empty INBOX the job fails with the STATUS / UIDNEXT numbers instead.
 - **New rules ignored by background scans for up to an hour.** The job worker
   (`antispam:jobs:work`, Docker scheduler) kept the white / blacklists,
   impersonation VIPs and settings (thresholds) it had read for its whole life

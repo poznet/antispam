@@ -8,7 +8,13 @@ per message, then makes a final decision:
 | `< quarantine`       | ham          | leave in INBOX                        |
 | `>= quarantine`      | quarantine   | move to QUARANTINE folder             |
 | `>= spam`            | spam         | move to SPAM (or delete if enabled)   |
+| blacklist hit (domain / e-mail, any pattern type) | spam | move to SPAM (or delete if enabled), whatever the score and threshold |
 | whitelist hit        | whitelisted  | short-circuit, never scored           |
+
+A blacklist hit is always spam (since 2.1.0, agent 3.5): the rule's points are
+still added, so the score log shows them, but a rule with fewer points than the
+mailbox's spam threshold no longer ends in quarantine / INBOX. Whitelists are
+checked first and still win over the blacklists.
 
 Defaults: `quarantine_threshold = 5`, `spam_threshold = 10`. Configure under
 **Ustawienia → Filtr spamu**.
@@ -18,7 +24,7 @@ threshold and the scoring switch (**Konta → Edytuj → Ustawienia skrzynki**,
 empty = inherit). The effective value (account override -> global) applies to
 everything that reads a threshold for that mailbox: the IMAP pipeline
 (`classify()`/`decide()`), the header cap below, the CERT default score, the
-plugin `/check`, the retroactive blacklist pass and the SSH agent (scan flags
+plugin `/check` and the SSH agent (scan flags
 and synced settings). The legacy mailbox always uses the global values. See
 [accounts.md](accounts.md#per-mailbox-settings-ustawienia-skrzynki).
 
@@ -26,8 +32,8 @@ and synced settings). The legacy mailbox always uses the global values. See
 
 | Signal            | Listener              | Default score        |
 |-------------------|-----------------------|----------------------|
-| Domain blacklist  | `CheckBlacklist`      | rule.score (def. 10) |
-| Email blacklist   | `CheckEmailBlacklist` | rule.score (def. 10) |
+| Domain blacklist  | `CheckBlacklist`      | rule.score (def. 10) + always spam |
+| Email blacklist   | `CheckEmailBlacklist` | rule.score (def. 10) + always spam |
 | SPF fail/softfail (`spf_fail`) | `CheckHeaders` | 6 (hard)        |
 | DKIM fail, no passing signature (`dkim_fail`) | `CheckHeaders` | 4 (hard) |
 | DMARC fail (`dmarc_fail`) | `CheckHeaders` | 6 (hard)             |

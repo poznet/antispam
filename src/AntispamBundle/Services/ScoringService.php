@@ -14,7 +14,7 @@ use Doctrine\ORM\EntityManagerInterface;
  * defaults. The service also writes a SpamScoreLog entry per processed message
  * so admins can audit "why was this flagged".
  */
-class ScoringService
+class ScoringService implements RuntimeCacheInterface
 {
     const DEFAULT_SPAM_THRESHOLD = 10;
     const DEFAULT_QUARANTINE_THRESHOLD = 5;
@@ -460,5 +460,10 @@ class ScoringService
         if ($v === null || $v === '') return $default;
         if (is_bool($v)) return $v;
         return in_array(strtolower((string)$v), ['1', 'true', 'yes', 'on'], true);
+    }
+
+    public function clearRuntimeCache(): void
+    {
+        $this->listCache = [];
     }
 }

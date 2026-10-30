@@ -98,12 +98,12 @@ class RawMessageScanner
             if ($host && ($rule = $this->matchRule(Blacklist::class, $accountEmail, $host, 'getHost'))) {
                 $score += $rule->getScore();
                 $reasons[] = ['rule' => 'blacklist:' . $rule->getHost() . ' (' . $rule->getPatternType() . ')', 'score' => $rule->getScore()];
-                $forcedSpam = $forcedSpam || !$scoringOn;
+                $forcedSpam = true; // a blacklist hit is spam whatever the threshold
             }
             if ($sender && ($rule = $this->matchRule(EmailBlacklist::class, $accountEmail, $sender, 'getBlacklistemail'))) {
                 $score += $rule->getScore();
                 $reasons[] = ['rule' => 'email_blacklist:' . $rule->getBlacklistemail() . ' (' . $rule->getPatternType() . ')', 'score' => $rule->getScore()];
-                $forcedSpam = $forcedSpam || !$scoringOn;
+                $forcedSpam = true; // a blacklist hit is spam whatever the threshold
             }
         }
 

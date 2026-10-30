@@ -82,6 +82,20 @@ class AgentMaildirTest extends TestCase
         $this->assertFileExists($this->maildir() . '/.SPAM/maildirfolder');
     }
 
+    public function testBlacklistHitBelowTheThresholdIsSpam()
+    {
+        // Agent 3.5, like the web pipeline: any blacklist hit is spam.
+        $this->import([
+            'email_blacklist' => [['email' => 'me@firma.pl', 'blacklistemail' => 'mailing@interia.pl', 'pattern_type' => 'exact', 'score' => 4]],
+            'settings' => ['spam_threshold' => '20', 'quarantine_threshold' => '10'],
+        ]);
+        $this->put('new/1.M1.host', "From: Skarbnica - dostarczone przez =?UTF-8?b?SW50ZXJpxJk=?=\n <mailing@interia.pl>\nMessage-ID: <1@x>\nSubject: hi\n\nbody\n");
+
+        $res = \runScan($this->maildir(), $this->db(), []);
+        $this->assertSame(1, $res['moved_to_spam'], json_encode($res));
+        $this->assertFileExists($this->maildir() . '/.SPAM/new/1.M1.host');
+    }
+
     public function testDisplayNameAddressDoesNotWhitelist()
     {
         $this->import([

@@ -13,7 +13,7 @@ Every mailbox ends a scan with one of three decisions per new message
 |----------|-------|--------------|
 | ham | below the quarantine threshold | stays in INBOX |
 | quarantine | quarantine threshold ≤ score < spam threshold | moved to `QUARANTINE` |
-| spam | ≥ spam threshold (or a hard hit: exact blacklist without scoring, ClamAV/VirusTotal) | moved to `SPAM`, or deleted |
+| spam | ≥ spam threshold (or a hard hit: any domain / e-mail blacklist rule, ClamAV/VirusTotal) | moved to `SPAM`, or deleted |
 
 Spam is **moved to the `SPAM` folder** of the same mailbox by default. It is
 deleted only when deletion is switched on:
@@ -169,13 +169,11 @@ Rules and limits:
 - Mail is always **moved**, never deleted, even when deletion is on - a mistake
   can be undone from the SPAM folder.
 - Senders on the domain / e-mail whitelist are left alone, as in the scan.
-- With scoring enabled, a rule below the spam threshold only adds points in
-  the scan, so it is not applied retroactively (the panel says so). The check
-  is **per mailbox** with its effective settings (account override -> global):
-  a global rule with 6 points is applied to a mailbox with spam threshold 6
-  and skipped for one with 10 ("próg spamu skrzynki jest wyższy: ola@firma.pl
-  (10)"); scoring switched off for a mailbox applies every rule there. SSH
-  agents get the mailbox's threshold in `apply-blacklist --spam-threshold`.
+- Every rule is applied, whatever its points: a blacklist hit is spam in the
+  scan too ([scoring.md](scoring.md)). (Up to 2.0.0 a rule below the mailbox's
+  spam threshold was skipped here.) SSH agents get `apply-blacklist
+  --spam-threshold=0`, so an agent older than 3.5 does not skip such a rule
+  either.
 - Cost: IMAP searches `SINCE <30 days>`, exact rules also `FROM "<value>"`
   (server-side; a value that cannot be quoted safely is matched client-side
   only). Messages are processed **newest first**; wildcard/regex rules inspect
@@ -216,7 +214,12 @@ Started by:
   A slot is caught up to 24 h late (scheduler down); after that the week is
   skipped. A failed rescan counts as done for its week (the error is on the
   account list);
-- `php bin/console antispam:rescan:due --account=ID` (now, from the console).
+- `php bin/console antispam:rescan:due --account=ID` (now, from the console);
+- the Thunderbird plugin (1.4.0+): folder menu **Sprawdź cały folder Odebrane na
+  serwerze** on an account logged in with its own mailbox (`POST
+  /api/plugin/rescan`, 5 a day per mailbox, audit actor = the mailbox) - the
+  plugin only polls the progress, the server moves the spam
+  ([thunderbird.md](thunderbird.md#plugin-behaviour)).
 
 How it runs (job `account.rescan`, [jobs.md](jobs.md)):
 

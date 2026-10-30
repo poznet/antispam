@@ -240,18 +240,22 @@ class MailboxSettingsTest extends TestCase
 
     public function testPluginCheckUsesTheLoggedInAccountSettings()
     {
-        $this->em->persist((new Blacklist())->setEmail('*')->setHost('evil.example')->setScore(6));
-        $this->em->flush();
         $raw = "From: Spammer <x@evil.example>\r\nSubject: hi\r\nMessage-ID: <1@evil.example>\r\n\r\nbody\r\n";
         $scanner = $this->rawScanner();
+        $this->config->set('scoring.header_check_enabled', '1');
 
+        // No rule: the thresholds of the mailbox (header heuristics only).
         $inherit = $this->account('ola@firma.pl');
-        $res = $scanner->scan($raw, 'ola@firma.pl', $inherit);
-        $this->assertSame(['quarantine', 10], [$res['decision'], $res['spam_threshold']]);
-
+        $this->assertSame(10, $scanner->scan($raw, 'ola@firma.pl', $inherit)['spam_threshold']);
         $strict = $this->account('jan@firma.pl')->setSpamThreshold(6);
-        $res = $scanner->scan($raw, 'jan@firma.pl', $strict);
-        $this->assertSame(['spam', 6], [$res['decision'], $res['spam_threshold']]);
+        $this->assertSame(6, $scanner->scan($raw, 'jan@firma.pl', $strict)['spam_threshold']);
+        $this->config->set('scoring.header_check_enabled', '0');
+
+        // A blacklist hit is spam whatever its points and the threshold.
+        $this->em->persist((new Blacklist())->setEmail('*')->setHost('evil.example')->setScore(6));
+        $this->em->flush();
+        $res = $scanner->scan($raw, 'ola@firma.pl', $inherit);
+        $this->assertSame(['spam', 10, 6], [$res['decision'], $res['spam_threshold'], $res['score']]);
 
         // Scoring off for the mailbox: a blacklist hit is spam outright.
         $off = $this->account('off@firma.pl')->setScoringEnabled(false)->setSpamThreshold(50);
@@ -278,7 +282,7 @@ class MailboxSettingsTest extends TestCase
         $this->assertSame([10, true], [$exporter->export('inny@firma.pl', $other)['settings']['spam_threshold'], $exporter->export('inny@firma.pl', $other)['settings']['scoring_enabled']]);
     }
 
-    public function testRetroactivePassUsesEachMailboxThreshold()
+    public function testRetroactivePassAppliesTheRuleToEveryMailboxWhateverTheThreshold()
     {
         $this->config->set('scoring.spam_threshold', 10);
         $strict = $this->account('jan@firma.pl')->setSpamThreshold(6);
@@ -303,23 +307,17 @@ class MailboxSettingsTest extends TestCase
         $inbox->method('getSpamFolder')->willReturn($this->createMock(MailboxInterface::class));
 
         $service = new RetroactiveSpamService($this->em, $this->scoring, $imap, $this->createMock(ConnectionService::class), $this->config,
-            $inbox, $this->createMock(SshService::class), $this->createMock(AgentRulesExporter::class), $this->resolver);
+            $inbox, $this->createMock(SshService::class), $this->createMock(AgentRulesExporter::class));
         $result = $service->applyRule($rule);
 
-        $this->assertSame([$strict->getEmail()], $connected);
-        $this->assertStringContainsString('ola@firma.pl (10)', (string)$result['skipped']);
-
-        // Too weak for every mailbox: the old one-line reason.
-        $strict->setSpamThreshold(null);
-        $this->em->flush();
-        $connected = [];
-        $this->assertSame('reguła ma 6 pkt, a próg spamu to 10', $service->applyRule($rule)['skipped']);
-        $this->assertSame([], $connected);
+        // A blacklist hit is spam: the 6-point rule applies also where the threshold is 10.
+        $this->assertSame([$strict->getEmail(), 'ola@firma.pl'], $connected);
+        $this->assertNull($result['skipped']);
     }
 
-    public function testSshAgentApplyBlacklistGetsTheMailboxThreshold()
+    public function testSshAgentApplyBlacklistMovesWhateverTheThreshold()
     {
-        $ssh = $this->account('ssh@firma.pl', Account::CONNECTION_SSH)->setSpamThreshold(5)->setAgentDeployed(true);
+        $ssh = $this->account('ssh@firma.pl', Account::CONNECTION_SSH)->setSpamThreshold(20)->setAgentDeployed(true);
         $this->em->flush();
         $rule = (new EmailBlacklist())->setEmail('ssh@firma.pl')->setBlacklistemail('x@evil.example')->setScore(5);
         $this->em->persist($rule);
@@ -327,13 +325,14 @@ class MailboxSettingsTest extends TestCase
 
         $agent = $this->createMock(SshService::class);
         $agent->method('syncRules')->willReturn(['success' => true]);
-        $agent->expects($this->once())->method('applyBlacklist')->with($ssh, 5, RetroactiveSpamService::DAYS)->willReturn(['moved_to_spam' => 2]);
+        // Threshold 0, so an agent before 3.5 does not skip the 5-point rule either.
+        $agent->expects($this->once())->method('applyBlacklist')->with($ssh, 0, RetroactiveSpamService::DAYS)->willReturn(['moved_to_spam' => 2]);
         $exporter = $this->createMock(AgentRulesExporter::class);
         $exporter->expects($this->once())->method('export')->with('ssh@firma.pl', $ssh)->willReturn([]);
         $imap = $this->createMock(ImapScanService::class);
 
         $service = new RetroactiveSpamService($this->em, $this->scoring, $imap, $this->createMock(ConnectionService::class), $this->config,
-            $this->createMock(InboxService::class), $agent, $exporter, $this->resolver);
+            $this->createMock(InboxService::class), $agent, $exporter);
         $this->assertSame(2, $service->applyRule($rule)['moved']);
     }
 

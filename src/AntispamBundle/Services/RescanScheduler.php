@@ -30,7 +30,8 @@ class RescanScheduler
     const TRIGGER_PANEL = 'panel';
     const TRIGGER_SCHEDULE = 'schedule';
     const TRIGGER_CLI = 'cli';
-    const TRIGGERS = [self::TRIGGER_PANEL => 'panel', self::TRIGGER_SCHEDULE => 'harmonogram (co tydzień)', self::TRIGGER_CLI => 'konsola'];
+    const TRIGGER_PLUGIN = 'plugin';
+    const TRIGGERS = [self::TRIGGER_PANEL => 'panel', self::TRIGGER_SCHEDULE => 'harmonogram (co tydzień)', self::TRIGGER_CLI => 'konsola', self::TRIGGER_PLUGIN => 'wtyczka pocztowa'];
 
     public function __construct(
         private EntityManagerInterface $em,
@@ -44,23 +45,28 @@ class RescanScheduler
         return BackgroundJob::TYPE_ACCOUNT_RESCAN . ':' . $account->getId();
     }
 
-    /** Queue a rescan of $account (or get the one already queued / running). */
+    /**
+     * Queue a rescan of $account (or get the one already queued / running).
+     * From the mail client plugin the actor is the mailbox itself (no panel user).
+     */
     public function enqueue(Account $account, string $trigger = self::TRIGGER_PANEL): EnqueueResult
     {
         $scheduled = $trigger === self::TRIGGER_SCHEDULE;
+        $plugin = $trigger === self::TRIGGER_PLUGIN;
+        [$actor, $actorType] = $scheduled ? ['harmonogram', AuditLog::ACTOR_CLI] : ($plugin ? [$account->getEmail(), AuditLog::ACTOR_PLUGIN] : [null, null]);
         $queued = $this->jobs->enqueue(
             BackgroundJob::TYPE_ACCOUNT_RESCAN,
             ['trigger' => $trigger],
             $account,
             label: ($scheduled ? 'Cotygodniowy ponowny skan: ' : 'Ponowny skan całej skrzynki: ') . ($account->getName() ?: $account->getEmail()),
             dedupeKey: self::dedupeKey($account),
-            requestedBy: $scheduled ? 'harmonogram' : null,
-            requestedByType: $scheduled ? AuditLog::ACTOR_CLI : null,
+            requestedBy: $actor,
+            requestedByType: $actorType,
         );
         if ($queued->created) {
             $this->audit?->log('account.rescan_queued', targetType: 'account', targetId: $account->getId(), label: $account->getName(), mailbox: $account->getEmail(),
                 details: ['job' => $queued->id, 'trigger' => $trigger],
-                actor: $scheduled ? 'harmonogram' : null, actorType: $scheduled ? AuditLog::ACTOR_CLI : null);
+                actor: $actor, actorType: $actorType);
         }
         return $queued;
     }

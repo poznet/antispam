@@ -9,7 +9,7 @@ use Doctrine\ORM\EntityManagerInterface;
  * Key/value settings stored in the `config` table (formerly the
  * "configuration" service of poznet/configbundle).
  */
-class ConfigService
+class ConfigService implements RuntimeCacheInterface
 {
     private $em;
     /** @var array<string, mixed> values read during this process */
@@ -50,5 +50,10 @@ class ConfigService
     private function find($name)
     {
         return $this->em->getRepository(Config::class)->findOneBy(['name' => $name]);
+    }
+
+    public function clearRuntimeCache(): void
+    {
+        $this->cache = [];
     }
 }

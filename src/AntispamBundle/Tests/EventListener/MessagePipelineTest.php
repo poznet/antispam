@@ -2,12 +2,14 @@
 
 namespace AntispamBundle\Tests\EventListener;
 
+use AntispamBundle\Entity\Blacklist;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Entity\SpamScoreLog;
 use AntispamBundle\Entity\Whitelist;
 use AntispamBundle\Event\MessageEvent;
 use AntispamBundle\EventListener\Message\ApplyScoreDecision;
 use AntispamBundle\EventListener\Message\CheckAttachmentsVirusTotal;
+use AntispamBundle\EventListener\Message\CheckBlacklist;
 use AntispamBundle\EventListener\Message\CheckDnsbl;
 use AntispamBundle\EventListener\Message\CheckEmailBlacklist;
 use AntispamBundle\EventListener\Message\CheckWhitelist;
@@ -73,6 +75,49 @@ class MessagePipelineTest extends KernelTestCase
         $listener->check($event);
         $this->assertTrue($event->isBlacklist());
         $this->assertSame(10, $event->getSpamscore());
+        $this->assertTrue($event->isSpam(), 'a blacklist hit is spam whatever the threshold');
+    }
+
+    public function testBlacklistHitBelowTheThresholdIsStillSpam()
+    {
+        // mailing@interia.pl, 10 points, mailbox threshold 15: still spam, not quarantine / ham.
+        $scoring = new ScoringService($this->createMock(EntityManagerInterface::class));
+        $this->assertSame(SpamScoreLog::DECISION_SPAM, $scoring->classify(10, true));
+        foreach ([[new CheckEmailBlacklist($this->em([(new EmailBlacklist())->setBlacklistemail('mailing@interia.pl')->setScore(1)]), $this->createMock(MessageService::class), $this->scoringOn()), 'mailing', 'interia.pl'],
+                  [new CheckBlacklist($this->em([(new Blacklist())->setHost('*.evil.example')->setPatternType('wildcard')->setScore(1)]), $this->createMock(MessageService::class), $this->scoringOn()), 'x', 'news.evil.example']] as [$listener, $mailbox, $host]) {
+            $event = new MessageEvent($this->message($mailbox, $host), 'box@interia.pl');
+            $event->setInitialScan(true);
+            $listener->check($event);
+            $this->assertSame([true, 1], [$event->isSpam(), $event->getSpamscore()], get_class($listener));
+        }
+    }
+
+    private function scoringOn(): ScoringService
+    {
+        $scoring = $this->createMock(ScoringService::class);
+        $scoring->method('isScoringEnabled')->willReturn(true);
+        return $scoring;
+    }
+
+    public function testRulesAreReadAgainAfterTheRuntimeCacheIsCleared()
+    {
+        // The job worker clears it before every job: a rule added meanwhile applies.
+        $repo = $this->createMock(EntityRepository::class);
+        $repo->method('findBy')->willReturnOnConsecutiveCalls([], [(new EmailBlacklist())->setBlacklistemail('mailing@interia.pl')]);
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('getRepository')->willReturn($repo);
+        $listener = new CheckEmailBlacklist($em, $this->createMock(MessageService::class), $this->scoringOn());
+
+        $check = function () use ($listener) {
+            $event = new MessageEvent($this->message('mailing', 'interia.pl'), 'box@interia.pl');
+            $event->setInitialScan(true);
+            $listener->check($event);
+            return $event->isSpam();
+        };
+        $this->assertFalse($check());
+        $this->assertFalse($check(), 'cached for the job');
+        $listener->clearRuntimeCache();
+        $this->assertTrue($check());
     }
 
     public function testFailedQuarantineMoveIsRethrownSoTheMessageIsRetried()

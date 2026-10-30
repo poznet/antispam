@@ -42,7 +42,7 @@
  * PHP warnings never reach STDOUT; they are collected into "warnings".
  */
 
-const AGENT_VERSION = '3.4';
+const AGENT_VERSION = '3.5';
 const CERT_DEFAULT_URL = 'https://hole.cert.pl/domains/v2/domains.txt';
 const CERT_MAX_BYTES = 52428800;
 const CERT_MIN_ROWS = 100;
@@ -876,12 +876,12 @@ function scoreMessage($filePath, $headers, array $cfg, array $lists, array $dnsb
     if ($senderHost && ($hit = matchListReturning($lists['blacklist'], $senderHost))) {
         $score += (int)$hit['score'];
         $reasons[] = ['rule' => 'blacklist:' . $hit['pattern'] . ' (' . $hit['pattern_type'] . ')', 'score' => (int)$hit['score']];
-        $forceSpam = $forceSpam || !$cfg['scoring'];
+        $forceSpam = true; // a blacklist hit is spam whatever the threshold
     }
     if ($senderEmail && ($hit = matchListReturning($lists['email_blacklist'], $senderEmail))) {
         $score += (int)$hit['score'];
         $reasons[] = ['rule' => 'email_blacklist:' . $hit['pattern'] . ' (' . $hit['pattern_type'] . ')', 'score' => (int)$hit['score']];
-        $forceSpam = $forceSpam || !$cfg['scoring'];
+        $forceSpam = true; // a blacklist hit is spam whatever the threshold
     }
     $blacklisted = (bool)$reasons;
 
@@ -1080,9 +1080,10 @@ function agentSetMeta($db, $key, $value)
 
 /**
  * Moves INBOX messages delivered in the last --days whose sender matches a
- * blacklist rule worth at least the spam threshold to .SPAM (any blacklist
- * hit when scoring is off, like RetroactiveSpamService). Whitelisted senders
- * are left alone, like in the scan.
+ * blacklist rule to .SPAM (any hit is spam, like the scan and
+ * RetroactiveSpamService; --spam-threshold is accepted for older panels but
+ * no longer filters the rules). Whitelisted senders are left alone, like in
+ * the scan.
  */
 function applyBlacklist($maildirPath, $dbPath, $options = [])
 {
@@ -1090,8 +1091,6 @@ function applyBlacklist($maildirPath, $dbPath, $options = [])
     $limit = max(1, (int)($options['limit'] ?? 5000));
 
     $db = getDb($dbPath);
-    $cfg = scanConfig(loadSettings($db), $options);
-    $spamThreshold = $cfg['scoring'] ? $cfg['spam_threshold'] : PHP_INT_MIN;
     $lists = loadAllLists($db);
 
     $stats = ['success' => true, 'examined' => 0, 'moved_to_spam' => 0, 'move_failed' => 0, 'truncated' => false, 'errors' => []];
@@ -1121,11 +1120,11 @@ function applyBlacklist($maildirPath, $dbPath, $options = [])
 
             $hit = $senderHost ? matchListReturning($lists['blacklist'], $senderHost) : null;
             $rule = $hit ? 'blacklist:' . $hit['pattern'] . ' (' . $hit['pattern_type'] . ')' : null;
-            if (!$hit || (int)$hit['score'] < $spamThreshold) {
+            if (!$hit) {
                 $hit = matchListReturning($lists['email_blacklist'], $senderEmail);
                 $rule = $hit ? 'email_blacklist:' . $hit['pattern'] . ' (' . $hit['pattern_type'] . ')' : null;
             }
-            if (!$hit || (int)$hit['score'] < $spamThreshold) continue;
+            if (!$hit) continue;
 
             $move = agentMoveMessage($maildirPath, $subdir, $file, '.SPAM');
             if (!$move['ok']) {

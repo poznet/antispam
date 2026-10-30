@@ -6,17 +6,18 @@ use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Event\MessageEvent;
 use AntispamBundle\Services\MessageService;
 use AntispamBundle\Services\PatternMatcher;
+use AntispamBundle\Services\RuntimeCacheInterface;
 use AntispamBundle\Services\ScoringService;
 use Doctrine\ORM\EntityManagerInterface;
 
-class CheckEmailBlacklist
+class CheckEmailBlacklist implements RuntimeCacheInterface
 {
     use SenderRuleTrait;
 
     private $em;
     private $ms;
     private $scoring;
-    /** @var array<string, array> rules cached per account email for the lifetime of this listener */
+    /** @var array<string, array> rules cached per account email (cleared before every background job) */
     private $rulesCache = [];
 
     public function __construct(EntityManagerInterface $em, MessageService $ms, ?ScoringService $scoring = null)
@@ -59,11 +60,17 @@ class CheckEmailBlacklist
                 'score' => $match->getScore(),
             ]]);
             $event->setBlacklist(true);
+            $event->setSpam(true);
             return;
         }
 
         $this->ms->setAsChecked($msg, $event->getEmail());
         $event->setBlacklist(true);
         $event->setSpam(true);
+    }
+
+    public function clearRuntimeCache(): void
+    {
+        $this->rulesCache = [];
     }
 }

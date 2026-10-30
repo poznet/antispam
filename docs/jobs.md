@@ -100,7 +100,14 @@ php bin/console antispam:jobs:run --once                 # run what is due, then
   interruptions it fails ("Proces wykonujący zadanie został przerwany 3 razy").
   A resumed scan continues from its stored cursor.
 - After every job the EntityManager is cleared (or reset when a failed flush
-  closed it).
+  closed it). **Before** every job (and every batch of a resumable one) the
+  rules / settings the services keep for the process lifetime are dropped
+  (`RuntimeCacheInterface`, tag `antispam.runtime_cache`: white / blacklist
+  listeners, impersonation VIPs, `ScoringService` lists, `ConfigService`), so a
+  rule or threshold changed in the panel applies to the next job, not only
+  after the worker restarts. (Up to 2.0.0 a rule added while the worker ran was
+  invisible to its scans and rescans for up to an hour.) Deliberately not
+  Symfony's `kernel.reset`: `BayesService::reset()` wipes the learned tokens.
 - SIGTERM / SIGINT finish the current job, then exit.
 
 ### Docker

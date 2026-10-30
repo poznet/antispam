@@ -175,7 +175,32 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 - Audit actions `spam.release`, `spam.whitelist`, `auth.2fa_*`.
 - New nullable 2FA columns on `antispam_user` (migration `Version20261028135851`).
 
+- **Thunderbird plugin 1.4.0: "Sprawdź cały folder Odebrane na serwerze".**
+  Right-click a folder of a Thunderbird account logged in with its own mailbox:
+  the plugin queues the full rescan of that mailbox's INBOX on the server (same
+  job `account.rescan` as the panel button - batches in the background, spam
+  moved to SPAM / QUARANTINE by the server, never deleted) and only polls its
+  progress every minute; a notification says when it is done, with the counters.
+  Thunderbird never downloads the mailbox, so a 100 000-message INBOX does not
+  slow it down. Watches survive a Thunderbird restart.
+- `/api/plugin/rescan` (token required): `POST` queues the rescan of the
+  token's mailbox (one per account at a time, 5 a day per account,
+  `409` for an SSH mailbox without the agent), `GET` returns the active job's
+  progress (`job`: id, status, done, total) or the last result (`last`).
+  `/api/plugin/status` advertises `rescan`. Audit `account.rescan_queued` with
+  the mailbox as the actor (`plugin`), trigger "wtyczka pocztowa".
+
 ### Changed
+- **A blacklist hit is always spam.** A domain or e-mail blacklist rule (exact,
+  wildcard or regex) now sends the message to SPAM whatever its points and the
+  mailbox's spam threshold - in the IMAP scan / rescan, the plugin `/check`, the
+  SSH agent and the retroactive pass. Before, with scoring on, a rule only added
+  its points (default 10): with a raised threshold the message went to
+  quarantine or stayed in INBOX, and the retroactive pass skipped such rules
+  ("reguła ma N pkt, a próg spamu to M" - that message is gone). The points are
+  still added and shown in the score log. Whitelists still win. SSH+Maildir
+  agent **3.5** (redeploy: *Konta → Wdróż*); `apply-blacklist` now gets
+  `--spam-threshold=0`, so older agents apply every rule too.
 - Database schema is versioned with Doctrine Migrations (`migrations/`, baseline =
   full 2.0.0 schema). The Docker entrypoint runs the new `antispam:db:upgrade` instead
   of `doctrine:schema:update --force`: fresh database -> all migrations; install made
@@ -187,6 +212,14 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   migrations and warns on entity changes without a migration. See `docs/migrations.md`.
 
 ### Fixed
+- **New rules ignored by background scans for up to an hour.** The job worker
+  (`antispam:jobs:work`, Docker scheduler) kept the white / blacklists,
+  impersonation VIPs and settings (thresholds) it had read for its whole life
+  (up to `JOBS_WORKER_TIME_LIMIT`, 3600 s). A rule added in the panel after the
+  worker had scanned the mailbox was not applied by **Skanuj**, the full
+  rescan (all batches) or other jobs until the worker restarted - seen as a
+  rescan that left `mailing@interia.pl` in INBOX although the rule existed.
+  These caches are now cleared before every job (`RuntimeCacheInterface`).
 - Thunderbird plugin 1.3.2: "Brak folderu Śmieci na koncie" on IMAP accounts whose
   spam folder carries no junk flag. The plugin now also takes a folder named
   Spam / Junk / Śmieci / Wiadomości-śmieci (any level, e.g. INBOX.Spam), and when

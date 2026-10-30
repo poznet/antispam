@@ -163,6 +163,19 @@ Since 1.3.0:
   message, attachments included (up to 10 MiB), goes to the admin's
   *Zgłoszenia phishingu* page and is handled like a spam report - see
   [phishing.md](phishing.md).
+- **Folder pane menu → Sprawdź cały folder Odebrane na serwerze** (1.4.0, account
+  logged in with its own mailbox; greyed out otherwise): the whole INBOX of that
+  mailbox is checked again **on the server** against the current rules - the
+  [full rescan](spam-handling.md#full-rescan) job `account.rescan`, the same as
+  the panel button. Thunderbird downloads nothing, so an INBOX of 100 000
+  messages does not slow it down: the server works in background batches and
+  moves spam to SPAM / QUARANTINE itself (never deletes; Thunderbird just sees
+  the messages leave INBOX). The plugin polls `GET /api/plugin/rescan` once a
+  minute, logs the progress ("N z M (x%)") in the event log and shows a
+  notification with the counters when it ends. Pending watches are kept in
+  `storage.local` (`rescanWatch`) and resumed after a restart; given up after 3
+  days or when the login is removed. A second click while a rescan runs only
+  shows its progress. Limit: 5 rescans a day per mailbox.
 - **Decision handling** (logged in): spam → mark + move to Junk (default),
   quarantine → nothing (default); both configurable.
 - **Feedback**: explicit actions (toolbar button, context menu) show their result
@@ -280,6 +293,8 @@ the report taught; `null` for anonymous and `report_only` reports).
 | POST | `/api/plugin/report` | optional for `spam`, required for `ham` | `{raw_base64, verdict: "spam"\|"ham", scope?, reported_from?}` → `{verdict, sender, signals, rules[], scope, mailbox, authenticated, retroactive?: "scheduled"}` |
 | POST | `/api/plugin/phishing` | required | `{raw_base64 (max 10 MiB decoded), client: "thunderbird"\|"outlook", truncated: bool, scope?, reported_from?}` → report fields + `{phishing_id, duplicate}`. 30/h per account (the authenticating one, also for `report_only`). See [phishing.md](phishing.md) |
 | POST | `/api/plugin/ping` | optional | Connection test from the settings page: `{client, client_version, app}` → `{ok, enabled, server_version, plugin_version, authenticated, email, client_ip, received_at}`. Nothing is learned; written to the audit log as `plugin.ping`. 60/h per IP |
+| POST | `/api/plugin/rescan` | required | Queue the full INBOX rescan of the token's mailbox (job `account.rescan`, trigger `plugin`). One per account while queued / running (a repeat returns it with `created: false`, not counted), 5/day per account; `409` for an SSH mailbox without the agent. Answer: `{created}` + the GET fields |
+| GET | `/api/plugin/rescan` | required | `{mailbox, active, job: {id, status, progress, done, total} \| null, last: {at, ok, total, checked, whitelisted, blacklisted, quarantined, moved_to_spam, move_failed, error} \| null}` |
 | POST | `/api/plugin/check` | required | `{raw_base64}` → `{decision, spam, score, spam_threshold, quarantine_threshold, reasons[], sender, subject}` |
 | GET | `/plugin/download` | — | The `.xpi` (`?build=instance` / `generic`; default: uploaded package if current, else instance) |
 | GET | `/plugin/thunderbird/updates.json` | — | Update manifest for the instance build's `update_url` |

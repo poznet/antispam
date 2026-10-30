@@ -115,7 +115,8 @@ The values are the account's effective ones: its **Ustawienia skrzynki**
 overrides (spam / quarantine threshold, scoring on/off) or else the global
 settings - both in the scan flags and in the synced `settings` (see
 [accounts.md](accounts.md#per-mailbox-settings-ustawienia-skrzynki)).
-With `scoring_enabled` = 0 only the lists apply and a blacklist hit is spam,
+With `scoring_enabled` = 0 only the lists apply. A blacklist hit is spam either
+way (agent 3.5+; before, with scoring on, it only added the rule's points),
 like the web pipeline.
 
 Pipeline (mirrors the web listeners): whitelist → blacklist → header
@@ -219,12 +220,13 @@ rescan ([spam-handling.md](spam-handling.md#full-rescan)).
 
 ### apply-blacklist
 ```bash
-php antispam-agent.php apply-blacklist --spam-threshold=10 --days=30 --account=5
+php antispam-agent.php apply-blacklist --days=30 --account=5
 ```
 Retroactive pass used after a new blacklist rule is synced: INBOX files
 (`new`, `cur`) modified in the last `--days` (default 30, at most `--limit`,
-default 5000) whose `From:` matches a domain / e-mail blacklist rule worth at
-least the spam threshold (any hit when scoring is off) are moved to `.SPAM`.
+default 5000) whose `From:` matches a domain / e-mail blacklist rule are moved to `.SPAM`
+(agent 3.5+: any hit, like the scan - `--spam-threshold` is still accepted and
+ignored; older agents moved only rules worth at least it, so the panel sends 0).
 Only headers are read; whitelisted senders are skipped. Logged in `score_log`
 as `spam` with the reason `retroactive …`. Returns `{"success", "examined",
 "moved_to_spam", "move_failed", "truncated", "errors"}`. See

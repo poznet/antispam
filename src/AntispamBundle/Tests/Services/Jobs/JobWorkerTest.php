@@ -6,6 +6,7 @@ use AntispamBundle\Entity\BackgroundJob;
 use AntispamBundle\Services\Jobs\JobContext;
 use AntispamBundle\Services\Jobs\JobHandlerInterface;
 use AntispamBundle\Services\Jobs\JobWorker;
+use AntispamBundle\Services\RuntimeCacheInterface;
 use AntispamBundle\Tests\Support\JobsDatabase;
 use PHPUnit\Framework\TestCase;
 
@@ -59,6 +60,27 @@ class JobWorkerTest extends TestCase
         $this->assertSame(['done', '{"ok":true}', null, 1, 'w połowie'], [$row['status'], $row['result'], $row['active_key'], (int)$row['attempts'], $row['progress']]);
         $this->assertNotNull($row['finished_at']);
         $this->assertNull($worker->runNext(), 'queue empty');
+    }
+
+    public function testRuntimeCachesAreClearedBeforeEveryJob()
+    {
+        // A rule added in the panel while the worker runs must apply to the next job.
+        $cache = new class implements RuntimeCacheInterface {
+            public int $cleared = 0;
+            public function clearRuntimeCache(): void { $this->cleared++; }
+        };
+        $seen = [];
+        $w = $this->db->worker([new ExclusiveTestHandler(function () use ($cache, &$seen) {
+            $seen[] = $cache->cleared;
+            return [];
+        })], null, [$cache]);
+        $w->configure(0, 60);
+        $this->db->queue->enqueue(BackgroundJob::TYPE_CERT_SYNC);
+        $w->runNext();
+        $this->db->queue->enqueue(BackgroundJob::TYPE_CERT_SYNC);
+        $w->runNext();
+
+        $this->assertSame([1, 2], $seen);
     }
 
     public function testExceptionFailsTheJobWithItsMessage()

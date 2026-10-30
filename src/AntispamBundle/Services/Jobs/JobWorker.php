@@ -4,6 +4,7 @@ namespace AntispamBundle\Services\Jobs;
 
 use AntispamBundle\Entity\BackgroundJob;
 use AntispamBundle\Services\AuditLogger;
+use AntispamBundle\Services\RuntimeCacheInterface;
 use Doctrine\DBAL\Connection;
 use Doctrine\Persistence\ManagerRegistry;
 use Psr\Log\LoggerInterface;
@@ -45,6 +46,8 @@ class JobWorker
         #[AutowireIterator('antispam.job_handler')] iterable $handlers,
         private ?LoggerInterface $logger = null,
         private ?AuditLogger $audit = null,
+        /** @var iterable<RuntimeCacheInterface> rules / settings cached for the process lifetime */
+        #[AutowireIterator('antispam.runtime_cache')] private iterable $runtimeCaches = [],
     ) {
         foreach ($handlers as $handler) {
             $this->handlers[$handler::type()] = $handler;
@@ -240,6 +243,12 @@ class JobWorker
         );
         $log && $log(sprintf('job #%d %s (%s) started', $id, $row['type'], $row['label']));
         $started = microtime(true);
+
+        // Every job (and every batch of a resumable one) sees the rules and
+        // settings as they are now, not as when this worker started.
+        foreach ($this->runtimeCaches as $cache) {
+            $cache->clearRuntimeCache();
+        }
 
         $this->armTimeout($id);
         try {

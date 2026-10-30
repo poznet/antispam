@@ -5,11 +5,14 @@ namespace AntispamBundle\Controller;
 use AntispamBundle\AppVersion;
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\AuditLog;
+use AntispamBundle\Entity\BackgroundJob;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Services\DeferredRetroactivePass;
 use AntispamBundle\Services\PhishingReportService;
 use AntispamBundle\Services\PluginService;
 use AntispamBundle\Services\RawMessageScanner;
+use AntispamBundle\Services\Jobs\JobQueue;
+use AntispamBundle\Services\RescanScheduler;
 use AntispamBundle\Services\ThunderbirdPluginBuilder;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -44,6 +47,8 @@ class PluginApiController extends AbstractController
         private EntityManagerInterface $em,
         private PhishingReportService $phishing,
         ?ThunderbirdPluginBuilder $tb = null,
+        private ?RescanScheduler $rescans = null,
+        private ?JobQueue $jobs = null,
     ) {
         $this->tb = $tb ?? new ThunderbirdPluginBuilder();
     }
@@ -52,8 +57,10 @@ class PluginApiController extends AbstractController
     const RETRO_RATE_LIMIT = 10;
     /** Phishing reports (full messages up to 10 MiB each) per account and hour. */
     const PHISHING_RATE_LIMIT = 30;
+    /** Full INBOX rescans started from the plugin per account and day. */
+    const RESCAN_RATE_LIMIT = 5;
 
-    const PLUGIN_VERSION = '1.3.2';
+    const PLUGIN_VERSION = '1.4.0';
 
     /**
      * The Thunderbird .xpi. Default: the uploaded generic package (e.g. the
@@ -143,6 +150,8 @@ class PluginApiController extends AbstractController
             'anonymous_reports' => $this->plugin->isAnonymousReportEnabled(),
             'check_enabled' => $this->plugin->isCheckEnabled(),
             'phishing_reports' => true,
+            // /api/plugin/rescan: the whole INBOX checked again on the server (plugin 1.4.0+).
+            'rescan' => $this->rescans !== null,
             // "scope" accepted by /report and /phishing (report_only: message
             // from another mail client account, nothing learned for the
             // token's mailbox). Missing on servers before plugin 1.3.0.
@@ -385,6 +394,81 @@ class PluginApiController extends AbstractController
         }
 
         return new JsonResponse($this->rawScanner->scan($raw, $account->getEmail(), $account));
+    }
+
+    /**
+     * "Sprawdź cały folder Odebrane": the full rescan of the token's mailbox
+     * (job account.rescan, docs/spam-handling.md#full-rescan) - the server
+     * reads INBOX in batches and moves spam to SPAM / QUARANTINE itself, the
+     * mail client only waits. Never deletes. One rescan per account at a time
+     * (a second request gets the running one), RESCAN_RATE_LIMIT a day.
+     * Answers like GET (state of the rescan) plus "created".
+     */
+    #[Route('/api/plugin/rescan', name: 'antispam_plugin_api_rescan_start', methods: ['POST'])]
+    public function rescanStartAction(Request $request)
+    {
+        if (!$this->plugin->isEnabled() || $this->rescans === null) {
+            return new JsonResponse(['error' => 'rescan unavailable'], 403);
+        }
+        $account = $this->plugin->accountForToken($this->bearer($request));
+        if (!$account) {
+            return new JsonResponse(['error' => 'login required'], 401);
+        }
+        if ($account->isSsh() && !$account->getAgentDeployed()) {
+            return new JsonResponse(['error' => 'agent not deployed', 'message' => 'Agent antyspamu nie jest jeszcze wdrożony na serwerze tej skrzynki - poproś administratora o „Wdróż”.'], 409);
+        }
+        // A request while a rescan runs only reports it: not counted.
+        if ($this->jobs?->findActive(RescanScheduler::dedupeKey($account)) === null
+            && !$this->plugin->hit('rescan', 'acc:' . $account->getId(), self::RESCAN_RATE_LIMIT, 86400)) {
+            return new JsonResponse(['error' => 'rate limit exceeded', 'message' => 'Limit ponownych skanów tej skrzynki na dziś został wykorzystany (' . self::RESCAN_RATE_LIMIT . ' na dobę).'], 429);
+        }
+        $queued = $this->rescans->enqueue($account, RescanScheduler::TRIGGER_PLUGIN);
+        return new JsonResponse(['created' => $queued->created] + $this->rescanState($account, $queued->id));
+    }
+
+    /** State of the mailbox's full rescan: the active job's progress, else the last result. */
+    #[Route('/api/plugin/rescan', name: 'antispam_plugin_api_rescan_status', methods: ['GET'])]
+    public function rescanStatusAction(Request $request)
+    {
+        if (!$this->plugin->isEnabled() || $this->rescans === null) {
+            return new JsonResponse(['error' => 'rescan unavailable'], 403);
+        }
+        $account = $this->plugin->accountForToken($this->bearer($request));
+        if (!$account) {
+            return new JsonResponse(['error' => 'login required'], 401);
+        }
+        return new JsonResponse($this->rescanState($account));
+    }
+
+    private function rescanState(Account $account, ?int $jobId = null): array
+    {
+        $jobId ??= $this->jobs?->findActive(RescanScheduler::dedupeKey($account));
+        $job = $jobId !== null ? $this->jobs?->find($jobId) : null;
+        $out = ['mailbox' => $account->getEmail(), 'active' => false, 'job' => null, 'last' => null];
+        if ($job && in_array($job->getStatus(), [BackgroundJob::STATUS_QUEUED, BackgroundJob::STATUS_RUNNING], true)) {
+            $out['active'] = true;
+            $out['job'] = [
+                'id' => $job->getId(),
+                'status' => $job->getStatus(),
+                'progress' => $job->getProgress(),
+                'done' => $job->getProgressDone() === null ? null : (int)$job->getProgressDone(),
+                'total' => $job->getProgressTotal() === null ? null : (int)$job->getProgressTotal(),
+            ];
+        }
+        if ($account->getLastRescanAt()) {
+            $r = $account->getLastRescanResultDecoded() ?? [];
+            $last = ['at' => $account->getLastRescanAt()->format(\DateTimeInterface::ATOM), 'ok' => !isset($r['error'])];
+            foreach (['total', 'checked', 'whitelisted', 'blacklisted', 'quarantined', 'moved_to_spam', 'move_failed'] as $k) {
+                if (isset($r[$k]) && is_numeric($r[$k])) {
+                    $last[$k] = (int)$r[$k];
+                }
+            }
+            if (isset($r['error'])) {
+                $last['error'] = mb_substr((string)$r['error'], 0, 300);
+            }
+            $out['last'] = $last;
+        }
+        return $out;
     }
 
     /** @return string|JsonResponse decoded message source or an error response */

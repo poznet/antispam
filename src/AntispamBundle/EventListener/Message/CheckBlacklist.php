@@ -6,22 +6,23 @@ use AntispamBundle\Entity\Blacklist;
 use AntispamBundle\Event\MessageEvent;
 use AntispamBundle\Services\MessageService;
 use AntispamBundle\Services\PatternMatcher;
+use AntispamBundle\Services\RuntimeCacheInterface;
 use AntispamBundle\Services\ScoringService;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
- * Domain blacklist check. Supports exact / wildcard / regex patterns and, when
- * scoring is enabled, adds the rule's score instead of immediately marking as
- * spam. Exact-match rules keep the legacy "hard spam" behaviour.
+ * Domain blacklist check (exact / wildcard / regex patterns). A hit is always
+ * spam, whatever the spam threshold of the mailbox; with scoring on the rule's
+ * points are added too, so the score log shows them.
  */
-class CheckBlacklist
+class CheckBlacklist implements RuntimeCacheInterface
 {
     use SenderRuleTrait;
 
     private $em;
     private $ms;
     private $scoring;
-    /** @var array<string, array> rules cached per account email for the lifetime of this listener */
+    /** @var array<string, array> rules cached per account email (cleared before every background job) */
     private $rulesCache = [];
 
     public function __construct(EntityManagerInterface $em, MessageService $ms, ?ScoringService $scoring = null)
@@ -64,11 +65,17 @@ class CheckBlacklist
                 'score' => $match->getScore(),
             ]]);
             $event->setBlacklist(true);
+            $event->setSpam(true);
             return;
         }
 
         $this->ms->setAsChecked($msg, $event->getEmail());
         $event->setBlacklist(true);
         $event->setSpam(true);
+    }
+
+    public function clearRuntimeCache(): void
+    {
+        $this->rulesCache = [];
     }
 }

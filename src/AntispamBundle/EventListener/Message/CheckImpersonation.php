@@ -5,13 +5,14 @@ namespace AntispamBundle\EventListener\Message;
 use AntispamBundle\Event\MessageEvent;
 use AntispamBundle\Services\HeaderAnalyzer;
 use AntispamBundle\Services\ImpersonationAnalyzer;
+use AntispamBundle\Services\RuntimeCacheInterface;
 use AntispamBundle\Services\ScoringService;
 
 /**
  * Impersonation / BEC protection: VIP display-name spoofing, lookalike
  * domains of protected domains and spoofing of the account's own domain.
  */
-class CheckImpersonation
+class CheckImpersonation implements RuntimeCacheInterface
 {
     private $analyzer;
     private $scoring;
@@ -65,5 +66,10 @@ class CheckImpersonation
             $event->setSpamscore($event->getSpamscore() + $result['score']);
             $event->addReasons($result['reasons']);
         }
+    }
+
+    public function clearRuntimeCache(): void
+    {
+        $this->vips = null;
     }
 }

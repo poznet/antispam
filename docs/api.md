@@ -213,6 +213,7 @@ Full reference: **[thunderbird.md](thunderbird.md)**, clients:
 | POST | `/api/plugin/login` | Mailbox e-mail + plugin/IMAP password → token (OAuth accounts: plugin password only; a 401 carries a Polish `message` saying so) |
 | POST | `/api/plugin/report` | User verdict (`spam` anonymous or logged in, `ham` logged in). Optional `scope` (`mailbox` default / `report_only`: message from another mail client account - shared fingerprints only, no rules or retroactive pass for the token's mailbox; not with `ham`) and informational `reported_from` |
 | POST | `/api/plugin/check` | Score a raw message (logged in) |
+| POST / GET | `/api/plugin/rescan` | Queue / follow the full INBOX rescan of the token's mailbox (logged in, 5/day, one at a time) - see [thunderbird.md](thunderbird.md#http-api-apiplugin) |
 | POST | `/api/plugin/phishing` | Phishing report: full message stored for the admin + spam report (logged in). Optional `scope` / `reported_from` as for `/report`: `report_only` stores the copy with the foreign address but learns nothing for the token's mailbox |
 | GET | `/plugin/download` | Download the `.xpi` (public, `Cache-Control: private, no-store`; `?build=instance\|generic`, default = uploaded package when current, else instance build) |
 | GET | `/plugin/thunderbird/updates.json` | Update manifest for the instance build's `update_url` (public) |

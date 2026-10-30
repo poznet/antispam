@@ -342,7 +342,8 @@ function contextDetail(ctx) {
 function responseSummary(data) {
   const out = {};
   for (const k of ["error", "message", "verdict", "sender", "signals", "rules", "retroactive", "phishing_id", "duplicate",
-    "scope", "mailbox", "authenticated", "email", "decision", "score", "spam_threshold", "version", "server_version", "report_only"]) {
+    "scope", "mailbox", "authenticated", "email", "decision", "score", "spam_threshold", "version", "server_version", "report_only",
+    "created", "active", "job", "last"]) {
     if (data && data[k] !== undefined && data[k] !== null && data[k] !== "") out[k] = data[k];
   }
   return out;
@@ -1113,6 +1114,7 @@ async function selectedMessages(info, tab) {
 }
 
 messenger.menus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === RESCAN_MENU) return rescanClicked(info);
   if (!MENU[info.menuItemId]) return;
   logEvent("click", true, "Menu: " + MENU[info.menuItemId]);
   enqueueManual(async () => {
@@ -1137,6 +1139,7 @@ messenger.menus.onClicked.addListener((info, tab) => {
  */
 if (messenger.menus.onShown && messenger.menus.update) {
   messenger.menus.onShown.addListener(async (info) => {
+    if (info && (info.menuIds || []).includes(RESCAN_MENU)) return rescanMenuShown(info);
     if (!info || !(info.menuIds || []).some(id => MENU[id])) return;
     try {
       let accountId = info.displayedFolder && info.displayedFolder.accountId;
@@ -1161,6 +1164,160 @@ if (messenger.menus.onShown && messenger.menus.update) {
       console.warn("antispam: menu update", e);
     }
   });
+}
+
+// --- full INBOX rescan on the server ("Sprawdź cały folder Odebrane") ----------
+
+/*
+ * A big INBOX (100 000 messages) is never read by Thunderbird: the plugin only
+ * asks the server (POST /api/plugin/rescan) to check the whole INBOX of the
+ * logged-in mailbox against the current rules. The server works in the
+ * background, in batches, and moves spam to SPAM / QUARANTINE itself (never
+ * deletes); Thunderbird just sees the messages leave INBOX. The plugin polls
+ * GET /api/plugin/rescan and tells the user when it is finished. Pending
+ * watches survive a Thunderbird restart (storage "rescanWatch").
+ */
+const RESCAN_MENU = "antispam-rescan";
+const RESCAN_TITLE = "Sprawdź cały folder Odebrane na serwerze (Antyspam)";
+const RESCAN_POLL_MS = 60 * 1000;
+const RESCAN_WATCH_MAX_MS = 3 * 24 * 3600 * 1000;
+const rescanTimers = new Map(); // login key → timer of the next poll
+
+messenger.menus.create({ id: RESCAN_MENU, title: RESCAN_TITLE, contexts: ["folder_pane"], icons: { "32": "icons/icon-32.png" } });
+
+/** Account of the folder a folder pane menu was opened on (TB 128+: selectedFolders, 115: selectedFolder). */
+function menuFolderAccountId(info) {
+  const f = (info && info.selectedFolders && info.selectedFolders[0]) || (info && info.selectedFolder) || (info && info.displayedFolder);
+  return folderAccountId(f) || (info && info.selectedAccount && info.selectedAccount.id) || null;
+}
+
+function rescanCounters(last) {
+  if (!last) return "";
+  if (!last.ok) return "błąd: " + (last.error || "nieznany");
+  const parts = ["sprawdzono " + (last.checked ?? last.total ?? 0)];
+  if (last.moved_to_spam) parts.push("do SPAM: " + last.moved_to_spam);
+  if (last.quarantined) parts.push("do kwarantanny: " + last.quarantined);
+  if (last.move_failed) parts.push("nie udało się przenieść: " + last.move_failed);
+  return parts.join(", ");
+}
+
+function rescanProgress(job) {
+  if (!job) return "";
+  if (job.total) return job.done + " z " + job.total + " (" + Math.floor(100 * job.done / Math.max(1, job.total)) + "%)";
+  return job.progress || (job.status === "queued" ? "w kolejce na serwerze" : "w toku");
+}
+
+// Writes to "rescanWatch" run one after another (read-modify-write).
+let rescanWrite = Promise.resolve();
+function updateRescanWatch(fn) {
+  rescanWrite = rescanWrite.then(async () => {
+    const { rescanWatch = {} } = await messenger.storage.local.get("rescanWatch");
+    fn(rescanWatch);
+    await messenger.storage.local.set({ rescanWatch });
+  }).catch(e => console.warn("antispam: rescan watch", e));
+  return rescanWrite;
+}
+
+async function startRescan(accountId) {
+  const ctx = await contextFor(accountId);
+  if (ctx.kind !== "own") {
+    await needsSetup("Sprawdzenie całego folderu Odebrane wymaga zalogowania tego konta (" + accountLabel(ctx.account) + ") we wtyczce jego skrzynką antyspamu.", contextDetail(ctx));
+    return;
+  }
+  let res;
+  try {
+    res = await api("/api/plugin/rescan", { method: "POST", login: ctx.login, body: {} });
+  } catch (e) {
+    const text = e.status === 404 || e.status === 405
+      ? "Serwer antyspamu nie obsługuje jeszcze sprawdzania całej skrzynki - zaktualizuj antyspam."
+      : "Nie udało się zlecić sprawdzenia folderu Odebrane (" + ctx.login.email + "): " + errorText(e);
+    await notify("Antyspam", text);
+    await feedback(false, text, contextDetail(ctx));
+    return;
+  }
+  const what = "folderu Odebrane skrzynki " + ctx.login.email;
+  const text = res.created
+    ? "Zlecono sprawdzenie całego " + what + ". Serwer robi to w tle i sam przenosi spam do folderu SPAM (nic nie usuwa) - możesz normalnie pracować, dam znać po zakończeniu."
+    : "Sprawdzanie całego " + what + " już trwa: " + rescanProgress(res.job) + ".";
+  await notify("Antyspam", text);
+  await feedback(true, text, Object.assign(contextDetail(ctx), { zadanie: res.job ? "#" + res.job.id : "", postęp: rescanProgress(res.job) }));
+  if (res.active) {
+    await updateRescanWatch(w => { w[ctx.login.key] = { email: ctx.login.email, job: res.job ? res.job.id : null, t: Date.now(), progress: "" }; });
+    scheduleRescanPoll(ctx.login.key, RESCAN_POLL_MS);
+  }
+}
+
+function scheduleRescanPoll(key, ms) {
+  clearTimeout(rescanTimers.get(key));
+  rescanTimers.set(key, setTimeout(() => pollRescan(key).catch(e => logEvent("rescan", false, "Sprawdzanie postępu skanu: " + errorText(e))), ms));
+}
+
+async function pollRescan(key) {
+  rescanTimers.delete(key);
+  const { rescanWatch = {} } = await messenger.storage.local.get("rescanWatch");
+  const watch = rescanWatch[key];
+  if (!watch) return;
+  const login = (await getLogins())[key];
+  if (!login || Date.now() - watch.t > RESCAN_WATCH_MAX_MS) {
+    logEvent("rescan", false, "Przestaję śledzić skan folderu Odebrane " + watch.email + (login ? " (trwa ponad 3 dni)" : " (wylogowano)") + " - stan w panelu antyspamu: Zadania w tle");
+    await updateRescanWatch(w => { delete w[key]; });
+    return;
+  }
+  let res;
+  try {
+    res = await api("/api/plugin/rescan", { login: Object.assign({ key }, login), quietOk: true });
+  } catch (e) {
+    // Server unreachable / restarting: try again later, a 401 already dropped the login.
+    logEvent("rescan", false, "Skan folderu Odebrane " + watch.email + ": nie udało się odczytać postępu (" + errorText(e) + "), ponowię za " + Math.round(RESCAN_POLL_MS / 60000) + " min");
+    scheduleRescanPoll(key, RESCAN_POLL_MS * 5);
+    return;
+  }
+  if (res.active) {
+    const progress = rescanProgress(res.job);
+    if (progress !== watch.progress) {
+      logEvent("rescan", true, "Skan folderu Odebrane " + watch.email + ": " + progress, res.job && res.job.progress ? res.job.progress : "");
+      await updateRescanWatch(w => { if (w[key]) w[key].progress = progress; });
+    }
+    scheduleRescanPoll(key, RESCAN_POLL_MS);
+    return;
+  }
+  await updateRescanWatch(w => { delete w[key]; });
+  const ok = !!(res.last && res.last.ok);
+  const text = "Zakończono sprawdzanie folderu Odebrane " + watch.email + (res.last ? ": " + rescanCounters(res.last) : "") + ".";
+  await notify("Antyspam", text);
+  await feedback(ok, text, res.last || "");
+}
+
+/** After a restart: go on watching rescans started before it. */
+messenger.storage.local.get("rescanWatch").then(({ rescanWatch = {} }) => {
+  for (const key of Object.keys(rescanWatch)) scheduleRescanPoll(key, 5000);
+}).catch(() => {});
+
+function rescanClicked(info) {
+  const accountId = menuFolderAccountId(info);
+  logEvent("click", true, "Menu folderu: " + RESCAN_TITLE, { konto: accountId || "?" });
+  enqueueManual(async () => {
+    if (!accountId) {
+      await feedback(false, "Nie rozpoznano konta folderu - kliknij prawym przyciskiem folder Odebrane konta i spróbuj ponownie.");
+      return;
+    }
+    await startRescan(accountId);
+  }, RESCAN_TITLE);
+}
+
+/** Folder pane menu: the rescan entry is active for accounts logged in with their own mailbox. */
+async function rescanMenuShown(info) {
+  try {
+    const ctx = await contextFor(menuFolderAccountId(info));
+    const ok = ctx.kind === "own";
+    await messenger.menus.update(RESCAN_MENU, {
+      title: RESCAN_TITLE + (ok ? " → " + ctx.login.email : " – wymaga zalogowania tego konta"),
+      enabled: ok,
+    });
+    if (messenger.menus.refresh) await messenger.menus.refresh();
+  } catch (e) {
+    console.warn("antispam: folder menu update", e);
+  }
 }
 
 // --- connection test ("Testuj połączenie" on the settings page) --------------

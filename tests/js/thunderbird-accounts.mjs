@@ -83,6 +83,7 @@ function env(stored = {}, server = {}) {
     if (p === "/api/plugin/check") return json({ decision: "spam", score: 9, spam_threshold: 5 });
     if (p === "/api/plugin/login") return json({ token: "TOK-" + body.email, email: body.email, expires_at: "2027-01-01T00:00:00+00:00" });
     if (p === "/api/plugin/ping") return json({ ok: true, client_ip: "1.2.3.4", received_at: "now" });
+    if (p === "/api/plugin/rescan" && server.rescan) return json(server.rescan(opts.method || "GET"));
     return json({});
   };
   return { store, listeners, calls, messenger, fetch };
@@ -349,6 +350,60 @@ await check("several selected messages, clicks while the previous one still runs
   release();
   assert.equal(reports(e).length, 5);
   assert.equal(reports(e).filter(r => r.body.scope === "report_only").length, 1, "message of the account without a login");
+});
+
+/** Folder pane menu "Sprawdź cały folder Odebrane": the server does the work, the plugin only polls. */
+function loadRescan(e) {
+  const fast = (fn, ms, ...a) => setTimeout(fn, Math.max(1, Math.round((ms || 0) / 1000)), ...a);
+  const src = read("common.js") + "\n" + read("background.js") + "\nreturn {};";
+  return new Function("messenger", "fetch", "browser", "setTimeout", "console", src)(e.messenger, e.fetch, e.messenger, fast, quiet);
+}
+const rescans = e => e.calls.requests.filter(r => r.path === "/api/plugin/rescan");
+
+await check("rescan: queued for the folder's own login, polled until done, then notified", async () => {
+  let polls = 0;
+  const notes = [];
+  const e = env({ logins }, { rescan: method => {
+    if (method === "POST") return { created: true, active: true, mailbox: "jan@firma.pl", job: { id: 41, status: "queued", done: null, total: null } };
+    return ++polls < 3
+      ? { active: true, job: { id: 41, status: "running", progress: "x", done: polls * 1000, total: 100000 } }
+      : { active: false, job: null, last: { ok: true, checked: 100000, moved_to_spam: 812, quarantined: 4 } };
+  } });
+  e.messenger.notifications.create = async n => { notes.push(n.message); };
+  loadRescan(e);
+  e.listeners.menu({ menuItemId: "antispam-rescan", selectedFolders: [{ accountId: "account1", path: "/INBOX" }] }, { id: 1 });
+  for (let i = 0; i < 200 && !notes.some(n => /Zakończono/.test(n)); i++) await wait(20);
+  const r = rescans(e);
+  assert.equal(r[0].auth, "Bearer T1");
+  assert.equal(r.filter(x => x.body !== null).length, 1, "one POST");
+  assert.ok(r.length >= 4, "polled until done");
+  assert.match(notes[0], /Zlecono sprawdzenie całego folderu Odebrane skrzynki jan@firma\.pl/);
+  assert.match(notes.at(-1), /sprawdzono 100000, do SPAM: 812, do kwarantanny: 4/);
+  await settle();
+  assert.deepEqual(e.store.rescanWatch, {}, "the watch is removed");
+  assert.ok(e.store.eventLog.some(x => /1000 z 100000 \(1%\)/.test(x.text)), "progress is logged");
+});
+
+await check("rescan: an account without its own login sends nothing; the menu is greyed out", async () => {
+  const e = env({ logins }, { rescan: () => ({}) });
+  loadRescan(e);
+  await e.listeners.menuShown({ menuIds: ["antispam-rescan"], selectedFolders: [{ accountId: "account2" }] });
+  const upd = e.calls.menuUpdates.find(([id]) => id === "antispam-rescan");
+  assert.equal(upd[1].enabled, false);
+  e.listeners.menu({ menuItemId: "antispam-rescan", selectedFolders: [{ accountId: "account2" }] }, { id: 1 });
+  await wait(100);
+  assert.equal(rescans(e).length, 0);
+});
+
+await check("rescan: a watch from before a restart is resumed", async () => {
+  const e = env({ logins, rescanWatch: { account1: { email: "jan@firma.pl", job: 41, t: Date.now(), progress: "" } } },
+    { rescan: () => ({ active: false, last: { ok: false, error: "IMAP down" } }) });
+  loadRescan(e);
+  for (let i = 0; i < 100 && rescans(e).length < 1; i++) await wait(20);
+  await settle();
+  assert.equal(rescans(e)[0].auth, "Bearer T1");
+  assert.deepEqual(e.store.rescanWatch, {});
+  assert.ok(e.store.eventLog.some(x => /błąd: IMAP down/.test(x.text)));
 });
 
 if (failures) {

@@ -4,11 +4,15 @@ namespace AntispamBundle\Tests\Controller;
 
 use AntispamBundle\Controller\PluginApiController;
 use AntispamBundle\Entity\Account;
+use AntispamBundle\Entity\BackgroundJob;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Services\DeferredRetroactivePass;
+use AntispamBundle\Services\Jobs\EnqueueResult;
+use AntispamBundle\Services\Jobs\JobQueue;
 use AntispamBundle\Services\PhishingReportService;
 use AntispamBundle\Services\PluginService;
 use AntispamBundle\Services\RawMessageScanner;
+use AntispamBundle\Services\RescanScheduler;
 use AntispamBundle\Services\ThunderbirdPluginBuilder;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
@@ -330,6 +334,101 @@ class PluginApiControllerTest extends TestCase
         $this->assertSame(PhishingReportService::MAX_RAW_BYTES, $data['phishing_max_bytes']);
         $this->assertSame(PluginApiController::PLUGIN_VERSION, $data['version']);
         $this->assertFalse($data['authenticated']);
+    }
+
+    /** Controller with a mocked rescan scheduler / job queue; $active: id of the running rescan job. */
+    private function rescanController(?int $active, ?RescanScheduler $scheduler = null): PluginApiController
+    {
+        $jobs = $this->createMock(JobQueue::class);
+        $jobs->method('findActive')->willReturn($active);
+        $job = $this->createMock(BackgroundJob::class);
+        $job->method('getId')->willReturn(41);
+        $job->method('getStatus')->willReturn(BackgroundJob::STATUS_RUNNING);
+        $job->method('getProgress')->willReturn('Sprawdzono ponownie 2000 wiadomości, zostało 98000');
+        $job->method('getProgressDone')->willReturn(2000);
+        $job->method('getProgressTotal')->willReturn(100000);
+        $jobs->method('find')->willReturn($job);
+        return new PluginApiController($this->createMock(RawMessageScanner::class), $this->plugin, $this->deferred, $this->em, $this->phishing, $this->tb(),
+            $scheduler ?? $this->createMock(RescanScheduler::class), $jobs);
+    }
+
+    private function rescanRequest(string $method, string $token = 'good'): Request
+    {
+        $request = Request::create('/api/plugin/rescan', $method, [], [], [], ['REMOTE_ADDR' => '203.0.113.5']);
+        $request->headers->set('Authorization', 'Bearer ' . $token);
+        return $request;
+    }
+
+    public function testRescanNeedsALogin()
+    {
+        $this->loggedIn();
+        $scheduler = $this->createMock(RescanScheduler::class);
+        $scheduler->expects($this->never())->method('enqueue');
+        $c = $this->rescanController(null, $scheduler);
+
+        $this->assertSame(401, $c->rescanStartAction($this->rescanRequest('POST', 'bad'))->getStatusCode());
+        $this->assertSame(401, $c->rescanStatusAction($this->rescanRequest('GET', 'bad'))->getStatusCode());
+        $this->assertSame([], $this->hits);
+    }
+
+    public function testRescanIsQueuedForTheTokensMailboxAndCounted()
+    {
+        $account = $this->loggedIn();
+        $scheduler = $this->createMock(RescanScheduler::class);
+        $scheduler->expects($this->once())->method('enqueue')->with($account, RescanScheduler::TRIGGER_PLUGIN)->willReturn(new EnqueueResult(41, true));
+        // No active job before the request, the new one is found by its id.
+        $res = $this->rescanController(null, $scheduler)->rescanStartAction($this->rescanRequest('POST'));
+        $data = json_decode($res->getContent(), true);
+
+        $this->assertSame(200, $res->getStatusCode());
+        $this->assertSame(['rescan'], $this->hits);
+        $this->assertTrue($data['created']);
+        $this->assertTrue($data['active']);
+        $this->assertSame('jan@example.com', $data['mailbox']);
+        $this->assertSame(['id' => 41, 'status' => 'running', 'progress' => 'Sprawdzono ponownie 2000 wiadomości, zostało 98000', 'done' => 2000, 'total' => 100000], $data['job']);
+    }
+
+    public function testRescanWhileOneRunsIsNotCounted()
+    {
+        $this->loggedIn();
+        $scheduler = $this->createMock(RescanScheduler::class);
+        $scheduler->method('enqueue')->willReturn(new EnqueueResult(41, false, BackgroundJob::STATUS_RUNNING));
+        $data = json_decode($this->rescanController(41, $scheduler)->rescanStartAction($this->rescanRequest('POST'))->getContent(), true);
+
+        $this->assertSame([], $this->hits);
+        $this->assertFalse($data['created']);
+        $this->assertSame(41, $data['job']['id']);
+    }
+
+    public function testRescanOfSshMailboxWithoutAgentIsRefused()
+    {
+        $account = $this->loggedIn();
+        $account->method('isSsh')->willReturn(true);
+        $account->method('getAgentDeployed')->willReturn(false);
+        $res = $this->rescanController(null)->rescanStartAction($this->rescanRequest('POST'));
+
+        $this->assertSame(409, $res->getStatusCode());
+        $this->assertSame([], $this->hits);
+    }
+
+    public function testRescanStatusShowsTheLastResult()
+    {
+        $account = $this->loggedIn();
+        $account->method('getLastRescanAt')->willReturn(new \DateTime('2026-10-30 12:00:00'));
+        $account->method('getLastRescanResultDecoded')->willReturn(['total' => 100000, 'checked' => 100000, 'moved_to_spam' => 812, 'quarantined' => 40, 'trigger' => 'plugin', 'job' => 41]);
+        $data = json_decode($this->rescanController(null)->rescanStatusAction($this->rescanRequest('GET'))->getContent(), true);
+
+        $this->assertFalse($data['active']);
+        $this->assertNull($data['job']);
+        $this->assertTrue($data['last']['ok']);
+        $this->assertSame(812, $data['last']['moved_to_spam']);
+        $this->assertArrayNotHasKey('trigger', $data['last']);
+    }
+
+    public function testStatusAdvertisesRescanOnlyWithTheScheduler()
+    {
+        $this->assertFalse(json_decode($this->controller()->statusAction(Request::create('/api/plugin/status'))->getContent(), true)['rescan']);
+        $this->assertTrue(json_decode($this->rescanController(null)->statusAction(Request::create('/api/plugin/status'))->getContent(), true)['rescan']);
     }
 
     public function testPingAnswersAndIsWrittenToTheAuditLog()

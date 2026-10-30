@@ -21,8 +21,8 @@ use Doctrine\ORM\EntityManagerInterface;
  *
  * Cheap on purpose: IMAP lets the server search by date (and by sender for
  * exact rules), newest mail first, capped per rule; the Maildir agent only
- * reads headers. Rules below the
- * spam threshold only add points in the scan, so they are not applied here.
+ * reads headers. Every rule applies, whatever its points: a blacklist hit is
+ * spam in the scan too.
  */
 class RetroactiveSpamService
 {
@@ -41,23 +41,7 @@ class RetroactiveSpamService
         private InboxService $inbox,
         private SshService $ssh,
         private AgentRulesExporter $rulesExporter,
-        private ?MailboxSettingsResolver $mailboxSettings = null,
     ) {
-    }
-
-    /** Effective settings of the mailbox (account override -> global); null account = legacy mailbox. */
-    private function settingsFor(?Account $account): MailboxSettings
-    {
-        if ($this->mailboxSettings) {
-            return $this->mailboxSettings->forAccount($account);
-        }
-        return new MailboxSettings((int)$this->scoring->getSpamThreshold(), (int)$this->scoring->getQuarantineThreshold(), (bool)$this->scoring->isScoringEnabled(), false, false, null, null);
-    }
-
-    /** With scoring on, a rule below the mailbox's spam threshold only adds points in the scan. */
-    private static function tooWeak($rule, MailboxSettings $settings): bool
-    {
-        return $settings->scoringEnabled && (int)$rule->getScore() < $settings->spamThreshold;
     }
 
     /**
@@ -68,22 +52,12 @@ class RetroactiveSpamService
     public function applyRule($rule)
     {
         $result = ['moved' => 0, 'errors' => [], 'skipped' => null];
-        // The threshold is per mailbox (Ustawienia skrzynki): a rule strong
-        // enough for one mailbox may only add points in another.
-        $weak = [];
-        $applied = 0;
 
         $owner = (string)$rule->getEmail();
         foreach ($this->em->getRepository(Account::class)->findBy(RuleOwnership::isGlobal($owner) ? [] : ['email' => $owner]) as $account) {
-            $settings = $this->settingsFor($account);
-            if (self::tooWeak($rule, $settings)) {
-                $weak[] = [(string)$account->getEmail(), $settings->spamThreshold];
-                continue;
-            }
-            $applied++;
             try {
                 if ($account->isSsh()) {
-                    $result['moved'] += $this->applySsh($account, $settings);
+                    $result['moved'] += $this->applySsh($account);
                 } else {
                     $connection = $this->imapScan->connect($account);
                     try {
@@ -98,44 +72,14 @@ class RetroactiveSpamService
         }
 
         if ($this->imapScan->isLegacyConfigured() && (RuleOwnership::isGlobal($owner) || strcasecmp((string)$this->config->get('email'), $owner) === 0)) {
-            $settings = $this->settingsFor(null);
-            if (self::tooWeak($rule, $settings)) {
-                $weak[] = [(string)$this->config->get('email'), $settings->spamThreshold];
-            } else {
-                $applied++;
-                try {
-                    $result['moved'] += $this->applyImap($this->legacyConnection->getConnection(), (string)$this->config->get('email'), $rule, $result['errors']);
-                } catch (\Throwable $e) {
-                    $result['errors'][] = 'IMAP: ' . $e->getMessage();
-                }
+            try {
+                $result['moved'] += $this->applyImap($this->legacyConnection->getConnection(), (string)$this->config->get('email'), $rule, $result['errors']);
+            } catch (\Throwable $e) {
+                $result['errors'][] = 'IMAP: ' . $e->getMessage();
             }
         }
 
-        $result['skipped'] = $this->skippedReason($rule, $weak, $applied);
-
         return $result;
-    }
-
-    /**
-     * @param array<int, array{0: string, 1: int}> $weak mailboxes (e-mail, spam threshold) the rule is too weak for
-     */
-    private function skippedReason($rule, array $weak, int $applied): ?string
-    {
-        $global = $this->settingsFor(null);
-        if (!$weak) {
-            // Nothing to check at all: still say why when the rule is too weak globally.
-            return $applied === 0 && self::tooWeak($rule, $global)
-                ? sprintf('reguła ma %d pkt, a próg spamu to %d', $rule->getScore(), $global->spamThreshold)
-                : null;
-        }
-        $thresholds = array_unique(array_column($weak, 1));
-        if ($applied === 0 && count($thresholds) === 1) {
-            return sprintf('reguła ma %d pkt, a próg spamu to %d', $rule->getScore(), reset($thresholds));
-        }
-        return sprintf('reguła ma %d pkt, a próg spamu skrzynki jest wyższy: %s', $rule->getScore(), implode(', ', array_map(
-            static fn ($w) => sprintf('%s (%d)', $w[0], $w[1]),
-            array_slice($weak, 0, 10)
-        )) . (count($weak) > 10 ? sprintf(' i %d innych', count($weak) - 10) : ''));
     }
 
     /** Short Polish summary for a flash message, or null when nothing worth saying happened. */
@@ -154,7 +98,7 @@ class RetroactiveSpamService
         return $parts ? implode(' ', $parts) : null;
     }
 
-    private function applySsh(Account $account, MailboxSettings $settings)
+    private function applySsh(Account $account)
     {
         if (!$account->getAgentDeployed()) {
             return 0;
@@ -164,7 +108,8 @@ class RetroactiveSpamService
         if (isset($sync['success']) && !$sync['success']) {
             throw new \RuntimeException('synchronizacja reguł nie powiodła się');
         }
-        $res = $this->ssh->applyBlacklist($account, $settings->spamThreshold, self::DAYS);
+        // Threshold 0: an agent before 3.5 still skips rules with fewer points.
+        $res = $this->ssh->applyBlacklist($account, 0, self::DAYS);
         if (!isset($res['moved_to_spam'])) {
             throw new \RuntimeException('agent nie obsługuje tej operacji - wdróż go ponownie (Konta → Wdróż)');
         }

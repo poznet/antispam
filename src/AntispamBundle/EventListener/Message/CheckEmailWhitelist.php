@@ -6,15 +6,16 @@ use AntispamBundle\Entity\EmailWhitelist;
 use AntispamBundle\Event\MessageEvent;
 use AntispamBundle\Services\MessageService;
 use AntispamBundle\Services\PatternMatcher;
+use AntispamBundle\Services\RuntimeCacheInterface;
 use Doctrine\ORM\EntityManagerInterface;
 
-class CheckEmailWhitelist
+class CheckEmailWhitelist implements RuntimeCacheInterface
 {
     use SenderRuleTrait;
 
     private $em;
     private $ms;
-    /** @var array<string, array> rules cached per account email for the lifetime of this listener */
+    /** @var array<string, array> rules cached per account email (cleared before every background job) */
     private $rulesCache = [];
 
     public function __construct(EntityManagerInterface $em, MessageService $ms)
@@ -51,5 +52,10 @@ class CheckEmailWhitelist
         $this->ms->setAsChecked($msg, $event->getEmail());
         $event->setWhitelist(true);
         $event->stopPropagation();
+    }
+
+    public function clearRuntimeCache(): void
+    {
+        $this->rulesCache = [];
     }
 }

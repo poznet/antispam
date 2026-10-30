@@ -222,6 +222,18 @@ class AccountRescanJobTest extends TestCase
         $this->assertTrue($scheduler->enqueue($other)->created);
     }
 
+    public function testPluginRescanIsRequestedByTheMailbox()
+    {
+        $queued = $this->scheduler()->enqueue($this->account, RescanScheduler::TRIGGER_PLUGIN);
+        $row = $this->db->row($queued->id);
+
+        $this->assertSame('jan@firma.pl', $row['requested_by']);
+        $this->assertSame('plugin', $row['requested_by_type']);
+        $this->assertSame('account.rescan_queued', $this->audits[0][0]);
+        $this->assertSame(['jan@firma.pl', 'plugin'], array_slice($this->audits[0][1], 5, 2));
+        $this->assertSame(['trigger' => 'plugin'], json_decode($row['payload'], true));
+    }
+
     /** @return iterable<string, array{0:string, 1:?string, 2:bool}> now, last rescan, due */
     public static function schedule(): iterable
     {

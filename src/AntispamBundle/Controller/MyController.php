@@ -10,6 +10,7 @@ use AntispamBundle\Security\MailboxAccess;
 use AntispamBundle\Services\DeferredAgentSync;
 use AntispamBundle\Services\Jobs\JobQueue;
 use AntispamBundle\Services\QuarantineDigestService;
+use AntispamBundle\Services\DeferredRetroactivePass;
 use AntispamBundle\Services\QuarantinePurge;
 use AntispamBundle\Services\QuarantineService;
 use AntispamBundle\Services\SpamFolderService;
@@ -46,6 +47,7 @@ class MyController extends AbstractController
         private DeferredAgentSync $agentSync,
         private ?QuarantinePurge $purger = null,
         private ?JobQueue $jobs = null,
+        private ?DeferredRetroactivePass $retroactive = null,
     ) {
     }
 
@@ -100,6 +102,7 @@ class MyController extends AbstractController
                     'release' => $this->quarantine->release($key, $id),
                     'whitelist' => $this->quarantine->release($key, $id, true),
                     'delete' => $this->quarantine->delete($key, $id),
+                    'blacklist' => $this->blacklist($key, $id),
                     default => ['success' => false, 'message' => 'Nieznana akcja'],
                 };
             }
@@ -135,9 +138,17 @@ class MyController extends AbstractController
             $this->addFlash('danger', 'Nieznana skrzynka lub tryb usuwania.');
             return $this->redirectToRoute('antispam_my_quarantine');
         }
+        $minScore = null;
+        if ($mode === QuarantineService::PURGE_MIN_SCORE) {
+            $minScore = (int)$request->request->get('min_score');
+            if ($minScore < 1 || $minScore > QuarantinePurge::MAX_MIN_SCORE) {
+                $this->addFlash('danger', 'Podaj liczbę punktów od 1 do ' . QuarantinePurge::MAX_MIN_SCORE . '.');
+                return $this->redirectToRoute('antispam_my_quarantine');
+            }
+        }
 
         $shown = $request->request->get('shown');
-        $queued = $this->purger->enqueue($mailbox, $mode, QuarantinePurge::SOURCE_MY, is_numeric($shown) ? max(0, (int)$shown) : null, $this->getUser());
+        $queued = $this->purger->enqueue($mailbox, $mode, QuarantinePurge::SOURCE_MY, is_numeric($shown) ? max(0, (int)$shown) : null, $this->getUser(), $minScore);
         $job = $this->jobs?->find($queued->id);
         if (!$job || !$this->mayViewJob($job)) {
             // Already queued by someone else (an administrator): not this user's job page.
@@ -361,5 +372,21 @@ class MyController extends AbstractController
         }
 
         return $this->render('@Antispam/My/password.html.twig', ['min_password' => UserController::MIN_PASSWORD_LENGTH]);
+    }
+
+    /**
+     * Sender of a quarantined message to the blacklist; its quarantined mail to
+     * SPAM. A new rule gets its retroactive pass (INBOX of the last 30 days,
+     * SSH agent rule sync), like a rule added on the blacklist page.
+     */
+    private function blacklist(string $key, string $id): array
+    {
+        $result = $this->quarantine->blacklist($key, $id);
+        if (!empty($result['rule'])) {
+            $this->audit('rule.add', targetType: 'email_blacklist', targetId: $result['rule']->getId(), label: $result['sender'], mailbox: $result['rule']->getEmail(),
+                details: ['pattern_type' => 'exact', 'score' => $result['rule']->getScore(), 'source' => 'quarantine']);
+            $this->retroactive?->queue($result['rule']);
+        }
+        return $result;
     }
 }

@@ -29,7 +29,10 @@ class QuarantinePurge
     const MODE_LABELS = [
         QuarantineService::PURGE_HIGH_RISK => 'wiadomości wysokiego ryzyka',
         QuarantineService::PURGE_ALL => 'wszystkie wiadomości',
+        QuarantineService::PURGE_MIN_SCORE => 'wiadomości z wynikiem od N pkt',
     ];
+    /** Highest threshold accepted from the form ("od N pkt"). */
+    const MAX_MIN_SCORE = 1000;
 
     public function __construct(
         private JobQueue $jobs,
@@ -52,11 +55,16 @@ class QuarantinePurge
      * @param array            $mailbox   a QuarantineService::getMailboxes() row
      * @param int|null         $shown     how many messages (of this mode) the page showed - for the job page and audit only
      * @param UserInterface|null $requester a database user is stored as the job's requester (the user area shows only own jobs)
+     * @param int|null         $minScore  PURGE_MIN_SCORE: delete messages whose score is at least this (1-MAX_MIN_SCORE)
      */
-    public function enqueue(array $mailbox, string $mode, string $source, ?int $shown = null, ?UserInterface $requester = null): EnqueueResult
+    public function enqueue(array $mailbox, string $mode, string $source, ?int $shown = null, ?UserInterface $requester = null, ?int $minScore = null): EnqueueResult
     {
         if (!self::isMode($mode)) {
             throw new \InvalidArgumentException('Unknown quarantine purge mode: ' . $mode);
+        }
+        $byScore = $mode === QuarantineService::PURGE_MIN_SCORE;
+        if ($byScore && ($minScore === null || $minScore < 1 || $minScore > self::MAX_MIN_SCORE)) {
+            throw new \InvalidArgumentException('Quarantine purge by score needs a threshold of 1-' . self::MAX_MIN_SCORE);
         }
         $key = (string)$mailbox['key'];
         $account = preg_match('/^(imap|ssh)-(\d+)\z/', $key, $m) ? $this->em->find(Account::class, (int)$m[2]) : null;
@@ -64,9 +72,13 @@ class QuarantinePurge
 
         $queued = $this->jobs->enqueue(
             BackgroundJob::TYPE_QUARANTINE_PURGE,
-            ['key' => $key, 'mode' => $mode, 'source' => $source, 'shown' => $shown],
+            ['key' => $key, 'mode' => $mode, 'source' => $source, 'shown' => $shown] + ($byScore ? ['min_score' => $minScore] : []),
             $account,
-            label: ($mode === QuarantineService::PURGE_ALL ? 'Usuń wszystko z kwarantanny: ' : 'Usuń wysokiego ryzyka z kwarantanny: ') . (string)$mailbox['label'],
+            label: match ($mode) {
+                QuarantineService::PURGE_ALL => 'Usuń wszystko z kwarantanny: ',
+                QuarantineService::PURGE_MIN_SCORE => 'Usuń z kwarantanny wiadomości od ' . $minScore . ' pkt: ',
+                default => 'Usuń wysokiego ryzyka z kwarantanny: ',
+            } . (string)$mailbox['label'],
             dedupeKey: self::dedupeKey($key, $mode),
             mailbox: ((string)($mailbox['account_email'] ?? '')) ?: null,
             requestedBy: $requestedBy,
@@ -75,7 +87,7 @@ class QuarantinePurge
         if ($queued->created) {
             $this->audit?->log('quarantine.purge_queued', targetType: 'quarantine', targetId: $key, label: (string)$mailbox['label'],
                 mailbox: ((string)($mailbox['account_email'] ?? '')) ?: null,
-                details: ['job' => $queued->id, 'mode' => $mode, 'source' => $source, 'shown' => $shown]);
+                details: ['job' => $queued->id, 'mode' => $mode, 'source' => $source, 'shown' => $shown] + ($byScore ? ['min_score' => $minScore] : []));
         }
         return $queued;
     }

@@ -292,7 +292,16 @@ so the rule survives the next sync. `quarantine-delete` removes the file.
 
 ```bash
 php antispam-agent.php quarantine-purge --mode=all|high_risk     # agent 3.4+
+php antispam-agent.php quarantine-purge --mode=min_score --min-score=N   # agent 3.6+
+php antispam-agent.php quarantine-to-spam --id=<id>              # agent 3.6+
 ```
+`min_score` deletes the files whose latest `score_log` row has `score >= N`;
+no row = kept. `quarantine-to-spam` reads the `From` address of quarantined
+message `<id>` and moves **every** `.QUARANTINE` file from that exact address to
+`.SPAM` (same `new` / `cur` sub-folder) - the panel's *Do czarnej listy*, which
+adds the blacklist rule itself. Answer: `{"success", "sender", "moved",
+"failed", "errors"}`.
+
 Bulk permanent deletion for the panel's *Usuń wszystko z kwarantanny* /
 *Usuń wszystkie wysokiego ryzyka* (job `quarantine.purge`,
 [spam-handling.md](spam-handling.md#bulk-deletion)). Only files present in

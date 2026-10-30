@@ -4,8 +4,10 @@ namespace AntispamBundle\Services;
 
 use AntispamBundle\Entity\SpamScoreLog;
 use AntispamBundle\Entity\Account;
+use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Entity\EmailWhitelist;
 use Ddeboer\Imap\Search\Date\Since;
+use Ddeboer\Imap\Search\Email\From;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -39,7 +41,9 @@ class QuarantineService
     /** purge() modes: every quarantined message / only the high-risk ones. */
     const PURGE_ALL = 'all';
     const PURGE_HIGH_RISK = 'high_risk';
-    const PURGE_MODES = [self::PURGE_ALL, self::PURGE_HIGH_RISK];
+    /** Score log score >= a threshold (messages without a known score are kept). */
+    const PURGE_MIN_SCORE = 'min_score';
+    const PURGE_MODES = [self::PURGE_ALL, self::PURGE_HIGH_RISK, self::PURGE_MIN_SCORE];
     /** IMAP purge: expunge after this many flagged messages (bounded work per round trip). */
     const PURGE_EXPUNGE_EVERY = 100;
 
@@ -280,10 +284,13 @@ class QuarantineService
      *
      * @throws \RuntimeException mailbox gone / unreachable, agent too old or failing
      */
-    public function purge(string $key, string $mode, ?callable $progress = null): array
+    public function purge(string $key, string $mode, ?callable $progress = null, ?int $minScore = null): array
     {
         if (!in_array($mode, self::PURGE_MODES, true)) {
             throw new \InvalidArgumentException('Unknown quarantine purge mode: ' . $mode);
+        }
+        if ($mode === self::PURGE_MIN_SCORE && (int)$minScore < 1) {
+            throw new \InvalidArgumentException('PURGE_MIN_SCORE needs a threshold of at least 1');
         }
         $mailbox = $this->getMailbox($key);
         if (!$mailbox) {
@@ -291,7 +298,7 @@ class QuarantineService
         }
 
         if (!self::isImapKey($key)) {
-            $res = $this->ssh->quarantinePurge($this->sshAccount($key), $mode);
+            $res = $this->ssh->quarantinePurge($this->sshAccount($key), $mode, $minScore);
             if (empty($res['success'])) {
                 throw new \RuntimeException('Agent quarantine-purge: ' . mb_substr((string)($res['error'] ?? 'unknown error'), 0, 300));
             }
@@ -304,10 +311,10 @@ class QuarantineService
             ];
         }
 
-        return $this->purgeImap($this->imapConnection($key), $mode, (string)$mailbox['account_email'], $progress);
+        return $this->purgeImap($this->imapConnection($key), $mode, (string)$mailbox['account_email'], $progress, (int)$minScore);
     }
 
-    private function purgeImap($connection, string $mode, string $accountEmail, ?callable $progress): array
+    private function purgeImap($connection, string $mode, string $accountEmail, ?callable $progress, int $minScore = 0): array
     {
         $out = ['total' => 0, 'deleted' => 0, 'skipped' => 0, 'failed' => 0, 'errors' => []];
         $name = $this->inbox->getQuarantineFolderName();
@@ -338,11 +345,15 @@ class QuarantineService
             }
         }
 
-        if ($mode === self::PURGE_HIGH_RISK) {
+        if ($mode !== self::PURGE_ALL) {
             $risky = [];
             foreach (array_chunk($items, 200) as $chunk) {
                 foreach ($this->attachImapScores($chunk, $accountEmail) as $item) {
-                    if (QuarantineDigestService::isPurgeableHighRisk($item['reasons'])) {
+                    // min_score: only a known score counts - no score log row = kept.
+                    $selected = $mode === self::PURGE_MIN_SCORE
+                        ? $item['score'] !== null && (int)$item['score'] >= $minScore
+                        : QuarantineDigestService::isPurgeableHighRisk($item['reasons']);
+                    if ($selected) {
                         $risky[] = $item;
                     } else {
                         $out['skipped']++;
@@ -378,6 +389,112 @@ class QuarantineService
         }
         $progress && $progress($total, $total);
         return $out;
+    }
+
+    /**
+     * "Dodaj nadawcę do czarnej listy": the sender of quarantined message $id
+     * and all its other messages in this mailbox's quarantine go to SPAM -
+     * moved, never deleted. The rule itself is added by blacklistRule().
+     *
+     * @return array ['success' => bool, 'message' => string, 'sender' => string, 'moved' => int, 'errors' => string[]]
+     */
+    public function moveSenderToSpam($key, $id)
+    {
+        $fail = fn (string $m) => ['success' => false, 'message' => $m, 'sender' => '', 'moved' => 0, 'errors' => []];
+        if (!$this->getMailbox($key)) {
+            return $fail('Ta skrzynka nie jest już obsługiwana.');
+        }
+        if (!self::isImapKey($key)) {
+            $res = $this->ssh->quarantineSenderToSpam($this->sshAccount($key), (string)$id);
+            if (empty($res['success'])) {
+                return $fail(self::agentError($res, 'Nie udało się przenieść wiadomości do SPAM.'));
+            }
+            return ['success' => true, 'message' => '', 'sender' => strtolower((string)($res['sender'] ?? '')), 'moved' => (int)($res['moved'] ?? 0),
+                'errors' => array_slice(array_map('strval', (array)($res['errors'] ?? [])), 0, 20)];
+        }
+
+        try {
+            $connection = $this->imapConnection($key);
+            $folder = $connection->getMailbox($this->inbox->getQuarantineFolderName());
+            $msg = $folder->getMessage((int)$id);
+            $sender = $msg->getFrom() ? strtolower((string)$msg->getFrom()->getAddress()) : '';
+        } catch (\Throwable $e) {
+            return $fail(self::NOT_FOUND);
+        }
+        if ($sender === '' || !filter_var($sender, FILTER_VALIDATE_EMAIL)) {
+            return $fail('Wiadomość nie ma poprawnego adresu nadawcy.');
+        }
+
+        $out = ['success' => true, 'message' => '', 'sender' => $sender, 'moved' => 0, 'errors' => []];
+        $spam = $this->inbox->getSpamFolder($connection);
+        // SEARCH FROM matches substrings: every hit is checked against the exact address.
+        try {
+            $candidates = $folder->getMessages(new From($sender));
+        } catch (\Throwable $e) {
+            $candidates = $folder->getMessages(); // server refused the search: check them all
+        }
+        foreach ($candidates as $candidate) {
+            try {
+                $from = $candidate->getFrom();
+                if (!$from || strtolower((string)$from->getAddress()) !== $sender) {
+                    continue;
+                }
+                $candidate->move($spam);
+                $out['moved']++;
+            } catch (\Throwable $e) {
+                if (count($out['errors']) < 20) {
+                    $out['errors'][] = 'UID ' . $candidate->getNumber() . ': ' . mb_substr($e->getMessage(), 0, 200);
+                }
+            }
+        }
+        if ($out['moved'] > 0) {
+            $connection->expunge();
+        }
+        return $out;
+    }
+
+    /**
+     * "Do czarnej listy" on a quarantined message: its sender gets an exact
+     * e-mail blacklist rule on this mailbox and every message of that sender
+     * in the quarantine goes to SPAM (moveSenderToSpam). 'rule' is the new
+     * rule (null when it existed) - the caller queues its retroactive pass,
+     * which also clears INBOX and syncs an SSH agent.
+     *
+     * @return array ['success', 'message', 'sender', 'moved', 'errors', 'rule' => ?EmailBlacklist]
+     */
+    public function blacklist($key, $id): array
+    {
+        $result = $this->moveSenderToSpam($key, $id) + ['rule' => null];
+        if (!$result['success']) {
+            return $result;
+        }
+        $mailbox = $this->getMailbox($key);
+        $result['rule'] = $this->blacklistRule((string)$mailbox['account_email'], $result['sender']);
+        $result['message'] = sprintf('%s jest na czarnej liście tej skrzynki%s. Z kwarantanny przeniesiono do SPAM: %d %s%s.',
+            $result['sender'],
+            $result['rule'] ? '' : ' (reguła już istniała)',
+            $result['moved'], QuarantineDigestService::pluralMessages($result['moved']),
+            $result['errors'] ? sprintf(' (nie udało się przenieść: %d)', count($result['errors'])) : '');
+        return $result;
+    }
+
+    /**
+     * Exact e-mail blacklist rule for $sender on $accountEmail (score 10, the
+     * default of the rule forms). Null when the same rule already exists for
+     * this mailbox or for all mailboxes.
+     */
+    public function blacklistRule($accountEmail, $sender): ?EmailBlacklist
+    {
+        $existing = $this->em->getRepository(EmailBlacklist::class)->findOneBy([
+            'email' => RuleOwnership::scope((string)$accountEmail), 'blacklistemail' => $sender,
+        ]);
+        if ($existing) {
+            return null;
+        }
+        $rule = (new EmailBlacklist())->setEmail((string)$accountEmail)->setBlacklistemail($sender)->setPatternType(EmailBlacklist::PATTERN_EXACT)->setScore(10);
+        $this->em->persist($rule);
+        $this->em->flush();
+        return $rule;
     }
 
     /**

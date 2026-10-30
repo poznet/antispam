@@ -19,6 +19,16 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 ## [Unreleased]
 
 ### Added
+- **Quarantine: "Do czarnej listy"** next to every quarantined message (admin
+  *Skrzynki → Kwarantanna* and `/my/quarantine`): the sender gets an exact e-mail
+  blacklist rule on that mailbox and **all** its messages in that quarantine go
+  to SPAM (moved, not deleted); the new rule's retroactive pass clears INBOX of
+  the last 30 days and syncs an SSH agent. Audit `quarantine.blacklist`.
+- **Quarantine: "Usuń od tylu punktów"** - per mailbox, a field "wynik od N pkt":
+  permanently deletes the quarantined messages whose score is at least N (job
+  `quarantine.purge`, mode `min_score`; unknown score = kept).
+- SSH+Maildir agent **3.6**: `quarantine-purge --mode=min_score --min-score=N`,
+  `quarantine-to-spam --id=...` (redeploy: *Konta → Wdróż*).
 - **Rule lists: "Zmień na: Wszystkie skrzynki".** Domain / e-mail white- and
   blacklists can turn existing mailbox rules into global ones (owner `*`):
   a per-rule button (globe icon), row checkboxes with *Zmień zaznaczone na:

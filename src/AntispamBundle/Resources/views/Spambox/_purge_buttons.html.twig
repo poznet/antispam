@@ -1,12 +1,25 @@
 {#
   Bulk permanent deletion of one mailbox's quarantine (background job quarantine.purge,
   docs/spam-handling.md#bulk-deletion). Shared by /spambox/quarantine and /my/quarantine.
-  Params: mailbox (row with items, high_risk_count, capped), purge_path, purge_token.
+  Params: mailbox (row with items, high_risk_count, capped), purge_path, purge_token,
+  purge_min_score (optional, default value of the "wynik od N pkt" field).
   The counts only feed the confirmations: what is deleted is decided when the job runs.
 #}
 {% set listed = mailbox.items|length %}
 {% set more = mailbox.capped ? ' (lista pokazuje tylko pierwsze ' ~ listed ~ ' - usuwanie obejmie całą kwarantannę)' : '' %}
 <div class="panel-footer text-right">
+    <form method="post" action="{{ purge_path }}" class="form-inline" style="display:inline;">
+        <input type="hidden" name="_token" value="{{ purge_token }}">
+        <input type="hidden" name="mailbox" value="{{ mailbox.key }}">
+        <input type="hidden" name="mode" value="min_score">
+        <label class="small text-muted" style="font-weight:normal;">wynik od
+            <input type="number" name="min_score" class="form-control input-sm" value="{{ purge_min_score|default(15) }}" min="1" max="1000" required style="width:70px;display:inline-block;height:22px;padding:0 4px;" aria-label="Minimalny wynik w punktach"> pkt</label>
+        <button type="submit" class="btn btn-xs btn-warning"
+                title="Trwale usuwa wiadomości z wynikiem co najmniej tylu punktów (z dziennika ocen); wiadomości z niższym lub nieznanym wynikiem zostają"
+                data-confirm="Trwale usunąć z kwarantanny skrzynki {{ mailbox.label }} wiadomości z wynikiem od podanej liczby punktów? Wynik zostanie sprawdzony w chwili usuwania; wiadomości z niższym lub nieznanym wynikiem zostaną w kwarantannie. Usuniętych wiadomości nie da się odzyskać.">
+            <span class="glyphicon glyphicon-scissors" aria-hidden="true"></span> Usuń od tylu punktów
+        </button>
+    </form>
     {% if mailbox.high_risk_count > 0 %}
     <form method="post" action="{{ purge_path }}" style="display:inline;">
         <input type="hidden" name="_token" value="{{ purge_token }}">

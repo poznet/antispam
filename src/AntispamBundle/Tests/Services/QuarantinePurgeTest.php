@@ -151,6 +151,76 @@ class QuarantinePurgeTest extends TestCase
         $this->assertSame(1, $counts['high_risk_count'], 'the button count matches what the job deletes');
     }
 
+    public function testMinScoreModeDeletesOnlyKnownScoresFromTheThreshold()
+    {
+        foreach ([['a@x.pl', 'A', 25], ['b@x.pl', 'B', 9]] as [$from, $subject, $score]) {
+            $this->db->em->persist((new SpamScoreLog())->setAccountEmail('jan@firma.pl')->setSender($from)->setSubject($subject)
+                ->setScore($score)->setDecision(SpamScoreLog::DECISION_QUARANTINE)->setReasons([['rule' => 'dkim_fail', 'score' => $score]]));
+        }
+        $this->db->em->flush();
+        $this->inFolder([
+            $this->message(1, 'a@x.pl', 'A', true),
+            $this->message(2, 'b@x.pl', 'B', false),
+            $this->message(3, 'c@x.pl', 'C', false), // no score log row: kept
+        ]);
+
+        $r = $this->service()->purge($this->key($this->imap), QuarantineService::PURGE_MIN_SCORE, null, 10);
+        $this->assertSame([3, 1, 2], [$r['total'], $r['deleted'], $r['skipped']]);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->service()->purge($this->key($this->imap), QuarantineService::PURGE_MIN_SCORE);
+    }
+
+    public function testMinScoreJobCarriesTheThreshold()
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->purger()->enqueue($this->mailboxRow($this->imap), QuarantineService::PURGE_MIN_SCORE, QuarantinePurge::SOURCE_PANEL);
+    }
+
+    public function testSshMinScoreIsDelegatedToTheAgent()
+    {
+        $this->sshService->expects($this->once())->method('quarantinePurge')->with($this->anything(), 'min_score', 12)
+            ->willReturn(['success' => true, 'total' => 5, 'deleted' => 2, 'skipped' => 3, 'failed' => 0]);
+        $r = $this->service()->purge($this->key($this->ssh), QuarantineService::PURGE_MIN_SCORE, null, 12);
+        $this->assertSame(2, $r['deleted']);
+    }
+
+    public function testBlacklistMovesTheSendersQuarantineToSpamAndAddsTheRule()
+    {
+        $spam = $this->createMock(MailboxInterface::class);
+        $first = $this->createMock(MessageInterface::class);
+        $first->method('getFrom')->willReturn(new EmailAddress('Mailing', 'Interia.pl'));
+        $first->expects($this->once())->method('move')->with($spam);
+        $other = $this->createMock(MessageInterface::class); // SEARCH FROM hit with a longer address
+        $other->method('getFrom')->willReturn(new EmailAddress('mailing', 'interia.pl.evil.com'));
+        $other->expects($this->never())->method('move');
+        $this->folder->method('getMessage')->willReturn($first);
+        $this->inFolder([$first, $other]);
+        $inbox = $this->createMock(InboxService::class);
+        $inbox->method('getQuarantineFolderName')->willReturn('QUARANTINE');
+        $inbox->method('getSpamFolder')->willReturn($spam);
+        $imapScan = $this->createMock(ImapScanService::class);
+        $imapScan->method('connect')->willReturn($this->conn);
+        $service = new QuarantineService($this->db->em, new ConfigService($this->db->em), $this->sshService,
+            $this->createMock(ConnectionService::class), $inbox, $this->createMock(MessageService::class), $imapScan);
+
+        $r = $service->blacklist($this->key($this->imap), '7');
+        $this->assertTrue($r['success']);
+        $this->assertSame(['mailing@interia.pl', 1], [$r['sender'], $r['moved']]);
+        $this->assertSame(['jan@firma.pl', 'mailing@interia.pl', 'exact'], [$r['rule']->getEmail(), $r['rule']->getBlacklistemail(), $r['rule']->getPatternType()]);
+        $this->assertStringContainsString('przeniesiono do SPAM: 1', $r['message']);
+        $this->assertNull($service->blacklistRule('jan@firma.pl', 'mailing@interia.pl'), 'no duplicate rule');
+    }
+
+    public function testSshBlacklistIsDelegatedToTheAgent()
+    {
+        $this->sshService->expects($this->once())->method('quarantineSenderToSpam')->with($this->anything(), 'abc.M1.host')
+            ->willReturn(['success' => true, 'sender' => 'Spam@X.pl', 'moved' => 3]);
+        $r = $this->service()->blacklist($this->key($this->ssh), 'abc.M1.host');
+        $this->assertSame(['spam@x.pl', 3], [$r['sender'], $r['moved']]);
+        $this->assertNotNull($r['rule']);
+    }
+
     public function testAllModeDeletesEverythingAndCountsFailures()
     {
         $bad = $this->createMock(MessageInterface::class);

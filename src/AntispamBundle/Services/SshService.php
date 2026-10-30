@@ -535,18 +535,32 @@ class SshService
 
     /**
      * Permanently delete messages from the agent's .QUARANTINE (agent 3.4+):
-     * $mode "all" or "high_risk" (judged by the agent at run time, same rule as
-     * QuarantineDigestService::isHighRisk()). An older agent answers with its
-     * usage text, which interpret() turns into "wdróż go ponownie".
+     * $mode "all", "high_risk" (judged by the agent at run time, same rule as
+     * QuarantineDigestService::isHighRisk()) or "min_score" (agent 3.6+: score
+     * log score >= $minScore). An older agent answers with its usage text,
+     * which interpret() turns into "wdróż go ponownie".
      *
      * @return array agent answer: success, total, deleted, skipped, failed, errors
      */
-    public function quarantinePurge(Account $account, string $mode)
+    public function quarantinePurge(Account $account, string $mode, ?int $minScore = null)
     {
-        if (!in_array($mode, ['all', 'high_risk'], true)) {
+        if (!in_array($mode, ['all', 'high_risk', 'min_score'], true)) {
             throw new \InvalidArgumentException('Unknown quarantine purge mode: ' . $mode);
         }
-        return $this->runAgent($account, 'quarantine-purge', $this->maildirArg($account) . ' --mode=' . $mode);
+        $args = $this->maildirArg($account) . ' --mode=' . $mode;
+        if ($mode === 'min_score') {
+            $args .= ' --min-score=' . max(1, (int)$minScore);
+        }
+        return $this->runAgent($account, 'quarantine-purge', $args);
+    }
+
+    /**
+     * Agent 3.6+: the sender of quarantined message $id and all its other
+     * quarantined messages go to .SPAM. Answer: success, sender, moved, failed.
+     */
+    public function quarantineSenderToSpam(Account $account, string $id)
+    {
+        return $this->runAgent($account, 'quarantine-to-spam', $this->maildirArg($account) . ' --id=' . escapeshellarg($id));
     }
 
     /** Newest messages of the agent's .SPAM folder (agent 3.1+). */

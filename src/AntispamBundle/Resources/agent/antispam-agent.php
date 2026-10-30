@@ -42,7 +42,7 @@
  * PHP warnings never reach STDOUT; they are collected into "warnings".
  */
 
-const AGENT_VERSION = '3.5';
+const AGENT_VERSION = '3.6';
 const CERT_DEFAULT_URL = 'https://hole.cert.pl/domains/v2/domains.txt';
 const CERT_MAX_BYTES = 52428800;
 const CERT_MIN_ROWS = 100;
@@ -147,6 +147,9 @@ try {
         case 'quarantine-purge':
             agentPrint(quarantinePurge($maildirPath, $dbPath, $options));
             break;
+        case 'quarantine-to-spam':
+            agentPrint(quarantineSenderToSpam($maildirPath, $options));
+            break;
         case 'spam-list':
             agentPrint(spamList($maildirPath, $dbPath, $options));
             break;
@@ -170,7 +173,8 @@ try {
             echo "  php antispam-agent.php quarantine-list [--maildir=path] [--account=ID] [--db=path] [--since=unix-ts] [--limit=N]\n";
             echo "  php antispam-agent.php quarantine-release --id=ID [--whitelist] [--maildir=path] [--account=ID] [--db=path]\n";
             echo "  php antispam-agent.php quarantine-delete --id=ID [--maildir=path] [--account=ID] [--db=path]\n";
-            echo "  php antispam-agent.php quarantine-purge --mode=all|high_risk [--maildir=path] [--account=ID] [--db=path]\n";
+            echo "  php antispam-agent.php quarantine-purge --mode=all|high_risk|min_score [--min-score=N] [--maildir=path] [--account=ID] [--db=path]\n";
+            echo "  php antispam-agent.php quarantine-to-spam --id=ID [--maildir=path] [--account=ID] [--db=path]\n";
             echo "  php antispam-agent.php spam-list [--maildir=path] [--account=ID] [--db=path] [--limit=N]\n";
             echo "  php antispam-agent.php spam-release --id=ID [--whitelist] [--maildir=path] [--account=ID] [--db=path]\n";
             break;
@@ -2743,7 +2747,8 @@ function quarantineIsHighRisk($row)
 /**
  * Bulk permanent deletion from .QUARANTINE only (agent 3.4+, panel job
  * quarantine.purge): --mode=all deletes every message, --mode=high_risk only
- * messages with a score_log row that quarantineIsHighRisk() selects, judged now
+ * messages with a score_log row that quarantineIsHighRisk() selects, --mode=min_score
+ * (agent 3.6+) those whose score_log score is >= --min-score, judged now
  * from the agent's own score_log (no row = unknown = kept: deletion never fails
  * closed). Only files present in .QUARANTINE/new and /cur at this moment are
  * touched - INBOX and .SPAM never are.
@@ -2751,16 +2756,23 @@ function quarantineIsHighRisk($row)
 function quarantinePurge($maildirPath, $dbPath, array $options)
 {
     $mode = isset($options['mode']) ? (string)$options['mode'] : '';
-    if ($mode !== 'all' && $mode !== 'high_risk') {
-        return ['success' => false, 'error' => 'Invalid mode (all | high_risk)'];
+    if ($mode !== 'all' && $mode !== 'high_risk' && $mode !== 'min_score') {
+        return ['success' => false, 'error' => 'Invalid mode (all | high_risk | min_score)'];
+    }
+    $minScore = isset($options['min-score']) ? (int)$options['min-score'] : 0;
+    if ($mode === 'min_score' && $minScore < 1) {
+        return ['success' => false, 'error' => 'min_score needs --min-score=N (N >= 1)'];
     }
     $scoreStmt = null;
-    if ($mode === 'high_risk') {
+    if ($mode !== 'all') {
         $db = getDb($dbPath);
         $scoreStmt = $db->prepare('SELECT score, reasons FROM score_log WHERE file = :f ORDER BY id DESC LIMIT 1');
     }
 
     $out = ['success' => true, 'mode' => $mode, 'total' => 0, 'deleted' => 0, 'skipped' => 0, 'failed' => 0];
+    if ($mode === 'min_score') {
+        $out['min_score'] = $minScore;
+    }
     $errors = [];
     foreach (['new', 'cur'] as $subdir) {
         $dir = $maildirPath . '/.QUARANTINE/' . $subdir;
@@ -2778,7 +2790,8 @@ function quarantinePurge($maildirPath, $dbPath, array $options)
                 $res = $scoreStmt->execute();
                 $row = $res ? $res->fetchArray(SQLITE3_ASSOC) : false;
                 // No score_log row = unknown: kept (bulk deletion never fails closed).
-                if (!$row || !quarantineIsHighRisk($row)) {
+                $selected = $row && ($mode === 'min_score' ? (int)$row['score'] >= $minScore : quarantineIsHighRisk($row));
+                if (!$selected) {
                     $out['skipped']++;
                     continue;
                 }
@@ -2791,6 +2804,61 @@ function quarantinePurge($maildirPath, $dbPath, array $options)
                 $out['failed']++;
                 if (count($errors) < 20) {
                     $errors[] = $file . ': could not delete';
+                }
+            }
+        }
+    }
+    if ($errors) {
+        $out['errors'] = $errors;
+    }
+    return $out;
+}
+
+/**
+ * "Dodaj nadawcę do czarnej listy" in the quarantine (agent 3.6+): the
+ * sender of message --id and every message of .QUARANTINE from the same
+ * address are moved to .SPAM (never deleted). The panel adds the blacklist
+ * rule and syncs it; this only clears the quarantine. Returns the sender, so
+ * the panel knows which rule to add.
+ */
+function quarantineSenderToSpam($maildirPath, array $options)
+{
+    $id = $options['id'] ?? '';
+    if (!validQuarantineId($id)) {
+        return ['success' => false, 'error' => 'Invalid id'];
+    }
+    $found = findQuarantineFile($maildirPath, $id);
+    if (!$found) {
+        return ['success' => false, 'error' => 'Message not found in quarantine (already released or deleted?)'];
+    }
+    $sender = strtolower(parseFromHeader(grabHeaderFolded(readHeaderBlock($found['path']), 'From'))['email']);
+    if ($sender === '') {
+        return ['success' => false, 'error' => 'The message has no sender address'];
+    }
+
+    ensureFolder($maildirPath . '/.SPAM');
+    $out = ['success' => true, 'sender' => agentUtf8($sender), 'moved' => 0, 'failed' => 0];
+    $errors = [];
+    foreach (['new', 'cur'] as $subdir) {
+        $dir = $maildirPath . '/.QUARANTINE/' . $subdir;
+        if (!is_dir($dir)) {
+            continue;
+        }
+        foreach ((array)@scandir($dir) as $file) {
+            $path = $dir . '/' . $file;
+            if (!is_string($file) || $file === '' || $file[0] === '.' || !is_file($path)) {
+                continue;
+            }
+            $headers = readHeaderBlock($path);
+            if ($headers === false || strtolower(parseFromHeader(grabHeaderFolded($headers, 'From'))['email']) !== $sender) {
+                continue;
+            }
+            if (@rename($path, $maildirPath . '/.SPAM/' . $subdir . '/' . $file)) {
+                $out['moved']++;
+            } elseif (file_exists($path)) {
+                $out['failed']++;
+                if (count($errors) < 20) {
+                    $errors[] = $file . ': could not move to .SPAM';
                 }
             }
         }

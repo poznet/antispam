@@ -51,7 +51,8 @@ Every quarantined message can be released:
 
 - in the panel: **Skrzynki → Kwarantanna** - *Przywróć* (back to INBOX),
   *Zawsze akceptuj* (back to INBOX + sender on the e-mail whitelist, hidden for
-  high-risk messages), *Usuń* (permanent); per mailbox also the bulk
+  high-risk messages), **Do czarnej listy** ([below](#blacklisting-a-sender-from-the-quarantine)),
+  *Usuń* (permanent); per mailbox also the bulk *Usuń od tylu punktów* /
   *Usuń wszystkie wysokiego ryzyka* / *Usuń wszystko z kwarantanny*
   ([below](#bulk-deletion));
 - from the [quarantine digest](quarantine-digest.md) e-mail (signed one-click
@@ -61,14 +62,34 @@ A released message is marked as checked, so the next scan does not quarantine
 it again. The page covers the legacy mailbox (`imap`), every IMAP account
 (`imap-<id>`) and every SSH account with a deployed agent (`ssh-<id>`).
 
+### Blacklisting a sender from the quarantine
+
+**Do czarnej listy** next to a quarantined message (admin **Skrzynki →
+Kwarantanna** and `/my/quarantine`, own mailboxes only; not in digest links):
+
+1. every message of **that sender** (exact `From` address) in the quarantine of
+   **this mailbox** goes to **SPAM** - moved, never deleted. IMAP: `SEARCH FROM`
+   in the quarantine folder, each hit compared with the exact address; SSH: agent
+   **3.6** `quarantine-to-spam --id=...` ([agent.md](agent.md#quarantine-management));
+2. the sender gets an **exact e-mail blacklist rule** owned by this mailbox
+   (score 10; a blacklist hit is always spam). An existing rule for the mailbox
+   or for all mailboxes is not duplicated (*reguła już istniała*);
+3. a new rule queues its usual retroactive pass (`rule.retroactive`): INBOX mail
+   of the last 30 days from the sender goes to SPAM too, and an SSH agent gets
+   the rule synced.
+
+Audit: `quarantine.blacklist` (`moved_to_spam`, `rule_added`) and, for a new
+rule, `rule.add` with `source: quarantine`.
+
 ### Bulk deletion
 
 Under the list of each mailbox (admin **Skrzynki → Kwarantanna** and the user's
-own mailbox on `/my/quarantine`) there are two buttons, both **permanent
+own mailbox on `/my/quarantine`) there are three buttons, all **permanent
 deletion** (`trwale`, nothing goes back to INBOX or to SPAM):
 
 | Button | Deletes |
 |--------|---------|
+| **wynik od [N] pkt → Usuń od tylu punktów** (2.1.0) | the quarantined messages whose score (score log, judged when the job runs) is at least N (1-1000); a message without a known score is kept |
 | **Usuń wszystkie wysokiego ryzyka** (only shown when the list has high-risk messages) | the quarantined messages that are high risk |
 | **Usuń wszystko z kwarantanny** | every quarantined message of that mailbox |
 
@@ -91,7 +112,7 @@ one job per mailbox, then the job list filtered to `quarantine.purge`.
   (`AGENT_HIGH_RISK_PATTERN`, kept equal by `AgentParityTest`) on its own
   `score_log`; no row = kept there too.
 - **Background job** `quarantine.purge` ([jobs.md](jobs.md)), payload mailbox
-  key + mode `high_risk` / `all`; one per mailbox and mode while queued /
+  key + mode `high_risk` / `all` / `min_score` (+ `min_score` = N); one per mailbox and mode while queued /
   running (dedupe key `quarantine.purge:<key>:<mode>`). The button redirects to
   the job page (admin `/jobs/{id}`, user `/my/jobs/{id}`) with the counts:
   messages in the quarantine, deleted, skipped (not high risk / unreadable /
@@ -103,7 +124,8 @@ one job per mailbox, then the job list filtered to `quarantine.purge`.
   quarantined in between is included. IMAP: `QuarantineService::purge()` opens
   only the quarantine folder (refuses if it were ever named `INBOX` or the SPAM
   folder), flags `\Deleted` and expunges every 100 messages. SSH: agent **3.4**
-  command `quarantine-purge --mode=...` ([agent.md](agent.md#quarantine-management)),
+  command `quarantine-purge --mode=...` (`min_score` needs agent **3.6**,
+  `--min-score=N`) ([agent.md](agent.md#quarantine-management)),
   which only unlinks files in `.QUARANTINE/new|cur`; an older agent fails the
   job with "wdróż go ponownie".
 - **Permissions:** admin - any mailbox (including the legacy `imap`); ROLE_USER -

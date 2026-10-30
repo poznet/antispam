@@ -170,6 +170,7 @@ class AuditLogger
             'whitelist' => 'quarantine.whitelist',
             'delete' => 'quarantine.delete',
             'release' => 'quarantine.release',
+            'blacklist' => 'quarantine.blacklist',
             default => 'quarantine.unknown',
         };
         $this->log(
@@ -178,7 +179,8 @@ class AuditLogger
             targetId: $id,
             label: ($result['sender'] ?? '') !== '' ? (string)$result['sender'] : null,
             mailbox: $mailbox ?? $this->mailboxForKey($key),
-            details: ['source' => $source, 'quarantine' => $key, 'ok' => (bool)($result['success'] ?? false)],
+            details: ['source' => $source, 'quarantine' => $key, 'ok' => (bool)($result['success'] ?? false)]
+                + (isset($result['moved']) ? ['moved_to_spam' => (int)$result['moved'], 'rule_added' => !empty($result['rule'])] : []),
             actor: $actor,
             actorType: $actorType,
         );

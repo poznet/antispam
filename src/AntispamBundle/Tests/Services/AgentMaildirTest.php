@@ -309,5 +309,45 @@ class AgentMaildirTest extends TestCase
         $this->assertFileExists($this->maildir() . '/new/4.M1.host', 'INBOX is never touched');
         $this->assertFileExists($this->maildir() . '/.SPAM/new/5.M1.host', '.SPAM is never touched');
     }
-}
 
+    /** quarantine-purge --mode=min_score (agent 3.6): score_log score >= N; no row = kept. */
+    public function testQuarantinePurgeByMinScore()
+    {
+        mkdir($this->maildir() . '/.QUARANTINE/new', 0700, true);
+        foreach ([1 => 25, 2 => 9, 3 => null] as $n => $score) {
+            $this->put('.QUARANTINE/new/' . $n . '.M1.host', "From: x$n@spam.pl\nSubject: s\n\nx\n");
+            if ($score !== null) {
+                $db = \getDb($this->db());
+                $db->exec("INSERT INTO score_log (sender, subject, score, decision, reasons, scored_at, file) VALUES ('x', 'x', $score, 'quarantine', '[]', '" . date('c') . "', '$n.M1.host')");
+                $db->close();
+            }
+        }
+        $this->assertFalse(\quarantinePurge($this->maildir(), $this->db(), ['mode' => 'min_score'])['success'], 'threshold required');
+
+        $res = \quarantinePurge($this->maildir(), $this->db(), ['mode' => 'min_score', 'min-score' => '10']);
+        $this->assertSame([3, 1, 2, 10], [$res['total'], $res['deleted'], $res['skipped'], $res['min_score']]);
+        $this->assertFileDoesNotExist($this->maildir() . '/.QUARANTINE/new/1.M1.host');
+        $this->assertFileExists($this->maildir() . '/.QUARANTINE/new/2.M1.host', 'below the threshold');
+        $this->assertFileExists($this->maildir() . '/.QUARANTINE/new/3.M1.host', 'unknown score');
+    }
+
+    /** quarantine-to-spam (agent 3.6): every quarantined message of the sender of --id goes to .SPAM. */
+    public function testQuarantineSenderToSpam()
+    {
+        foreach (['.QUARANTINE/new', '.QUARANTINE/cur'] as $d) {
+            mkdir($this->maildir() . '/' . $d, 0700, true);
+        }
+        $this->put('.QUARANTINE/new/1.M1.host', "From: Skarbnica - dostarczone przez =?UTF-8?b?SW50ZXJpxJk=?=\n <Mailing@Interia.pl>\nSubject: a\n\nx\n");
+        $this->put('.QUARANTINE/cur/2.M1.host:2,S', "From: mailing@interia.pl\nSubject: b\n\nx\n");
+        $this->put('.QUARANTINE/new/3.M1.host', "From: inny@interia.pl\nSubject: c\n\nx\n");
+        $this->put('new/4.M1.host', "From: mailing@interia.pl\nSubject: inbox\n\nx\n");
+
+        $this->assertFalse(\quarantineSenderToSpam($this->maildir(), ['id' => '../x'])['success']);
+        $res = \quarantineSenderToSpam($this->maildir(), ['id' => '1.M1.host']);
+        $this->assertSame(['success' => true, 'sender' => 'mailing@interia.pl', 'moved' => 2, 'failed' => 0], $res);
+        $this->assertFileExists($this->maildir() . '/.SPAM/new/1.M1.host');
+        $this->assertFileExists($this->maildir() . '/.SPAM/cur/2.M1.host:2,S');
+        $this->assertFileExists($this->maildir() . '/.QUARANTINE/new/3.M1.host', 'other sender stays');
+        $this->assertFileExists($this->maildir() . '/new/4.M1.host', 'INBOX is the retroactive pass\'s job');
+    }
+}

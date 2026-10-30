@@ -1,15 +1,16 @@
 {# Result of a bulk quarantine deletion (docs/spam-handling.md#bulk-deletion). Also rendered on /my/jobs/{id} (is_admin = false: no raw errors). #}
 {% set admin_view = is_admin is defined ? is_admin : true %}
 <div class="alert alert-{{ result.failed|default(0) > 0 ? 'warning' : 'success' }}">
-    <strong>{{ result.mode|default('') == 'all' ? 'Kwarantanna wyczyszczona.' : 'Wiadomości wysokiego ryzyka usunięte z kwarantanny.' }}</strong>
+    {% set mode = result.mode|default('') %}
+    <strong>{% if mode == 'all' %}Kwarantanna wyczyszczona.{% elseif mode == 'min_score' %}Wiadomości z wynikiem od {{ result.min_score }} pkt usunięte z kwarantanny.{% else %}Wiadomości wysokiego ryzyka usunięte z kwarantanny.{% endif %}</strong>
     <br><small>Usunięte wiadomości zostały skasowane trwale - nie trafiły do skrzynki odbiorczej ani do folderu SPAM.
-    {% if result.mode|default('') != 'all' %}Ryzyko każdej wiadomości sprawdzono w chwili usuwania; pozostałe zostały w kwarantannie.{% endif %}</small>
+    {% if mode == 'min_score' %}Wynik każdej wiadomości sprawdzono w chwili usuwania (z dziennika ocen); wiadomości z niższym lub nieznanym wynikiem zostały w kwarantannie.{% elseif mode != 'all' %}Ryzyko każdej wiadomości sprawdzono w chwili usuwania; pozostałe zostały w kwarantannie.{% endif %}</small>
 </div>
 <div class="table-responsive">
 <table class="table table-bordered">
     <tr><th style="width:280px;">Wiadomości w kwarantannie</th><td>{{ result.total|default(0) }}</td></tr>
     <tr><th>Usunięte trwale</th><td><strong>{{ result.deleted|default(0) }}</strong></td></tr>
-    <tr><th>Pominięte{{ result.mode|default('') == 'all' ? '' : ' (nie wysokiego ryzyka lub nieczytelne)' }}</th><td>{{ result.skipped|default(0) }}</td></tr>
+    <tr><th>Pominięte{{ mode == 'all' ? '' : (mode == 'min_score' ? ' (niższy lub nieznany wynik, nieczytelne)' : ' (nie wysokiego ryzyka lub nieczytelne)') }}</th><td>{{ result.skipped|default(0) }}</td></tr>
     <tr><th>Błędy</th><td>{{ result.failed|default(0) }}</td></tr>
     {% if result.shown is defined and result.shown is not null %}<tr><th>Na liście w chwili kliknięcia</th><td>{{ result.shown }}</td></tr>{% endif %}
 </table>

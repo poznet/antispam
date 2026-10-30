@@ -46,7 +46,8 @@ class QuarantinePurgeHandler implements JobHandlerInterface
         $key = (string)($payload['key'] ?? '');
         $mode = (string)($payload['mode'] ?? '');
         $source = (string)($payload['source'] ?? QuarantinePurge::SOURCE_PANEL);
-        if ($key === '' || !QuarantinePurge::isMode($mode)) {
+        $minScore = isset($payload['min_score']) ? (int)$payload['min_score'] : null;
+        if ($key === '' || !QuarantinePurge::isMode($mode) || ($mode === QuarantineService::PURGE_MIN_SCORE && (int)$minScore < 1)) {
             throw new \RuntimeException('Nieprawidłowe zadanie (skrzynka / tryb).');
         }
 
@@ -58,12 +59,14 @@ class QuarantinePurgeHandler implements JobHandlerInterface
                     throw new \RuntimeException('Brak dostępu do tej skrzynki.');
                 }
             }
-            $context->progress($mode === QuarantineService::PURGE_ALL
-                ? 'Usuwanie wszystkich wiadomości z kwarantanny...'
-                : 'Sprawdzanie i usuwanie wiadomości wysokiego ryzyka z kwarantanny...');
+            $context->progress(match ($mode) {
+                QuarantineService::PURGE_ALL => 'Usuwanie wszystkich wiadomości z kwarantanny...',
+                QuarantineService::PURGE_MIN_SCORE => sprintf('Sprawdzanie i usuwanie wiadomości z wynikiem od %d pkt z kwarantanny...', $minScore),
+                default => 'Sprawdzanie i usuwanie wiadomości wysokiego ryzyka z kwarantanny...',
+            });
             $result = $this->quarantine->purge($key, $mode, function (int $done, int $total) use ($context) {
                 $context->progress(sprintf('Usunięto %d z %d', $done, $total), $done, $total);
-            });
+            }, $minScore);
         } catch (\Throwable $e) {
             $this->audit($context, $key, $mode, $source, null, $e->getMessage());
             throw $e;
@@ -71,12 +74,12 @@ class QuarantinePurgeHandler implements JobHandlerInterface
 
         $this->audit($context, $key, $mode, $source, $result, null);
         $context->progress('Zakończone', (int)$result['deleted'], (int)$result['deleted']);
-        return $result + ['key' => $key, 'mode' => $mode, 'source' => $source, 'shown' => $payload['shown'] ?? null];
+        return $result + ['key' => $key, 'mode' => $mode, 'source' => $source, 'shown' => $payload['shown'] ?? null, 'min_score' => $minScore];
     }
 
     private function audit(JobContext $context, string $key, string $mode, string $source, ?array $result, ?string $error): void
     {
-        $details = ['ok' => $error === null, 'mode' => $mode, 'source' => $source];
+        $details = ['ok' => $error === null, 'mode' => $mode, 'source' => $source] + (isset($context->payload()['min_score']) ? ['min_score' => (int)$context->payload()['min_score']] : []);
         foreach (['total', 'deleted', 'skipped', 'failed'] as $k) {
             $details[$k] = (int)($result[$k] ?? 0);
         }

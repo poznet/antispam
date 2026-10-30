@@ -45,6 +45,12 @@
                                 <span class="glyphicon glyphicon-star" aria-hidden="true"></span> Zawsze akceptuj
                             </button>
                             {% endif %}
+                            {% if item.from %}
+                            <button type="submit" name="action" value="blacklist" class="btn btn-xs btn-warning" title="Dodaj nadawcę do czarnej listy tej skrzynki i przenieś wszystkie jego wiadomości z kwarantanny do SPAM"
+                                    data-confirm="Dodać {{ item.from }} do czarnej listy tej skrzynki? Wszystkie wiadomości od tego nadawcy z kwarantanny trafią do folderu SPAM (nie zostaną usunięte), a nowa poczta od niego od razu do SPAM.">
+                                <span class="glyphicon glyphicon-ban-circle" aria-hidden="true"></span> Do czarnej listy
+                            </button>
+                            {% endif %}
                             <button type="submit" name="action" value="delete" class="btn btn-xs btn-danger" title="Usuń trwale" aria-label="Usuń trwale" data-confirm="Usunąć wiadomość na stałe?">
                                 <span class="glyphicon glyphicon-trash" aria-hidden="true"></span>
                             </button>

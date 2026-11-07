@@ -7,9 +7,10 @@
 | GET | `/` | Public home page (product landing) with the admin login form (`#logowanie`); logged-in admins see a link to the panel |
 | GET | `/login` | Redirects to `/#logowanie` (form_login entry point and failed-login redirect; the error is shown on the home page) |
 | POST | `/login` | Form login check (`_username`, `_password`, CSRF token `authenticate`) → `/panel`. Throttled: 5 failed attempts per login + client IP per 15 minutes (`login_throttling`), then the form shows "too many failed login attempts" |
+| POST | `/login/yubikey` | Passwordless YubiKey login (`YubiKeyAuthenticator`): `otp` (what the key typed), CSRF token `yubikey_login`; only when "Logowanie samym kluczem" is on. Success -> `/start` with the second factor done; failure -> `/#logowanie` with the error. Throttled: 10 attempts per client IP per 15 minutes (`yubikey_login` limiter) + `login_throttling`. GET redirects to `/#logowanie` |
 | GET | `/logout` | Log out → `/` |
 | GET | `/start` | After-login redirect (ROLE_USER): admins -> `/panel`, users -> `/my/quarantine` |
-| GET/POST | `/2fa` | Second login step when 2FA is on: `code` (TOTP or a backup code), CSRF token `two_factor_verify`; success -> `/start`. Throttled: 5 wrong codes per login per 15 minutes (`two_factor_code` limiter). Until it succeeds every non-public page redirects here (`TwoFactorGuard`); without a pending code it redirects to `/start` |
+| GET/POST | `/2fa` | Second login step when 2FA is on: `code` (TOTP, a backup code or a YubiKey OTP), CSRF token `two_factor_verify`; success -> `/start`. Throttled: 5 wrong codes per login per 15 minutes (`two_factor_code` limiter). Until it succeeds every non-public page redirects here (`TwoFactorGuard`); without a pending code it redirects to `/start` |
 | GET | `/panel` | Admin dashboard (ROLE_ADMIN) |
 
 Access: `/`, `/login`, `/api/feed`, `/q/`, `/api/plugin` and the plugin downloads are public;
@@ -38,6 +39,8 @@ a foreign mailbox key gives 403, see [users.md](users.md).
 | GET | `/my/2fa` | Own 2FA: status, setup with a local SVG QR code (pending secret kept in the session), backup codes |
 | POST | `/my/2fa/enable` | `code` of the pending secret; CSRF token `my_2fa`; shows the 10 backup codes once |
 | POST | `/my/2fa/disable` | `current` (password) + `code` (TOTP / backup); CSRF `my_2fa`; refused for admins while 2FA is required |
+| POST | `/my/yubikey/add` | Register a YubiKey: `name`, `current` (password), `otp` (validated by the Yubico server); CSRF `my_2fa`; rate limited like the code checks |
+| POST | `/my/yubikey/{id}/remove` | Remove an own key: `current` (password); CSRF `my_2fa`; a foreign id answers "not found"; refused for an admin's last factor while 2FA is required |
 | POST | `/my/2fa/backup-codes` | `current` + `code`; CSRF `my_2fa`; new backup codes replace the old ones |
 
 ## Users (`/users`, ROLE_ADMIN)
@@ -48,7 +51,8 @@ a foreign mailbox key gives 403, see [users.md](users.md).
 | GET/POST | `/users/add` | Create a user: login, password, role, mailboxes (CSRF token `user_form`) |
 | GET/POST | `/users/edit/{id}` | Edit; empty password keeps the current one (CSRF token `user_form`) |
 | POST | `/users/del/{id}` | Delete (CSRF token `user_action_{id}`); not your own account |
-| POST | `/users/2fa-reset/{id}` | Reset the user's 2FA (secret + backup codes); CSRF token `user_action_{id}` |
+| POST | `/users/2fa-reset/{id}` | Reset the user's 2FA (secret + backup codes + all YubiKeys); CSRF token `user_action_{id}` |
+| POST | `/users/yubikey-settings` | YubiKey API: `client_id`, `secret` (empty = keep, `clear_secret=1` = remove), `api_url` (empty = YubiCloud, https only), `passwordless`; CSRF token `user_yubikey_settings` |
 | POST | `/users/2fa-policy` | `required` = `1` / `0`: "Wymagaj 2FA dla administratorów"; CSRF token `user_2fa_policy` |
 
 ## Account Management (`/account`)

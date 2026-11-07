@@ -3,6 +3,8 @@
 namespace AntispamBundle\Security\TwoFactor;
 
 use AntispamBundle\Entity\User;
+use AntispamBundle\Security\YubiKey\YubicoOtpClient;
+use AntispamBundle\Security\YubiKey\YubiKeyService;
 use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\CryptoService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -45,8 +47,11 @@ class TwoFactorService
 
     public const METHOD_TOTP = 'totp';
     public const METHOD_BACKUP = 'backup';
+    public const METHOD_YUBIKEY = 'yubikey';
 
     private string $envSecret;
+    /** Status of the last YubiKey OTP check in verify() (for the error message). */
+    private ?string $lastYubiKeyStatus = null;
 
     public function __construct(
         private EntityManagerInterface $em,
@@ -54,6 +59,7 @@ class TwoFactorService
         private ConfigService $config,
         #[Autowire(service: 'limiter.two_factor_code')] private RateLimiterFactoryInterface $limiter,
         #[Autowire('%env(default::ADMIN_TOTP_SECRET)%')] ?string $envSecret = '',
+        private ?YubiKeyService $yubiKeys = null,
     ) {
         $this->envSecret = Totp::normalizeSecret((string)$envSecret);
     }
@@ -72,9 +78,31 @@ class TwoFactorService
     public function isEnabled(?UserInterface $user): bool
     {
         if ($user instanceof User) {
-            return $user->isTotpEnabled();
+            return $user->isTotpEnabled() || $this->hasYubiKey($user);
         }
         return $this->isEnvAdmin($user) && $this->hasEnvSecret();
+    }
+
+    /** The user has registered YubiKeys and the Yubico API is configured. */
+    public function hasYubiKey(?UserInterface $user): bool
+    {
+        return $user instanceof User && $this->yubiKeys !== null && $this->yubiKeys->isActiveFor($user);
+    }
+
+    /**
+     * The user may drop one of its factors (TOTP or a key) while 2FA is
+     * required for admins: only when another factor stays.
+     */
+    public function canDropFactor(User $user, string $factor): bool
+    {
+        if (!$user->isAdmin() || !$this->isRequiredForAdmins()) {
+            return true;
+        }
+        if ($factor === self::METHOD_TOTP) {
+            return $this->hasYubiKey($user);
+        }
+        // Dropping one key: TOTP or another key must remain.
+        return $user->isTotpEnabled() || ($this->yubiKeys !== null && count($this->yubiKeys->keysOf($user)) > 1);
     }
 
     public function isRequiredForAdmins(): bool
@@ -95,7 +123,7 @@ class TwoFactorService
      */
     public function needsSetup(?UserInterface $user): bool
     {
-        return $user instanceof User && $user->isAdmin() && !$user->isTotpEnabled() && $this->isRequiredForAdmins();
+        return $user instanceof User && $user->isAdmin() && !$this->isEnabled($user) && $this->isRequiredForAdmins();
     }
 
     /* ----- session marker ------------------------------------------------ */
@@ -148,13 +176,20 @@ class TwoFactorService
      * replay counter / remaining backup codes. Does not rate limit - callers
      * call consumeAttempt() first.
      *
-     * @return string|null METHOD_TOTP | METHOD_BACKUP, or null when wrong
+     * A Yubico OTP (touch of a registered YubiKey) is accepted as well.
+     *
+     * @return string|null METHOD_TOTP | METHOD_BACKUP | METHOD_YUBIKEY, or null when wrong
      */
     public function verify(UserInterface $user, string $code): ?string
     {
         $code = trim($code);
+        $this->lastYubiKeyStatus = null;
         if ($code === '') {
             return null;
+        }
+        if ($user instanceof User && YubicoOtpClient::isOtp($code)) {
+            $this->lastYubiKeyStatus = $this->hasYubiKey($user) ? $this->yubiKeys->verifyForUser($user, $code) : 'UNKNOWN_KEY';
+            return $this->lastYubiKeyStatus === YubicoOtpClient::STATUS_OK ? self::METHOD_YUBIKEY : null;
         }
         if ($user instanceof User) {
             if (!$user->isTotpEnabled()) {
@@ -190,6 +225,12 @@ class TwoFactorService
             }
         }
         return null;
+    }
+
+    /** Status of the last YubiKey check in verify(), null when the code was not an OTP. */
+    public function lastYubiKeyStatus(): ?string
+    {
+        return $this->lastYubiKeyStatus;
     }
 
     /** Verify a code against a secret that is not stored yet (setup confirmation). */

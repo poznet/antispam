@@ -213,9 +213,58 @@ secret and backup codes (POST + CSRF); the user logs in with the password and ma
 `auth.2fa_reset`; the policy switch is `settings.save` (`target_id` `2fa_policy`). Codes
 are never logged.
 
-**Not covered**: remembered / trusted devices, WebAuthn, 2FA for the plugin API
+**Not covered**: remembered / trusted devices, WebAuthn / FIDO2 (YubiKeys are supported
+through Yubico OTP, see [YubiKey](#yubikey)), 2FA for the plugin API
 (`/api/plugin`, its own token login) and the signed `/q/` digest links. A configuration
-backup does not carry the 2FA columns: users restored from a backup set 2FA up again.
+backup does not carry the 2FA columns nor the registered YubiKeys: users restored from a
+backup set 2FA up again.
+
+## YubiKey
+
+Login with a hardware YubiKey through **Yubico OTP** (the key "types" a 44-character
+one-time code when touched; works with every YubiKey 5 / NEO / Standard over USB or NFC,
+not with the FIDO-only "Security Key" series). Code: `Security\YubiKey\`
+(`YubicoOtpClient`, `YubiKeyService`, `YubiKeyAuthenticator`), entity `YubiKey`
+(table `antispam_yubikey`: `user_id` (cascade), `public_id` (unique), `name`,
+`created_at`, `last_used_at`).
+
+**API (admin)**: Ustawienia → Użytkownicy → **Klucze YubiKey**: Client ID + Secret Key
+from <https://upgrade.yubico.com/getapikey/> (free), optional own validation server
+(yubikey-val, protocol 2.0, `https://` only; empty = YubiCloud
+`api.yubico.com/wsapi/2.0/verify`) and **Logowanie samym kluczem**. Config keys
+`yubikey.client_id`, `yubikey.secret` (encrypted with `CryptoService`, never shown
+again), `yubikey.api_url`, `yubikey.passwordless`. Audit `settings.save`, `target_id`
+`yubikey`.
+
+**Validation**: every OTP goes to the validation server with a random nonce, the request
+is signed (HMAC-SHA1 of the Secret Key, `h`); the answer is accepted only with a valid
+signature, the same `otp` + `nonce` echoed and `status=OK`. The server tracks the key's
+counter, so each OTP works once (`REPLAYED_OTP`). The panel stores only the **public ID**
+(first 12 modhex characters of every OTP, not a secret). Without the API configured (or
+with an unreadable secret after an `APP_SECRET` change) the keys are ignored - nobody is
+locked out, users fall back to the password (+ TOTP if they have it).
+
+**Registering** (`/my/2fa`, section "Klucze YubiKey", every database user): name +
+current password + touch the key; the OTP is validated before the key is stored. Up to
+10 keys per user; a key belongs to one user. Removing a key needs the password. Audit
+`auth.yubikey_added` / `auth.yubikey_removed` (public ID + name).
+
+**Second factor**: a registered key counts as 2FA being on (also without TOTP, also for
+"Wymagaj 2FA dla administratorów"). The `/2fa` step accepts the key's OTP in the same
+field as a TOTP / backup code (`auth.2fa_verified` method `yubikey`; failures
+`auth.2fa_failed` reason `yubikey_<status>` / `yubikey_unknown_key`). While 2FA is required
+for admins, an admin cannot drop the last factor (disable TOTP without a key, remove the
+last key without TOTP).
+
+**Passwordless login** (when "Logowanie samym kluczem" is on): the login card on the home
+page shows **Zaloguj kluczem YubiKey** - one field, touch the key. The public ID finds the
+user, the OTP is validated, the session is marked as "second factor done" (the hardware
+key replaces password + code; `YubiKeyLoginBadge` on the passport). Throttled per client IP
+(`yubikey_login`: 10 / 15 min) and by `login_throttling`. Turn it off to require the
+password first (the key then works only as the second factor).
+
+**Reset**: Użytkownicy → "Reset 2FA" also removes all the user's keys (lost key). The env
+admin (`ADMIN_USER`) cannot register keys (not in the database).
 
 ## Administration notes
 

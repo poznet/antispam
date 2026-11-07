@@ -665,6 +665,23 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                     </button>
                 </form>
+                {% if yubikey_login|default(false) %}
+                    <details class="login-yubikey"{% if yubikey_open|default(false) %} open{% endif %}>
+                        <summary>Zaloguj kluczem YubiKey</summary>
+                        <form action="{{ path('login_yubikey') }}" method="post" autocomplete="off">
+                            <p class="login-yubikey-hint">Włóż klucz, kliknij w pole i dotknij przycisku na kluczu.</p>
+                            <label class="login-field">
+                                <span>Kod z klucza</span>
+                                <span class="login-input">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.8-9.8M17 6l3 3M14 9l2 2"/></svg>
+                                    <input type="text" name="otp" placeholder="dotknij klucza" maxlength="64" spellcheck="false" required>
+                                </span>
+                            </label>
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token('yubikey_login') }}">
+                            <button type="submit" class="btn btn-ghost login-submit">Zaloguj kluczem</button>
+                        </form>
+                    </details>
+                {% endif %}
             {% endif %}
             <p class="login-secure">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>

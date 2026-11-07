@@ -28,6 +28,12 @@ framework:
             policy: sliding_window
             limit: 5
             interval: '15 minutes'
+        # Passwordless YubiKey login (Security\YubiKey\YubiKeyAuthenticator):
+        # 10 attempts per client IP per 15 minutes (reset on success).
+        yubikey_login:
+            policy: sliding_window
+            limit: 10
+            interval: '15 minutes'
 
 # Production is served over HTTPS only: never send the session cookie over
 # plain http. The flag does not depend on Symfony detecting https, so it also

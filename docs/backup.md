@@ -72,7 +72,7 @@ Without `--include-secrets` (and in the panel's default download) these stay on 
   (`scoring.vt_api_key`, `url.gsb_api_key`), shared feed keys (`feed.server_key`,
   `feed.remote_key`) - `BackupSecrets::CONFIG_KEYS`;
 - OAuth client secrets (`oauth.microsoft.client_secret`, `oauth.google.client_secret`,
-  stored encrypted) and the accounts' OAuth refresh tokens (`oauth_refresh_token`; access
+  stored encrypted), the YubiKey API Secret Key (`yubikey.secret`, stored encrypted) and the accounts' OAuth refresh tokens (`oauth_refresh_token`; access
   tokens are never exported - they are renewed on first use, see [oauth.md](oauth.md));
 - account IMAP passwords, plugin password hashes and SSH key paths;
 - user password hashes.

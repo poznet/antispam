@@ -21,6 +21,16 @@ class SecurityController extends AbstractController
     }
 
     /**
+     * Passwordless YubiKey login: POST is handled by YubiKeyAuthenticator
+     * (custom_authenticators of the main firewall); GET goes to the form.
+     */
+    #[Route('/login/yubikey', name: 'login_yubikey', methods: ['GET', 'POST'])]
+    public function loginYubiKeyAction(): RedirectResponse
+    {
+        return $this->redirect($this->generateUrl('antispam_home') . '#logowanie');
+    }
+
+    /**
      * Landing page after login (form_login default_target_path): administrators
      * go to the dashboard, everyone else to their own quarantine.
      */

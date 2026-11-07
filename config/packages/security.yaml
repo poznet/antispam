@@ -37,6 +37,11 @@ security:
         main:
             lazy: true
             provider: app_users
+            # Passwordless "Zaloguj kluczem YubiKey" (POST /login/yubikey), only
+            # when enabled in Ustawienia → Użytkownicy - see docs/users.md#yubikey.
+            custom_authenticators:
+                - AntispamBundle\Security\YubiKey\YubiKeyAuthenticator
+            entry_point: form_login
             form_login:
                 login_path: login
                 check_path: login

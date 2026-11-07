@@ -19,6 +19,15 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 ## [Unreleased]
 
 ### Added
+- **YubiKey login (Yubico OTP).** Ustawienia → Użytkownicy → *Klucze YubiKey*: Client ID
+  + Secret Key of the Yubico API (YubiCloud or own yubikey-val, secret stored
+  encrypted). Every user registers keys on *Weryfikacja dwuetapowa* (touch the key,
+  password required); a key is a second factor after the password (in the `/2fa` field,
+  next to TOTP) and - with *Logowanie samym kluczem* - a passwordless login from the
+  login card (*Zaloguj kluczem YubiKey*). Signed requests, nonce/otp/signature check of
+  the answer, rate limited, audited (`auth.yubikey_added` / `_removed`); "Reset 2FA" also
+  removes the keys. New table `antispam_yubikey` (migration `Version20261107120000`).
+  See `docs/users.md#yubikey`.
 - **Quarantine: "Do czarnej listy"** next to every quarantined message (admin
   *Skrzynki → Kwarantanna* and `/my/quarantine`): the sender gets an exact e-mail
   blacklist rule on that mailbox and **all** its messages in that quarantine go

@@ -6,6 +6,8 @@ use AntispamBundle\Entity\User;
 use AntispamBundle\Security\TwoFactor\QrCodeRenderer;
 use AntispamBundle\Security\TwoFactor\TwoFactorGuard;
 use AntispamBundle\Security\TwoFactor\TwoFactorService;
+use AntispamBundle\Security\YubiKey\YubicoOtpClient;
+use AntispamBundle\Security\YubiKey\YubiKeyService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -29,6 +31,7 @@ class TwoFactorController extends AbstractController
         private QrCodeRenderer $qr,
         private UserPasswordHasherInterface $hasher,
         private TwoFactorGuard $guard,
+        private ?YubiKeyService $yubiKeys = null,
     ) {
     }
 
@@ -59,13 +62,16 @@ class TwoFactorController extends AbstractController
                 }
                 return $this->redirectToRoute('antispam_start');
             } else {
-                $this->failed('login', 'wrong_code');
-                $this->addFlash('danger', 'Nieprawidłowy kod.');
+                $yk = $this->twoFactor->lastYubiKeyStatus();
+                $this->failed('login', $yk === null ? 'wrong_code' : 'yubikey_' . strtolower($yk));
+                $this->addFlash('danger', $yk === null ? 'Nieprawidłowy kod.' : ($yk === 'UNKNOWN_KEY' ? 'Ten klucz YubiKey nie jest przypisany do Twojego konta.' : YubicoOtpClient::describe($yk)));
             }
         }
 
         return $this->render('@Antispam/TwoFactor/verify.html.twig', [
-            'backup_allowed' => $user instanceof User,
+            'backup_allowed' => $user instanceof User && $user->isTotpEnabled(),
+            'totp' => !$user instanceof User || $user->isTotpEnabled(),
+            'yubikey' => $this->twoFactor->hasYubiKey($user),
         ]);
     }
 
@@ -76,10 +82,14 @@ class TwoFactorController extends AbstractController
         $user = $this->getUser();
         $vars = [
             'env_admin' => $this->twoFactor->isEnvAdmin($user),
-            'enabled' => $this->twoFactor->isEnabled($user),
+            // TOTP section; YubiKeys have their own section below.
+            'enabled' => $user instanceof User ? $user->isTotpEnabled() : $this->twoFactor->isEnabled($user),
             'required' => $this->twoFactor->needsSetup($user),
             'remaining_codes' => $this->twoFactor->remainingBackupCodes($user),
             'enabled_at' => $user instanceof User ? $user->getTotpEnabledAt() : null,
+            'yubikey_configured' => $this->yubiKeys?->isConfigured() ?? false,
+            'yubikey_passwordless' => $this->yubiKeys?->isPasswordlessEnabled() ?? false,
+            'yubikeys' => $user instanceof User && $this->yubiKeys ? $this->yubiKeys->keysOf($user) : [],
         ];
         if ($user instanceof User && !$user->isTotpEnabled()) {
             $secret = $this->twoFactor->pendingSecret($request->getSession());
@@ -134,15 +144,17 @@ class TwoFactorController extends AbstractController
         if (!$user instanceof User || !$user->isTotpEnabled()) {
             return $this->redirectToRoute('antispam_my_2fa');
         }
-        if ($user->isAdmin() && $this->twoFactor->isRequiredForAdmins()) {
-            $this->addFlash('danger', 'Weryfikacja dwuetapowa jest wymagana dla administratorów - nie można jej wyłączyć.');
+        if (!$this->twoFactor->canDropFactor($user, TwoFactorService::METHOD_TOTP)) {
+            $this->addFlash('danger', 'Weryfikacja dwuetapowa jest wymagana dla administratorów - nie można jej wyłączyć (najpierw zarejestruj klucz YubiKey).');
             return $this->redirectToRoute('antispam_my_2fa');
         }
         if (!$this->checkPasswordAndCode($request, $user, 'disable')) {
             return $this->redirectToRoute('antispam_my_2fa');
         }
         $this->twoFactor->disable($user);
-        $this->twoFactor->clearPassed($request->getSession());
+        if (!$this->twoFactor->isEnabled($user)) {
+            $this->twoFactor->clearPassed($request->getSession());
+        }
         $this->audit('auth.2fa_disabled', targetType: 'user', targetId: $user->getId(), label: $user->getUsername());
         $this->addFlash('success', 'Weryfikacja dwuetapowa została wyłączona.');
         return $this->redirectToRoute('antispam_my_2fa');
@@ -162,6 +174,87 @@ class TwoFactorController extends AbstractController
         $this->audit('auth.2fa_backup_codes', targetType: 'user', targetId: $user->getId(), label: $user->getUsername());
         $this->addFlash('success', 'Wygenerowano nowe kody zapasowe - poprzednie przestały działać.');
         return $this->render('@Antispam/TwoFactor/backup_codes.html.twig', ['codes' => $codes]);
+    }
+
+    /**
+     * Register a YubiKey: name + the OTP the key typed + current password.
+     * The OTP is validated by the Yubico server before the key is stored.
+     */
+    #[Route('/my/yubikey/add', name: 'antispam_my_yubikey_add', methods: ['POST'])]
+    public function yubiKeyAddAction(Request $request): Response
+    {
+        $user = $this->getUser();
+        if (!$user instanceof User || !$this->yubiKeys) {
+            return $this->redirectToRoute('antispam_my_2fa');
+        }
+        if (!$this->isCsrfTokenValid('my_2fa', (string)$request->request->get('_token'))) {
+            $this->addFlash('danger', 'Nieprawidłowy token formularza, spróbuj ponownie');
+            return $this->redirectToRoute('antispam_my_2fa');
+        }
+        if (!$this->twoFactor->consumeAttempt($user)) {
+            $this->failed('yubikey_add', 'throttled');
+            $this->addFlash('danger', 'Zbyt wiele nieudanych prób. Spróbuj ponownie za kilkanaście minut.');
+            return $this->redirectToRoute('antispam_my_2fa');
+        }
+        if (!$this->hasher->isPasswordValid($user, (string)$request->request->get('current'))) {
+            $this->failed('yubikey_add', 'wrong_password');
+            $this->addFlash('danger', 'Obecne hasło jest nieprawidłowe.');
+            return $this->redirectToRoute('antispam_my_2fa');
+        }
+        $wasEnabled = $this->twoFactor->isEnabled($user);
+        $result = $this->yubiKeys->register($user, (string)$request->request->get('otp'), (string)$request->request->get('name'));
+        if (is_string($result)) {
+            $this->failed('yubikey_add', 'rejected');
+            $this->addFlash('danger', $result);
+            return $this->redirectToRoute('antispam_my_2fa');
+        }
+        $this->twoFactor->resetAttempts($user);
+        if (!$wasEnabled) {
+            // This session just proved the key - it is the second factor now.
+            $this->twoFactor->markPassed($request->getSession(), $user);
+        }
+        $this->audit('auth.yubikey_added', targetType: 'user', targetId: $user->getId(), label: $user->getUsername(),
+            details: ['public_id' => $result->getPublicId(), 'name' => $result->getName()]);
+        $this->addFlash('success', sprintf('Zarejestrowano klucz „%s” (%s).', $result->getName(), $result->getPublicId()));
+        return $this->redirectToRoute('antispam_my_2fa');
+    }
+
+    /** Remove one own YubiKey (current password required). */
+    #[Route('/my/yubikey/{id}/remove', name: 'antispam_my_yubikey_remove', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function yubiKeyRemoveAction(int $id, Request $request): Response
+    {
+        $user = $this->getUser();
+        if (!$user instanceof User || !$this->yubiKeys) {
+            return $this->redirectToRoute('antispam_my_2fa');
+        }
+        if (!$this->isCsrfTokenValid('my_2fa', (string)$request->request->get('_token'))) {
+            $this->addFlash('danger', 'Nieprawidłowy token formularza, spróbuj ponownie');
+            return $this->redirectToRoute('antispam_my_2fa');
+        }
+        if (!$this->twoFactor->canDropFactor($user, TwoFactorService::METHOD_YUBIKEY)) {
+            $this->addFlash('danger', 'Weryfikacja dwuetapowa jest wymagana dla administratorów - to Twój jedyny drugi składnik, nie można go usunąć.');
+            return $this->redirectToRoute('antispam_my_2fa');
+        }
+        if (!$this->twoFactor->consumeAttempt($user)) {
+            $this->failed('yubikey_remove', 'throttled');
+            $this->addFlash('danger', 'Zbyt wiele nieudanych prób. Spróbuj ponownie za kilkanaście minut.');
+            return $this->redirectToRoute('antispam_my_2fa');
+        }
+        if (!$this->hasher->isPasswordValid($user, (string)$request->request->get('current'))) {
+            $this->failed('yubikey_remove', 'wrong_password');
+            $this->addFlash('danger', 'Obecne hasło jest nieprawidłowe.');
+            return $this->redirectToRoute('antispam_my_2fa');
+        }
+        $key = $this->yubiKeys->remove($user, $id);
+        if (!$key) {
+            $this->addFlash('danger', 'Nie znaleziono klucza.');
+            return $this->redirectToRoute('antispam_my_2fa');
+        }
+        $this->twoFactor->resetAttempts($user);
+        $this->audit('auth.yubikey_removed', targetType: 'user', targetId: $user->getId(), label: $user->getUsername(),
+            details: ['public_id' => $key->getPublicId(), 'name' => $key->getName()]);
+        $this->addFlash('success', sprintf('Usunięto klucz „%s”.', $key->getName()));
+        return $this->redirectToRoute('antispam_my_2fa');
     }
 
     /** CSRF + rate limit + current password + a current code (TOTP or backup). */

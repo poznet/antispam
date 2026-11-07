@@ -5,6 +5,7 @@ namespace AntispamBundle\Controller;
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\User;
 use AntispamBundle\Security\TwoFactor\TwoFactorService;
+use AntispamBundle\Security\YubiKey\YubiKeyService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -30,6 +31,7 @@ class UserController extends AbstractController
         private UserPasswordHasherInterface $hasher,
         #[Autowire('%env(ADMIN_USER)%')] private string $envAdminUser,
         private ?TwoFactorService $twoFactor = null,
+        private ?YubiKeyService $yubiKeys = null,
     ) {
     }
 
@@ -42,7 +44,52 @@ class UserController extends AbstractController
             'env_admin' => $this->envAdminUser,
             'two_factor_required' => $this->twoFactor?->isRequiredForAdmins() ?? false,
             'env_admin_2fa' => $this->twoFactor?->hasEnvSecret() ?? false,
+            'yubikey' => $this->yubiKeys ? [
+                'configured' => $this->yubiKeys->isConfigured(),
+                'client_id' => $this->yubiKeys->clientId(),
+                'has_secret' => $this->yubiKeys->hasSecret(),
+                'api_url' => $this->yubiKeys->customApiUrl(),
+                'default_url' => \AntispamBundle\Security\YubiKey\YubicoOtpClient::DEFAULT_URL,
+                'passwordless' => $this->yubiKeys->isPasswordlessEnabled(),
+                'counts' => $this->yubiKeys->keyCounts(),
+            ] : null,
         ];
+    }
+
+    /**
+     * YubiKey (Yubico OTP) API: Client ID + Secret Key from
+     * upgrade.yubico.com/getapikey, optional own validation server, and
+     * whether the login page offers the passwordless key login.
+     */
+    #[Route('/yubikey-settings', name: 'antispam_user_yubikey_settings', methods: ['POST'])]
+    public function yubiKeySettingsAction(Request $request)
+    {
+        $this->checkToken($request, 'user_yubikey_settings');
+        if (!$this->yubiKeys) {
+            return $this->redirectToRoute('antispam_user_index');
+        }
+        $secret = trim((string)$request->request->get('secret'));
+        $clear = $request->request->getBoolean('clear_secret');
+        $errors = $this->yubiKeys->saveSettings(
+            (string)$request->request->get('client_id'),
+            $clear ? '' : ($secret === '' ? null : $secret),
+            (string)$request->request->get('api_url'),
+            $request->request->getBoolean('passwordless'),
+        );
+        if ($errors) {
+            foreach ($errors as $error) {
+                $this->addFlash('danger', $error);
+            }
+            return $this->redirectToRoute('antispam_user_index', ['_fragment' => 'yubikey']);
+        }
+        $this->audit('settings.save', targetType: 'settings', targetId: 'yubikey', details: [
+            'fields' => array_values(array_filter(['client_id', $secret !== '' || $clear ? 'secret' : null, 'api_url', 'passwordless'])),
+            'passwordless' => $request->request->getBoolean('passwordless'),
+        ]);
+        $this->addFlash('success', $this->yubiKeys->isConfigured()
+            ? 'Zapisano ustawienia YubiKey. Użytkownicy rejestrują klucze w menu konta → Weryfikacja dwuetapowa.'
+            : 'Zapisano ustawienia YubiKey - bez Client ID i Secret Key logowanie kluczem jest wyłączone.');
+        return $this->redirectToRoute('antispam_user_index', ['_fragment' => 'yubikey']);
     }
 
     /** Admin reset of a user's 2FA (lost phone and backup codes): the user logs in with the password only and may set it up again. */
@@ -53,12 +100,13 @@ class UserController extends AbstractController
         $user = $this->em->getRepository(User::class)->find($id);
         if (!$user) {
             $this->addFlash('danger', 'Nie znaleziono użytkownika.');
-        } elseif (!$user->isTotpEnabled()) {
+        } elseif (!$user->isTotpEnabled() && !($this->yubiKeys && $this->yubiKeys->keysOf($user))) {
             $this->addFlash('info', sprintf('Użytkownik %s nie ma włączonej weryfikacji dwuetapowej.', $user->getUsername()));
         } else {
             $user->clearTotp();
             $this->em->flush();
-            $this->audit('auth.2fa_reset', targetType: 'user', targetId: $user->getId(), label: $user->getUsername());
+            $removedKeys = $this->yubiKeys ? $this->yubiKeys->removeAll($user) : 0;
+            $this->audit('auth.2fa_reset', targetType: 'user', targetId: $user->getId(), label: $user->getUsername(), details: ['yubikeys_removed' => $removedKeys]);
             $this->addFlash('success', sprintf('Zresetowano weryfikację dwuetapową użytkownika %s.', $user->getUsername()));
         }
         return $this->redirectToRoute('antispam_user_index');

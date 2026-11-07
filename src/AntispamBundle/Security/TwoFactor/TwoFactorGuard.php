@@ -2,6 +2,7 @@
 
 namespace AntispamBundle\Security\TwoFactor;
 
+use AntispamBundle\Security\YubiKey\YubiKeyLoginBadge;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -38,7 +39,7 @@ class TwoFactorGuard implements EventSubscriberInterface
     /** Reachable while the code is pending. */
     private const PENDING_ROUTES = [self::ROUTE_VERIFY, 'logout'];
     /** Reachable while an enforced setup is pending. */
-    private const SETUP_ROUTES = [self::ROUTE_SETUP, 'antispam_my_2fa_enable', self::ROUTE_VERIFY, 'logout'];
+    private const SETUP_ROUTES = [self::ROUTE_SETUP, 'antispam_my_2fa_enable', 'antispam_my_yubikey_add', self::ROUTE_VERIFY, 'logout'];
 
     public function __construct(
         private TokenStorageInterface $tokens,
@@ -62,6 +63,11 @@ class TwoFactorGuard implements EventSubscriberInterface
         if ($request->hasSession()) {
             $this->twoFactor->clearPassed($request->getSession());
             $this->twoFactor->discardPendingSecret($request->getSession());
+            // Passwordless YubiKey login: the hardware key is the strong factor,
+            // no extra code is asked (docs/users.md#yubikey).
+            if ($event->getPassport()->hasBadge(YubiKeyLoginBadge::class)) {
+                $this->twoFactor->markPassed($request->getSession(), $event->getUser());
+            }
         }
     }
 

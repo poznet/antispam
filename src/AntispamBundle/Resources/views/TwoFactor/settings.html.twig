@@ -66,6 +66,62 @@
             </div>
         </form>
     {% endif %}
+
+    {% set yubikey_configured = yubikey_configured|default(false) %}
+    {% set yubikey_passwordless = yubikey_passwordless|default(false) %}
+    {% set yubikeys = yubikeys|default([]) %}
+    {% if not env_admin %}
+        <div class="panel panel-default" id="yubikey">
+            <div class="panel-heading"><span class="glyphicon glyphicon-flash"></span> Klucze YubiKey</div>
+            <div class="panel-body">
+            {% if not yubikey_configured %}
+                <p class="text-muted" style="margin:0;">Logowanie kluczem YubiKey nie jest skonfigurowane. Administrator włącza je w <strong>Ustawienia → Użytkownicy → Klucze YubiKey</strong> (dane API Yubico).{% if yubikeys|length %} Masz zarejestrowane klucze ({{ yubikeys|length }}), ale do tego czasu nie działają.{% endif %}</p>
+            {% else %}
+                <p>Zarejestrowany klucz (Yubico OTP) zastępuje kod z aplikacji przy logowaniu: po haśle wystarczy dotknąć klucza.
+                {% if yubikey_passwordless %}Na stronie logowania możesz też użyć przycisku <strong>„Zaloguj kluczem YubiKey”</strong> - bez hasła.{% endif %}</p>
+                {% if yubikeys|length %}
+                    <div class="table-responsive">
+                    <table class="table table-condensed">
+                        <thead><tr><th>Nazwa</th><th>ID klucza</th><th>Dodano</th><th>Ostatnio użyty</th><th></th></tr></thead>
+                        <tbody>
+                        {% for k in yubikeys %}
+                            <tr>
+                                <td>{{ k.name }}</td>
+                                <td class="pp-mono">{{ k.publicId }}</td>
+                                <td class="pp-mono">{{ k.createdAt|date('Y-m-d H:i') }}</td>
+                                <td class="pp-mono">{{ k.lastUsedAt ? k.lastUsedAt|date('Y-m-d H:i') : '—' }}</td>
+                                <td>
+                                    <form method="post" action="{{ path('antispam_my_yubikey_remove', {id: k.id}) }}" class="form-inline" style="margin:0; white-space:nowrap;" autocomplete="off">
+                                        <input type="hidden" name="_token" value="{{ token }}">
+                                        <input type="password" class="form-control input-sm" name="current" placeholder="Obecne hasło" autocomplete="current-password" required aria-label="Obecne hasło">
+                                        <button type="submit" class="btn btn-xs btn-danger" data-confirm="Usunąć klucz „{{ k.name }}”?"><span class="glyphicon glyphicon-trash"></span> Usuń</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    </div>
+                {% else %}
+                    <p class="text-muted">Nie masz jeszcze zarejestrowanych kluczy.</p>
+                {% endif %}
+
+                <form method="post" action="{{ path('antispam_my_yubikey_add') }}" autocomplete="off">
+                    <input type="hidden" name="_token" value="{{ token }}">
+                    <h4>Dodaj klucz</h4>
+                    <div class="form-group"><label for="yk-name">Nazwa</label><input type="text" class="form-control" id="yk-name" name="name" maxlength="100" placeholder="np. YubiKey 5 NFC - brelok"></div>
+                    <div class="form-group"><label for="yk-current">Obecne hasło</label><input type="password" class="form-control" id="yk-current" name="current" autocomplete="current-password" required></div>
+                    <div class="form-group">
+                        <label for="yk-otp">Kod z klucza</label>
+                        <input type="text" class="form-control pp-mono" id="yk-otp" name="otp" autocomplete="off" maxlength="64" required placeholder="kliknij tutaj i dotknij klucza">
+                        <p class="help-block">Włóż klucz do USB (lub przyłóż NFC), kliknij w pole i dotknij przycisku na kluczu - wpisze kod i wyśle formularz.</p>
+                    </div>
+                    <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-plus"></span> Zarejestruj klucz</button>
+                </form>
+            {% endif %}
+            </div>
+        </div>
+    {% endif %}
     </div>
 {% endblock %}
 

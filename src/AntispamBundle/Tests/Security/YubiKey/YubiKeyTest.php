@@ -5,6 +5,7 @@ namespace AntispamBundle\Tests\Security\YubiKey;
 use AntispamBundle\Entity\User;
 use AntispamBundle\Entity\YubiKey;
 use AntispamBundle\Repository\YubiKeyRepository;
+use AntispamBundle\Security\AdminUserProvider;
 use AntispamBundle\Security\TwoFactor\TwoFactorService;
 use AntispamBundle\Security\YubiKey\YubicoOtpClient;
 use AntispamBundle\Security\YubiKey\YubiKeyAuthenticator;
@@ -24,6 +25,7 @@ use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\RateLimiter\Storage\InMemoryStorage;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException;
+use Symfony\Component\Security\Core\User\InMemoryUser;
 use Symfony\Component\Security\Http\Authenticator\Passport\Credentials\CustomCredentials;
 
 /**
@@ -108,7 +110,12 @@ class YubiKeyTest extends TestCase
 
             public function findByUser(User $user): array
             {
-                return array_values(array_filter($this->t->keys(), fn(YubiKey $k) => $k->getUser()->getId() === $user->getId()));
+                return array_values(array_filter($this->t->keys(), fn(YubiKey $k) => $k->getUser()?->getId() === $user->getId()));
+            }
+
+            public function findByAdminLogin(string $login): array
+            {
+                return array_values(array_filter($this->t->keys(), fn(YubiKey $k) => $k->getUser() === null && $k->getAdminLogin() === $login));
             }
 
             public function findOneByPublicId(string $publicId): ?YubiKey
@@ -250,12 +257,50 @@ class YubiKeyTest extends TestCase
 
     /* ----- passwordless login ------------------------------------------- */
 
-    private function authenticator(YubiKeyService $yk, int $limit = 10): YubiKeyAuthenticator
+    private function authenticator(YubiKeyService $yk, int $limit = 10, ?AdminUserProvider $admins = null): YubiKeyAuthenticator
     {
         $urls = $this->createMock(UrlGeneratorInterface::class);
         $urls->method('generate')->willReturnCallback(fn($n) => '/' . $n);
         $limiter = new RateLimiterFactory(['id' => 'yubikey_login', 'policy' => 'sliding_window', 'limit' => $limit, 'interval' => '15 minutes'], new InMemoryStorage());
-        return new YubiKeyAuthenticator($yk, $urls, $limiter);
+        return new YubiKeyAuthenticator($yk, $urls, $limiter, null, $admins);
+    }
+
+    /* ----- built-in ADMIN_USER ------------------------------------------- */
+
+    public function testEnvAdminKeys()
+    {
+        $yk = $this->service();
+        $tf = new TwoFactorService($this->createMock(EntityManagerInterface::class), new CryptoService('test-secret'),
+            $this->createMock(ConfigService::class), TwoFactorFixtures::limiter(), '', $yk);
+        $admin = new InMemoryUser('admin', 'hash', ['ROLE_ADMIN']);
+        $this->assertFalse($tf->isEnabled($admin));
+
+        $key = $yk->register($admin, self::OTP, 'awaryjny');
+        $this->assertInstanceOf(YubiKey::class, $key);
+        $this->assertNull($key->getUser());
+        $this->assertSame('admin', $key->getAdminLogin());
+        $this->assertTrue($tf->isEnabled($admin), 'env admin with a key needs the key after the password');
+        $this->assertSame(TwoFactorService::METHOD_YUBIKEY, $tf->verify($admin, self::OTP));
+
+        // A database user with the same key id cannot use it, nor another env login.
+        $this->assertNull($tf->verify(TwoFactorFixtures::user(User::ROLE_ADMIN, 7, 'admin'), self::OTP));
+        $this->assertNull($tf->verify(new InMemoryUser('root', 'hash', ['ROLE_ADMIN']), self::OTP));
+        $this->assertNull($yk->remove(TwoFactorFixtures::user(User::ROLE_ADMIN, 7, 'admin'), $key->getId()), 'no IDOR');
+
+        // Passwordless: loaded through AdminUserProvider (still that login).
+        $auth = $this->authenticator($yk, 10, new AdminUserProvider('admin', 'hash'));
+        $passport = $auth->authenticate($this->loginRequest(self::OTP));
+        $this->assertInstanceOf(InMemoryUser::class, $passport->getUser());
+        $this->assertSame('admin', $passport->getUser()->getUserIdentifier());
+        $passport = $this->authenticator($yk, 10, new AdminUserProvider('nowy', 'hash'))->authenticate($this->loginRequest(self::OTP));
+        try {
+            $passport->getUser();
+            $this->fail('ADMIN_USER renamed: the old key must not log in');
+        } catch (\Symfony\Component\Security\Core\Exception\UserNotFoundException $e) {
+        }
+
+        $this->assertSame($key, $yk->remove($admin, $key->getId()));
+        $this->assertFalse($tf->isEnabled($admin));
     }
 
     private function loginRequest(string $otp): Request

@@ -18,6 +18,15 @@ class YubiKeyRepository extends EntityRepository
         return $this->findBy(['user' => $user], ['createdAt' => 'ASC']);
     }
 
+    /** @return YubiKey[] keys of the environment admin with this login */
+    public function findByAdminLogin(string $login): array
+    {
+        if ($login === '') {
+            return [];
+        }
+        return $this->findBy(['adminLogin' => $login, 'user' => null], ['createdAt' => 'ASC']);
+    }
+
     public function findOneByPublicId(string $publicId): ?YubiKey
     {
         return $this->findOneBy(['publicId' => $publicId]);
@@ -28,6 +37,7 @@ class YubiKeyRepository extends EntityRepository
     {
         $rows = $this->createQueryBuilder('k')
             ->select('IDENTITY(k.user) AS uid, COUNT(k.id) AS n')
+            ->where('k.user IS NOT NULL')
             ->groupBy('k.user')
             ->getQuery()->getArrayResult();
         $out = [];
@@ -41,6 +51,13 @@ class YubiKeyRepository extends EntityRepository
     {
         return (int)$this->createQueryBuilder('k')->delete()
             ->where('k.user = :user')->setParameter('user', $user)
+            ->getQuery()->execute();
+    }
+
+    public function deleteByAdminLogin(string $login): int
+    {
+        return (int)$this->createQueryBuilder('k')->delete()
+            ->where('k.user IS NULL AND k.adminLogin = :login')->setParameter('login', $login)
             ->getQuery()->execute();
     }
 }

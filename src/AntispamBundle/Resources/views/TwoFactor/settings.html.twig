@@ -12,9 +12,10 @@
                 {% if enabled %}
                     <p><span class="label label-success">włączona</span> Kod jednorazowy jest wymagany przy logowaniu. Sekret pochodzi ze zmiennej środowiskowej <code>ADMIN_TOTP_SECRET</code>.</p>
                 {% else %}
-                    <p><span class="label label-default">wyłączona</span> Konto <code>ADMIN_USER</code> nie jest zapisane w bazie, więc 2FA nie da się dla niego włączyć w panelu.</p>
+                    <p><span class="label label-default">kod z aplikacji: wyłączony</span> Konto <code>ADMIN_USER</code> nie jest zapisane w bazie, więc kodu z aplikacji nie da się dla niego włączyć w panelu.</p>
                 {% endif %}
-                <p class="text-muted">2FA tego konta ustawia się zmienną środowiskową <code>ADMIN_TOTP_SECRET</code> (sekret base32, np. z <code>php bin/console antispam:2fa:secret</code>), którą trzeba też dodać w aplikacji uwierzytelniającej. To konto nie ma kodów zapasowych. Zalecane: utwórz administratora w <strong>Ustawienia → Użytkownicy</strong> i włącz mu 2FA tutaj.</p>
+                <p>Możesz też zarejestrować dla tego konta <strong>klucz YubiKey</strong> (sekcja poniżej) - wtedy po haśle wystarczy dotknąć klucza.</p>
+                <p class="text-muted">Kod z aplikacji dla tego konta ustawia się zmienną środowiskową <code>ADMIN_TOTP_SECRET</code> (sekret base32, np. z <code>php bin/console antispam:2fa:secret</code>), którą trzeba też dodać w aplikacji uwierzytelniającej. To konto nie ma kodów zapasowych. Zalecane: utwórz administratora w <strong>Ustawienia → Użytkownicy</strong> i włącz mu 2FA tutaj.</p>
             </div>
         </div>
     {% elseif enabled %}
@@ -70,13 +71,14 @@
     {% set yubikey_configured = yubikey_configured|default(false) %}
     {% set yubikey_passwordless = yubikey_passwordless|default(false) %}
     {% set yubikeys = yubikeys|default([]) %}
-    {% if not env_admin %}
+    {% if true %}
         <div class="panel panel-default" id="yubikey">
             <div class="panel-heading"><span class="glyphicon glyphicon-flash"></span> Klucze YubiKey</div>
             <div class="panel-body">
             {% if not yubikey_configured %}
                 <p class="text-muted" style="margin:0;">Logowanie kluczem YubiKey nie jest skonfigurowane. Administrator włącza je w <strong>Ustawienia → Użytkownicy → Klucze YubiKey</strong> (dane API Yubico).{% if yubikeys|length %} Masz zarejestrowane klucze ({{ yubikeys|length }}), ale do tego czasu nie działają.{% endif %}</p>
             {% else %}
+                {% if env_admin %}<div class="alert alert-warning">To wbudowane konto awaryjne. Po dodaniu klucza bez niego się nie zalogujesz (chyba że ustawisz też <code>ADMIN_TOTP_SECRET</code>). Zgubiony klucz: inny administrator usuwa klucze w <strong>Ustawienia → Użytkownicy</strong> albo na serwerze <code>php bin/console antispam:yubikey:reset {{ app.user.userIdentifier }}</code>.</div>{% endif %}
                 <p>Zarejestrowany klucz (Yubico OTP) zastępuje kod z aplikacji przy logowaniu: po haśle wystarczy dotknąć klucza.
                 {% if yubikey_passwordless %}Na stronie logowania możesz też użyć przycisku <strong>„Zaloguj kluczem YubiKey”</strong> - bez hasła.{% endif %}</p>
                 {% if yubikeys|length %}

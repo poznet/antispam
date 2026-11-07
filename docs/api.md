@@ -52,6 +52,7 @@ a foreign mailbox key gives 403, see [users.md](users.md).
 | GET/POST | `/users/edit/{id}` | Edit; empty password keeps the current one (CSRF token `user_form`) |
 | POST | `/users/del/{id}` | Delete (CSRF token `user_action_{id}`); not your own account |
 | POST | `/users/2fa-reset/{id}` | Reset the user's 2FA (secret + backup codes + all YubiKeys); CSRF token `user_action_{id}` |
+| POST | `/users/env-admin-yubikey-reset` | Remove all YubiKeys of the built-in `ADMIN_USER`; CSRF token `user_env_admin_yubikey_reset` |
 | POST | `/users/yubikey-settings` | YubiKey API: `client_id`, `secret` (empty = keep, `clear_secret=1` = remove), `api_url` (empty = YubiCloud, https only), `passwordless`; CSRF token `user_yubikey_settings` |
 | POST | `/users/2fa-policy` | `required` = `1` / `0`: "Wymagaj 2FA dla administratorów"; CSRF token `user_2fa_policy` |
 

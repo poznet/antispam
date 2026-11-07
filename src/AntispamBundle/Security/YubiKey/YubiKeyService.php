@@ -7,6 +7,8 @@ use AntispamBundle\Entity\YubiKey;
 use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\CryptoService;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Security\Core\User\InMemoryUser;
+use Symfony\Component\Security\Core\User\UserInterface;
 
 /**
  * YubiKey (Yubico OTP) login of panel users.
@@ -18,7 +20,9 @@ use Doctrine\ORM\EntityManagerInterface;
  *   yubikey.passwordless - '1' = the login page offers "Zaloguj kluczem YubiKey"
  *                          (touch the key, no password)
  *
- * Every database user can register keys under /my/2fa. A registered key is a
+ * Every database user - and the built-in environment admin (ADMIN_USER, keys
+ * kept with admin_login instead of user_id) - can register keys under /my/2fa.
+ * A registered key is a
  * second factor after the password (like TOTP, TwoFactorService) and - when
  * passwordless is on - a login on its own (YubiKeyAuthenticator).
  * Without the API configured the keys are ignored (no lockout).
@@ -120,16 +124,50 @@ class YubiKeyService
 
     /* ----- keys ------------------------------------------------------------ */
 
-    /** @return YubiKey[] */
-    public function keysOf(User $user): array
+    /** The built-in admin from ADMIN_USER (not in the database). */
+    public static function isEnvAdmin(?UserInterface $user): bool
     {
-        return $this->repo()->findByUser($user);
+        return $user instanceof InMemoryUser;
     }
 
-    /** The user has keys and they can be validated (counts as 2FA on). */
-    public function isActiveFor(?object $user): bool
+    /** Database user or env admin - the ones that can own keys. */
+    public static function canOwnKeys(?UserInterface $user): bool
     {
-        return $user instanceof User && $this->isConfigured() && $this->keysOf($user) !== [];
+        return $user instanceof User || self::isEnvAdmin($user);
+    }
+
+    /** @return YubiKey[] */
+    public function keysOf(UserInterface $user): array
+    {
+        if ($user instanceof User) {
+            return $this->repo()->findByUser($user);
+        }
+        return self::isEnvAdmin($user) ? $this->repo()->findByAdminLogin($user->getUserIdentifier()) : [];
+    }
+
+    public function owns(UserInterface $user, YubiKey $key): bool
+    {
+        if ($user instanceof User) {
+            return $key->getUser() !== null && $key->getUser()->getId() === $user->getId();
+        }
+        return self::isEnvAdmin($user) && $key->getUser() === null && hash_equals((string)$key->getAdminLogin(), $user->getUserIdentifier());
+    }
+
+    /**
+     * The user has keys and they can be validated (counts as 2FA on). Never
+     * throws: the env admin must log in also when the database is down
+     * (AdminUserProvider) - then its keys are simply not asked for.
+     */
+    public function isActiveFor(?UserInterface $user): bool
+    {
+        if (!self::canOwnKeys($user)) {
+            return false;
+        }
+        try {
+            return $this->isConfigured() && $this->keysOf($user) !== [];
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     /**
@@ -138,10 +176,13 @@ class YubiKeyService
      *
      * @return YubiKey|string the new key or a Polish error message
      */
-    public function register(User $user, string $otp, string $name): YubiKey|string
+    public function register(UserInterface $user, string $otp, string $name): YubiKey|string
     {
         $otp = YubicoOtpClient::normalize($otp);
         $name = trim($name);
+        if (!self::canOwnKeys($user)) {
+            return 'To konto nie może mieć kluczy YubiKey.';
+        }
         if (!$this->isConfigured()) {
             return 'Logowanie kluczem YubiKey nie jest skonfigurowane (administrator: Ustawienia → Użytkownicy).';
         }
@@ -159,17 +200,20 @@ class YubiKeyService
         if ($status !== YubicoOtpClient::STATUS_OK) {
             return YubicoOtpClient::describe($status);
         }
-        $key = new YubiKey($user, $publicId, $name !== '' ? mb_substr($name, 0, 100) : 'YubiKey ' . $publicId);
+        $label = $name !== '' ? mb_substr($name, 0, 100) : 'YubiKey ' . $publicId;
+        $key = $user instanceof User
+            ? new YubiKey($user, $publicId, $label)
+            : new YubiKey(null, $publicId, $label, $user->getUserIdentifier());
         $key->markUsed();
         $this->em->persist($key);
         $this->em->flush();
         return $key;
     }
 
-    public function remove(User $user, int $keyId): ?YubiKey
+    public function remove(UserInterface $user, int $keyId): ?YubiKey
     {
         $key = $this->repo()->find($keyId);
-        if (!$key instanceof YubiKey || $key->getUser()->getId() !== $user->getId()) {
+        if (!$key instanceof YubiKey || !$this->owns($user, $key)) {
             return null;
         }
         $this->em->remove($key);
@@ -181,6 +225,18 @@ class YubiKeyService
     public function removeAll(User $user): int
     {
         return $this->repo()->deleteByUser($user);
+    }
+
+    /** Drop all keys of the environment admin with this login (panel button / CLI recovery). */
+    public function removeAllOfEnvAdmin(string $login): int
+    {
+        return $this->repo()->deleteByAdminLogin($login);
+    }
+
+    /** @return YubiKey[] */
+    public function keysOfEnvAdmin(string $login): array
+    {
+        return $this->repo()->findByAdminLogin($login);
     }
 
     /** @return array<int, int> user id => number of keys */
@@ -195,13 +251,13 @@ class YubiKeyService
      * Second factor: the OTP comes from one of the user's keys and is valid.
      * Returns STATUS_OK, or a failure status ('UNKNOWN_KEY' for a foreign key).
      */
-    public function verifyForUser(User $user, string $otp): string
+    public function verifyForUser(UserInterface $user, string $otp): string
     {
         if (!YubicoOtpClient::isOtp($otp)) {
             return YubicoOtpClient::STATUS_BAD_OTP;
         }
         $key = $this->repo()->findOneByPublicId(YubicoOtpClient::publicId($otp));
-        if (!$key || $key->getUser()->getId() !== $user->getId()) {
+        if (!$key || !$this->owns($user, $key)) {
             return 'UNKNOWN_KEY';
         }
         $status = $this->check($otp);

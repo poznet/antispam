@@ -27,7 +27,9 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   login card (*Zaloguj kluczem YubiKey*). Signed requests, nonce/otp/signature check of
   the answer, rate limited, audited (`auth.yubikey_added` / `_removed`); "Reset 2FA" also
   removes the keys. New table `antispam_yubikey` (migration `Version20261107120000`).
-  See `docs/users.md#yubikey`.
+  The built-in `ADMIN_USER` can register keys too (stored by login, `admin_login`;
+  migration `Version20261107180000`); recovery: *Usuń klucze tego konta* on the users
+  page or `bin/console antispam:yubikey:reset`. See `docs/users.md#yubikey`.
 - **Quarantine: "Do czarnej listy"** next to every quarantined message (admin
   *Skrzynki → Kwarantanna* and `/my/quarantine`): the sender gets an exact e-mail
   blacklist rule on that mailbox and **all** its messages in that quarantine go

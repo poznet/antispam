@@ -2,8 +2,8 @@
 
 namespace AntispamBundle\Security\YubiKey;
 
-use AntispamBundle\Entity\User;
 use AntispamBundle\Entity\YubiKey;
+use AntispamBundle\Security\AdminUserProvider;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -15,6 +15,8 @@ use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
 use Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException;
+use Symfony\Component\Security\Core\Exception\UserNotFoundException;
+use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Component\Security\Http\Authenticator\AbstractAuthenticator;
 use Symfony\Component\Security\Http\Authenticator\Passport\Badge\CsrfTokenBadge;
 use Symfony\Component\Security\Http\Authenticator\Passport\Badge\UserBadge;
@@ -47,6 +49,7 @@ class YubiKeyAuthenticator extends AbstractAuthenticator
         private UrlGeneratorInterface $urls,
         #[Autowire(service: 'limiter.yubikey_login')] private RateLimiterFactoryInterface $limiter,
         private ?LoggerInterface $logger = null,
+        #[Autowire(lazy: true)] private ?AdminUserProvider $envAdmins = null,
     ) {
         $this->logger ??= new NullLogger();
     }
@@ -76,13 +79,22 @@ class YubiKeyAuthenticator extends AbstractAuthenticator
             $this->logger->notice('YubiKey login: unknown key {public_id}', ['public_id' => YubicoOtpClient::publicId($otp)]);
             throw new CustomUserMessageAuthenticationException('Ten klucz YubiKey nie jest zarejestrowany w panelu.');
         }
-        $user = $key->getUser();
-        $username = $user->getUserIdentifier();
+        $username = $key->getOwnerLogin();
         $request->getSession()->set(SecurityRequestAttributes::LAST_USERNAME, $username);
+        // Database user: the key's owner. Env admin key: only while ADMIN_USER
+        // still has that login (AdminUserProvider throws otherwise).
+        $loader = $key->getUser() !== null
+            ? fn() => $key->getUser()
+            : function (string $login) {
+                if (!$this->envAdmins) {
+                    throw new UserNotFoundException();
+                }
+                return $this->envAdmins->loadUserByIdentifier($login);
+            };
 
         return new Passport(
-            new UserBadge($username, fn() => $user),
-            new CustomCredentials(function (string $otp, User $user) use ($key) {
+            new UserBadge($username, $loader),
+            new CustomCredentials(function (string $otp, UserInterface $user) use ($key) {
                 $status = $this->yubiKeys->check($otp);
                 if ($status !== YubicoOtpClient::STATUS_OK) {
                     $this->logger->notice('YubiKey login failed for {user}: {status}', ['user' => $user->getUserIdentifier(), 'status' => $status]);

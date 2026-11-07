@@ -52,6 +52,7 @@ class UserController extends AbstractController
                 'default_url' => \AntispamBundle\Security\YubiKey\YubicoOtpClient::DEFAULT_URL,
                 'passwordless' => $this->yubiKeys->isPasswordlessEnabled(),
                 'counts' => $this->yubiKeys->keyCounts(),
+                'env_admin_keys' => $this->envAdminUser !== '' ? count($this->yubiKeys->keysOfEnvAdmin($this->envAdminUser)) : 0,
             ] : null,
         ];
     }
@@ -110,6 +111,19 @@ class UserController extends AbstractController
             $this->addFlash('success', sprintf('Zresetowano weryfikację dwuetapową użytkownika %s.', $user->getUsername()));
         }
         return $this->redirectToRoute('antispam_user_index');
+    }
+
+    /** Remove all YubiKeys of the built-in ADMIN_USER account (lost key). */
+    #[Route('/env-admin-yubikey-reset', name: 'antispam_user_env_admin_yubikey_reset', methods: ['POST'])]
+    public function envAdminYubiKeyResetAction(Request $request)
+    {
+        $this->checkToken($request, 'user_env_admin_yubikey_reset');
+        if ($this->yubiKeys && $this->envAdminUser !== '') {
+            $removed = $this->yubiKeys->removeAllOfEnvAdmin($this->envAdminUser);
+            $this->audit('auth.2fa_reset', targetType: 'user', label: $this->envAdminUser, details: ['env_admin' => true, 'yubikeys_removed' => $removed]);
+            $this->addFlash('success', sprintf('Usunięto klucze YubiKey konta %s: %d.', $this->envAdminUser, $removed));
+        }
+        return $this->redirectToRoute('antispam_user_index', ['_fragment' => 'yubikey']);
     }
 
     /** "Wymagaj 2FA dla administratorów" (config security.2fa_required_admins). */

@@ -80,13 +80,13 @@ class TwoFactorService
         if ($user instanceof User) {
             return $user->isTotpEnabled() || $this->hasYubiKey($user);
         }
-        return $this->isEnvAdmin($user) && $this->hasEnvSecret();
+        return $this->isEnvAdmin($user) && ($this->hasEnvSecret() || $this->hasYubiKey($user));
     }
 
-    /** The user has registered YubiKeys and the Yubico API is configured. */
+    /** The user (database user or env admin) has registered YubiKeys and the Yubico API is configured. */
     public function hasYubiKey(?UserInterface $user): bool
     {
-        return $user instanceof User && $this->yubiKeys !== null && $this->yubiKeys->isActiveFor($user);
+        return $this->yubiKeys !== null && $this->yubiKeys->isActiveFor($user);
     }
 
     /**
@@ -187,7 +187,7 @@ class TwoFactorService
         if ($code === '') {
             return null;
         }
-        if ($user instanceof User && YubicoOtpClient::isOtp($code)) {
+        if (($user instanceof User || $this->isEnvAdmin($user)) && YubicoOtpClient::isOtp($code)) {
             $this->lastYubiKeyStatus = $this->hasYubiKey($user) ? $this->yubiKeys->verifyForUser($user, $code) : 'UNKNOWN_KEY';
             return $this->lastYubiKeyStatus === YubicoOtpClient::STATUS_OK ? self::METHOD_YUBIKEY : null;
         }

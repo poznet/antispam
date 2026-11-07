@@ -226,7 +226,7 @@ one-time code when touched; works with every YubiKey 5 / NEO / Standard over USB
 not with the FIDO-only "Security Key" series). Code: `Security\YubiKey\`
 (`YubicoOtpClient`, `YubiKeyService`, `YubiKeyAuthenticator`), entity `YubiKey`
 (table `antispam_yubikey`: `user_id` (cascade), `public_id` (unique), `name`,
-`created_at`, `last_used_at`).
+`admin_login` (env admin keys, `user_id` NULL then), `created_at`, `last_used_at`).
 
 **API (admin)**: Ustawienia → Użytkownicy → **Klucze YubiKey**: Client ID + Secret Key
 from <https://upgrade.yubico.com/getapikey/> (free), optional own validation server
@@ -263,8 +263,24 @@ key replaces password + code; `YubiKeyLoginBadge` on the passport). Throttled pe
 (`yubikey_login`: 10 / 15 min) and by `login_throttling`. Turn it off to require the
 password first (the key then works only as the second factor).
 
-**Reset**: Użytkownicy → "Reset 2FA" also removes all the user's keys (lost key). The env
-admin (`ADMIN_USER`) cannot register keys (not in the database).
+**Reset**: Użytkownicy → "Reset 2FA" also removes all the user's keys (lost key).
+
+**Built-in admin (`ADMIN_USER`)**: registers keys on `/my/2fa` like everybody else. They
+are stored with `user_id` NULL and `admin_login` = its login, so they belong to whoever
+`ADMIN_USER` is set to with that login (renaming `ADMIN_USER` orphans them). With a key the
+env admin needs it after the password (or `ADMIN_TOTP_SECRET`, whichever is given) and can
+use the passwordless login (loaded through `AdminUserProvider`, lazily). To keep the
+"never locked out" promise of this account: when the database / config table is
+unreachable its keys are not asked for (password, + TOTP if `ADMIN_TOTP_SECRET` is set);
+lost key -> another admin clicks **Usuń klucze tego konta** (Użytkownicy → Klucze
+YubiKey, `POST /users/env-admin-yubikey-reset`) or on the server:
+
+```bash
+php bin/console antispam:yubikey:reset --list   # keys of ADMIN_USER
+php bin/console antispam:yubikey:reset           # remove them (or: antispam:yubikey:reset <login>)
+```
+
+Both are audited as `auth.2fa_reset` (`yubikeys_removed`).
 
 ## Administration notes
 

@@ -210,6 +210,20 @@ php bin/console antispam:feed:sync --push-only
 php bin/console antispam:feed:sync --pull-only
 ```
 
+## Login security
+
+### antispam:yubikey:reset
+
+```bash
+php bin/console antispam:yubikey:reset --list    # keys of ADMIN_USER
+php bin/console antispam:yubikey:reset           # remove all keys of ADMIN_USER
+php bin/console antispam:yubikey:reset jan       # same for a database user
+```
+
+Lost YubiKey recovery without the panel (above all for the built-in `ADMIN_USER`, which
+has no "Reset 2FA" button of its own). Audited as `auth.2fa_reset`. See
+[users.md](users.md#yubikey).
+
 ## Database
 
 ### antispam:db:upgrade

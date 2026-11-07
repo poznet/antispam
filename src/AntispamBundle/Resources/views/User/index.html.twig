@@ -21,7 +21,7 @@
             {% if two_factor_required %}<span class="label label-success">wymagana</span>{% else %}<span class="label label-default">dobrowolna</span>{% endif %}
             <button type="submit" class="btn btn-xs btn-default" style="margin-left:8px;">{{ two_factor_required ? 'Nie wymagaj' : 'Wymagaj 2FA dla administratorów' }}</button>
             <p class="help-block" style="margin-bottom:0;">Gdy wymagana, administrator bez 2FA po zalogowaniu musi ją najpierw włączyć (menu konta → Weryfikacja dwuetapowa).
-            {% if env_admin %}Konto <strong>{{ env_admin }}</strong> z konfiguracji serwera używa 2FA tylko ze zmienną <code>ADMIN_TOTP_SECRET</code>{% if env_admin_2fa %} (<span class="text-success">ustawiona</span>){% else %} (<span class="text-danger">nieustawiona - to konto loguje się samym hasłem</span>){% endif %}.{% endif %}</p>
+            {% if env_admin %}Konto <strong>{{ env_admin }}</strong> z konfiguracji serwera używa 2FA ze zmienną <code>ADMIN_TOTP_SECRET</code> albo z kluczem YubiKey{% if yubikey and yubikey.env_admin_keys|default(0) and yubikey.configured %} (<span class="text-success">klucze: {{ yubikey.env_admin_keys }}</span>){% elseif env_admin_2fa %} (<span class="text-success">ustawiona</span>){% else %} (<span class="text-danger">nieustawiona - to konto loguje się samym hasłem</span>){% endif %}.{% endif %}</p>
         </div>
     </form>
 
@@ -33,7 +33,11 @@
         </div>
         <div class="panel-body">
             <input type="hidden" name="_token" value="{{ csrf_token('user_yubikey_settings') }}">
-            <p class="text-muted">Dane API z <a href="https://upgrade.yubico.com/getapikey/" target="_blank" rel="noopener noreferrer">upgrade.yubico.com/getapikey</a> (darmowe; podajesz e-mail i dotykasz dowolnego klucza YubiKey). Po zapisaniu każdy użytkownik rejestruje swoje klucze w menu konta → <strong>Weryfikacja dwuetapowa</strong>. Zarejestrowany klucz działa jako drugi składnik po haśle (zamiast albo obok kodu z aplikacji){% if env_admin %}; konto <strong>{{ env_admin }}</strong> z konfiguracji serwera nie może rejestrować kluczy{% endif %}.</p>
+            <p class="text-muted">Dane API z <a href="https://upgrade.yubico.com/getapikey/" target="_blank" rel="noopener noreferrer">upgrade.yubico.com/getapikey</a> (darmowe; podajesz e-mail i dotykasz dowolnego klucza YubiKey). Po zapisaniu każdy użytkownik rejestruje swoje klucze w menu konta → <strong>Weryfikacja dwuetapowa</strong>. Zarejestrowany klucz działa jako drugi składnik po haśle (zamiast albo obok kodu z aplikacji). Wbudowane konto <strong>{{ env_admin ?: 'ADMIN_USER' }}</strong> też może mieć klucze (rejestruje je po zalogowaniu na to konto).</p>
+            {% if env_admin and yubikey.env_admin_keys|default(0) %}
+                <p>Konto <strong>{{ env_admin }}</strong>: zarejestrowanych kluczy <span class="label label-info">{{ yubikey.env_admin_keys }}</span>
+                    <button type="submit" form="yk-env-reset" class="btn btn-xs btn-warning" data-confirm="Usunąć wszystkie klucze YubiKey konta {{ env_admin }}? Zaloguje się samym hasłem (+ ADMIN_TOTP_SECRET, jeśli ustawiony)."><span class="glyphicon glyphicon-trash"></span> Usuń klucze tego konta</button></p>
+            {% endif %}
             <div class="row">
                 <div class="col-sm-4 form-group">
                     <label for="yk-client">Client ID</label>
@@ -56,6 +60,11 @@
             <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-floppy-disk"></span> Zapisz</button>
         </div>
     </form>
+    {% if env_admin and yubikey.env_admin_keys|default(0) %}
+    <form method="post" action="{{ path('antispam_user_env_admin_yubikey_reset') }}" id="yk-env-reset">
+        <input type="hidden" name="_token" value="{{ csrf_token('user_env_admin_yubikey_reset') }}">
+    </form>
+    {% endif %}
     {% endif %}
 
     <div class="table-responsive">

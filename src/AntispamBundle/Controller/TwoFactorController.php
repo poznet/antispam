@@ -70,7 +70,7 @@ class TwoFactorController extends AbstractController
 
         return $this->render('@Antispam/TwoFactor/verify.html.twig', [
             'backup_allowed' => $user instanceof User && $user->isTotpEnabled(),
-            'totp' => !$user instanceof User || $user->isTotpEnabled(),
+            'totp' => $user instanceof User ? $user->isTotpEnabled() : $this->twoFactor->hasEnvSecret(),
             'yubikey' => $this->twoFactor->hasYubiKey($user),
         ]);
     }
@@ -83,13 +83,13 @@ class TwoFactorController extends AbstractController
         $vars = [
             'env_admin' => $this->twoFactor->isEnvAdmin($user),
             // TOTP section; YubiKeys have their own section below.
-            'enabled' => $user instanceof User ? $user->isTotpEnabled() : $this->twoFactor->isEnabled($user),
+            'enabled' => $user instanceof User ? $user->isTotpEnabled() : $this->twoFactor->hasEnvSecret(),
             'required' => $this->twoFactor->needsSetup($user),
             'remaining_codes' => $this->twoFactor->remainingBackupCodes($user),
             'enabled_at' => $user instanceof User ? $user->getTotpEnabledAt() : null,
             'yubikey_configured' => $this->yubiKeys?->isConfigured() ?? false,
             'yubikey_passwordless' => $this->yubiKeys?->isPasswordlessEnabled() ?? false,
-            'yubikeys' => $user instanceof User && $this->yubiKeys ? $this->yubiKeys->keysOf($user) : [],
+            'yubikeys' => $this->yubiKeys && YubiKeyService::canOwnKeys($user) ? $this->safeKeys($user) : [],
         ];
         if ($user instanceof User && !$user->isTotpEnabled()) {
             $secret = $this->twoFactor->pendingSecret($request->getSession());
@@ -184,7 +184,7 @@ class TwoFactorController extends AbstractController
     public function yubiKeyAddAction(Request $request): Response
     {
         $user = $this->getUser();
-        if (!$user instanceof User || !$this->yubiKeys) {
+        if (!YubiKeyService::canOwnKeys($user) || !$this->yubiKeys) {
             return $this->redirectToRoute('antispam_my_2fa');
         }
         if (!$this->isCsrfTokenValid('my_2fa', (string)$request->request->get('_token'))) {
@@ -213,7 +213,7 @@ class TwoFactorController extends AbstractController
             // This session just proved the key - it is the second factor now.
             $this->twoFactor->markPassed($request->getSession(), $user);
         }
-        $this->audit('auth.yubikey_added', targetType: 'user', targetId: $user->getId(), label: $user->getUsername(),
+        $this->audit('auth.yubikey_added', targetType: 'user', targetId: $user instanceof User ? $user->getId() : null, label: $user->getUserIdentifier(),
             details: ['public_id' => $result->getPublicId(), 'name' => $result->getName()]);
         $this->addFlash('success', sprintf('Zarejestrowano klucz „%s” (%s).', $result->getName(), $result->getPublicId()));
         return $this->redirectToRoute('antispam_my_2fa');
@@ -224,14 +224,14 @@ class TwoFactorController extends AbstractController
     public function yubiKeyRemoveAction(int $id, Request $request): Response
     {
         $user = $this->getUser();
-        if (!$user instanceof User || !$this->yubiKeys) {
+        if (!YubiKeyService::canOwnKeys($user) || !$this->yubiKeys) {
             return $this->redirectToRoute('antispam_my_2fa');
         }
         if (!$this->isCsrfTokenValid('my_2fa', (string)$request->request->get('_token'))) {
             $this->addFlash('danger', 'Nieprawidłowy token formularza, spróbuj ponownie');
             return $this->redirectToRoute('antispam_my_2fa');
         }
-        if (!$this->twoFactor->canDropFactor($user, TwoFactorService::METHOD_YUBIKEY)) {
+        if ($user instanceof User && !$this->twoFactor->canDropFactor($user, TwoFactorService::METHOD_YUBIKEY)) {
             $this->addFlash('danger', 'Weryfikacja dwuetapowa jest wymagana dla administratorów - to Twój jedyny drugi składnik, nie można go usunąć.');
             return $this->redirectToRoute('antispam_my_2fa');
         }
@@ -251,10 +251,20 @@ class TwoFactorController extends AbstractController
             return $this->redirectToRoute('antispam_my_2fa');
         }
         $this->twoFactor->resetAttempts($user);
-        $this->audit('auth.yubikey_removed', targetType: 'user', targetId: $user->getId(), label: $user->getUsername(),
+        $this->audit('auth.yubikey_removed', targetType: 'user', targetId: $user instanceof User ? $user->getId() : null, label: $user->getUserIdentifier(),
             details: ['public_id' => $key->getPublicId(), 'name' => $key->getName()]);
         $this->addFlash('success', sprintf('Usunięto klucz „%s”.', $key->getName()));
         return $this->redirectToRoute('antispam_my_2fa');
+    }
+
+    /** Keys of the user; the env admin page must render also when the database is down. */
+    private function safeKeys($user): array
+    {
+        try {
+            return $this->yubiKeys->keysOf($user);
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     /** CSRF + rate limit + current password + a current code (TOTP or backup). */

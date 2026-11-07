@@ -70,6 +70,26 @@ class YubiKeyTemplatesTest extends KernelTestCase
         $this->assertStringContainsString('Zaloguj kluczem YubiKey', $html);
     }
 
+    public function testEnvAdminCanRegisterKeys()
+    {
+        $admin = new InMemoryUser('admin', 'x', ['ROLE_ADMIN']);
+        $key = new YubiKey(null, 'cccccbcdefgh', 'Awaryjny', 'admin');
+        (new \ReflectionProperty(YubiKey::class, 'id'))->setValue($key, 5);
+        $html = $this->render('@Antispam/TwoFactor/settings.html.twig', [
+            'env_admin' => true, 'enabled' => false, 'required' => false, 'remaining_codes' => 0, 'enabled_at' => null,
+            'yubikey_configured' => true, 'yubikey_passwordless' => false, 'yubikeys' => [$key],
+        ], $admin, 'antispam_my_2fa');
+        $this->assertStringContainsString('action="/my/yubikey/add"', $html);
+        $this->assertStringContainsString('Awaryjny', $html);
+        $this->assertStringContainsString('antispam:yubikey:reset admin', $html, 'recovery hint');
+
+        $users = $this->render('@Antispam/User/index.html.twig', [
+            'users' => [], 'env_admin' => 'admin', 'two_factor_required' => false, 'env_admin_2fa' => false,
+            'yubikey' => ['configured' => true, 'client_id' => '1', 'has_secret' => true, 'api_url' => '', 'default_url' => 'x', 'passwordless' => false, 'counts' => [], 'env_admin_keys' => 1],
+        ], $admin, 'antispam_user_index');
+        $this->assertStringContainsString('action="/users/env-admin-yubikey-reset"', $users);
+    }
+
     public function testVerifyPromptsForKey()
     {
         $html = $this->render('@Antispam/TwoFactor/verify.html.twig', ['backup_allowed' => false, 'totp' => false, 'yubikey' => true],

@@ -37,6 +37,7 @@ const DEFAULTS = {
   moveOnReport: true,   // move to Junk after reporting from the button / menu
   notify: true,
   foreignMode: "report_only", // report_only | linked | off - accounts without their own login
+  folderScan: "rules",  // "apply rules in this folder": rules (sender vs. black/whitelists, locally) | full (+ server check of the rest)
 };
 const FOREIGN_MODES = ["report_only", "linked", "off"];
 
@@ -163,6 +164,7 @@ async function settings() {
   s.bundledServer = await bundledServer;
   s.server = normalizeServer(s.server) || s.bundledServer;
   if (!FOREIGN_MODES.includes(s.foreignMode)) s.foreignMode = DEFAULTS.foreignMode;
+  if (s.folderScan !== "full") s.folderScan = "rules";
   return s;
 }
 
@@ -1115,6 +1117,7 @@ async function selectedMessages(info, tab) {
 
 messenger.menus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === RESCAN_MENU) return rescanClicked(info);
+  if (info.menuItemId === FOLDER_RULES_MENU) return folderRulesClicked(info);
   if (!MENU[info.menuItemId]) return;
   logEvent("click", true, "Menu: " + MENU[info.menuItemId]);
   enqueueManual(async () => {
@@ -1139,7 +1142,7 @@ messenger.menus.onClicked.addListener((info, tab) => {
  */
 if (messenger.menus.onShown && messenger.menus.update) {
   messenger.menus.onShown.addListener(async (info) => {
-    if (info && (info.menuIds || []).includes(RESCAN_MENU)) return rescanMenuShown(info);
+    if (info && (info.menuIds || []).some(id => id === RESCAN_MENU || id === FOLDER_RULES_MENU)) return folderMenuShown(info);
     if (!info || !(info.menuIds || []).some(id => MENU[id])) return;
     try {
       let accountId = info.displayedFolder && info.displayedFolder.accountId;
@@ -1305,8 +1308,13 @@ function rescanClicked(info) {
   }, RESCAN_TITLE);
 }
 
-/** Folder pane menu: the rescan entry is active for accounts logged in with their own mailbox. */
-async function rescanMenuShown(info) {
+/**
+ * Folder pane menu: the rescan entry is active for accounts logged in with
+ * their own mailbox; "apply rules in this folder" for own / linked logins and
+ * folders that can hold spam (not Junk, Trash, Sent, Drafts...), and turns into
+ * "stop" while a folder pass runs.
+ */
+async function folderMenuShown(info) {
   try {
     const ctx = await contextFor(menuFolderAccountId(info));
     const ok = ctx.kind === "own";
@@ -1314,10 +1322,423 @@ async function rescanMenuShown(info) {
       title: RESCAN_TITLE + (ok ? " → " + ctx.login.email : " – wymaga zalogowania tego konta"),
       enabled: ok,
     });
+    let title = FOLDER_RULES_TITLE;
+    let enabled = true;
+    const folder = menuFolder(info);
+    if (folderRun) {
+      title = "Zatrzymaj stosowanie reguł w folderze " + folderRun.label + " (" + folderRun.done + " z " + folderRun.total + ")";
+    } else if (!folder || !folderAccountId(folder)) {
+      title += " – nie rozpoznano folderu";
+      enabled = false;
+    } else if (folderSkipReason(folder)) {
+      title += " – " + folderSkipReason(folder);
+      enabled = false;
+    } else if (ctx.kind === "own" || ctx.kind === "linked") {
+      title += " „" + folderLabel(folder) + "” → " + ctx.login.email;
+    } else {
+      title += " – wymaga zalogowania tego konta";
+      enabled = false;
+    }
+    await messenger.menus.update(FOLDER_RULES_MENU, { title, enabled });
     if (messenger.menus.refresh) await messenger.menus.refresh();
   } catch (e) {
     console.warn("antispam: folder menu update", e);
   }
+}
+
+// --- "Zastosuj reguły antyspamu w tym folderze" ------------------------------
+
+/*
+ * Any folder of a logged-in account (own or linked login) is cleaned up with
+ * the mailbox's current antispam rules:
+ *   1. GET /api/plugin/rules - the mailbox's white/blacklists (its own and the
+ *      global ones), downloaded once per pass;
+ *   2. every message's sender (From, from the headers Thunderbird already has -
+ *      nothing is downloaded or uploaded) is matched locally: whitelist keeps
+ *      the message, blacklist moves it to the account's quarantine folder
+ *      (QUARANTINE / Kwarantanna, created when missing; Junk as a fallback);
+ *   3. setting folderScan = "full": messages no list matched also go to POST
+ *      /api/plugin/check (full scoring); spam -> Junk (only marked when "spam"
+ *      is set to "mark"), quarantine follows the quarantine setting.
+ * Nothing is deleted. Runs in the background outside the click queue (a big
+ * folder takes a while); one folder pass at a time, the same menu entry stops
+ * it. Rules, progress, every hit and every error go to the event log.
+ */
+const FOLDER_RULES_MENU = "antispam-folder-rules";
+const FOLDER_RULES_TITLE = "Zastosuj reguły antyspamu w tym folderze";
+const FOLDER_RULES_PROGRESS_EVERY = 50;
+const FOLDER_RULES_MOVE_BATCH = 25;
+// The server or the network is down: stop instead of failing every message.
+const FOLDER_RULES_MAX_API_ERRORS = 5;
+const FOLDER_LIST_TIMEOUT_MS = 60 * 1000;
+let folderRun = null; // running pass: { label, done, total, stop }
+
+messenger.menus.create({ id: FOLDER_RULES_MENU, title: FOLDER_RULES_TITLE, contexts: ["folder_pane"], icons: { "32": "icons/icon-32.png" } });
+
+/** Folder a folder pane menu was opened on (TB 128+: selectedFolders, 115: selectedFolder). */
+function menuFolder(info) {
+  return (info && info.selectedFolders && info.selectedFolders[0]) || (info && info.selectedFolder) || null;
+}
+
+function folderLabel(folder) {
+  return folderBaseName(folder) || folder.path || "?";
+}
+
+/** Why the rules are not applied in this folder ("" = they can be). */
+function folderSkipReason(folder) {
+  const uses = [...(folder.specialUse || []), folder.type].filter(Boolean);
+  if (uses.includes("junk") || JUNK_NAME_RE.test(folderBaseName(folder))) return "to folder śmieci";
+  if (uses.includes("trash")) return "to kosz";
+  if (uses.some(u => ["sent", "drafts", "outbox", "templates"].includes(u))) return "folder wysłanych / roboczych";
+  if (folder.isVirtual || folder.isUnified) return "folder wirtualny";
+  return "";
+}
+
+function folderRulesCounters(c, done) {
+  const parts = done === undefined ? [] : ["przejrzano " + done];
+  if (c.blacklisted) parts.push("czarna lista: " + c.blacklisted + " (do kwarantanny: " + c.quarantined + ")");
+  if (c.whitelisted) parts.push("biała lista: " + c.whitelisted);
+  if (c.unmatched) parts.push("bez reguły: " + c.unmatched);
+  if (c.checked) parts.push("sprawdzono na serwerze: " + c.checked);
+  if (c.spam) parts.push("spam: " + c.spam);
+  if (c.quarantine) parts.push("podejrzane: " + c.quarantine);
+  if (c.ham) parts.push("czyste: " + c.ham);
+  if (c.moved) parts.push("przeniesiono: " + c.moved);
+  if (c.move_failed) parts.push("nie udało się przenieść: " + c.move_failed);
+  if (c.failed) parts.push("błędy: " + c.failed);
+  return parts.join(", ");
+}
+
+function folderRulesClicked(info) {
+  if (folderRun) {
+    folderRun.stop = true;
+    logEvent("click", true, "Menu folderu: zatrzymanie stosowania reguł w folderze " + folderRun.label, { postęp: folderRun.done + " z " + folderRun.total });
+    feedback(true, "Zatrzymuję stosowanie reguł w folderze " + folderRun.label + " (" + folderRun.done + " z " + folderRun.total + ").");
+    return;
+  }
+  const folder = menuFolder(info) || (info && info.displayedFolder) || null;
+  logEvent("click", true, "Menu folderu: " + FOLDER_RULES_TITLE, { folder: folder ? (folder.path || folder.name) : "?", konto: folderAccountId(folder) || "?" });
+  applyFolderRules(folder).catch(e => {
+    folderRun = null;
+    console.warn("antispam: folder rules", e);
+    logEvent("error", false, FOLDER_RULES_TITLE + ": nieoczekiwany błąd: " + errorText(e), e && e.stack ? String(e.stack).slice(0, 600) : "");
+  });
+}
+
+// --- local rule matching (rules from GET /api/plugin/rules) ------------------
+
+/** Lower-case address of a From / author header ("Name <a@b.pl>" -> "a@b.pl"). */
+function senderAddress(author) {
+  const s = String(author || "");
+  const m = s.match(/<([^<>\s]+@[^<>\s]+)>/) || s.match(/([^\s<>"',;:]+@[^\s<>"',;:]+)/);
+  return m ? m[1].toLowerCase().replace(/\.$/, "") : "";
+}
+
+function globToRegExp(glob) {
+  let out = "";
+  for (const ch of glob.toLowerCase()) {
+    if (ch === "*") out += ".*";
+    else if (ch === "?") out += ".";
+    else out += ch.replace(/[.\\+()[\]{}^$|\/~#]/g, "\\$&");
+  }
+  return new RegExp("^" + out + "$", "i");
+}
+
+/**
+ * Compile one list of rules ({value, type}) the way PatternMatcher does:
+ * exact = case-insensitive equality, wildcard = shell glob over the whole
+ * value, regex = case-insensitive search. A regex JavaScript cannot compile
+ * (PCRE-only syntax) is skipped and counted in `bad`.
+ */
+function compileRules(list, bad) {
+  const out = [];
+  for (const r of Array.isArray(list) ? list : []) {
+    const value = String((r && r.value) || "");
+    if (!value) continue;
+    const type = r.type || "exact";
+    try {
+      if (type === "regex") out.push({ value, type, global: !!r.global, re: new RegExp(value, "i") });
+      else if (type === "wildcard") out.push({ value, type, global: !!r.global, re: globToRegExp(value) });
+      else out.push({ value, type: "exact", global: !!r.global, exact: value.toLowerCase() });
+    } catch (e) {
+      bad.push(value);
+    }
+  }
+  return out;
+}
+
+function matchRuleList(rules, value) {
+  if (!value) return null;
+  for (const r of rules) {
+    if (r.exact !== undefined ? r.exact === value : r.re.test(value)) return r;
+  }
+  return null;
+}
+
+/** The mailbox's rules from the server, compiled: {wl, ewl, bl, ebl, counts, bad, truncated}. */
+async function fetchRules(ctx) {
+  const res = await api("/api/plugin/rules", { login: ctx.login, quietOk: true });
+  const bad = [];
+  const rules = {
+    wl: compileRules(res.whitelist, bad),
+    ewl: compileRules(res.email_whitelist, bad),
+    bl: compileRules(res.blacklist, bad),
+    ebl: compileRules(res.email_blacklist, bad),
+    truncated: !!res.truncated,
+    bad,
+  };
+  rules.counts = "biała lista domen " + rules.wl.length + ", adresów " + rules.ewl.length
+    + "; czarna lista domen " + rules.bl.length + ", adresów " + rules.ebl.length;
+  return rules;
+}
+
+/** Whitelists first (they win, as on the server), then blacklists. {verdict: "white"|"black"|"", rule} */
+function matchSender(rules, address) {
+  const host = address.includes("@") ? address.split("@").pop() : "";
+  let r;
+  if ((r = matchRuleList(rules.wl, host))) return { verdict: "white", rule: "whitelist:" + r.value };
+  if ((r = matchRuleList(rules.ewl, address))) return { verdict: "white", rule: "email_whitelist:" + r.value };
+  if ((r = matchRuleList(rules.bl, host))) return { verdict: "black", rule: "blacklist:" + r.value + " (" + r.type + (r.global ? ", wszystkie skrzynki" : "") + ")" };
+  if ((r = matchRuleList(rules.ebl, address))) return { verdict: "black", rule: "email_blacklist:" + r.value + " (" + r.type + (r.global ? ", wszystkie skrzynki" : "") + ")" };
+  return { verdict: "", rule: "" };
+}
+
+// Local quarantine folder of an account: an existing QUARANTINE (the
+// server's IMAP quarantine) / Kwarantanna folder, else "Kwarantanna" is created.
+const QUARANTINE_NAME_RE = /^(quarantine|kwarantanna)$/i;
+const QUARANTINE_NEW_NAME = "Kwarantanna";
+
+async function findQuarantineFolder(accountId) {
+  const folders = await accountFolders(accountId);
+  const found = folders.find(f => QUARANTINE_NAME_RE.test(folderBaseName(f)));
+  if (found) return found;
+  if (!messenger.folders || !messenger.folders.create) {
+    logEvent("folder", false, "Thunderbird nie pozwala wtyczce tworzyć folderów - brak folderu " + QUARANTINE_NEW_NAME);
+    return null;
+  }
+  let acc = null;
+  try { acc = await step("konto (accounts.get)", () => messenger.accounts.get(accountId, false)); } catch (e) { /* below */ }
+  // TB 121+: root folder id; TB 115: the account / root folder object.
+  const parents = [];
+  if (acc && acc.rootFolder) parents.push(acc.rootFolder.id || acc.rootFolder);
+  if (acc) parents.push(acc);
+  let lastErr = null;
+  for (const parent of parents) {
+    try {
+      const f = await step("utworzenie folderu " + QUARANTINE_NEW_NAME + " (folders.create)", () => messenger.folders.create(parent, QUARANTINE_NEW_NAME));
+      logEvent("folder", true, "Utworzono folder " + QUARANTINE_NEW_NAME + " na koncie " + (acc.name || accountId), { folder: f && (f.path || f.name) });
+      return f;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  logEvent("folder", false, "Nie udało się utworzyć folderu " + QUARANTINE_NEW_NAME + ": " + (lastErr ? errorText(lastErr) : "nie znaleziono konta"),
+    { rada: "Załóż folder Kwarantanna na tym koncie ręcznie i spróbuj ponownie" });
+  return null;
+}
+
+async function applyFolderRules(folder) {
+  if (!folder || !folderAccountId(folder)) {
+    await feedback(false, "Nie rozpoznano folderu - kliknij prawym przyciskiem folder na liście folderów i spróbuj ponownie.");
+    return;
+  }
+  const skip = folderSkipReason(folder);
+  if (skip) {
+    await feedback(false, "Reguły nie są stosowane w folderze " + folderLabel(folder) + " (" + skip + ").", { folder: folder.path || "" });
+    return;
+  }
+  const ctx = await contextFor(folderAccountId(folder));
+  if (ctx.kind !== "own" && ctx.kind !== "linked") {
+    await needsSetup("Zastosowanie reguł w folderze wymaga zalogowania konta " + accountLabel(ctx.account) + " we wtyczce (adres skrzynki + hasło wtyczki lub IMAP).", contextDetail(ctx));
+    return;
+  }
+  if (folderRun) {
+    await feedback(false, "Trwa już stosowanie reguł w folderze " + folderRun.label + " (" + folderRun.done + " z " + folderRun.total + ") - poczekaj na koniec albo zatrzymaj je z menu folderu.");
+    return;
+  }
+
+  const label = folderLabel(folder);
+  const run = { label, done: 0, total: 0, stop: false };
+  folderRun = run;
+  const c = { checked: 0, blacklisted: 0, whitelisted: 0, unmatched: 0, spam: 0, quarantine: 0, ham: 0, quarantined: 0, moved: 0, move_failed: 0, failed: 0 };
+  const t0 = Date.now();
+  const base = Object.assign({ folder: folder.path || label }, contextDetail(ctx));
+  let abort = "";
+  let mode = "rules";
+  try {
+    const s = await settings();
+    mode = s.folderScan === "full" ? "full" : "rules";
+
+    // 1. The mailbox's current rules (one request); an older server without
+    //    /api/plugin/rules: every message goes to the server check instead.
+    let rules = null;
+    try {
+      rules = await fetchRules(ctx);
+      logEvent("folder", true, "Folder " + label + ": pobrano reguły skrzynki " + ctx.login.email + " - " + rules.counts,
+        Object.assign({}, base, {
+          pominięte: rules.bad.length ? "wyrażenia nieobsługiwane w Thunderbirdzie (" + rules.bad.length + "): " + rules.bad.slice(0, 10).join(", ") : "",
+          uwaga: rules.truncated ? "lista reguł obcięta przez serwer - reszta tylko przy sprawdzaniu na serwerze" : "",
+        }));
+    } catch (e) {
+      if (e.status === 404 || e.status === 405) {
+        mode = "full";
+        logEvent("folder", false, "Serwer antyspamu nie udostępnia reguł wtyczce (zaktualizuj antyspam) - każda wiadomość zostanie sprawdzona na serwerze", base);
+      } else {
+        const text = "Nie udało się pobrać reguł antyspamu (" + ctx.login.email + "): " + errorText(e);
+        await notify("Antyspam — błąd", text);
+        await feedback(false, text, base);
+        return;
+      }
+    }
+
+    // 2. The folder's messages (headers only).
+    const messages = [];
+    try {
+      for await (const m of listMessages(await step("lista wiadomości folderu (messages.list)", () => messenger.messages.list(folder.id || folder), FOLDER_LIST_TIMEOUT_MS))) {
+        messages.push(m);
+        run.total = messages.length;
+        if (run.stop) break;
+      }
+    } catch (e) {
+      const text = "Nie udało się odczytać listy wiadomości folderu " + label + ": " + errorText(e);
+      await notify("Antyspam — błąd", text);
+      await feedback(false, text, base);
+      return;
+    }
+    run.total = messages.length;
+    if (!messages.length) {
+      await feedback(true, "Folder " + label + " jest pusty - nie ma czego sprawdzać.", base);
+      return;
+    }
+
+    const spamAction = s.spamAction === "mark" ? "mark" : "move";
+    const quarantineAction = s.quarantineAction;
+    const text0 = "Stosuję reguły antyspamu w folderze " + label + ": " + messages.length + " wiadomości (" + targetText(ctx) + "). "
+      + (mode === "full" ? "Wiadomości spoza list są sprawdzane na serwerze. " : "")
+      + "Nadawcy z czarnej listy trafią do folderu Kwarantanna - możesz normalnie pracować, dam znać po zakończeniu.";
+    await notify("Antyspam", text0);
+    await feedback(true, text0, Object.assign({}, base, { tryb: mode === "full" ? "reguły + sprawdzanie na serwerze" : "tylko reguły (lokalnie)", spam: spamAction, podejrzane: quarantineAction }));
+
+    // Destinations are looked up when first needed; moves go in batches.
+    const dest = {};
+    const destFolder = async kind => {
+      if (!(kind in dest)) {
+        dest[kind] = kind === "quarantine" ? await findQuarantineFolder(folderAccountId(folder)) : await findJunkFolder(folderAccountId(folder));
+        if (!dest[kind] && kind === "quarantine") {
+          dest[kind] = await findJunkFolder(folderAccountId(folder));
+          if (dest[kind]) logEvent("folder", false, "Folder " + label + ": brak folderu Kwarantanna - wiadomości z czarnej listy trafią do " + (dest[kind].path || "Śmieci"));
+        } else if (!dest[kind]) {
+          logEvent("folder", false, "Folder " + label + ": brak folderu Śmieci na koncie - spam zostanie tylko oznaczony", base);
+        }
+      }
+      return dest[kind];
+    };
+    const pending = { quarantine: [], junk: [] };
+    const flush = async kind => {
+      const batch = pending[kind];
+      if (!batch.length) return;
+      pending[kind] = [];
+      const target = dest[kind];
+      const name = target.path || target.name || (kind === "quarantine" ? "Kwarantanna" : "Śmieci");
+      try {
+        await step("przeniesienie do " + name + " (messages.move)", () => messenger.messages.move(batch.map(m => m.id), target.id || target));
+        c.moved += batch.length;
+        logEvent("folder", true, "Folder " + label + ": przeniesiono do " + name + ": " + batch.length);
+      } catch (e) {
+        c.move_failed += batch.length;
+        logEvent("folder", false, "Folder " + label + ": przeniesienie " + batch.length + " wiadomości do " + name + " nie powiodło się: " + errorText(e),
+          { tematy: batch.map(m => m.subject || "(bez tematu)").slice(0, 10).join(" | ") });
+      }
+    };
+    const moveTo = async (kind, m) => {
+      const target = await destFolder(kind);
+      if (!target) return false;
+      if (folder.path && target.path === folder.path) return true;
+      pending[kind].push(m);
+      if (pending[kind].length >= FOLDER_RULES_MOVE_BATCH) await flush(kind);
+      return true;
+    };
+
+    const limit = mode === "full" ? await reportLimit() : 0;
+    let apiErrors = 0;
+    for (const m of messages) {
+      if (run.stop) break;
+      if (run.done && run.done % FOLDER_RULES_PROGRESS_EVERY === 0) {
+        logEvent("folder", true, "Folder " + label + ": " + run.done + " z " + run.total + " (" + Math.floor(100 * run.done / run.total) + "%) - " + folderRulesCounters(c, run.done));
+      }
+      run.done++;
+
+      // 3a. Local rules on the sender: whitelist keeps it, blacklist -> quarantine folder.
+      if (rules) {
+        const address = senderAddress(m.author);
+        const hit = matchSender(rules, address);
+        if (hit.verdict === "white") {
+          c.whitelisted++;
+          continue;
+        }
+        if (hit.verdict === "black") {
+          c.blacklisted++;
+          const moved = await moveTo("quarantine", m);
+          if (moved) c.quarantined++;
+          logEvent("folder", true, "Folder " + label + ": czarna lista → " + (moved ? "kwarantanna" : "zostaje (brak folderu)") + ": " + (m.subject || "(bez tematu)"),
+            Object.assign(messageDetail(m), { nadawca_adres: address, reguła: hit.rule }));
+          continue;
+        }
+        if (mode !== "full") {
+          c.unmatched++;
+          continue;
+        }
+      }
+
+      // 3b. Full mode: the server scores the rest (patterns, DNSBL, feed, Bayes...).
+      let raw;
+      try {
+        raw = (await rawSource(m.id, limit)).base64;
+      } catch (e) {
+        c.failed++;
+        logEvent("folder", false, "Folder " + label + ": nie udało się odczytać wiadomości: " + errorText(e), messageDetail(m));
+        continue;
+      }
+      let res;
+      try {
+        res = await api("/api/plugin/check", { method: "POST", body: { raw_base64: raw }, login: ctx.login, quietOk: true });
+        apiErrors = 0;
+      } catch (e) {
+        c.failed++;
+        logEvent("folder", false, "Folder " + label + ": sprawdzenie nie powiodło się: " + errorText(e), messageDetail(m));
+        if (e.status === 401 || e.status === 403) { abort = errorText(e); break; }
+        if (++apiErrors >= FOLDER_RULES_MAX_API_ERRORS) { abort = FOLDER_RULES_MAX_API_ERRORS + " błędów serwera z rzędu (" + errorText(e) + ")"; break; }
+        continue;
+      }
+      c.checked++;
+      const decision = res.decision;
+      if (decision === "spam") c.spam++;
+      else if (decision === "quarantine") c.quarantine++;
+      else if (decision === "whitelisted") c.whitelisted++;
+      else c.ham++;
+      const action = decision === "spam" ? spamAction : decision === "quarantine" ? quarantineAction : "none";
+      if (action === "mark" || action === "move") await setJunk(m, true);
+      let movedOk = false;
+      if (action === "move") movedOk = await moveTo("junk", m);
+      if (decision === "spam" || decision === "quarantine") {
+        const why = Array.isArray(res.reasons) ? res.reasons.map(r => r && r.rule).filter(Boolean).slice(0, 6).join(", ") : "";
+        logEvent("folder", true, "Folder " + label + ": " + (decision === "spam" ? "SPAM" : "podejrzana") + ": " + (m.subject || "(bez tematu)") + " — wynik " + res.score + "/" + res.spam_threshold,
+          Object.assign(messageDetail(m), { decyzja: decision, akcja_lokalna: action === "move" && !movedOk ? "mark (brak Śmieci)" : action, reguły: why }));
+      }
+    }
+    await flush("quarantine");
+    await flush("junk");
+  } finally {
+    folderRun = null;
+  }
+
+  const secs = Math.round((Date.now() - t0) / 1000);
+  const how = abort ? "Przerwano stosowanie reguł w folderze " + label + " (" + abort + ")"
+    : run.stop ? "Zatrzymano stosowanie reguł w folderze " + label + " po " + run.done + " z " + run.total
+    : "Zakończono stosowanie reguł w folderze " + label;
+  const text = how + ": " + folderRulesCounters(c, run.done) + ".";
+  await notify(abort ? "Antyspam — błąd" : "Antyspam", text);
+  await feedback(!abort && !c.failed && !c.move_failed, text, Object.assign({}, base, { tryb: mode, czas: secs + " s", wiadomości: run.total }));
 }
 
 // --- connection test ("Testuj połączenie" on the settings page) --------------

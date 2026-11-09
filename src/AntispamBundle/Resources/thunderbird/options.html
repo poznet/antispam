@@ -63,6 +63,12 @@
         <option value="move">oznacz jako śmieci i przenieś do Śmieci</option>
       </select>
     </label>
+    <label>„Zastosuj reguły antyspamu w tym folderze” (menu folderu)
+      <select id="folderScan">
+        <option value="rules">tylko reguły: nadawcy z czarnej listy do Kwarantanny (szybko, nic nie jest wysyłane)</option>
+        <option value="full">reguły + pozostałe wiadomości sprawdź na serwerze (wolniej, spam do Śmieci)</option>
+      </select>
+    </label>
     <label class="check"><input type="checkbox" id="notify"> Pokazuj powiadomienia</label>
   </section>
 

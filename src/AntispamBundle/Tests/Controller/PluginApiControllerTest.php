@@ -359,6 +359,53 @@ class PluginApiControllerTest extends TestCase
         return $request;
     }
 
+    public function testRulesNeedALogin()
+    {
+        $this->loggedIn();
+        $this->em->expects($this->never())->method('getRepository');
+        $request = Request::create('/api/plugin/rules');
+        $request->headers->set('Authorization', 'Bearer bad');
+        $this->assertSame(401, $this->controller()->rulesAction($request)->getStatusCode());
+    }
+
+    public function testRulesListTheMailboxsOwnAndGlobalRules()
+    {
+        $this->loggedIn();
+        $rule = function (string $owner, string $value, string $type) {
+            $r = new EmailBlacklist();
+            $r->setEmail($owner);
+            $r->setBlacklistemail($value);
+            $r->setPatternType($type);
+            return $r;
+        };
+        $scopes = [];
+        $this->em->method('getRepository')->willReturnCallback(function ($class) use (&$scopes, $rule) {
+            $repo = $this->createMock(EntityRepository::class);
+            $repo->method('findBy')->willReturnCallback(function ($criteria) use (&$scopes, $rule, $class) {
+                $scopes[] = $criteria['email'];
+                return $class === EmailBlacklist::class
+                    ? [$rule('jan@example.com', 'spam@evil.top', 'exact'), $rule('*', '*@promo.biz', 'wildcard')]
+                    : [];
+            });
+            return $repo;
+        });
+        $request = Request::create('/api/plugin/rules');
+        $request->headers->set('Authorization', 'Bearer good');
+        $res = $this->controller()->rulesAction($request);
+        $data = json_decode($res->getContent(), true);
+
+        $this->assertSame(200, $res->getStatusCode());
+        $this->assertSame('jan@example.com', $data['mailbox']);
+        $this->assertFalse($data['truncated']);
+        $this->assertCount(4, $scopes, 'one query per list');
+        $this->assertContains('*', $scopes[0], 'global rules included');
+        $this->assertContains('jan@example.com', $scopes[0]);
+        $this->assertSame([
+            ['value' => 'spam@evil.top', 'type' => 'exact', 'global' => false],
+            ['value' => '*@promo.biz', 'type' => 'wildcard', 'global' => true],
+        ], $data['email_blacklist']);
+    }
+
     public function testRescanNeedsALogin()
     {
         $this->loggedIn();

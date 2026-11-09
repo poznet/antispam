@@ -19,6 +19,17 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 ## [Unreleased]
 
 ### Added
+
+- **Thunderbird plugin 1.5.0: "Zastosuj reguły antyspamu w tym folderze"**
+  (folder pane menu, any folder of a logged-in account): downloads the mailbox's
+  current white / blacklists (own + global) from the new `GET /api/plugin/rules`
+  and matches the senders of the folder locally - nothing is uploaded;
+  blacklisted mail is moved to the account's quarantine folder (`QUARANTINE` /
+  `Kwarantanna`, created when missing). Option *full*: the rest is also scored on
+  the server (`/api/plugin/check`), spam to Junk. Runs in the background, can be
+  stopped from the same menu, every hit and error in the event log. New
+  permission `accountsFolders` (Thunderbird asks once when updating). See
+  `docs/thunderbird.md`.
 - **YubiKey login (Yubico OTP).** Ustawienia → Użytkownicy → *Klucze YubiKey*: Client ID
   + Secret Key of the Yubico API (YubiCloud or own yubikey-val, secret stored
   encrypted). Every user registers keys on *Weryfikacja dwuetapowa* (touch the key,

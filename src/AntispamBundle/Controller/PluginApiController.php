@@ -6,13 +6,18 @@ use AntispamBundle\AppVersion;
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\AuditLog;
 use AntispamBundle\Entity\BackgroundJob;
+use AntispamBundle\Entity\Blacklist;
 use AntispamBundle\Entity\EmailBlacklist;
+use AntispamBundle\Entity\EmailWhitelist;
+use AntispamBundle\Entity\Whitelist;
 use AntispamBundle\Services\DeferredRetroactivePass;
+use AntispamBundle\Services\PatternMatcher;
 use AntispamBundle\Services\PhishingReportService;
 use AntispamBundle\Services\PluginService;
 use AntispamBundle\Services\RawMessageScanner;
 use AntispamBundle\Services\Jobs\JobQueue;
 use AntispamBundle\Services\RescanScheduler;
+use AntispamBundle\Services\RuleOwnership;
 use AntispamBundle\Services\ThunderbirdPluginBuilder;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -60,7 +65,10 @@ class PluginApiController extends AbstractController
     /** Full INBOX rescans started from the plugin per account and day. */
     const RESCAN_RATE_LIMIT = 5;
 
-    const PLUGIN_VERSION = '1.4.0';
+    /** Rules per list sent to the plugin by /api/plugin/rules. */
+    const RULES_MAX = 20000;
+
+    const PLUGIN_VERSION = '1.5.0';
 
     /**
      * The Thunderbird .xpi. Default: the uploaded generic package (e.g. the
@@ -438,6 +446,54 @@ class PluginApiController extends AbstractController
             return new JsonResponse(['error' => 'login required'], 401);
         }
         return new JsonResponse($this->rescanState($account));
+    }
+
+    /**
+     * "Zastosuj reguły antyspamu w tym folderze": the token's mailbox rules -
+     * its own plus the global ones (owner `*`), the same set the server and the
+     * SSH agent match a sender against. The plugin matches the senders of a
+     * folder locally (no message leaves the mail client) and moves blacklisted
+     * mail to its quarantine folder. Whitelists win over blacklists, as on the
+     * server. Each list is capped at RULES_MAX entries ("truncated": true).
+     */
+    #[Route('/api/plugin/rules', name: 'antispam_plugin_api_rules', methods: ['GET'])]
+    public function rulesAction(Request $request)
+    {
+        if (!$this->plugin->isEnabled()) {
+            return new JsonResponse(['error' => 'plugin disabled'], 403);
+        }
+        $account = $this->plugin->accountForToken($this->bearer($request));
+        if (!$account) {
+            return new JsonResponse(['error' => 'login required'], 401);
+        }
+        $scope = RuleOwnership::scope($account->getEmail());
+        $out = ['mailbox' => $account->getEmail(), 'generated_at' => (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM), 'truncated' => false];
+        $lists = [
+            'whitelist' => [Whitelist::class, 'getHost'],
+            'email_whitelist' => [EmailWhitelist::class, 'getWhitelistemail'],
+            'blacklist' => [Blacklist::class, 'getHost'],
+            'email_blacklist' => [EmailBlacklist::class, 'getBlacklistemail'],
+        ];
+        foreach ($lists as $key => [$class, $getter]) {
+            $rows = $this->em->getRepository($class)->findBy(['email' => $scope], ['id' => 'ASC'], self::RULES_MAX + 1);
+            if (count($rows) > self::RULES_MAX) {
+                $rows = array_slice($rows, 0, self::RULES_MAX);
+                $out['truncated'] = true;
+            }
+            $out[$key] = [];
+            foreach ($rows as $rule) {
+                $value = (string)$rule->{$getter}();
+                if ($value === '') {
+                    continue;
+                }
+                $out[$key][] = [
+                    'value' => $value,
+                    'type' => $rule->getPatternType() ?: PatternMatcher::EXACT,
+                    'global' => RuleOwnership::isGlobal($rule->getEmail()),
+                ];
+            }
+        }
+        return new JsonResponse($out);
     }
 
     private function rescanState(Account $account, ?int $jobId = null): array

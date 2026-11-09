@@ -83,6 +83,7 @@ function env(stored = {}, server = {}) {
     if (p === "/api/plugin/check") return json({ decision: "spam", score: 9, spam_threshold: 5 });
     if (p === "/api/plugin/login") return json({ token: "TOK-" + body.email, email: body.email, expires_at: "2027-01-01T00:00:00+00:00" });
     if (p === "/api/plugin/ping") return json({ ok: true, client_ip: "1.2.3.4", received_at: "now" });
+    if (p === "/api/plugin/rules" && server.rules) return json(server.rules);
     if (p === "/api/plugin/rescan" && server.rescan) return json(server.rescan(opts.method || "GET"));
     return json({});
   };
@@ -404,6 +405,92 @@ await check("rescan: a watch from before a restart is resumed", async () => {
   assert.equal(rescans(e)[0].auth, "Bearer T1");
   assert.deepEqual(e.store.rescanWatch, {});
   assert.ok(e.store.eventLog.some(x => /błąd: IMAP down/.test(x.text)));
+});
+
+// --- "Zastosuj reguły antyspamu w tym folderze" ---------------------------------
+const RULES = {
+  mailbox: "jan@firma.pl", truncated: false,
+  whitelist: [{ value: "partner.pl", type: "exact", global: false }],
+  email_whitelist: [{ value: "szef@evil.top", type: "exact", global: false }],
+  blacklist: [{ value: "*.spam.biz", type: "wildcard", global: true }, { value: "(?<x>bad", type: "regex", global: false }],
+  email_blacklist: [{ value: "spam@evil.top", type: "exact", global: false }, { value: "^promo-\\d+@", type: "regex", global: false }],
+};
+const folderMsgs = () => [
+  msg(11, "account1", { author: "Spammer <SPAM@evil.top>" }),
+  msg(12, "account1", { author: "Szef <szef@evil.top>" }),
+  msg(13, "account1", { author: "x@mail.spam.biz" }),
+  msg(14, "account1", { author: "\"Promo\" <promo-123@shop.pl>" }),
+  msg(15, "account1", { author: "Kontrahent <a@partner.pl>" }),
+  msg(16, "account1", { author: "Ktoś <ktos@neutral.pl>" }),
+];
+function folderEnv(stored, { folders = [], rules = RULES } = {}) {
+  const e = env(Object.assign({ logins }, stored), { rules });
+  const created = [];
+  e.messenger.messages.list = async () => ({ id: null, messages: folderMsgs() });
+  e.messenger.accounts.get = async id => Object.assign({}, ACCOUNTS.find(a => a.id === id), { rootFolder: { id: id + "://", path: "/" }, folders });
+  e.messenger.folders.create = async (parent, name) => { const f = { id: "account1://" + name, path: "/" + name, name, accountId: "account1" }; created.push([parent, name]); return f; };
+  e.created = created;
+  return e;
+}
+const runFolder = async (e, folder = { id: "account1://INBOX/Sub", accountId: "account1", path: "/INBOX/Sub", name: "Sub" }) => {
+  const notes = [];
+  e.messenger.notifications.create = async n => { notes.push(n.message); };
+  loadRescan(e);
+  e.listeners.menu({ menuItemId: "antispam-folder-rules", selectedFolders: [folder] }, { id: 1 });
+  for (let i = 0; i < 200 && !notes.some(n => /Zakończono|Przerwano|Nie udało/.test(n)); i++) await wait(20);
+  await settle();
+  return notes;
+};
+
+await check("folder rules: blacklisted senders go to a new Kwarantanna folder, nothing is uploaded", async () => {
+  const e = folderEnv();
+  const notes = await runFolder(e);
+  const reqs = e.calls.requests.map(r => r.path);
+  assert.ok(reqs.includes("/api/plugin/rules"));
+  assert.ok(!reqs.includes("/api/plugin/check"), "rules mode sends no messages");
+  assert.equal(e.calls.requests.find(r => r.path === "/api/plugin/rules").auth, "Bearer T1");
+  assert.deepEqual(e.created.map(x => x[1]), ["Kwarantanna"]);
+  assert.equal(e.calls.moves.length, 1);
+  assert.deepEqual(e.calls.moves[0][0].sort(), [11, 13, 14]);
+  assert.equal(e.calls.moves[0][1], "account1://Kwarantanna");
+  assert.match(notes.at(-1), /czarna lista: 3 \(do kwarantanny: 3\), biała lista: 2, bez reguły: 1/);
+  assert.ok(e.store.eventLog.some(x => /pominięte: .*\(\?<x>bad/.test(x.detail || "")), "a bad regex is logged");
+  assert.ok(e.store.eventLog.some(x => /czarna lista → kwarantanna/.test(x.text) && /reguła: blacklist:\*\.spam\.biz \(wildcard, wszystkie skrzynki\)/.test(x.detail || "")));
+});
+
+await check("folder rules: an existing QUARANTINE folder is used, full mode checks the rest on the server", async () => {
+  const e = folderEnv({ folderScan: "full" }, { folders: [{ id: "account1://QUARANTINE", path: "/QUARANTINE", name: "QUARANTINE", accountId: "account1" }] });
+  await runFolder(e);
+  assert.equal(e.created.length, 0);
+  const checks = e.calls.requests.filter(r => r.path === "/api/plugin/check");
+  assert.equal(checks.length, 1, "only the message no list matched");
+  const q = e.calls.moves.find(m => m[1] === "account1://QUARANTINE");
+  const j = e.calls.moves.find(m => m[1] === "account1://Junk");
+  assert.deepEqual(q[0].sort(), [11, 13, 14]);
+  assert.deepEqual(j[0], [16]);
+});
+
+await check("folder rules: not offered in Junk, and greyed out for an account without its own login", async () => {
+  const e = folderEnv();
+  loadRescan(e);
+  await e.listeners.menuShown({ menuIds: ["antispam-folder-rules"], selectedFolders: [{ accountId: "account1", path: "/Junk", name: "Junk", specialUse: ["junk"] }] });
+  assert.equal(e.calls.menuUpdates.find(([id]) => id === "antispam-folder-rules")[1].enabled, false);
+  e.calls.menuUpdates.length = 0;
+  await e.listeners.menuShown({ menuIds: ["antispam-folder-rules"], selectedFolders: [{ accountId: "account2", path: "/INBOX", name: "Inbox" }] });
+  assert.equal(e.calls.menuUpdates.find(([id]) => id === "antispam-folder-rules")[1].enabled, false);
+  e.calls.menuUpdates.length = 0;
+  await e.listeners.menuShown({ menuIds: ["antispam-folder-rules"], selectedFolders: [{ accountId: "account1", path: "/INBOX", name: "Inbox" }] });
+  const upd = e.calls.menuUpdates.find(([id]) => id === "antispam-folder-rules")[1];
+  assert.equal(upd.enabled, true);
+  assert.match(upd.title, /„Inbox” → jan@firma\.pl/);
+});
+
+await check("folder rules: an older server without /rules falls back to the server check", async () => {
+  const e = folderEnv({}, { rules: null });
+  const f = e.fetch;
+  e.fetch = async (url, o) => url.endsWith("/api/plugin/rules") ? { ok: false, status: 404, json: async () => ({}) } : f(url, o);
+  await runFolder(e);
+  assert.equal(e.calls.requests.filter(r => r.path === "/api/plugin/check").length, 6);
 });
 
 if (failures) {

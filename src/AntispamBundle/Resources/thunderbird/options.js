@@ -2,7 +2,7 @@
 
 const $ = id => document.getElementById(id);
 const FLAGS = ["reportOnJunk", "moveOnReport", "autoCheck", "notify"];
-const SELECTS = ["spamAction", "quarantineAction", "foreignMode"];
+const SELECTS = ["spamAction", "quarantineAction", "foreignMode", "folderScan"];
 
 const ext = globalThis.messenger || globalThis.browser;
 const send = msg => ext.runtime.sendMessage(msg);

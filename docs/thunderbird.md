@@ -176,6 +176,31 @@ Since 1.3.0:
   `storage.local` (`rescanWatch`) and resumed after a restart; given up after 3
   days or when the login is removed. A second click while a rescan runs only
   shows its progress. Limit: 5 rescans a day per mailbox.
+- **Folder pane menu → Zastosuj reguły antyspamu w tym folderze** (1.5.0, any
+  folder of an account logged in with its own or a linked login; not offered on
+  Junk, Trash, Sent, Drafts, Outbox, Templates and virtual folders): the folder is
+  cleaned up with the mailbox's **current** rules. The plugin downloads the rules
+  once (`GET /api/plugin/rules`: domain / e-mail white- and blacklists of that
+  mailbox plus the global `*` ones) and matches every message's sender (the From
+  Thunderbird already has - no message is downloaded or uploaded) locally, the
+  same way as `PatternMatcher` (exact = case-insensitive equality, wildcard =
+  glob over the whole value, regex = case-insensitive search; a PCRE-only regex
+  JavaScript cannot compile is skipped and listed in the log). Whitelist wins
+  and keeps the message; a blacklist hit moves it to the account's quarantine
+  folder - an existing `QUARANTINE` (the server's IMAP quarantine) or
+  `Kwarantanna`, created at the account root when missing (permission
+  `accountsFolders`; Junk when it cannot be created). Setting *„Zastosuj reguły
+  antyspamu w tym folderze”*: `rules` (default, local only) or `full` - messages
+  no list matched are also sent to `POST /api/plugin/check` (full scoring);
+  spam → Junk (only marked when the spam action is "mark"), quarantine follows the
+  quarantine setting. Nothing is deleted; moves go in batches of 25. The pass
+  runs in the background outside the click queue; one at a time - while it runs
+  the menu entry turns into *Zatrzymaj stosowanie reguł…* (N z M). The event log
+  (`[folder]`) has the rule counts, each blacklist / spam hit with its rule, the
+  progress every 50 messages, every error, and the final counters (also as a
+  notification). An older server without `/api/plugin/rules` (404): every message
+  is checked on the server instead. 5 server errors in a row or a 401/403 stop
+  the pass.
 - **Decision handling** (logged in): spam → mark + move to Junk (default),
   quarantine → nothing (default); both configurable.
 - **Feedback**: explicit actions (toolbar button, context menu) show their result
@@ -295,6 +320,7 @@ the report taught; `null` for anonymous and `report_only` reports).
 | POST | `/api/plugin/ping` | optional | Connection test from the settings page: `{client, client_version, app}` → `{ok, enabled, server_version, plugin_version, authenticated, email, client_ip, received_at}`. Nothing is learned; written to the audit log as `plugin.ping`. 60/h per IP |
 | POST | `/api/plugin/rescan` | required | Queue the full INBOX rescan of the token's mailbox (job `account.rescan`, trigger `plugin`). One per account while queued / running (a repeat returns it with `created: false`, not counted), 5/day per account; `409` for an SSH mailbox without the agent. Answer: `{created}` + the GET fields |
 | GET | `/api/plugin/rescan` | required | `{mailbox, active, job: {id, status, progress, done, total} \| null, last: {at, ok, total, checked, whitelisted, blacklisted, quarantined, moved_to_spam, move_failed, error} \| null}` |
+| GET | `/api/plugin/rules` | required | Rules the plugin matches locally ("Zastosuj reguły antyspamu w tym folderze"): `{mailbox, generated_at, truncated, whitelist, email_whitelist, blacklist, email_blacklist}`, each list `[{value, type: exact\|wildcard\|regex, global}]` - the token's mailbox rules plus the global (`*`) ones, at most 20 000 per list (`truncated: true` past that). Read-only, no rate limit |
 | POST | `/api/plugin/check` | required | `{raw_base64}` → `{decision, spam, score, spam_threshold, quarantine_threshold, reasons[], sender, subject}` |
 | GET | `/plugin/download` | — | The `.xpi` (`?build=instance` / `generic`; default: uploaded package if current, else instance) |
 | GET | `/plugin/thunderbird/updates.json` | — | Update manifest for the instance build's `update_url` |

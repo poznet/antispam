@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Antispam Pancernapanda",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Zgłaszaj spam do Antispam Pancernapanda i sprawdzaj nową pocztę na serwerze antyspamu.",
   "author": "Pancernapanda",
   "browser_specific_settings": {
@@ -21,6 +21,7 @@
     "scripts": ["common.js", "background.js"]
   },
   "permissions": [
+    "accountsFolders",
     "accountsRead",
     "messagesRead",
     "messagesMove",

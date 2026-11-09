@@ -57,6 +57,18 @@
             Sprawdzaj automatycznie otwierane wiadomości (gdy panel jest przypięty)</label>
         <button type="button" class="as-link" id="as-logout">Wyloguj</button>
     </section>
+
+    <section class="as-box" id="as-folder-box" hidden>
+        <div class="as-label">Zastosuj reguły antyspamu w folderze</div>
+        <p class="as-muted">Serwer antyspamu sprawdzi cały wybrany folder aktualnymi regułami (czarna / biała lista, punktacja)
+            i sam przeniesie spam do folderu SPAM, a podejrzane do kwarantanny. Nic nie jest usuwane, Outlook nie musi być otwarty.</p>
+        <div class="as-folder-row">
+            <select id="as-folder" aria-label="Folder"><option value="">Wczytywanie folderów…</option></select>
+            <button type="button" class="as-link" id="as-folder-reload" title="Wczytaj listę folderów ponownie">odśwież</button>
+        </div>
+        <button type="button" class="as-btn as-btn-primary" id="as-folder-run">Zastosuj reguły w tym folderze</button>
+        <div class="as-folder-state as-muted" id="as-folder-state" hidden></div>
+    </section>
 </main>
 </body>
 </html>

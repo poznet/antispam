@@ -37,6 +37,7 @@ class SshService
         'scan' => 3600,
         // one batch of a full rescan; the agent stops itself after --time-limit
         'rescan' => 3600,
+        'folders' => 60,
         'apply-blacklist' => 1800,
         'quarantine-list' => 180,
         'quarantine-release' => 60,
@@ -449,11 +450,22 @@ class SshService
      */
     public function runRescan(Account $account, bool $reset, int $timeLimit, array $options = [])
     {
+        $folder = $options['folder'] ?? null;
+        unset($options['folder']);
         $args = $this->scanArgs($account, $options) . ' --time-limit=' . max(10, $timeLimit);
         if ($reset) {
             $args .= ' --reset';
         }
+        if ($folder !== null && $folder !== '') {
+            $args .= ' --folder=' . escapeshellarg((string)$folder);
+        }
         return $this->runAgent($account, 'rescan', $args);
+    }
+
+    /** Maildir++ subfolders a rule pass can run on (agent 3.7+ `folders`). */
+    public function runFolders(Account $account)
+    {
+        return $this->runAgent($account, 'folders', $this->maildirArg($account));
     }
 
     private function scanArgs(Account $account, array $options)

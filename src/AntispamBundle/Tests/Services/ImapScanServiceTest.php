@@ -487,6 +487,37 @@ class ImapScanServiceTest extends TestCase
         $this->assertSame([], $this->processed);
     }
 
+    public function testRescanOfAnotherFolderUsesItAndKeepsItInTheCursor()
+    {
+        $this->fill(1, 3);
+        $scan = $this->service($this->messages());
+        $opened = [];
+        $connection = $this->connection();
+        $mailbox = $connection->getMailbox('INBOX');
+        $connection = $this->createMock(ConnectionInterface::class);
+        $connection->method('getMailbox')->willReturnCallback(function ($name) use (&$opened, $mailbox) { $opened[] = $name; return $mailbox; });
+        $connection->method('hasMailbox')->willReturnCallback(fn ($name) => $name === 'INBOX/Faktury');
+
+        $stats = $scan->rescan($connection, 'box@firma.pl', null, 2, null, 'INBOX/Faktury');
+        $this->assertSame(['INBOX/Faktury'], array_unique($opened));
+        $this->assertSame('INBOX/Faktury', $stats['folder']);
+        $this->assertSame('INBOX/Faktury', $stats['cursor']['folder']);
+
+        // An INBOX cursor (no 'folder') is not this folder's: the folder pass starts over.
+        $this->processed = [];
+        $scan->rescan($connection, 'box@firma.pl', ['uidvalidity' => 777, 'last_uid' => 2, 'until_uid' => 3, 'left' => 1], null, null, 'INBOX/Faktury');
+        $this->assertSame([1, 2, 3], $this->processed);
+
+        foreach (['Nope', 'INBOX.SPAM', 'QUARANTINE'] as $bad) {
+            try {
+                $scan->rescan($connection, 'box@firma.pl', null, null, null, $bad);
+                $this->fail('accepted ' . $bad);
+            } catch (\RuntimeException $e) {
+                $this->assertMatchesRegularExpression('/Nie ma folderu|folder antyspamu/', $e->getMessage());
+            }
+        }
+    }
+
     public function testRescanRunsInBatchesUpToTheMessagesThatExistedAtTheStart()
     {
         $this->fill(1, 5);

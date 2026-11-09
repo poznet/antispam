@@ -77,6 +77,8 @@ class AuditLogger
         'account.sync' => 'Konto: synchronizacja reguł',
         'account.rescan_queued' => 'Konto: ponowny skan całej skrzynki - zlecenie',
         'account.rescan' => 'Konto: ponowny skan całej skrzynki - wynik',
+        'account.rescan_folder' => 'Konto: reguły zastosowane w folderze (wtyczka) - wynik',
+        'account.rescan_folder_queued' => 'Konto: zlecono zastosowanie reguł w folderze (wtyczka)',
         'account.host_key_reset' => 'Konto: reset klucza hosta SSH',
         'account.oauth_connected' => 'Konto: połączenie OAuth (Microsoft 365 / Google)',
         'account.oauth_disconnected' => 'Konto: rozłączenie OAuth',

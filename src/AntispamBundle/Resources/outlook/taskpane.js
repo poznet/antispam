@@ -10,6 +10,13 @@
  * pinned - every opened message can be checked automatically. "Zgłoś phishing"
  * (logged in) sends the whole .eml for the admin to inspect.
  *
+ * "Zastosuj reguły antyspamu w folderze" (logged in): Office.js cannot read or
+ * move a whole folder, so the server does it - the folder is picked from
+ * GET /api/plugin/folders, POST /api/plugin/rescan {"folder"} queues the pass
+ * (spam to SPAM, suspicious to QUARANTINE, nothing deleted) and the pane polls
+ * GET /api/plugin/rescan?job=ID while it is open; the job id is kept in
+ * localStorage, so a reopened pane goes on showing the progress.
+ *
  * Office add-ins cannot move messages to Junk in read mode without Microsoft
  * Graph (Azure app registration + SSO), so the decision is only shown; the
  * user files the message with Outlook's own Junk / Report button.
@@ -44,7 +51,9 @@ function phishingLimit() {
   return Number.isFinite(max) && max > 0 ? Math.min(pmax, max) : pmax;
 }
 
-const state = { token: "", email: "", autoCheck: false, status: null, busy: false };
+const state = { token: "", email: "", autoCheck: false, status: null, busy: false, folders: null, folderJob: null, folderBusy: false };
+const FOLDER_POLL_MS = 10 * 1000;
+let folderTimer = null;
 const $ = (id) => document.getElementById(id);
 
 // --- settings (roaming with the mailbox; non-secret ones also in localStorage) --
@@ -231,6 +240,149 @@ function render() {
   $("as-phishing").title = !logged ? "Wymaga zalogowania" : (st.phishing_reports !== true ? "Serwer nie obsługuje zgłoszeń phishingu" : "");
   $("as-ham").title = logged ? "" : "Wymaga zalogowania";
   $("as-check").title = !logged ? "Wymaga zalogowania" : (st.check_enabled === false ? "Sprawdzanie wyłączone na serwerze" : "");
+
+  const folderOk = logged && enabled && st.folder_rescan === true;
+  $("as-folder-box").hidden = !folderOk;
+  $("as-folder-run").disabled = !folderOk || state.folderBusy || !!state.folderJob || !$("as-folder").value;
+  $("as-folder-run").textContent = state.folderJob ? "Trwa sprawdzanie folderu…" : "Zastosuj reguły w tym folderze";
+}
+
+// --- "Zastosuj reguły antyspamu w folderze" (server side) --------------------
+
+function folderJobKey() {
+  return "antispam_folderJob_" + (state.email || "");
+}
+
+function setFolderState(kind, text) {
+  const el = $("as-folder-state");
+  el.className = "as-folder-state as-muted" + (kind ? " " + kind : "");
+  el.textContent = text;
+  el.hidden = !text;
+}
+
+function folderCounters(r) {
+  if (!r) return "";
+  const parts = ["sprawdzono " + (r.checked ?? r.total ?? 0)];
+  if (r.blacklisted) parts.push("czarna lista: " + r.blacklisted);
+  if (r.moved_to_spam) parts.push("do SPAM: " + r.moved_to_spam);
+  if (r.quarantined) parts.push("do kwarantanny: " + r.quarantined);
+  if (r.whitelisted) parts.push("biała lista: " + r.whitelisted);
+  if (r.move_failed) parts.push("nie udało się przenieść: " + r.move_failed);
+  return parts.join(", ");
+}
+
+function jobProgress(job) {
+  if (!job) return "";
+  if (job.total) return job.done + " z " + job.total + " (" + Math.floor(100 * job.done / Math.max(1, job.total)) + "%)";
+  return job.progress || (job.status === "queued" ? "w kolejce na serwerze" : "w toku");
+}
+
+async function loadFolders() {
+  if (!state.token || !state.status || state.status.folder_rescan !== true) return;
+  const sel = $("as-folder");
+  const previous = sel.value || localStorage.getItem("antispam_folder") || "INBOX";
+  sel.innerHTML = '<option value="">Wczytywanie folderów…</option>';
+  sel.disabled = true;
+  try {
+    const res = await api("/folders");
+    state.folders = res.folders || [];
+    sel.innerHTML = "";
+    for (const f of state.folders) {
+      const o = document.createElement("option");
+      o.value = f.name;
+      o.textContent = (f.name === "INBOX" ? "Odebrane (INBOX)" : f.name) + (typeof f.messages === "number" ? " – " + f.messages : "");
+      sel.appendChild(o);
+    }
+    if (state.folders.some((f) => f.name === previous)) sel.value = previous;
+    if (!state.folders.length) sel.innerHTML = '<option value="">Brak folderów do sprawdzenia</option>';
+  } catch (e) {
+    state.folders = null;
+    sel.innerHTML = '<option value="">Nie udało się wczytać folderów</option>';
+    setFolderState("err", "Lista folderów: " + (e.message || e));
+  } finally {
+    sel.disabled = false;
+    render();
+  }
+}
+
+async function startFolderPass() {
+  const folder = $("as-folder").value;
+  if (!folder || state.folderJob) return;
+  const label = folder === "INBOX" ? "Odebrane" : folder;
+  state.folderBusy = true;
+  render();
+  setFolderState("", "Zlecanie sprawdzenia folderu " + label + "…");
+  try {
+    try { localStorage.setItem("antispam_folder", folder); } catch (e) { /* blocked storage */ }
+    // INBOX: the regular full rescan (same counters), other folders: a folder pass.
+    const res = await api("/rescan", { method: "POST", body: folder === "INBOX" ? {} : { folder } });
+    if (res.active && res.job) {
+      watchFolderJob(res.job.id, label);
+      setFolderState("", (res.created ? "Zlecono sprawdzenie folderu " : "Sprawdzanie folderu już trwa: ") + label + " – " + jobProgress(res.job)
+        + ". Serwer robi to w tle, możesz zamknąć panel.");
+    } else {
+      setFolderState("ok", "Folder " + label + " sprawdzony.");
+    }
+  } catch (e) {
+    setFolderState("err", e.message || String(e));
+  } finally {
+    state.folderBusy = false;
+    render();
+  }
+}
+
+function watchFolderJob(id, label) {
+  state.folderJob = { id, label };
+  try { localStorage.setItem(folderJobKey(), JSON.stringify(state.folderJob)); } catch (e) { /* blocked storage */ }
+  clearTimeout(folderTimer);
+  folderTimer = setTimeout(pollFolderJob, FOLDER_POLL_MS);
+  render();
+}
+
+function stopFolderWatch() {
+  state.folderJob = null;
+  clearTimeout(folderTimer);
+  try { localStorage.removeItem(folderJobKey()); } catch (e) { /* blocked storage */ }
+  render();
+}
+
+async function pollFolderJob() {
+  const job = state.folderJob;
+  if (!job || !state.token) return;
+  let res;
+  try {
+    res = await api("/rescan?job=" + encodeURIComponent(job.id));
+  } catch (e) {
+    setFolderState("err", "Folder " + job.label + ": nie udało się odczytać postępu (" + (e.message || e) + "), ponawiam…");
+    folderTimer = setTimeout(pollFolderJob, FOLDER_POLL_MS * 3);
+    return;
+  }
+  if (res.active && res.job && res.job.id === job.id) {
+    setFolderState("", "Folder " + job.label + ": " + jobProgress(res.job));
+    folderTimer = setTimeout(pollFolderJob, FOLDER_POLL_MS);
+    return;
+  }
+  stopFolderWatch();
+  const f = res.finished;
+  if (f && f.ok) {
+    const text = "Zakończono sprawdzanie folderu " + job.label + ": " + folderCounters(f) + ".";
+    setFolderState("ok", text);
+    notifyItem("Antyspam: " + text);
+  } else if (f) {
+    setFolderState("err", "Sprawdzanie folderu " + job.label + " " + (f.status === "cancelled" ? "anulowano" : "nie powiodło się") + (f.error ? ": " + f.error : "") + ".");
+  } else {
+    setFolderState("", "Sprawdzanie folderu " + job.label + " zakończone - wynik w panelu antyspamu (Zadania w tle).");
+  }
+}
+
+function resumeFolderWatch() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(folderJobKey())); } catch (e) { saved = null; }
+  if (saved && saved.id) {
+    state.folderJob = saved;
+    setFolderState("", "Folder " + saved.label + ": sprawdzanie postępu…");
+    pollFolderJob();
+  }
 }
 
 async function refreshStatus() {
@@ -329,10 +481,15 @@ async function login(ev) {
     $("as-password").value = "";
     showResult("ok", "Zalogowano jako " + escapeHtml(res.email) + ".");
     await refreshStatus();
+    loadFolders();
+    resumeFolderWatch();
   });
 }
 
 function logout() {
+  stopFolderWatch();
+  setFolderState("", "");
+  state.folders = null;
   state.token = "";
   state.email = "";
   saveSettings();
@@ -364,6 +521,9 @@ Office.onReady((info) => {
   $("as-login").addEventListener("submit", login);
   $("as-logout").addEventListener("click", logout);
   $("as-autocheck").addEventListener("change", (e) => { state.autoCheck = e.target.checked; saveSettings(); });
+  $("as-folder").addEventListener("change", render);
+  $("as-folder-reload").addEventListener("click", () => loadFolders());
+  $("as-folder-run").addEventListener("click", () => startFolderPass());
 
   // Pinned pane: follow the selected message (Mailbox 1.5).
   if (supports("1.5")) {
@@ -372,6 +532,8 @@ Office.onReady((info) => {
   renderItem();
   render();
   refreshStatus().then(() => {
+    loadFolders();
+    resumeFolderWatch();
     if (state.autoCheck && state.token && Office.context.mailbox.item && state.status && state.status.check_enabled !== false) {
       run(() => check({ auto: true }));
     }

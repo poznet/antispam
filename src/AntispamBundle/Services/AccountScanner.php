@@ -75,13 +75,26 @@ class AccountScanner
      * @throws ScanLockedException the mailbox is being scanned by another process
      * @throws \RuntimeException   connection / agent failure (old agent: "wdróż go ponownie")
      */
-    public function rescan(Account $account, ?array $cursor, bool $first, ?float $deadline = null): array
+    public function rescan(Account $account, ?array $cursor, bool $first, ?float $deadline = null, ?string $folder = null): array
     {
+        if ($folder !== null && ($folder === '' || strcasecmp($folder, 'INBOX') === 0)) {
+            $folder = null;
+        }
         if (!$account->isSsh()) {
-            return $this->imapScan->rescanAccount($account, $cursor, null, $deadline);
+            return $this->imapScan->rescanAccount($account, $cursor, null, $deadline, $folder);
+        }
+        if ($folder !== null && $first) {
+            // An agent older than 3.7 would ignore --folder and rescan INBOX instead.
+            $known = array_column($this->listFolders($account), 'name');
+            if (!in_array($folder, $known, true)) {
+                throw new \RuntimeException('Nie ma folderu ' . $folder . ' w Maildirze tej skrzynki (albo antyspam go nie sprawdza).');
+            }
         }
         $seconds = $deadline !== null ? (int)ceil($deadline - microtime(true)) : 300;
-        $result = $this->ssh->runRescan($account, $first, max(10, $seconds));
+        $result = $this->ssh->runRescan($account, $first, max(10, $seconds), $folder !== null ? ['folder' => $folder] : []);
+        if ($folder !== null && ($result['folder'] ?? null) !== $folder && isset($result['total'])) {
+            throw new \RuntimeException('Agent nie obsługuje sprawdzania innych folderów niż INBOX - wdróż go ponownie (Konta → Wdróż).');
+        }
         if (!isset($result['total']) || empty($result['rescan'])) {
             if (!empty($result['locked'])) {
                 throw new ScanLockedException('Agent na serwerze właśnie skanuje tę skrzynkę.');
@@ -96,6 +109,30 @@ class AccountScanner
         $result['remaining'] = (int)($result['remaining'] ?? 0);
         $result['cursor'] = null;
         return $result;
+    }
+
+    /**
+     * Folders a rule pass can run on: [['name' => 'INBOX', 'messages' => int|null], ...].
+     * IMAP: listed live (message counts not read); SSH: the agent's `folders` (3.7+).
+     *
+     * @throws \RuntimeException connection / agent failure (old agent: "wdróż go ponownie")
+     */
+    public function listFolders(Account $account): array
+    {
+        if (!$account->isSsh()) {
+            return array_map(static fn ($n) => ['name' => $n, 'messages' => null], $this->imapScan->listFolders($account));
+        }
+        $result = $this->ssh->runFolders($account);
+        if (empty($result['success']) || !isset($result['folders']) || !is_array($result['folders'])) {
+            throw new \RuntimeException(mb_substr((string)($result['error'] ?? 'nieprawidłowa odpowiedź agenta - wdróż go ponownie (Konta → Wdróż)'), 0, 500));
+        }
+        $out = [];
+        foreach ($result['folders'] as $f) {
+            if (is_array($f) && isset($f['name']) && is_string($f['name'])) {
+                $out[] = ['name' => $f['name'], 'messages' => isset($f['messages']) ? (int)$f['messages'] : null];
+            }
+        }
+        return $out;
     }
 
     /**

@@ -271,6 +271,33 @@ class AgentMaildirTest extends TestCase
     }
 
     /** quarantine-purge (agent 3.4): high risk judged from the agent's score_log at run time; INBOX and .SPAM untouched. */
+    public function testRescanOfASubfolderMovesToTheMaildirsSpamFolder()
+    {
+        $this->import(['email_blacklist' => [['email' => 'me@firma.pl', 'blacklistemail' => 'a@spam.pl', 'pattern_type' => 'exact', 'score' => 10]]]);
+        foreach (['.Faktury/new', '.Faktury/cur', '.Faktury.2025/cur', '.Trash/cur', '.SPAM/cur'] as $d) {
+            @mkdir($this->maildir() . '/' . $d, 0700, true);
+        }
+        $this->put('.Faktury/cur/1.M1.host:2,S', "From: a@spam.pl\nMessage-ID: <1@x>\nSubject: hi\n\nbody\n");
+        $this->put('.Faktury/new/2.M1.host', "From: ok@good.pl\nMessage-ID: <2@x>\nSubject: ok\n\nbody\n");
+        $this->put('new/3.M1.host', "From: a@spam.pl\nMessage-ID: <3@x>\nSubject: inbox\n\nbody\n");
+
+        $list = \listFolders($this->maildir());
+        $this->assertSame(['INBOX', 'Faktury', 'Faktury.2025'], array_column($list['folders'], 'name'), 'no Trash / SPAM');
+        $this->assertSame(2, $list['folders'][1]['messages']);
+
+        $res = \runScan($this->maildir(), $this->db(), ['rescan' => true, 'folder' => 'Faktury']);
+        $this->assertSame('Faktury', $res['folder']);
+        $this->assertSame([2, 1, 0], [$res['checked'], $res['moved_to_spam'], $res['remaining']], json_encode($res));
+        $this->assertFileExists($this->maildir() . '/.SPAM/cur/1.M1.host:2,S');
+        $this->assertFileExists($this->maildir() . '/.Faktury/new/2.M1.host');
+        $this->assertFileExists($this->maildir() . '/new/3.M1.host', 'INBOX untouched');
+
+        foreach (['../etc', '.Hidden', 'SPAM', 'Nope'] as $bad) {
+            $res = \runScan($this->maildir(), $this->db(), ['rescan' => true, 'folder' => $bad]);
+            $this->assertFalse($res['success'], $bad);
+        }
+    }
+
     public function testQuarantinePurgeHighRiskThenAll()
     {
         foreach (['.QUARANTINE/new', '.QUARANTINE/cur', '.SPAM/new'] as $d) {

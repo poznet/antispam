@@ -71,6 +71,30 @@ when a message is open (read mode).
 | Sprawdź w Antyspamie | — | ✔ shows decision, score, reasons |
 | Check opened messages automatically | — | ✔ optional, while the pane is **pinned** |
 | Zgłoś phishing | — | ✔ whole `.eml` (up to 10 MiB) to *Zgłoszenia phishingu*, sender blacklisted ([phishing.md](phishing.md)) |
+| Zastosuj reguły antyspamu w folderze | — | ✔ (1.2.0.0) the server checks a chosen folder with the current rules and moves spam itself |
+
+**Zastosuj reguły antyspamu w folderze** (add-in 1.2.0.0, server `folder_rescan`
+in `/api/plugin/status`). Office.js can neither read nor move a whole folder, so
+the pass runs **on the server** - the same [full rescan](spam-handling.md#full-rescan)
+as the INBOX one, over any folder of the mailbox:
+
+1. the pane lists the folders with `GET /api/plugin/folders` (IMAP: live LIST;
+   SSH: agent 3.7+ `folders`). INBOX first; SPAM / QUARANTINE, Trash, Sent,
+   Drafts, Junk, Gmail's *All Mail* / *Important* / *Starred* are left out;
+2. *Zastosuj reguły w tym folderze* → `POST /api/plugin/rescan {"folder": ...}`
+   (INBOX → the regular rescan): job `account.rescan` with payload `folder`,
+   in background batches; spam goes to SPAM, suspicious mail to QUARANTINE,
+   nothing is deleted (the account's "delete spam" setting is ignored, as in a
+   rescan). The pass's progress and result stay in the job only - the
+   account's INBOX rescan progress and *last rescan* are not touched. Audit
+   `account.rescan_folder_queued` / `account.rescan_folder`;
+3. the pane polls `GET /api/plugin/rescan?job=ID` every 10 s while it is open
+   and shows the counters when the job ends (also as a notification bar on the
+   message). The job id is kept in `localStorage`, so a reopened pane goes on.
+
+One pass per mailbox at a time (shared with the INBOX rescan: `409` with a
+message while the other one runs), 20 folder passes a day per mailbox.
+Outlook shows the moves after its next sync with the server.
 
 Login uses the same credentials as Thunderbird: mailbox e-mail + plugin
 password (account form) or IMAP password. The token is stored in the add-in's
@@ -102,6 +126,9 @@ Results are also shown as a short notification bar on the message
 - **No moving to Junk.** Office.js cannot move an item in read mode; that would
   need Microsoft Graph (Azure app registration, SSO consent). The pane shows the
   decision and asks the user to use Outlook's own *Junk* / *Report* button.
+  Whole folders are cleaned on the server instead (*Zastosuj reguły antyspamu w
+  folderze* above) - that needs the mailbox to be an IMAP / SSH account in
+  antispam.
 - **Outlook's Junk button is not hooked.** Unlike Thunderbird, marking a message
   as junk with Outlook's own button does not report it to antispam.
 - Reports are logged as plugin reports (*Skrzynki → Zgłoszenia z wtyczek*) like

@@ -20,6 +20,18 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 
 ### Added
 
+- **Outlook add-in 1.2.0.0: "Zastosuj reguły antyspamu w folderze"** (logged
+  in): pick a folder of the mailbox (new `GET /api/plugin/folders`) and the
+  server checks it with the current rules - the full rescan (`account.rescan`)
+  over that folder (`POST /api/plugin/rescan {"folder"}`), spam to SPAM,
+  suspicious to QUARANTINE, nothing deleted; the pane follows the job
+  (`GET /api/plugin/rescan?job=ID`, new `finished` block). The folder pass
+  keeps away from the account's INBOX rescan progress / last result; audit
+  `account.rescan_folder(_queued)`; 20 a day per mailbox. IMAP: any selectable
+  folder; SSH+Maildir agent **3.7**: `rescan --folder=NAME` and `folders`
+  (redeploy: *Konta → Wdróż*; an older agent is refused, never rescans INBOX
+  instead). See `docs/outlook.md`.
+
 - **Thunderbird plugin 1.5.0: "Zastosuj reguły antyspamu w tym folderze"**
   (folder pane menu, any folder of a logged-in account): downloads the mailbox's
   current white / blacklists (own + global) from the new `GET /api/plugin/rules`

@@ -10,7 +10,10 @@ use AntispamBundle\Entity\Blacklist;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Entity\EmailWhitelist;
 use AntispamBundle\Entity\Whitelist;
+use AntispamBundle\Services\AccountScanner;
 use AntispamBundle\Services\DeferredRetroactivePass;
+use AntispamBundle\Services\ImapScanService;
+use AntispamBundle\Services\Jobs\Handler\AccountRescanHandler;
 use AntispamBundle\Services\PatternMatcher;
 use AntispamBundle\Services\PhishingReportService;
 use AntispamBundle\Services\PluginService;
@@ -54,6 +57,7 @@ class PluginApiController extends AbstractController
         ?ThunderbirdPluginBuilder $tb = null,
         private ?RescanScheduler $rescans = null,
         private ?JobQueue $jobs = null,
+        private ?AccountScanner $scanner = null,
     ) {
         $this->tb = $tb ?? new ThunderbirdPluginBuilder();
     }
@@ -64,6 +68,8 @@ class PluginApiController extends AbstractController
     const PHISHING_RATE_LIMIT = 30;
     /** Full INBOX rescans started from the plugin per account and day. */
     const RESCAN_RATE_LIMIT = 5;
+    /** Rule passes over a chosen folder started from the plugin per account and day. */
+    const FOLDER_RESCAN_RATE_LIMIT = 20;
 
     /** Rules per list sent to the plugin by /api/plugin/rules. */
     const RULES_MAX = 20000;
@@ -160,6 +166,8 @@ class PluginApiController extends AbstractController
             'phishing_reports' => true,
             // /api/plugin/rescan: the whole INBOX checked again on the server (plugin 1.4.0+).
             'rescan' => $this->rescans !== null,
+            // /api/plugin/folders + POST /rescan {"folder"}: rules applied in a chosen folder on the server (Outlook add-in).
+            'folder_rescan' => $this->rescans !== null && $this->scanner !== null,
             // "scope" accepted by /report and /phishing (report_only: message
             // from another mail client account, nothing learned for the
             // token's mailbox). Missing on servers before plugin 1.3.0.
@@ -425,8 +433,20 @@ class PluginApiController extends AbstractController
         if ($account->isSsh() && !$account->getAgentDeployed()) {
             return new JsonResponse(['error' => 'agent not deployed', 'message' => 'Agent antyspamu nie jest jeszcze wdrożony na serwerze tej skrzynki - poproś administratora o „Wdróż”.'], 409);
         }
+        $data = json_decode($request->getContent(), true);
+        $folder = AccountRescanHandler::folderOf(is_array($data) ? $data : []);
+        if ($folder !== null) {
+            return $this->folderRescanStart($account, $folder);
+        }
+        // A folder pass of this mailbox is running: the INBOX rescan waits for it.
+        $activeId = $this->jobs?->findActive(RescanScheduler::dedupeKey($account));
+        $active = $activeId !== null ? $this->jobs?->find($activeId) : null;
+        if ($active && ($activeFolder = AccountRescanHandler::folderOf($active->getPayload())) !== null) {
+            return new JsonResponse(['error' => 'busy', 'message' => 'Na tej skrzynce trwa już sprawdzanie folderu ' . $activeFolder . ' - poczekaj, aż się skończy.']
+                + $this->rescanState($account, $activeId), 409);
+        }
         // A request while a rescan runs only reports it: not counted.
-        if ($this->jobs?->findActive(RescanScheduler::dedupeKey($account)) === null
+        if ($activeId === null
             && !$this->plugin->hit('rescan', 'acc:' . $account->getId(), self::RESCAN_RATE_LIMIT, 86400)) {
             return new JsonResponse(['error' => 'rate limit exceeded', 'message' => 'Limit ponownych skanów tej skrzynki na dziś został wykorzystany (' . self::RESCAN_RATE_LIMIT . ' na dobę).'], 429);
         }
@@ -434,7 +454,70 @@ class PluginApiController extends AbstractController
         return new JsonResponse(['created' => $queued->created] + $this->rescanState($account, $queued->id));
     }
 
-    /** State of the mailbox's full rescan: the active job's progress, else the last result. */
+    /**
+     * "Zastosuj reguły antyspamu w folderze" (Outlook add-in): POST /rescan
+     * {"folder": "<name from /api/plugin/folders>"} - the same server-side pass
+     * as the INBOX rescan over that folder (spam to SPAM / QUARANTINE, never
+     * deleted). One pass per mailbox at a time: while one runs over the same
+     * folder it is returned (not counted), over another folder / INBOX -> 409.
+     */
+    private function folderRescanStart(Account $account, string $folder): JsonResponse
+    {
+        if ($this->scanner === null) {
+            return new JsonResponse(['error' => 'folder rescan unavailable'], 403);
+        }
+        if (mb_strlen($folder) > 255 || preg_match('/[\x00-\x1f]/', $folder)) {
+            return new JsonResponse(['error' => 'invalid folder'], 400);
+        }
+        if (ImapScanService::isProtectedFolder($folder)) {
+            return new JsonResponse(['error' => 'protected folder', 'message' => 'Folder ' . $folder . ' to folder antyspamu - nie stosuje się w nim reguł.'], 400);
+        }
+        $activeId = $this->jobs?->findActive(RescanScheduler::dedupeKey($account));
+        if ($activeId !== null) {
+            $active = $this->jobs?->find($activeId);
+            $activeFolder = $active ? AccountRescanHandler::folderOf($active->getPayload()) : null;
+            if ($activeFolder !== $folder) {
+                return new JsonResponse(['error' => 'busy', 'message' => 'Na tej skrzynce trwa już sprawdzanie ' . ($activeFolder === null ? 'folderu Odebrane' : 'folderu ' . $activeFolder) . ' - poczekaj, aż się skończy.']
+                    + $this->rescanState($account, $activeId), 409);
+            }
+        } elseif (!$this->plugin->hit('rescan_folder', 'acc:' . $account->getId(), self::FOLDER_RESCAN_RATE_LIMIT, 86400)) {
+            return new JsonResponse(['error' => 'rate limit exceeded', 'message' => 'Limit sprawdzeń folderów tej skrzynki na dziś został wykorzystany (' . self::FOLDER_RESCAN_RATE_LIMIT . ' na dobę).'], 429);
+        }
+        $queued = $this->rescans->enqueueFolder($account, $folder, RescanScheduler::TRIGGER_PLUGIN);
+        return new JsonResponse(['created' => $queued->created] + $this->rescanState($account, $queued->id));
+    }
+
+    /**
+     * Folders the token's mailbox can have the rules applied in (Outlook
+     * add-in folder list): INBOX first; SPAM / QUARANTINE, Trash, Sent, Drafts,
+     * Junk are left out. IMAP: listed live; SSH: agent 3.7+ (`folders`).
+     */
+    #[Route('/api/plugin/folders', name: 'antispam_plugin_api_folders', methods: ['GET'])]
+    public function foldersAction(Request $request)
+    {
+        if (!$this->plugin->isEnabled() || $this->scanner === null) {
+            return new JsonResponse(['error' => 'folders unavailable'], 403);
+        }
+        $account = $this->plugin->accountForToken($this->bearer($request));
+        if (!$account) {
+            return new JsonResponse(['error' => 'login required'], 401);
+        }
+        if ($account->isSsh() && !$account->getAgentDeployed()) {
+            return new JsonResponse(['error' => 'agent not deployed', 'message' => 'Agent antyspamu nie jest jeszcze wdrożony na serwerze tej skrzynki - poproś administratora o „Wdróż”.'], 409);
+        }
+        try {
+            $folders = $this->scanner->listFolders($account);
+        } catch (\Throwable $e) {
+            return new JsonResponse(['error' => 'folders unavailable', 'message' => 'Nie udało się odczytać folderów skrzynki: ' . mb_substr($e->getMessage(), 0, 300)], 502);
+        }
+        return new JsonResponse(['mailbox' => $account->getEmail(), 'folders' => $folders]);
+    }
+
+    /**
+     * State of the mailbox's full rescan: the active job's progress, else the
+     * last result. ?job=ID: that job of the token's mailbox (a folder pass),
+     * with its own result once finished ("finished").
+     */
     #[Route('/api/plugin/rescan', name: 'antispam_plugin_api_rescan_status', methods: ['GET'])]
     public function rescanStatusAction(Request $request)
     {
@@ -445,7 +528,8 @@ class PluginApiController extends AbstractController
         if (!$account) {
             return new JsonResponse(['error' => 'login required'], 401);
         }
-        return new JsonResponse($this->rescanState($account));
+        $jobId = (int)$request->query->get('job', 0);
+        return new JsonResponse($this->rescanState($account, $jobId > 0 ? $jobId : null, $jobId > 0));
     }
 
     /**
@@ -496,10 +580,14 @@ class PluginApiController extends AbstractController
         return new JsonResponse($out);
     }
 
-    private function rescanState(Account $account, ?int $jobId = null): array
+    private function rescanState(Account $account, ?int $jobId = null, bool $withFinished = false): array
     {
         $jobId ??= $this->jobs?->findActive(RescanScheduler::dedupeKey($account));
         $job = $jobId !== null ? $this->jobs?->find($jobId) : null;
+        // Only jobs of the token's own mailbox (?job= is client input).
+        if ($job && ($job->getType() !== BackgroundJob::TYPE_ACCOUNT_RESCAN || (int)$job->getAccountId() !== (int)$account->getId())) {
+            $job = null;
+        }
         $out = ['mailbox' => $account->getEmail(), 'active' => false, 'job' => null, 'last' => null];
         if ($job && in_array($job->getStatus(), [BackgroundJob::STATUS_QUEUED, BackgroundJob::STATUS_RUNNING], true)) {
             $out['active'] = true;
@@ -509,7 +597,22 @@ class PluginApiController extends AbstractController
                 'progress' => $job->getProgress(),
                 'done' => $job->getProgressDone() === null ? null : (int)$job->getProgressDone(),
                 'total' => $job->getProgressTotal() === null ? null : (int)$job->getProgressTotal(),
+                'folder' => AccountRescanHandler::folderOf($job->getPayload()) ?? 'INBOX',
             ];
+        } elseif ($job && $withFinished) {
+            $r = (array)(($job->getResult() ?? [])['scan_result'] ?? []);
+            $finished = ['id' => $job->getId(), 'status' => $job->getStatus(), 'ok' => $job->getStatus() === BackgroundJob::STATUS_DONE,
+                'folder' => AccountRescanHandler::folderOf($job->getPayload()) ?? 'INBOX',
+                'at' => $job->getFinishedAt()?->format(\DateTimeInterface::ATOM)];
+            foreach (['total', 'checked', 'whitelisted', 'blacklisted', 'quarantined', 'moved_to_spam', 'move_failed'] as $k) {
+                if (isset($r[$k]) && is_numeric($r[$k])) {
+                    $finished[$k] = (int)$r[$k];
+                }
+            }
+            if ($job->getError()) {
+                $finished['error'] = mb_substr((string)$job->getError(), 0, 300);
+            }
+            $out['finished'] = $finished;
         }
         if ($account->getLastRescanAt()) {
             $r = $account->getLastRescanResultDecoded() ?? [];

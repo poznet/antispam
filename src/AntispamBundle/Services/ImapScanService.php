@@ -318,17 +318,21 @@ class ImapScanService
      * @return array scan() counters + 'remaining' and 'cursor' (pass it to the
      *               next call; null = the rescan is complete)
      *
+     * $folder: another IMAP folder than INBOX ("Zastosuj reguły antyspamu w
+     * folderze", mail client plugins) - its spam goes to the same SPAM /
+     * QUARANTINE folders.
+     *
      * @throws ScanLockedException another process is scanning this mailbox
      */
-    public function rescanAccount(Account $account, ?array $cursor = null, ?int $maxMessages = null, ?float $deadline = null): array
+    public function rescanAccount(Account $account, ?array $cursor = null, ?int $maxMessages = null, ?float $deadline = null, ?string $folder = null): array
     {
         $lock = $this->lock(self::accountLockName($account));
         try {
             $connection = $this->connect($account);
             try {
                 $settings = $this->mailboxSettings?->forAccount($account);
-                $run = function () use ($connection, $account, $cursor, $maxMessages, $deadline) {
-                    return $this->rescan($connection, $account->getEmail(), $cursor, $maxMessages, $deadline);
+                $run = function () use ($connection, $account, $cursor, $maxMessages, $deadline, $folder) {
+                    return $this->rescan($connection, $account->getEmail(), $cursor, $maxMessages, $deadline, $folder);
                 };
                 return $settings ? $this->mailboxSettings->within($settings, $run) : $run();
             } finally {
@@ -356,13 +360,28 @@ class ImapScanService
      * @throws \RuntimeException STATUS unreadable (no UIDVALIDITY): the batch
      *                           fails, the cursor is kept, the caller retries
      */
-    public function rescan(ConnectionInterface $connection, $email, ?array $cursor = null, ?int $maxMessages = null, ?float $deadline = null): array
+    public function rescan(ConnectionInterface $connection, $email, ?array $cursor = null, ?int $maxMessages = null, ?float $deadline = null, ?string $folder = null): array
     {
         $stats = ['total' => 0, 'checked' => 0, 'skipped' => 0, 'whitelisted' => 0, 'blacklisted' => 0,
                   'quarantined' => 0, 'moved_to_spam' => 0, 'remaining' => 0, 'errors' => [], 'cursor' => null];
         $t0 = microtime(true);
 
-        $inbox = $connection->getMailbox('INBOX');
+        $folder = ($folder === null || $folder === '' || strcasecmp($folder, 'INBOX') === 0) ? 'INBOX' : $folder;
+        if ($folder !== 'INBOX') {
+            if (self::isProtectedFolder($folder)) {
+                throw new \RuntimeException('Folderu ' . $folder . ' nie sprawdza się regułami (to folder antyspamu).');
+            }
+            if (!$connection->hasMailbox($folder)) {
+                throw new \RuntimeException('Nie ma folderu ' . $folder . ' w skrzynce IMAP.');
+            }
+            $stats['folder'] = $folder;
+        }
+        // A cursor of another folder (or an INBOX cursor without 'folder') is not this one's.
+        if ($cursor !== null && (string)($cursor['folder'] ?? 'INBOX') !== $folder) {
+            $cursor = null;
+        }
+
+        $inbox = $connection->getMailbox($folder);
         try {
             $status = $inbox->getStatus(\SA_MESSAGES | \SA_UIDVALIDITY | \SA_UIDNEXT);
         } catch (\Throwable $e) {
@@ -428,7 +447,8 @@ class ImapScanService
             }
             if ($done > 0 && (($maxMessages !== null && $done >= $maxMessages) || ($deadline !== null && microtime(true) >= $deadline) || $this->cancelRequested())) {
                 $stats['remaining'] = max(count($queue), $left - $done);
-                $stats['cursor'] = ['uidvalidity' => $validity, 'last_uid' => $maxUid, 'until_uid' => $until, 'left' => $stats['remaining']];
+                $stats['cursor'] = ['uidvalidity' => $validity, 'last_uid' => $maxUid, 'until_uid' => $until, 'left' => $stats['remaining']]
+                    + ($folder !== 'INBOX' ? ['folder' => $folder] : []);
                 break;
             }
             $uid = array_shift($queue);
@@ -449,6 +469,46 @@ class ImapScanService
         $this->logger?->info('antispam: rescan batch', ['mailbox' => $email] + $stats['timing']);
 
         return $stats;
+    }
+
+    /** SPAM / QUARANTINE (any case, any parent): never rescanned as a source folder. */
+    public static function isProtectedFolder(string $folder): bool
+    {
+        $last = strtolower((string)preg_replace('~^.*[./]~', '', $folder));
+        return in_array($last, ['spam', 'quarantine'], true);
+    }
+
+    /**
+     * Folders of an IMAP mailbox a rule pass can run on ("Zastosuj reguły
+     * antyspamu w folderze"): INBOX first, then every selectable folder except
+     * SPAM / QUARANTINE and the special-use Trash / Sent / Drafts / Junk ones.
+     *
+     * @return string[]
+     */
+    public function listFolders(Account $account): array
+    {
+        $connection = $this->connect($account);
+        try {
+            $names = [];
+            foreach ($connection->getMailboxes() as $name => $mailbox) {
+                $name = (string)$name;
+                if (strcasecmp($name, 'INBOX') === 0 || self::isProtectedFolder($name)) {
+                    continue;
+                }
+                $attrs = $mailbox->getAttributes();
+                if ($attrs & \LATT_NOSELECT) {
+                    continue;
+                }
+                if (preg_match('~(^|[./])(trash|sent|sent items|sent messages|drafts|junk|junk e-mail|deleted items|deleted messages|kosz|wysłane|wyslane|robocze|elementy wysłane|elementy usunięte|templates|outbox|all mail|wszystkie|important|ważne|starred|oznaczone gwiazdką)$~iu', $name)) {
+                    continue;
+                }
+                $names[] = $name;
+            }
+            sort($names, SORT_STRING | SORT_FLAG_CASE);
+            return array_merge(['INBOX'], $names);
+        } finally {
+            $connection->close();
+        }
     }
 
     /**

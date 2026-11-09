@@ -226,6 +226,10 @@ per-mailbox thresholds.
 
 Started by:
 
+- the **Outlook add-in** - *Zastosuj reguły antyspamu w folderze*: the same pass
+  over **any chosen folder** (payload `folder`, SSH agent 3.7+ `--folder`); its
+  result lives only in the job, the account's INBOX rescan state is untouched
+  ([outlook.md](outlook.md));
 - **Konta → ↻ Przeskanuj całą skrzynkę ponownie** (account list, or the button
   below the account form) - per account, admin only;
 - **Cotygodniowy ponowny skan całej skrzynki** in the account's *Ustawienia

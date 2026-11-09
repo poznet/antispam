@@ -73,3 +73,12 @@ main { padding: 12px 14px 20px; }
 }
 .as-check { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; margin: 8px 0; }
 .as-link { background: none; border: 0; padding: 0; color: var(--pp-blue); cursor: pointer; font: inherit; text-decoration: underline; }
+.as-folder-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.as-folder-row select {
+    flex: 1; min-width: 0; padding: 8px 10px; font: inherit;
+    color: var(--pp-text); background: var(--pp-bg);
+    border: 1px solid var(--pp-line); border-radius: 8px;
+}
+.as-folder-state { margin-top: 8px; }
+.as-folder-state.ok { color: var(--pp-green); }
+.as-folder-state.err { color: var(--pp-red); }

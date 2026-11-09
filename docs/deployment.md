@@ -435,7 +435,7 @@ checks) should read the parameter or the constant, never parse `CHANGELOG.md`.
      package in every panel - an uploaded package of an older version stops
      being served. See [plugin-distribution.md](plugin-distribution.md).
    - Outlook: `<Version>` in `Resources/outlook/manifest.xml` (four parts,
-     `1.1.0.0`; Outlook caches add-ins by it).
+     `1.2.0.0`; Outlook caches add-ins by it).
    - New `/api/plugin` response fields are additive; a plugin must keep
      working against an older server (missing field = feature off).
 5. **SSH+Maildir agent:** bump `AGENT_VERSION` in

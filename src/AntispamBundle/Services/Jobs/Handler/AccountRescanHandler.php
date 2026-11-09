@@ -23,6 +23,12 @@ use Doctrine\ORM\EntityManagerInterface;
  * account (lastRescanAt / lastRescanResult) and audited as `account.rescan`.
  *
  * While the scheduled scan holds the mailbox lock the job waits like a scan.
+ *
+ * Payload 'folder' (mail client plugins, "Zastosuj reguły antyspamu w
+ * folderze"): the same pass over another folder than INBOX. Its progress lives
+ * only in the job state and its result only in the job result (the account's
+ * INBOX rescan progress / last rescan are not touched); audit
+ * `account.rescan_folder`.
  */
 class AccountRescanHandler implements JobHandlerInterface
 {
@@ -51,10 +57,12 @@ class AccountRescanHandler implements JobHandlerInterface
     {
         $account = $this->account($this->em, $context);
         $trigger = (string)($context->payload()['trigger'] ?? 'panel');
+        $folder = self::folderOf($context->payload());
         $state = $context->state();
-        if (!$state) {
+        if (!$state && $folder === null) {
             $state = $this->resumeState($account, !empty($context->payload()['restart']));
         }
+        $what = $folder === null ? 'Ponowny skan' : 'Reguły w folderze ' . $folder;
         $sum = $state['result'] ?? null;
         $done = $sum ? (int)$sum['checked'] : 0;
 
@@ -65,13 +73,15 @@ class AccountRescanHandler implements JobHandlerInterface
             $state['resume_noted'] = true;
             $context->progress(sprintf('Wznowiono przerwany ponowny skan (%s) - sprawdzono już %d', $state['resumed_from'], $done), $done, $done + (int)($sum['remaining'] ?? 0));
         } elseif ($sum) {
-            $context->progress(sprintf('Ponowny skan - kolejna partia (sprawdzono %d)', $done), $done, $done + (int)($sum['remaining'] ?? 0));
+            $context->progress(sprintf('%s - kolejna partia (sprawdzono %d)', $what, $done), $done, $done + (int)($sum['remaining'] ?? 0));
+        } elseif ($folder !== null) {
+            $context->progress(sprintf('Sprawdzanie folderu %s aktualnymi regułami...', $folder));
         } else {
             $context->progress($account->isSsh() ? 'Agent sprawdza ponownie cały Maildir...' : 'Łączenie ze skrzynką IMAP, ponowny skan całej skrzynki...');
         }
 
         try {
-            $pass = $this->scanner->rescan($account, $state['cursor'] ?? null, empty($state['started']), $context->batchDeadline());
+            $pass = $this->scanner->rescan($account, $state['cursor'] ?? null, empty($state['started']), $context->batchDeadline(), $folder);
         } catch (ScanLockedException $e) {
             $waits = (int)($state['lock_waits'] ?? 0) + 1;
             if ($waits > AccountScanHandler::MAX_LOCK_WAITS) {
@@ -85,7 +95,7 @@ class AccountRescanHandler implements JobHandlerInterface
             // later, from the same cursor - fail only after RETRY_DELAYS run out.
             $retries = (int)($state['retries'] ?? 0);
             // An agent that does not know the command waits for a redeploy, not for time.
-            $permanent = str_contains($e->getMessage(), 'wdróż go ponownie');
+            $permanent = str_contains($e->getMessage(), 'wdróż go ponownie') || str_starts_with($e->getMessage(), 'Nie ma folderu') || str_starts_with($e->getMessage(), 'Folderu ');
             if (!$permanent && $retries < count(self::RETRY_DELAYS)) {
                 $delay = self::RETRY_DELAYS[$retries];
                 $context->continueLater(['retries' => $retries + 1, 'last_error' => mb_substr($e->getMessage(), 0, 300)] + $state, $delay,
@@ -102,16 +112,22 @@ class AccountRescanHandler implements JobHandlerInterface
         $remaining = (int)($sum['remaining'] ?? 0);
         if ($remaining > 0) {
             // On the account too: a failed / cancelled / killed job does not lose it.
-            $this->scanner->saveRescanProgress($account, ['cursor' => $cursor, 'result' => $sum, 'job' => $context->jobId(), 'at' => (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM)]);
-            $context->progress(sprintf('Sprawdzono ponownie %d wiadomości, zostało %d', $done, $remaining), $done, $done + $remaining);
+            if ($folder === null) {
+                $this->scanner->saveRescanProgress($account, ['cursor' => $cursor, 'result' => $sum, 'job' => $context->jobId(), 'at' => (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM)]);
+            }
+            $context->progress(sprintf('%s: sprawdzono %d wiadomości, zostało %d', $what, $done, $remaining), $done, $done + $remaining);
             $context->continueLater(['result' => $sum, 'cursor' => $cursor, 'started' => true, 'lock_waits' => 0, 'retries' => 0] + $state, 0);
             return [];
         }
 
         $sum['rescan'] = true;
         $sum['trigger'] = $trigger;
-        $this->scanner->finishRescan($account, $sum + ['job' => $context->jobId()], true);
-        $this->audit($context, $account, $sum, $trigger, null);
+        if ($folder !== null) {
+            $sum['folder'] = $folder;
+        } else {
+            $this->scanner->finishRescan($account, $sum + ['job' => $context->jobId()], true);
+        }
+        $this->audit($context, $account, $sum, $trigger, null, $folder);
         $context->progress('Zakończone', $done, $done);
         return ['success' => true, 'messages' => [], 'scan_result' => $sum];
     }
@@ -140,28 +156,38 @@ class AccountRescanHandler implements JobHandlerInterface
         ];
     }
 
+    /** Folder of a folder pass (payload 'folder'), null = INBOX (the regular rescan). */
+    public static function folderOf(array $payload): ?string
+    {
+        $folder = isset($payload['folder']) ? trim((string)$payload['folder']) : '';
+        return ($folder === '' || strcasecmp($folder, 'INBOX') === 0) ? null : $folder;
+    }
+
     /** Ends the job as failed; the account's rescan progress stays for the next rescan. */
     private function fail(JobContext $context, Account $account, ?array $sum, string $trigger, string $error): never
     {
+        $folder = self::folderOf($context->payload());
         // Remember the failure on the account too (list column, weekly schedule);
         // never let that bookkeeping hide the real error (e.g. a closed EntityManager).
-        try {
-            $this->scanner->finishRescan($account, ['error' => mb_substr($error, 0, 500), 'trigger' => $trigger, 'job' => $context->jobId()] + ($sum ?? []));
-        } catch (\Throwable) {
+        if ($folder === null) {
+            try {
+                $this->scanner->finishRescan($account, ['error' => mb_substr($error, 0, 500), 'trigger' => $trigger, 'job' => $context->jobId()] + ($sum ?? []));
+            } catch (\Throwable) {
+            }
         }
-        $this->audit($context, $account, $sum, $trigger, $error);
+        $this->audit($context, $account, $sum, $trigger, $error, $folder);
         throw new \RuntimeException($error);
     }
 
-    private function audit(JobContext $context, Account $account, ?array $sum, string $trigger, ?string $error): void
+    private function audit(JobContext $context, Account $account, ?array $sum, string $trigger, ?string $error, ?string $folder = null): void
     {
-        $details = ['ok' => $error === null, 'trigger' => $trigger];
+        $details = ['ok' => $error === null, 'trigger' => $trigger] + ($folder !== null ? ['folder' => $folder] : []);
         foreach (['total', 'checked', 'whitelisted', 'blacklisted', 'quarantined', 'moved_to_spam'] as $k) {
             $details[$k] = (int)($sum[$k] ?? 0);
         }
         if ($error !== null) {
             $details['error'] = mb_substr($error, 0, 300);
         }
-        $context->audit('account.rescan', targetType: 'account', targetId: $account->getId(), label: $account->getName(), mailbox: $account->getEmail(), details: $details);
+        $context->audit($folder === null ? 'account.rescan' : 'account.rescan_folder', targetType: 'account', targetId: $account->getId(), label: $account->getName(), mailbox: $account->getEmail(), details: $details);
     }
 }

@@ -242,6 +242,47 @@ class AccountRescanJobTest extends TestCase
         $this->assertSame('done', $this->worker($this->createMock(ImapScanService::class), $ssh)->runNext()['status']);
     }
 
+    public function testFolderPassLeavesTheAccountsRescanStateAlone()
+    {
+        $this->account->setRescanProgress(['cursor' => ['uidvalidity' => 777, 'last_uid' => 900, 'until_uid' => 2500], 'result' => self::pass(900, 1600, null), 'job' => 3, 'at' => '2026-11-01T10:00:00+00:00']);
+        $this->db->em->flush();
+        $id = $this->scheduler()->enqueueFolder($this->account, 'INBOX/Faktury')->id;
+        $imap = $this->createMock(ImapScanService::class);
+        $calls = [];
+        $imap->expects($this->exactly(2))->method('rescanAccount')
+            ->willReturnCallback(function (Account $a, ?array $cursor, ?int $max, ?float $deadline, ?string $folder) use (&$calls) {
+                $calls[] = [$cursor, $folder];
+                return count($calls) === 1
+                    ? self::pass(100, 50, ['uidvalidity' => 5, 'last_uid' => 100, 'until_uid' => 150, 'folder' => 'INBOX/Faktury'])
+                    : self::pass(50, 0, null);
+            });
+        $worker = $this->worker($imap);
+        $worker->runNext();
+        $this->assertSame('done', $worker->runNext()['status']);
+
+        $this->assertSame([null, 'INBOX/Faktury'], $calls[0], 'starts from scratch, not from the INBOX rescan progress');
+        $this->assertSame('INBOX/Faktury', $calls[1][1]);
+        $result = json_decode($this->db->row($id)['result'], true)['scan_result'];
+        $this->assertSame(['INBOX/Faktury', 150], [$result['folder'], $result['checked']]);
+        $account = $this->freshAccount();
+        $this->assertNull($account->getLastRescanAt(), 'the INBOX "last rescan" is not a folder pass');
+        $this->assertSame(900, $account->getRescanProgress()['cursor']['last_uid'], 'the unfinished INBOX rescan is kept');
+        $this->assertSame(['account.rescan_folder_queued', 'account.rescan_folder'], array_column($this->audits, 0));
+        $this->assertSame('INBOX/Faktury', $this->audits[1][1][4]['folder']);
+    }
+
+    public function testFolderPassOnAnOldAgentAsksForARedeploy()
+    {
+        $this->account->setConnectionType(Account::CONNECTION_SSH)->setAgentDeployed(true);
+        $this->db->em->flush();
+        $id = $this->scheduler()->enqueueFolder($this->account, 'Faktury')->id;
+        $ssh = $this->createMock(SshService::class);
+        $ssh->method('runFolders')->willReturn(['success' => false, 'error' => 'Agent na serwerze nie obsługuje polecenia "folders" (starsza wersja) - wdróż go ponownie (Konta → Wdróż).']);
+        $ssh->expects($this->never())->method('runRescan');
+        $this->assertSame('failed', $this->worker($this->createMock(ImapScanService::class), $ssh)->runNext()['status'], 'no retries: waits for a redeploy');
+        $this->assertStringContainsString('wdróż go ponownie', (string)$this->db->row($id)['error']);
+    }
+
     public function testSshRescanResetsOnTheFirstBatchOnly()
     {
         $this->account->setConnectionType(Account::CONNECTION_SSH)->setAgentDeployed(true);

@@ -213,6 +213,22 @@ rescan ([spam-handling.md](spam-handling.md#full-rescan)).
   as usual. Markers are set again, so the next `scan` skips the messages.
 - **Lock:** the same `<db>.lock` as `scan` - a rescan batch and a scan never
   run at once (`{"locked": true}`).
+- **`--folder=NAME`** (agent **3.7+**): the Maildir++ subfolder `.NAME`
+  (`Faktury`, `Archiwum.2025`) instead of INBOX - "Zastosuj reguły antyspamu w
+  folderze" from the Outlook add-in. Spam still goes to the Maildir's `.SPAM` /
+  `.QUARANTINE`; the answer has `folder`. `SPAM` / `QUARANTINE`, a name with
+  `/`, `..`, a leading dot or control characters and a missing folder are
+  refused (`success: false`). A rescan of another folder than the unfinished
+  one starts from scratch (`agent_meta.rescan_folder`).
+
+### folders
+```bash
+php antispam-agent.php folders --maildir=/home/user/Maildir
+```
+Agent **3.7+**. `{"success": true, "folders": [{"name": "INBOX", "messages": 120}, {"name": "Faktury", "messages": 37}, ...]}` -
+INBOX and the Maildir++ subfolders (with `cur/` or `new/`) a folder rescan can
+run on; `.SPAM`, `.QUARANTINE` and the usual Trash / Sent / Drafts / Junk names
+are left out. Used by `GET /api/plugin/folders`.
 - Output: the `scan` counters plus `"rescan": true` and `"remaining"`.
 - Agents up to 3.2 do not know the command: they print their usage text and
   the panel reports "Agent na serwerze nie obsługuje polecenia "rescan"

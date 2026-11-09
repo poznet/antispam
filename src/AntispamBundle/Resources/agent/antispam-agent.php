@@ -22,6 +22,8 @@
  * rescan_done table remembers what the current rescan has processed, so the
  * next call continues (--reset starts a new rescan). It moves only to .SPAM /
  * .QUARANTINE and writes no scan_log entry (kept out of the statistics).
+ * --folder=NAME (3.7+) rescans the Maildir++ subfolder .NAME instead of INBOX
+ * ("Zastosuj reguły antyspamu w folderze"); `folders` lists those subfolders.
  *
  * `apply-blacklist` re-checks recent INBOX mail (already scanned or not)
  * against the blacklists only, so a newly added rule also clears messages
@@ -42,7 +44,7 @@
  * PHP warnings never reach STDOUT; they are collected into "warnings".
  */
 
-const AGENT_VERSION = '3.6';
+const AGENT_VERSION = '3.7';
 const CERT_DEFAULT_URL = 'https://hole.cert.pl/domains/v2/domains.txt';
 const CERT_MAX_BYTES = 52428800;
 const CERT_MIN_ROWS = 100;
@@ -127,6 +129,9 @@ try {
                 return runScan($maildirPath, $dbPath, ['rescan' => true] + $options);
             }));
             break;
+        case 'folders':
+            agentPrint(listFolders($maildirPath));
+            break;
         case 'apply-blacklist':
             agentPrint(agentLocked($dbPath, function () use ($maildirPath, $dbPath, $options) {
                 return applyBlacklist($maildirPath, $dbPath, $options);
@@ -167,7 +172,8 @@ try {
             echo "  php antispam-agent.php version\n";
             echo "  php antispam-agent.php import-rules [--account=ID] [--db=path] < rules.json\n";
             echo "  php antispam-agent.php scan [--maildir=path] [--account=ID] [--db=path] [--spam-threshold=N] [--quarantine-threshold=N] [--no-dnsbl] [--no-headers] [--no-impersonation] [--no-urls] [--no-cert] [--no-attachment-policy] [--no-clamav] [--no-virustotal] [--no-bayes]\n";
-            echo "  php antispam-agent.php rescan [--reset] [--time-limit=SECONDS] [--limit=N] [scan options]\n";
+            echo "  php antispam-agent.php rescan [--reset] [--folder=NAME] [--time-limit=SECONDS] [--limit=N] [scan options]\n";
+            echo "  php antispam-agent.php folders [--maildir=path]\n";
             echo "  php antispam-agent.php apply-blacklist [--maildir=path] [--account=ID] [--db=path] [--spam-threshold=N] [--days=30] [--limit=5000]\n";
             echo "  php antispam-agent.php health [--maildir=path] [--account=ID] [--db=path]\n";
             echo "  php antispam-agent.php quarantine-list [--maildir=path] [--account=ID] [--db=path] [--since=unix-ts] [--limit=N]\n";
@@ -388,6 +394,53 @@ function runHealth($maildirPath, $dbPath)
     $out['maildir_spam'] = countMessages($maildirPath . '/.SPAM', ['new', 'cur']);
     $out['maildir_quarantine'] = countMessages($maildirPath . '/.QUARANTINE', ['new', 'cur']);
     return $out;
+}
+
+/**
+ * Maildir++ subfolders a rescan can run on (`folders`, agent 3.7+): every
+ * directory .NAME with a cur/ or new/ under the Maildir, except the antispam
+ * folders (.SPAM, .QUARANTINE) and the usual Trash / Sent / Drafts / Junk.
+ * INBOX (the Maildir itself) comes first.
+ */
+function listFolders($maildirPath)
+{
+    if (!is_dir($maildirPath)) {
+        return ['success' => false, 'error' => 'Maildir not found: ' . $maildirPath];
+    }
+    $out = [['name' => 'INBOX', 'messages' => countMessages($maildirPath, ['new', 'cur'])]];
+    $names = [];
+    foreach ((array)@scandir($maildirPath) as $entry) {
+        if (!is_string($entry) || strlen($entry) < 2 || $entry[0] !== '.' || $entry === '..') continue;
+        $name = substr($entry, 1);
+        if (agentFolderName($name) === null || agentIsSystemFolder($name)) continue;
+        $dir = $maildirPath . '/' . $entry;
+        if (!is_dir($dir . '/cur') && !is_dir($dir . '/new')) continue;
+        $names[] = $name;
+    }
+    sort($names, SORT_STRING | SORT_FLAG_CASE);
+    foreach ($names as $name) {
+        $out[] = ['name' => $name, 'messages' => countMessages($maildirPath . '/.' . $name, ['new', 'cur'])];
+    }
+    return ['success' => true, 'folders' => $out];
+}
+
+/** A safe Maildir++ folder name (no leading dot, no "/", NUL or ".." part), else null. */
+function agentFolderName($name)
+{
+    $name = (string)$name;
+    if ($name === '' || strlen($name) > 255 || $name[0] === '.' || preg_match('#[/\\\\\x00-\x1f]#', $name)
+        || in_array('', explode('.', $name), true)) {
+        return null;
+    }
+    return $name;
+}
+
+/** Antispam's own and the mail client's system folders: never rescanned. */
+function agentIsSystemFolder($name)
+{
+    $last = strtolower((string)substr(strrchr('.' . $name, '.'), 1));
+    return in_array(strtolower($name), ['spam', 'quarantine'], true)
+        || in_array($last, ['trash', 'sent', 'drafts', 'junk', 'spam', 'quarantine', 'templates', 'outbox', 'kosz', 'wysłane', 'wyslane', 'robocze', 'deleted messages', 'sent messages'], true);
 }
 
 function countMessages($base, array $subdirs)
@@ -636,7 +689,27 @@ function runScan($maildirPath, $dbPath, $options = [])
     $batchLimit = $rescan ? max(0, (int)($options['limit'] ?? 0)) : 0;
     $rescanDone = null;
     $rescanMark = null;
+    // The folder whose messages are checked: INBOX (the Maildir itself) or,
+    // for a rescan with --folder, the subfolder .NAME. Spam always goes to the
+    // Maildir's .SPAM / .QUARANTINE.
+    $folder = '';
+    $sourcePath = $maildirPath;
+    if ($rescan && isset($options['folder']) && strcasecmp((string)$options['folder'], 'INBOX') !== 0) {
+        $folder = agentFolderName($options['folder']);
+        if ($folder === null || in_array(strtolower($folder), ['spam', 'quarantine'], true)) {
+            return ['success' => false, 'error' => 'Invalid --folder: ' . (string)$options['folder']];
+        }
+        $sourcePath = $maildirPath . '/.' . $folder;
+        if (!is_dir($sourcePath . '/cur') && !is_dir($sourcePath . '/new')) {
+            return ['success' => false, 'error' => 'Folder not found in the Maildir: ' . $folder];
+        }
+    }
     if ($rescan) {
+        // A rescan of another folder than the unfinished one starts afresh.
+        if ((string)agentMeta($db, 'rescan_folder') !== $folder) {
+            $options['reset'] = true;
+            agentSetMeta($db, 'rescan_folder', $folder);
+        }
         if (!empty($options['reset']) || agentMeta($db, 'rescan_started_ts') === null) {
             $db->exec('DELETE FROM rescan_done');
             agentSetMeta($db, 'rescan_started_ts', time());
@@ -677,6 +750,7 @@ function runScan($maildirPath, $dbPath, $options = [])
     if ($rescan) {
         $stats['rescan'] = true;
         $stats['remaining'] = 0;
+        $stats['folder'] = $folder === '' ? 'INBOX' : $folder;
     }
 
     $lists = loadAllLists($db);
@@ -695,9 +769,10 @@ function runScan($maildirPath, $dbPath, $options = [])
     $tx = agentTxBegin($db);
 
     foreach (['new', 'cur'] as $subdir) {
-        $dir = $maildirPath . '/' . $subdir;
+        $dir = $sourcePath . '/' . $subdir;
         $files = is_dir($dir) ? @scandir($dir) : false;
         if ($files === false) {
+            if ($folder !== '' && !is_dir($dir)) continue; // a subfolder may lack new/
             $complete = false;
             continue;
         }
@@ -771,7 +846,7 @@ function runScan($maildirPath, $dbPath, $options = [])
             if ($verdict['attachments_flagged']) { $stats['attachments_flagged']++; }
 
             if ($decision === 'spam' || $decision === 'quarantine') {
-                $move = agentMoveMessage($maildirPath, $subdir, $file, $decision === 'spam' ? '.SPAM' : '.QUARANTINE');
+                $move = agentMoveMessage($sourcePath, $subdir, $file, $decision === 'spam' ? '.SPAM' : '.QUARANTINE', $maildirPath);
                 if (!$move['ok']) {
                     // Not marked checked, so the next run retries the move.
                     $stats['move_failed']++;
@@ -978,7 +1053,7 @@ function scoreMessage($filePath, $headers, array $cfg, array $lists, array $dnsb
  *
  * @return array{ok:bool, error:?string}
  */
-function agentMoveMessage($maildirPath, $subdir, $file, $folder)
+function agentMoveMessage($maildirPath, $subdir, $file, $folder, $targetRoot = null)
 {
     $src = $maildirPath . '/' . $subdir . '/' . $file;
     if (!is_file($src) && $subdir === 'new') {
@@ -993,9 +1068,9 @@ function agentMoveMessage($maildirPath, $subdir, $file, $folder)
         }
     }
     if (!is_file($src)) {
-        return ['ok' => false, 'error' => 'message no longer in INBOX'];
+        return ['ok' => false, 'error' => 'message no longer in its folder'];
     }
-    $targetDir = $maildirPath . '/' . $folder . '/' . $subdir;
+    $targetDir = ($targetRoot ?? $maildirPath) . '/' . $folder . '/' . $subdir;
     if (!is_dir($targetDir) && !@mkdir($targetDir, 0700, true) && !is_dir($targetDir)) {
         return ['ok' => false, 'error' => 'cannot create ' . $folder . '/' . $subdir];
     }

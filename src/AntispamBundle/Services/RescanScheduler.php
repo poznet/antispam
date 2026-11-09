@@ -73,6 +73,33 @@ class RescanScheduler
         return $queued;
     }
 
+    /**
+     * Queue a rule pass over another folder than INBOX (mail client plugins,
+     * "Zastosuj reguły antyspamu w folderze"): job `account.rescan` with
+     * payload 'folder'. Same dedupe key as the INBOX rescan - one pass per
+     * mailbox at a time; while another one runs it is returned (created false).
+     */
+    public function enqueueFolder(Account $account, string $folder, string $trigger = self::TRIGGER_PLUGIN): EnqueueResult
+    {
+        $plugin = $trigger === self::TRIGGER_PLUGIN;
+        [$actor, $actorType] = $plugin ? [$account->getEmail(), AuditLog::ACTOR_PLUGIN] : [null, null];
+        $queued = $this->jobs->enqueue(
+            BackgroundJob::TYPE_ACCOUNT_RESCAN,
+            ['trigger' => $trigger, 'folder' => $folder],
+            $account,
+            label: 'Reguły antyspamu w folderze ' . $folder . ': ' . ($account->getName() ?: $account->getEmail()),
+            dedupeKey: self::dedupeKey($account),
+            requestedBy: $actor,
+            requestedByType: $actorType,
+        );
+        if ($queued->created) {
+            $this->audit?->log('account.rescan_folder_queued', targetType: 'account', targetId: $account->getId(), label: $account->getName(), mailbox: $account->getEmail(),
+                details: ['job' => $queued->id, 'trigger' => $trigger, 'folder' => $folder],
+                actor: $actor, actorType: $actorType);
+        }
+        return $queued;
+    }
+
     /** Start of the account's weekly slot in the week of $now (may be later than $now). */
     public static function slotOfWeek(Account $account, \DateTimeImmutable $now): \DateTimeImmutable
     {

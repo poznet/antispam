@@ -6,6 +6,7 @@ use AntispamBundle\Controller\PluginApiController;
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\BackgroundJob;
 use AntispamBundle\Entity\EmailBlacklist;
+use AntispamBundle\Services\AccountScanner;
 use AntispamBundle\Services\DeferredRetroactivePass;
 use AntispamBundle\Services\Jobs\EnqueueResult;
 use AntispamBundle\Services\Jobs\JobQueue;
@@ -337,24 +338,28 @@ class PluginApiControllerTest extends TestCase
     }
 
     /** Controller with a mocked rescan scheduler / job queue; $active: id of the running rescan job. */
-    private function rescanController(?int $active, ?RescanScheduler $scheduler = null): PluginApiController
+    private function rescanController(?int $active, ?RescanScheduler $scheduler = null, array $payload = [], string $status = BackgroundJob::STATUS_RUNNING, ?AccountScanner $scanner = null, ?array $result = null): PluginApiController
     {
         $jobs = $this->createMock(JobQueue::class);
         $jobs->method('findActive')->willReturn($active);
         $job = $this->createMock(BackgroundJob::class);
         $job->method('getId')->willReturn(41);
-        $job->method('getStatus')->willReturn(BackgroundJob::STATUS_RUNNING);
+        $job->method('getType')->willReturn(BackgroundJob::TYPE_ACCOUNT_RESCAN);
+        $job->method('getAccountId')->willReturn(7);
+        $job->method('getPayload')->willReturn($payload);
+        $job->method('getResult')->willReturn($result);
+        $job->method('getStatus')->willReturn($status);
         $job->method('getProgress')->willReturn('Sprawdzono ponownie 2000 wiadomości, zostało 98000');
         $job->method('getProgressDone')->willReturn(2000);
         $job->method('getProgressTotal')->willReturn(100000);
         $jobs->method('find')->willReturn($job);
         return new PluginApiController($this->createMock(RawMessageScanner::class), $this->plugin, $this->deferred, $this->em, $this->phishing, $this->tb(),
-            $scheduler ?? $this->createMock(RescanScheduler::class), $jobs);
+            $scheduler ?? $this->createMock(RescanScheduler::class), $jobs, $scanner ?? $this->createMock(AccountScanner::class));
     }
 
-    private function rescanRequest(string $method, string $token = 'good'): Request
+    private function rescanRequest(string $method, string $token = 'good', ?array $body = null, array $query = []): Request
     {
-        $request = Request::create('/api/plugin/rescan', $method, [], [], [], ['REMOTE_ADDR' => '203.0.113.5']);
+        $request = Request::create('/api/plugin/rescan', $method, $query, [], [], ['REMOTE_ADDR' => '203.0.113.5'], $body === null ? null : json_encode($body));
         $request->headers->set('Authorization', 'Bearer ' . $token);
         return $request;
     }
@@ -406,6 +411,65 @@ class PluginApiControllerTest extends TestCase
         ], $data['email_blacklist']);
     }
 
+    public function testFolderPassIsQueuedForTheChosenFolderAndCountedSeparately()
+    {
+        $account = $this->loggedIn();
+        $scheduler = $this->createMock(RescanScheduler::class);
+        $scheduler->expects($this->never())->method('enqueue');
+        $scheduler->expects($this->once())->method('enqueueFolder')->with($account, 'INBOX/Faktury', RescanScheduler::TRIGGER_PLUGIN)->willReturn(new EnqueueResult(41, true));
+        $res = $this->rescanController(null, $scheduler, ['folder' => 'INBOX/Faktury'])->rescanStartAction($this->rescanRequest('POST', 'good', ['folder' => 'INBOX/Faktury']));
+        $data = json_decode($res->getContent(), true);
+
+        $this->assertSame(200, $res->getStatusCode(), $res->getContent());
+        $this->assertSame(['rescan_folder'], $this->hits);
+        $this->assertTrue($data['created']);
+        $this->assertSame('INBOX/Faktury', $data['job']['folder']);
+    }
+
+    public function testFolderPassRefusesSpamFoldersAndABusyMailbox()
+    {
+        $this->loggedIn();
+        $scheduler = $this->createMock(RescanScheduler::class);
+        $scheduler->expects($this->never())->method('enqueueFolder');
+        $c = $this->rescanController(null, $scheduler);
+        $this->assertSame(400, $c->rescanStartAction($this->rescanRequest('POST', 'good', ['folder' => 'INBOX.SPAM']))->getStatusCode());
+        $this->assertSame(400, $c->rescanStartAction($this->rescanRequest('POST', 'good', ['folder' => 'QUARANTINE']))->getStatusCode());
+
+        // The INBOX rescan runs: a folder pass waits (409), nothing counted.
+        $res = $this->rescanController(41, $scheduler, [])->rescanStartAction($this->rescanRequest('POST', 'good', ['folder' => 'Faktury']));
+        $this->assertSame(409, $res->getStatusCode());
+        $this->assertMatchesRegularExpression('/folderu Odebrane/', json_decode($res->getContent(), true)['message']);
+        // ...and a running folder pass blocks the INBOX rescan.
+        $res = $this->rescanController(41, $scheduler, ['folder' => 'Faktury'])->rescanStartAction($this->rescanRequest('POST'));
+        $this->assertSame(409, $res->getStatusCode());
+        $this->assertSame([], $this->hits);
+    }
+
+    public function testFinishedFolderPassIsReportedByJobId()
+    {
+        $this->loggedIn();
+        $c = $this->rescanController(null, null, ['folder' => 'Faktury'], BackgroundJob::STATUS_DONE, null,
+            ['success' => true, 'scan_result' => ['total' => 120, 'checked' => 120, 'moved_to_spam' => 7, 'quarantined' => 2, 'folder' => 'Faktury']]);
+        $data = json_decode($c->rescanStatusAction($this->rescanRequest('GET', 'good', null, ['job' => 41]))->getContent(), true);
+
+        $this->assertFalse($data['active']);
+        $this->assertSame(['id' => 41, 'status' => 'done', 'ok' => true, 'folder' => 'Faktury', 'at' => null, 'total' => 120, 'checked' => 120, 'quarantined' => 2, 'moved_to_spam' => 7], $data['finished']);
+    }
+
+    public function testFoldersListTheMailboxsFolders()
+    {
+        $account = $this->loggedIn();
+        $scanner = $this->createMock(AccountScanner::class);
+        $scanner->method('listFolders')->with($account)->willReturn([['name' => 'INBOX', 'messages' => null], ['name' => 'Faktury', 'messages' => null]]);
+        $request = Request::create('/api/plugin/folders');
+        $request->headers->set('Authorization', 'Bearer good');
+        $data = json_decode($this->rescanController(null, null, [], BackgroundJob::STATUS_RUNNING, $scanner)->foldersAction($request)->getContent(), true);
+        $this->assertSame(['INBOX', 'Faktury'], array_column($data['folders'], 'name'));
+
+        $request->headers->set('Authorization', 'Bearer bad');
+        $this->assertSame(401, $this->rescanController(null, null, [], BackgroundJob::STATUS_RUNNING, $scanner)->foldersAction($request)->getStatusCode());
+    }
+
     public function testRescanNeedsALogin()
     {
         $this->loggedIn();
@@ -432,7 +496,7 @@ class PluginApiControllerTest extends TestCase
         $this->assertTrue($data['created']);
         $this->assertTrue($data['active']);
         $this->assertSame('jan@example.com', $data['mailbox']);
-        $this->assertSame(['id' => 41, 'status' => 'running', 'progress' => 'Sprawdzono ponownie 2000 wiadomości, zostało 98000', 'done' => 2000, 'total' => 100000], $data['job']);
+        $this->assertSame(['id' => 41, 'status' => 'running', 'progress' => 'Sprawdzono ponownie 2000 wiadomości, zostało 98000', 'done' => 2000, 'total' => 100000, 'folder' => 'INBOX'], $data['job']);
     }
 
     public function testRescanWhileOneRunsIsNotCounted()

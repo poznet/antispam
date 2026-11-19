@@ -3,6 +3,8 @@
 namespace AntispamBundle\Command;
 
 use AntispamBundle\Entity\Account;
+use AntispamBundle\Entity\AccountDailyStat;
+use AntispamBundle\Services\AccountStatsService;
 use AntispamBundle\Services\ImapScanService;
 use AntispamBundle\Services\SshService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -19,7 +21,7 @@ class AgentScanCommand extends Command
     private $ssh;
     private $imapScan;
 
-    public function __construct(EntityManagerInterface $em, SshService $ssh, ImapScanService $imapScan)
+    public function __construct(EntityManagerInterface $em, SshService $ssh, ImapScanService $imapScan, private ?AccountStatsService $stats = null)
     {
         parent::__construct();
         $this->em = $em;
@@ -54,6 +56,8 @@ class AgentScanCommand extends Command
             } else {
                 $result = $this->imapScan->scanAccount($account);
             }
+            $initial = $account->getLastScanAt() === null || !empty($result['initial']);
+            $this->stats?->record($account, $initial ? AccountDailyStat::KIND_INITIAL : AccountDailyStat::KIND_SCAN, $result);
 
             $account->markScanned($result);
             $this->em->flush();

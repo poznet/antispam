@@ -44,7 +44,7 @@
  * PHP warnings never reach STDOUT; they are collected into "warnings".
  */
 
-const AGENT_VERSION = '3.8';
+const AGENT_VERSION = '3.9';
 // Complex rules (complex*() functions below)
 const COMPLEX_MAX_BODY = 262144;
 const COMPLEX_BACKTRACK_LIMIT = 100000;
@@ -189,6 +189,9 @@ try {
         case 'spam-release':
             agentPrint(spamRelease($maildirPath, $dbPath, $options));
             break;
+        case 'stats':
+            agentPrint(agentStats($dbPath, $options));
+            break;
         case 'version':
             agentPrint(['success' => true, 'php' => PHP_VERSION]);
             break;
@@ -211,11 +214,97 @@ try {
             echo "  php antispam-agent.php quarantine-to-spam --id=ID [--maildir=path] [--account=ID] [--db=path]\n";
             echo "  php antispam-agent.php spam-list [--maildir=path] [--account=ID] [--db=path] [--limit=N]\n";
             echo "  php antispam-agent.php spam-release --id=ID [--whitelist] [--maildir=path] [--account=ID] [--db=path]\n";
+            echo "  php antispam-agent.php stats [--days=30] [--account=ID] [--db=path]\n";
             break;
     }
 } catch (\Throwable $e) {
     agentPrint(['success' => false, 'error' => get_class($e) . ': ' . $e->getMessage()]);
     exit(1);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Statistics (agent 3.9+, panel "Statystyki konta")                      */
+/* ---------------------------------------------------------------------- */
+
+/**
+ * What the agent's own score_log / scan_log know about the mailbox in the last
+ * --days days (0 = everything kept, see the score log retention): decisions,
+ * decisions per day, top senders / domains / rules of spam + quarantine (same
+ * aggregation as AccountStatsService::aggregate()), the newest spam /
+ * quarantine entries, scan runs. Read only.
+ */
+function agentStats($dbPath, array $options)
+{
+    $db = getDb($dbPath);
+    $days = max(0, min(3650, (int)($options['days'] ?? 30)));
+    $where = '1 = 1';
+    if ($days > 0) {
+        $where = "datetime(scored_at) >= datetime('now', '-" . $days . " days')";
+    }
+    $out = ['success' => true, 'days' => $days, 'decisions' => [], 'daily' => [], 'total' => 0,
+        'senders' => [], 'domains' => [], 'rules' => [], 'categories' => [], 'recent' => [], 'scans' => null,
+        'first_entry' => null, 'sampled' => false];
+
+    $res = $db->query("SELECT decision, COUNT(*) AS cnt FROM score_log WHERE $where GROUP BY decision");
+    while ($res && ($row = $res->fetchArray(SQLITE3_ASSOC))) {
+        $out['decisions'][(string)$row['decision']] = (int)$row['cnt'];
+        $out['total'] += (int)$row['cnt'];
+    }
+    $res = $db->query("SELECT substr(scored_at, 1, 10) AS day, decision, COUNT(*) AS cnt FROM score_log WHERE $where GROUP BY day, decision ORDER BY day");
+    while ($res && ($row = $res->fetchArray(SQLITE3_ASSOC))) {
+        $out['daily'][(string)$row['day']][(string)$row['decision']] = (int)$row['cnt'];
+    }
+    $first = $db->querySingle('SELECT MIN(scored_at) FROM score_log');
+    $out['first_entry'] = $first ? (string)$first : null;
+
+    $senders = $domains = $rules = $categories = [];
+    $n = 0;
+    $res = $db->query("SELECT sender, reasons FROM score_log WHERE $where AND decision IN ('spam', 'quarantine') ORDER BY id DESC LIMIT 20000");
+    while ($res && ($row = $res->fetchArray(SQLITE3_ASSOC))) {
+        $n++;
+        $sender = strtolower(trim((string)$row['sender']));
+        if ($sender !== '') {
+            $senders[$sender] = ($senders[$sender] ?? 0) + 1;
+            $at = strrpos($sender, '@');
+            if ($at !== false) {
+                $domain = substr($sender, $at + 1);
+                $domains[$domain] = ($domains[$domain] ?? 0) + 1;
+            }
+        }
+        $reasons = json_decode((string)$row['reasons'], true);
+        $seen = [];
+        foreach (is_array($reasons) ? $reasons : [] as $reason) {
+            $rule = is_array($reason) ? trim((string)($reason['rule'] ?? '')) : '';
+            if ($rule === '' || isset($seen[$rule])) {
+                continue;
+            }
+            $seen[$rule] = true;
+            $rules[$rule] = ($rules[$rule] ?? 0) + 1;
+            $cat = strtolower((string)preg_replace('~[:\s(].*$~s', '', $rule));
+            $cat = $cat !== '' ? $cat : 'inne';
+            $categories[$cat] = ($categories[$cat] ?? 0) + 1;
+        }
+    }
+    $out['sampled'] = $n >= 20000;
+    foreach (['senders', 'domains', 'rules', 'categories'] as $k) {
+        arsort($$k);
+        $out[$k] = array_slice($$k, 0, 15, true);
+    }
+
+    $res = $db->query("SELECT sender, subject, score, decision, scored_at FROM score_log WHERE $where AND decision IN ('spam', 'quarantine') ORDER BY id DESC LIMIT 30");
+    while ($res && ($row = $res->fetchArray(SQLITE3_ASSOC))) {
+        $out['recent'][] = ['sender' => (string)$row['sender'], 'subject' => (string)$row['subject'], 'score' => (int)$row['score'],
+            'decision' => (string)$row['decision'], 'scored_at' => (string)$row['scored_at']];
+    }
+
+    $scanWhere = $days > 0 ? "datetime(scanned_at) >= datetime('now', '-" . $days . " days')" : '1 = 1';
+    $row = $db->querySingle("SELECT COUNT(*) AS runs, SUM(checked) AS checked, SUM(moved_to_spam) AS moved_to_spam, SUM(quarantined) AS quarantined, MAX(scanned_at) AS last FROM scan_log WHERE $scanWhere", true);
+    if (is_array($row)) {
+        $out['scans'] = ['runs' => (int)$row['runs'], 'checked' => (int)$row['checked'], 'moved_to_spam' => (int)$row['moved_to_spam'],
+            'quarantined' => (int)$row['quarantined'], 'last' => $row['last'] ? (string)$row['last'] : null];
+    }
+    $out['retention_days'] = max(30, settingInt(loadSettings($db), 'agent_retention_days', 180));
+    return $out;
 }
 
 /**

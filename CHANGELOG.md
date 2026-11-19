@@ -18,15 +18,16 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 
 ## [Unreleased]
 
-### Fixed
-
-- IMAP: the scan no longer fails with *Can not create "SPAM" mailbox* on
-  servers that refuse it (poczta.interia.pl: "Internal error") - the mailbox's
-  own spam folder (`Spam`, `INBOX.Spam`, `[Gmail]/Spam`, `Junk`…) is used, and
-  a refused top-level folder is created as `INBOX.SPAM` / `INBOX.QUARANTINE`.
-
 ### Added
 
+- **Account statistics** (*Konta → Statystyki*): per mailbox and period
+  (today / 7 / 30 / 90 days / year / all) how much mail was checked, moved to
+  SPAM, quarantined, whitelisted, blacklist hits, failed moves and errors,
+  per kind of scan (new mail, first scan, rescan, retroactive) and per day;
+  the score log breakdown (sources, outcomes, top senders, domains and rules)
+  and the newest spam / quarantine entries. Scan counters are recorded from
+  now on for IMAP and SSH accounts (`antispam_account_daily_stat`).
+- Agent 3.9: `stats` command (the agent's own log for the statistics page).
 - **Complex rules ("Reguły złożone")**: conditions joined with I / LUB (nested
   groups up to 4 levels, negation of a condition or a whole group) on the sender
   (address, domain, name, internal / external, free mail), To / Cc, Reply-To,
@@ -310,6 +311,10 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   migrations and warns on entity changes without a migration. See `docs/migrations.md`.
 
 ### Fixed
+- IMAP: the scan no longer fails with *Can not create "SPAM" mailbox* on
+  servers that refuse it (poczta.interia.pl: "Internal error") - the mailbox's
+  own spam folder (`Spam`, `INBOX.Spam`, `[Gmail]/Spam`, `Junk`…) is used, and
+  a refused top-level folder is created as `INBOX.SPAM` / `INBOX.QUARANTINE`.
 - **Full rescan of a big IMAP INBOX "finished" without checking anything**
   (Interia, 30 390 messages: *Sprawdzone ponownie 0*, no error). The first batch
   took the message list from `SEARCH ALL` filtered by `STATUS UIDNEXT`; an empty

@@ -591,6 +591,12 @@ class SshService
         return $this->runAgent($account, 'spam-release', $args);
     }
 
+    /** The agent's own score log / scan log of the last $days days, 0 = all (agent 3.9+ `stats`). */
+    public function runStats(Account $account, int $days = 30)
+    {
+        return $this->runAgent($account, 'stats', $this->maildirArg($account) . ' --days=' . max(0, $days));
+    }
+
     public function runHealth(Account $account)
     {
         return $this->runAgent($account, 'health', $this->maildirArg($account));

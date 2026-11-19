@@ -1,0 +1,248 @@
+{% extends '@Antispam/main.html.twig' %}
+
+{% block title %}Statystyki — {{ account.email }}{% endblock %}
+{% block page_title %}Statystyki konta {{ account.name }}{% endblock %}
+
+{% macro num(v) %}{{ v|default(0)|number_format(0, ',', ' ') }}{% endmacro %}
+
+    {# --- Per-message detail: server score log (IMAP + plugin) or the agent's own log (SSH) --- #}
+    {% macro details(src, decision_labels, source_labels, outcome_labels, sources) %}
+        {% import _self as m %}
+        <div class="pp-grid pp-grid-2">
+            <div class="panel panel-default">
+                <div class="panel-heading"><span class="glyphicon glyphicon-tasks"></span> Decyzje ({{ m.num(src.total) }} wiadomości)</div>
+                <table class="table table-condensed pp-stats-table">
+                    <tbody>
+                    {% for d, n in src.decisions %}
+                        <tr><td>{{ decision_labels[d] ?? d }}</td><td class="text-right"><b>{{ m.num(n) }}</b></td><td class="text-right text-muted">{{ (src.total ? n / src.total * 100 : 0)|number_format(1, ',', ' ') }}%</td></tr>
+                    {% else %}
+                        <tr><td class="text-muted">Brak wpisów w tym okresie.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                {% if sources and src.sources|default([]) %}
+                    <table class="table table-condensed pp-stats-table">
+                        <thead><tr><th>Źródło</th><th class="text-right">SPAM</th><th class="text-right">Kwar.</th><th class="text-right">Czyste</th><th class="text-right">Biała l.</th></tr></thead>
+                        <tbody>
+                        {% for s, c in src.sources %}
+                            <tr><td>{{ source_labels[s] ?? s }}</td><td class="text-right">{{ m.num(c.spam|default(0)) }}</td><td class="text-right">{{ m.num(c.quarantine|default(0)) }}</td><td class="text-right">{{ m.num(c.ham|default(0)) }}</td><td class="text-right">{{ m.num(c.whitelisted|default(0)) }}</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% endif %}
+                {% if src.outcomes|default([]) %}
+                    <ul class="list-unstyled pp-stats-list">
+                        {% for o, n in src.outcomes %}<li>{{ outcome_labels[o] ?? o }}: <b>{{ m.num(n) }}</b></li>{% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+            <div class="panel panel-default">
+                <div class="panel-heading"><span class="glyphicon glyphicon-flash"></span> Co łapało spam i kwarantannę</div>
+                <table class="table table-condensed pp-stats-table">
+                    <thead><tr><th>Mechanizm</th><th class="text-right">wiadomości</th></tr></thead>
+                    <tbody>
+                    {% for c, n in src.categories %}
+                        <tr><td>{{ constant('AntispamBundle\\Services\\AccountStatsService::CATEGORY_LABELS')[c] ?? c }}</td><td class="text-right">{{ m.num(n) }}</td></tr>
+                    {% else %}
+                        <tr><td class="text-muted">Brak.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                {% if src.rules %}
+                    <table class="table table-condensed pp-stats-table">
+                        <thead><tr><th>Najczęstsze reguły</th><th class="text-right"></th></tr></thead>
+                        <tbody>
+                        {% for r, n in src.rules %}<tr><td class="pp-cell-wrap"><code>{{ r }}</code></td><td class="text-right">{{ m.num(n) }}</td></tr>{% endfor %}
+                        </tbody>
+                    </table>
+                {% endif %}
+            </div>
+        </div>
+        <div class="pp-grid pp-grid-2">
+            <div class="panel panel-default">
+                <div class="panel-heading"><span class="glyphicon glyphicon-user"></span> Najczęstsi nadawcy spamu / kwarantanny</div>
+                <table class="table table-condensed pp-stats-table">
+                    <tbody>
+                    {% for s, n in src.senders %}<tr><td class="pp-cell-wrap">{{ s }}</td><td class="text-right">{{ m.num(n) }}</td></tr>{% else %}<tr><td class="text-muted">Brak.</td></tr>{% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="panel panel-default">
+                <div class="panel-heading"><span class="glyphicon glyphicon-globe"></span> Najczęstsze domeny nadawców</div>
+                <table class="table table-condensed pp-stats-table">
+                    <tbody>
+                    {% for s, n in src.domains %}<tr><td class="pp-cell-wrap">{{ s }}</td><td class="text-right">{{ m.num(n) }}</td></tr>{% else %}<tr><td class="text-muted">Brak.</td></tr>{% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% if src.sampled %}<p class="text-muted small">Nadawcy i reguły policzone z ostatnich 20 000 wiadomości spamu / kwarantanny okresu.</p>{% endif %}
+        <div class="panel panel-default">
+            <div class="panel-heading"><span class="glyphicon glyphicon-time"></span> Ostatnie wiadomości w SPAM / kwarantannie</div>
+            <div class="table-responsive">
+            <table class="table table-condensed table-striped">
+                <thead><tr><th>Data</th><th>Decyzja</th><th>Wynik</th><th>Nadawca</th><th>Temat</th></tr></thead>
+                <tbody>
+                {% for r in src.recent %}
+                    <tr>
+                        <td class="text-nowrap">{{ r.scored_at|date('d.m.Y H:i') }}</td>
+                        <td><span class="label {{ r.decision == 'spam' ? 'label-danger' : 'label-warning' }}">{{ decision_labels[r.decision] ?? r.decision }}</span>
+                            {% if r.source|default(null) == 'plugin' %}<span class="label label-default">wtyczka</span>{% endif %}
+                            {% if r.outcome|default(null) == 'move_failed' %}<span class="label label-danger" title="Przeniesienie nie powiodło się">w INBOX</span>{% endif %}</td>
+                        <td>{{ r.score }}</td>
+                        <td class="pp-cell-wrap">{{ r.sender }}</td>
+                        <td class="pp-cell-wrap">{{ r.subject }}</td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="5" class="text-muted">Brak.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+    {% endmacro %}
+
+{% block body %}
+    {% import _self as m %}
+    {% set t = totals.all %}
+    {% set period = periods[days] %}
+    {% set decision_labels = {spam: 'spam', quarantine: 'kwarantanna', ham: 'czyste', whitelisted: 'biała lista', move_failed: 'nieudane przeniesienie'} %}
+    {% set source_labels = {scan: 'skan serwera', initial: 'pierwszy skan', rescan: 'ponowne skanowanie', retro: 'wstecz po nowej regule', plugin: 'sprawdzenie z wtyczki'} %}
+    {% set outcome_labels = {spam_folder: 'przeniesione do SPAM', quarantined: 'przeniesione do kwarantanny', deleted: 'usunięte', move_failed: 'przeniesienie nie powiodło się (zostały w INBOX)', none: 'zostały na miejscu'} %}
+
+    <div class="pp-toolbar">
+        <a href="{{ path('antispam_account_index') }}" class="btn btn-default"><span class="glyphicon glyphicon-chevron-left"></span> Konta</a>
+        <span class="pp-acct"><span class="pp-acct-ic">{{ account.name|first }}</span><b>{{ account.email }}</b></span>
+        <span class="label {{ account.connectionType == 'ssh' ? 'label-info' : 'label-default' }}">{{ account.connectionType == 'ssh' ? 'SSH+Maildir' : 'IMAP' }}</span>
+        <span class="pp-spacer"></span>
+        <div class="btn-group btn-group-sm" role="group" aria-label="Okres">
+            {% for d, label in periods %}
+                <a href="{{ path('antispam_account_stats', {id: account.id, days: d}) }}" class="btn {{ d == days ? 'btn-primary' : 'btn-default' }}">{{ label }}</a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <p class="text-muted">
+        Ostatni skan: {{ account.lastScanAt ? account.lastScanAt|date('d.m.Y H:i') : 'jeszcze nie było' }}
+        {% if account.lastRescanAt %} · ostatnie ponowne skanowanie: {{ account.lastRescanAt|date('d.m.Y H:i') }}{% endif %}
+        {% if totals.first_day %} · statystyki skanów zbierane od {{ totals.first_day|date('d.m.Y') }}{% else %} · statystyki skanów zbierane są od tej wersji panelu - pojawią się po najbliższym skanie{% endif %}
+    </p>
+
+    {# --- Scan counters (every pass, IMAP and SSH) --- #}
+    <div class="pp-grid pp-grid-4">
+        {% for k in [
+            {label: 'Sprawdzone', value: t.checked, tone: 'accent', icon: 'search', foot: m.num(t.passes) ~ ' przebiegów skanu'},
+            {label: 'Przeniesione do SPAM', value: t.moved_to_spam, tone: 'danger', icon: 'fire', foot: account.connectionType == 'ssh' or not account.deleteSpam ? 'folder SPAM' : 'spam usuwany (ustawienie konta)'},
+            {label: 'Do kwarantanny', value: t.quarantined, tone: 'warning', icon: 'warning-sign', foot: 'podejrzane, do przejrzenia'},
+            {label: 'Z białej listy', value: t.whitelisted, tone: 'success', icon: 'ok', foot: 'przepuszczone bez oceny'}
+        ] %}
+            {% set pct = t.checked > 0 and k.label != 'Sprawdzone' ? (k.value / t.checked * 100)|round(1) : null %}
+            <div class="pp-kpi" data-kpi="{{ k.tone }}">
+                <div class="pp-kpi-head"><span class="pp-kpi-label">{{ k.label }} ({{ period }})</span><span class="pp-kpi-icon"><span class="glyphicon glyphicon-{{ k.icon }}"></span></span></div>
+                <div class="pp-kpi-value">{{ m.num(k.value) }}</div>
+                <div class="pp-kpi-foot">{% if pct is not null %}<span class="pp-kpi-bar"><i style="width:{{ min(100, pct) }}%"></i></span>{{ pct|number_format(1, ',', ' ') }}% · {% endif %}{{ k.foot }}</div>
+            </div>
+        {% endfor %}
+    </div>
+
+    <div class="pp-grid pp-grid-main">
+        <div class="panel panel-default">
+            <div class="panel-heading pp-flex">
+                <span><span class="glyphicon glyphicon-stats"></span> Dziennie — ostatnie {{ daily|length }} dni</span>
+                <span class="pp-legend">
+                    <span><i class="c-ham"></i>Czyste</span>
+                    <span><i class="c-white"></i>Biała lista</span>
+                    <span><i class="c-quarantine"></i>Kwarantanna</span>
+                    <span><i class="c-spam"></i>Spam</span>
+                </span>
+            </div>
+            <div class="panel-body">
+                {% set maxv = 1 %}
+                {% for d in daily %}{% if d.checked > maxv %}{% set maxv = d.checked %}{% endif %}{% endfor %}
+                <div class="pp-chart pp-chart-dense" role="img" aria-label="Wiadomości sprawdzone dziennie">
+                    {% for day, d in daily %}
+                        {% set clean = max(0, d.checked - d.whitelisted - d.quarantined - d.moved_to_spam) %}
+                        <div class="pp-chart-col">
+                            <div class="pp-chart-tip">
+                                <strong>{{ day|date('d.m.Y') }}</strong><br>
+                                Sprawdzone: {{ d.checked }} · SPAM: {{ d.moved_to_spam }}<br>
+                                Kwarantanna: {{ d.quarantined }} · Biała lista: {{ d.whitelisted }}
+                                {% if d.errors %}<br>Błędy: {{ d.errors }}{% endif %}
+                            </div>
+                            <div class="pp-chart-area"><div class="pp-chart-stack" style="height:{{ d.checked > 0 ? max(3, (d.checked / maxv * 100)|round) : 0 }}%">
+                                {% if d.checked > 0 %}
+                                    <i class="c-ham" style="height:{{ clean / d.checked * 100 }}%"></i>
+                                    <i class="c-white" style="height:{{ d.whitelisted / d.checked * 100 }}%"></i>
+                                    <i class="c-quarantine" style="height:{{ d.quarantined / d.checked * 100 }}%"></i>
+                                    <i class="c-spam" style="height:{{ d.moved_to_spam / d.checked * 100 }}%"></i>
+                                {% endif %}
+                            </div></div>
+                            <span class="pp-chart-day">{{ loop.index0 % 7 == (daily|length - 1) % 7 ? day|date('d.m') : '' }}</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="panel panel-default">
+            <div class="panel-heading"><span class="glyphicon glyphicon-list"></span> Skany — {{ period }}</div>
+            <table class="table table-condensed pp-stats-table">
+                <thead><tr><th>Rodzaj</th><th class="text-right">Sprawdz.</th><th class="text-right">SPAM</th><th class="text-right">Kwar.</th><th class="text-right">Biała l.</th></tr></thead>
+                <tbody>
+                {% for kind, c in totals.kinds %}
+                    <tr>
+                        <td>{{ kinds[kind] ?? kind }} <small class="text-muted">({{ c.passes }}×)</small></td>
+                        <td class="text-right">{{ m.num(c.checked) }}</td>
+                        <td class="text-right">{{ m.num(c.moved_to_spam) }}</td>
+                        <td class="text-right">{{ m.num(c.quarantined) }}</td>
+                        <td class="text-right">{{ m.num(c.whitelisted) }}</td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="5" class="text-muted">Brak skanów w tym okresie.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            <ul class="list-unstyled pp-stats-list">
+                <li>Z czarnej listy (w tym SPAM / kwarantannie): <b>{{ m.num(t.blacklisted) }}</b></li>
+                <li>Pominięte (już sprawdzone wcześniej): <b>{{ m.num(t.skipped) }}</b></li>
+                <li{% if t.move_failed %} class="text-danger"{% endif %}>Nieudane przeniesienia: <b>{{ m.num(t.move_failed) }}</b></li>
+                <li{% if t.errors %} class="text-danger"{% endif %}>Błędy wiadomości: <b>{{ m.num(t.errors) }}</b></li>
+                {% if plugin_reports %}
+                    <li>Zgłoszenia z wtyczki:
+                        {% for v, n in plugin_reports %}<b>{{ n }}</b> {{ v == 'spam' ? 'jako spam' : (v == 'ham' ? 'jako nie-spam' : v) }}{% if not loop.last %}, {% endif %}{% endfor %}
+                    </li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+
+
+    {% if account.connectionType == 'ssh' %}
+        <h3 class="pp-section-title">Dziennik agenta na serwerze</h3>
+        {% if agent is null %}
+            <p>Szczegóły pojedynczych wiadomości (nadawcy, reguły, decyzje) agent SSH trzyma u siebie. Pobranie ich łączy się z serwerem skrzynki.</p>
+            <p><a href="{{ path('antispam_account_stats', {id: account.id, days: days, agent: 1}) }}" class="btn btn-primary"><span class="glyphicon glyphicon-download"></span> Pobierz statystyki z agenta ({{ period }})</a></p>
+        {% elseif not agent.success %}
+            <div class="alert alert-danger">Nie udało się pobrać statystyk z agenta: {{ agent.error }}{% if 'nie obsługuje' in agent.error %} Statystyki wymagają agenta 3.9 - wdróż go ponownie (Konta → Wdróż).{% endif %}</div>
+        {% else %}
+            <p class="text-muted">
+                {% if agent.scans %}Przebiegi skanu agenta: {{ agent.scans.runs }}{% if agent.scans.last %}, ostatni {{ agent.scans.last|date('d.m.Y H:i') }}{% endif %} · {% endif %}
+                dziennik agenta przechowuje {{ agent.retention_days }} dni{% if agent.first_entry %} (najstarszy wpis: {{ agent.first_entry|date('d.m.Y') }}){% endif %}
+                · <a href="{{ path('antispam_account_stats', {id: account.id, days: days, agent: 1}) }}">odśwież</a>
+            </p>
+            {{ m.details(agent, decision_labels, source_labels, outcome_labels, false) }}
+        {% endif %}
+        {% if log.total > 0 %}
+            <h3 class="pp-section-title">Sprawdzenia z wtyczek (dziennik ocen serwera)</h3>
+            {{ m.details(log, decision_labels, source_labels, outcome_labels, true) }}
+        {% endif %}
+    {% else %}
+        <h3 class="pp-section-title">Dziennik ocen — {{ period }}
+            <small><a href="{{ path('antispam_spambox_scorelog', {account: account.email}) }}">pełny dziennik ocen tej skrzynki →</a></small></h3>
+        {% if log.total == 0 %}
+            <p class="text-muted">Brak wpisów w dzienniku ocen w tym okresie{% if t.checked > 0 %} (zapisywanie wyników można włączyć w <a href="{{ path('antispam_spam_config') }}">ustawieniach filtra</a>){% endif %}.</p>
+        {% else %}
+            {{ m.details(log, decision_labels, source_labels, outcome_labels, true) }}
+        {% endif %}
+    {% endif %}
+{% endblock %}

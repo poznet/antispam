@@ -4,6 +4,10 @@
 {% block page_title %}Edycja konta: {{ account.name }}{% endblock %}
 
 {% block body %}
+    <div class="pp-toolbar">
+        <span class="pp-spacer"></span>
+        <a href="{{ path('antispam_account_stats', {id: account.id}) }}" class="btn btn-default"><span class="glyphicon glyphicon-stats"></span> Statystyki konta</a>
+    </div>
     <form method="post" action="{{ path('antispam_account_edit', {id: account.id}) }}">
         <input type="hidden" name="_token" value="{{ csrf_token('account_form') }}">
         <div class="panel panel-default">

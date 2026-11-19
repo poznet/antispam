@@ -377,4 +377,25 @@ class AgentMaildirTest extends TestCase
         $this->assertFileExists($this->maildir() . '/.QUARANTINE/new/3.M1.host', 'other sender stays');
         $this->assertFileExists($this->maildir() . '/new/4.M1.host', 'INBOX is the retroactive pass\'s job');
     }
+
+    public function testStatsAggregateTheAgentLog()
+    {
+        $this->import([
+            'email_blacklist' => [['email' => 'me@firma.pl', 'blacklistemail' => 'a@spam.pl', 'pattern_type' => 'exact', 'score' => 10]],
+        ]);
+        $this->put('new/1.M1.host', "From: a@spam.pl\nMessage-ID: <s1@x>\nSubject: kup\n\nbody\n");
+        $this->put('new/2.M1.host', "From: b@ok.pl\nMessage-ID: <s2@x>\nSubject: hej\n\nbody\n");
+        \runScan($this->maildir(), $this->db(), []);
+
+        $stats = \agentStats($this->db(), ['days' => 30]);
+        $this->assertTrue($stats['success']);
+        $this->assertSame(1, $stats['decisions']['spam'] ?? 0, json_encode($stats));
+        $this->assertSame(['a@spam.pl' => 1], $stats['senders']);
+        $this->assertSame(['spam.pl' => 1], $stats['domains']);
+        $this->assertSame(1, $stats['categories']['email_blacklist'] ?? 0);
+        $this->assertSame('a@spam.pl', $stats['recent'][0]['sender']);
+        $this->assertSame(1, $stats['scans']['runs']);
+        $this->assertSame(1, $stats['scans']['moved_to_spam']);
+        $this->assertCount(1, $stats['daily']);
+    }
 }

@@ -361,6 +361,20 @@ Agents older than 3.1 answer with the usage text; the panel then reports the age
 outdated for that mailbox (redeploy: Konta → Wdróż). Nothing else changed in 3.1 - the
 SQLite schema is the same, rules and the checked history are kept on redeploy.
 
+## Statistics (agent 3.9+)
+
+```bash
+php antispam-agent.php stats [--days=30]     # 0 = everything still in the log
+```
+
+Read only. Answers from the agent's own `score_log` / `scan_log` of the last
+`--days` days: `decisions` (decision => count), `daily` (day => decision =>
+count), `total`, top 15 `senders` / `domains` / `rules` / `categories` of the
+spam + quarantine entries (the newest 20 000; `sampled` when cut), `recent`
+(30 newest spam / quarantine entries), `scans` (runs, checked, moved_to_spam,
+quarantined, last), `first_entry`, `retention_days`. Shown by the panel's
+*Konta → Statystyki* on request (docs/account-stats.md).
+
 ## Maildir Structure
 
 ```

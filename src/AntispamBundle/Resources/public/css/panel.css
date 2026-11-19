@@ -978,3 +978,12 @@ a.pp-kpi:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); bord
 .pp-imap-cert td { word-break: break-all; }
 .pp-imap-result .label { display: inline-block; margin: 0 2px 4px 0; }
 .form-horizontal .pp-imap-security .form-group { margin-left: 0; margin-right: 0; }
+
+/* Account statistics (Account/stats.html.twig) */
+.pp-chart-dense { gap: 2px; height: 240px; }
+.pp-chart-dense .pp-chart-day { min-height: 13px; }
+.pp-stats-table { margin-bottom: 0; }
+.pp-stats-table td, .pp-stats-table th { font-variant-numeric: tabular-nums; }
+.pp-stats-list { padding: 10px 15px; margin: 0; line-height: 1.9; }
+.pp-section-title { font-size: 18px; margin: 26px 0 12px; }
+.pp-section-title small { font-size: 13px; margin-left: 8px; }

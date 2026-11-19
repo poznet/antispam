@@ -218,10 +218,11 @@ class SshServiceTest extends TestCase
 
     public function testAgentScriptHasTheRescanCommand()
     {
-        $this->assertSame('3.8', SshService::bundledAgentVersion());
+        $this->assertSame('3.9', SshService::bundledAgentVersion());
         $src = file_get_contents(__DIR__ . '/../../Resources/agent/antispam-agent.php');
         $this->assertStringContainsString("case 'rescan':", $src);
         $this->assertStringContainsString("case 'quarantine-purge':", $src);
+        $this->assertStringContainsString("case 'stats':", $src);
     }
 
     public function testQuarantinePurgePassesOnlyAKnownModeAndUsesItsTimeout()

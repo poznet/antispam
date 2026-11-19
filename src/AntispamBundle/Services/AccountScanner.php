@@ -3,6 +3,7 @@
 namespace AntispamBundle\Services;
 
 use AntispamBundle\Entity\Account;
+use AntispamBundle\Entity\AccountDailyStat;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -27,6 +28,7 @@ class AccountScanner
         private EntityManagerInterface $em,
         private SshService $ssh,
         private ImapScanService $imapScan,
+        private ?AccountStatsService $stats = null,
     ) {
     }
 
@@ -56,6 +58,7 @@ class AccountScanner
         } else {
             $result = $this->imapScan->scanAccount($account, $maxMessages, $deadline);
         }
+        $this->stats?->record($account, !empty($result['initial']) ? AccountDailyStat::KIND_INITIAL : AccountDailyStat::KIND_SCAN, $result);
 
         return $result;
     }
@@ -81,7 +84,9 @@ class AccountScanner
             $folder = null;
         }
         if (!$account->isSsh()) {
-            return $this->imapScan->rescanAccount($account, $cursor, null, $deadline, $folder);
+            $result = $this->imapScan->rescanAccount($account, $cursor, null, $deadline, $folder);
+            $this->stats?->record($account, AccountDailyStat::KIND_RESCAN, $result);
+            return $result;
         }
         if ($folder !== null && $first) {
             // An agent older than 3.7 would ignore --folder and rescan INBOX instead.
@@ -108,6 +113,7 @@ class AccountScanner
         unset($result['decisions'], $result['decisions_truncated'], $result['agent_warning'], $result['agent_outdated'], $result['warnings']);
         $result['remaining'] = (int)($result['remaining'] ?? 0);
         $result['cursor'] = null;
+        $this->stats?->record($account, AccountDailyStat::KIND_RESCAN, $result);
         return $result;
     }
 

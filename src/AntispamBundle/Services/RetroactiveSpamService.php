@@ -3,6 +3,7 @@
 namespace AntispamBundle\Services;
 
 use AntispamBundle\Entity\Account;
+use AntispamBundle\Entity\AccountDailyStat;
 use AntispamBundle\Entity\Blacklist;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Entity\EmailWhitelist;
@@ -41,6 +42,7 @@ class RetroactiveSpamService
         private InboxService $inbox,
         private SshService $ssh,
         private AgentRulesExporter $rulesExporter,
+        private ?AccountStatsService $stats = null,
     ) {
     }
 
@@ -57,14 +59,18 @@ class RetroactiveSpamService
         foreach ($this->em->getRepository(Account::class)->findBy(RuleOwnership::isGlobal($owner) ? [] : ['email' => $owner]) as $account) {
             try {
                 if ($account->isSsh()) {
-                    $result['moved'] += $this->applySsh($account);
+                    $moved = $this->applySsh($account);
                 } else {
                     $connection = $this->imapScan->connect($account);
                     try {
-                        $result['moved'] += $this->applyImap($connection, (string)$account->getEmail(), $rule, $result['errors']);
+                        $moved = $this->applyImap($connection, (string)$account->getEmail(), $rule, $result['errors']);
                     } finally {
                         $connection->close();
                     }
+                }
+                $result['moved'] += $moved;
+                if ($moved > 0) {
+                    $this->stats?->record($account, AccountDailyStat::KIND_RETRO, ['moved_to_spam' => $moved, 'blacklisted' => $moved]);
                 }
             } catch (\Throwable $e) {
                 $result['errors'][] = $account->getEmail() . ': ' . $e->getMessage();

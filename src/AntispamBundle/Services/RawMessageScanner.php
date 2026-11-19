@@ -61,19 +61,23 @@ class RawMessageScanner
      * @param Account|null $account logged-in account: its thresholds / scoring
      *        switch apply (override -> global); null = looked up by e-mail
      *
+     * @param array $options 'antivirus' => MessageVirusScanService::scan() result, applied
+     *        first (a hit is spam, also from a whitelisted sender);
+     *        'source' => reason tag of the score log (default thunderbird_plugin)
+     *
      * @return array{decision:string, spam:bool, score:int, spam_threshold:int, quarantine_threshold:int, reasons:array, sender:string, subject:string}
      */
-    public function scan($raw, $accountEmail, ?Account $account = null)
+    public function scan($raw, $accountEmail, ?Account $account = null, array $options = [])
     {
         if ($this->mailboxSettings === null) {
-            return $this->doScan($raw, $accountEmail);
+            return $this->doScan($raw, $accountEmail, $options);
         }
         $settings = $account ? $this->mailboxSettings->forAccount($account) : $this->mailboxSettings->forEmail($accountEmail);
 
-        return $this->mailboxSettings->within($settings, fn () => $this->doScan($raw, $accountEmail));
+        return $this->mailboxSettings->within($settings, fn () => $this->doScan($raw, $accountEmail, $options));
     }
 
-    private function doScan($raw, $accountEmail)
+    private function doScan($raw, $accountEmail, array $options = [])
     {
         $msg = new RawMessageParser($raw);
         $sender = $msg->getFromAddress();
@@ -217,8 +221,22 @@ class RawMessageScanner
             }
         }
 
+        // Antivirus of "Sprawdź tę wiadomość" (MessageVirusScanService): first in the reasons, a hit wins over a whitelist.
+        $av = $options['antivirus'] ?? null;
+        if (is_array($av) && $av['reasons']) {
+            $score += (int)$av['score'];
+            $reasons = array_merge($av['reasons'], $reasons);
+            if (!empty($av['infected'])) {
+                $forcedSpam = true;
+                if ($whitelisted) {
+                    $whitelisted = false;
+                    $reasons[] = ['rule' => 'whitelist_overridden:virus', 'score' => 0];
+                }
+            }
+        }
+
         $decision = $this->scoring->classify($score, $forcedSpam, $whitelisted, $forcedQuarantine);
-        $reasons[] = ['rule' => 'source:thunderbird_plugin', 'score' => 0];
+        $reasons[] = ['rule' => 'source:' . (preg_match('/^[a-z_]{1,40}$/', (string)($options['source'] ?? '')) ? $options['source'] : 'thunderbird_plugin'), 'score' => 0];
         $this->scoring->logDecision($accountEmail, $score, $decision, $reasons, $sender, $subject, SpamScoreLog::SOURCE_PLUGIN, SpamScoreLog::OUTCOME_NONE);
 
         return [

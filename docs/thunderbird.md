@@ -147,6 +147,22 @@ Since 1.3.0:
 
 ## Plugin behaviour
 
+- **"Sprawdź tę wiadomość: antywirus + reguły"** (1.7.0, message list context
+  menu, logged-in accounts): the whole message (up to `phishing_max_bytes` /
+  `max_upload_bytes`, so the attachments arrive intact) goes to `POST
+  /api/plugin/scan`. The server runs the **antivirus first**
+  (`MessageVirusScanService`): ClamAV on the whole source and on every decoded
+  attachment (up to the clamd stream limit), VirusTotal on the SHA-256 of every
+  attachment (only the hash leaves the server, at most 8 lookups per message),
+  then the same checks as `/check`. A ClamAV / VirusTotal hit is spam even for
+  a whitelisted sender (`whitelist_overridden:virus`) and its reasons come
+  first. Both engines run only when configured in *Ustawienia → Filtr spamu*
+  (whatever the scoring switch). A window (`scan-result.html`) shows the
+  verdict, every ClamAV item, every VirusTotal file with a link to its report,
+  and the rules that matched, with *Przenieś do Śmieci*; the result is acted on
+  like an on-arrival check (spam / suspicious settings). Audit `plugin.scan`,
+  score log reason `source:plugin_scan`. Servers without `scan` in `/status`:
+  the plugin falls back to `/check`.
 - **Junk / not-junk in Thunderbird** → report (option *Report when I mark a message
   as junk*). Junk changes on a message that arrived less than 2 minutes ago and
   is still unread are ignored — those come from Thunderbird's own classifier
@@ -338,6 +354,7 @@ the report taught; `null` for anonymous and `report_only` reports).
 | GET | `/api/plugin/folders` | required | Folders the token's mailbox can have the rules applied in on the server (Outlook add-in): `{mailbox, folders: [{name, messages \| null}]}`, INBOX first, SPAM / QUARANTINE / Trash / Sent / Drafts / Junk left out. IMAP: live LIST; SSH: agent 3.7+ (`folders`); `409` agent not deployed, `502` mailbox / agent unreachable |
 | GET | `/api/plugin/rules` | required | Rules the plugin matches locally ("Zastosuj reguły antyspamu w tym folderze"): `{mailbox, generated_at, truncated, whitelist, email_whitelist, blacklist, email_blacklist}`, each list `[{value, type: exact\|wildcard\|regex, global}]` - the token's mailbox rules plus the global (`*`) ones, at most 20 000 per list (`truncated: true` past that). Read-only, no rate limit |
 | GET / POST / PUT / DELETE | `/api/plugin/complex-rules[/{id}]` | required | Complex rules of the token's mailbox (1.6.0) - [complex-rules.md](complex-rules.md#plugin-api) |
+| POST | `/api/plugin/scan` | required | `{raw_base64, truncated?}` (up to `phishing_max_bytes`) → `/check`'s fields + `antivirus: {attachments, infected, score, reasons[], truncated, clamav: {enabled, items: [{name, size, status: clean\|infected\|skipped\|error, signature, error}]}, virustotal: {enabled, items: [{name, sha256, status: clean\|malicious\|suspicious\|unknown\|skipped\|error, malicious, suspicious, total, link, error}]}}`; `/status` has `scan` and `antivirus: {clamav, virustotal}` |
 | POST | `/api/plugin/check` | required | `{raw_base64}` → `{decision, spam, score, spam_threshold, quarantine_threshold, reasons[], sender, subject}` |
 | GET | `/plugin/download` | — | The `.xpi` (`?build=instance` / `generic`; default: uploaded package if current, else instance) |
 | GET | `/plugin/thunderbird/updates.json` | — | Update manifest for the instance build's `update_url` |

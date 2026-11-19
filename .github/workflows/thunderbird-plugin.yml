@@ -66,6 +66,7 @@ jobs:
           node tests/js/thunderbird-first-run.mjs
           node tests/js/thunderbird-accounts.mjs
           node tests/js/thunderbird-complex-rules.mjs
+          node tests/js/thunderbird-scan.mjs
 
       - name: Build generic .xpi (reproducible)
         run: |

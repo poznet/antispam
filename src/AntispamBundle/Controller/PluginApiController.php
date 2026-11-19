@@ -20,7 +20,9 @@ use AntispamBundle\Services\Jobs\Handler\AccountRescanHandler;
 use AntispamBundle\Services\PatternMatcher;
 use AntispamBundle\Services\PhishingReportService;
 use AntispamBundle\Services\PluginService;
+use AntispamBundle\Services\MessageVirusScanService;
 use AntispamBundle\Services\RawMessageScanner;
+use AntispamBundle\Services\ScoringService;
 use AntispamBundle\Services\Jobs\JobQueue;
 use AntispamBundle\Services\RescanScheduler;
 use AntispamBundle\Services\RuleOwnership;
@@ -63,6 +65,8 @@ class PluginApiController extends AbstractController
         private ?AccountScanner $scanner = null,
         private ?ComplexRuleService $complex = null,
         private ?DeferredAgentSync $agentSync = null,
+        private ?MessageVirusScanService $virusScan = null,
+        private ?ScoringService $scoringService = null,
     ) {
         $this->tb = $tb ?? new ThunderbirdPluginBuilder();
     }
@@ -82,7 +86,7 @@ class PluginApiController extends AbstractController
     /** Complex rule changes (create / update / delete) per account and hour. */
     const COMPLEX_RULES_RATE_LIMIT = 120;
 
-    const PLUGIN_VERSION = '1.6.0';
+    const PLUGIN_VERSION = '1.7.0';
 
     /**
      * The Thunderbird .xpi. Default: the uploaded generic package (e.g. the
@@ -172,6 +176,10 @@ class PluginApiController extends AbstractController
             'anonymous_reports' => $this->plugin->isAnonymousReportEnabled(),
             'check_enabled' => $this->plugin->isCheckEnabled(),
             'phishing_reports' => true,
+            // /api/plugin/scan: "Sprawdź tę wiadomość" - ClamAV + VirusTotal first, then the rules (plugin 1.7.0+).
+            'scan' => $this->virusScan !== null && $this->plugin->isCheckEnabled(),
+            'antivirus' => ['clamav' => $this->scoringService?->isClamavEnabled() ?? false,
+                'virustotal' => $this->scoringService ? ($this->scoringService->isVirusTotalEnabled() && $this->scoringService->getVirusTotalApiKey() !== '') : false],
             // /api/plugin/rescan: the whole INBOX checked again on the server (plugin 1.4.0+).
             'rescan' => $this->rescans !== null,
             // /api/plugin/folders + POST /rescan {"folder"}: rules applied in a chosen folder on the server (Outlook add-in).
@@ -422,6 +430,40 @@ class PluginApiController extends AbstractController
         }
 
         return new JsonResponse($this->rawScanner->scan($raw, $account->getEmail(), $account));
+    }
+
+    /**
+     * "Sprawdź tę wiadomość" (plugin 1.7.0+, Outlook add-in 1.3): antivirus
+     * first - ClamAV on the whole message and every attachment, VirusTotal on
+     * the attachment hashes (MessageVirusScanService) - then the same checks
+     * as /check. POST {"raw_base64": "..."} up to the phishing report size
+     * (attachments must arrive whole). Answers /check's fields + "antivirus".
+     * Nothing is moved on the server; the plugin acts on the answer.
+     */
+    #[Route('/api/plugin/scan', name: 'antispam_plugin_api_scan', methods: ['POST'])]
+    public function scanAction(Request $request)
+    {
+        if (!$this->plugin->isEnabled() || !$this->plugin->isCheckEnabled()) {
+            return new JsonResponse(['error' => 'checks disabled'], 403);
+        }
+        $account = $this->plugin->accountForToken($this->bearer($request));
+        if (!$account) {
+            return new JsonResponse(['error' => 'login required'], 401);
+        }
+        if (!$this->virusScan) {
+            return new JsonResponse(['error' => 'not available'], 404);
+        }
+        $data = json_decode($request->getContent(), true);
+        if (($raw = $this->rawFrom($data, PhishingReportService::MAX_RAW_BYTES)) instanceof JsonResponse) {
+            return $raw;
+        }
+        $av = $this->virusScan->scan($raw);
+        $result = $this->rawScanner->scan($raw, $account->getEmail(), $account, ['antivirus' => $av, 'source' => 'plugin_scan']);
+        $result['antivirus'] = $av + ['truncated' => !empty($data['truncated'])];
+        $this->audit('plugin.scan', targetType: 'message', label: mb_substr((string)$result['subject'], 0, 200), mailbox: $account->getEmail(), actor: $account->getEmail(), actorType: AuditLog::ACTOR_PLUGIN,
+            details: ['decision' => $result['decision'], 'score' => $result['score'], 'sender' => $result['sender'], 'infected' => $av['infected'],
+                'attachments' => $av['attachments'], 'clamav' => $av['clamav']['enabled'], 'virustotal' => $av['virustotal']['enabled']]);
+        return new JsonResponse($result);
     }
 
     /**

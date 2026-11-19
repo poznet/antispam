@@ -239,7 +239,8 @@ function render() {
   $("as-phishing").disabled = state.busy || !hasItem || !enabled || !logged || st.phishing_reports !== true;
   $("as-phishing").title = !logged ? "Wymaga zalogowania" : (st.phishing_reports !== true ? "Serwer nie obsługuje zgłoszeń phishingu" : "");
   $("as-ham").title = logged ? "" : "Wymaga zalogowania";
-  $("as-check").title = !logged ? "Wymaga zalogowania" : (st.check_enabled === false ? "Sprawdzanie wyłączone na serwerze" : "");
+  $("as-check").title = !logged ? "Wymaga zalogowania" : (st.check_enabled === false ? "Sprawdzanie wyłączone na serwerze"
+    : st.scan === true ? "Antywirus (ClamAV, VirusTotal), potem reguły antyspamu" : "");
 
   const folderOk = logged && enabled && st.folder_rescan === true;
   $("as-folder-box").hidden = !folderOk;
@@ -452,17 +453,51 @@ async function reportPhishing() {
 
 const LABELS = { spam: "SPAM", quarantine: "podejrzana", ham: "czysta", whitelisted: "biała lista" };
 
+const CLAM_LABELS = { clean: "czysto", infected: "ZAINFEKOWANE", skipped: "pominięte", error: "błąd" };
+const VT_LABELS = { clean: "czysto", malicious: "ZŁOŚLIWY", suspicious: "podejrzany", unknown: "nieznany", skipped: "pominięty", error: "błąd" };
+
+/** Antivirus part of a /scan answer as HTML (values escaped). */
+function antivirusHtml(av) {
+  if (!av) return "";
+  const item = (i, labels, extra) => "<li>" + escapeHtml(i.name) + ": <b>" + escapeHtml(labels[i.status] || i.status) + "</b>" + (extra || "")
+    + (i.error ? " – " + escapeHtml(i.error) : "") + "</li>";
+  let html = "<div class=\"as-av\"><strong>1. Antywirus</strong>";
+  html += "<div>ClamAV: " + (av.clamav && av.clamav.enabled
+    ? "<ul>" + (av.clamav.items || []).map((i) => item(i, CLAM_LABELS, i.signature ? " " + escapeHtml(i.signature) : "")).join("") + "</ul>"
+    : "wyłączony na serwerze") + "</div>";
+  html += "<div>VirusTotal: " + (av.virustotal && av.virustotal.enabled
+    ? ((av.virustotal.items || []).length
+      ? "<ul>" + av.virustotal.items.map((i) => item(i, VT_LABELS, i.total ? " " + i.malicious + "/" + i.total : "")).join("") + "</ul>"
+      : "brak załączników")
+    : "wyłączony na serwerze") + "</div>";
+  if (av.truncated) html += "<div>Wiadomość wysłana w części – załączniki mogły nie zostać sprawdzone w całości.</div>";
+  return html + "</div><strong>2. Reguły i filtr spamu</strong>";
+}
+
+/**
+ * "Sprawdź tę wiadomość": servers with "scan" in /status get the whole message
+ * on /scan (ClamAV + VirusTotal first, then the rules); older ones /check.
+ */
 async function check({ auto = false } = {}) {
-  if (!auto) showResult("", "Sprawdzanie…");
-  const res = await api("/check", { method: "POST", body: { raw_base64: await rawBase64() } });
-  const label = LABELS[res.decision] || res.decision;
-  const kind = res.decision === "spam" ? "err" : res.decision === "quarantine" ? "warn" : "ok";
+  const full = !auto && state.status && state.status.scan === true;
+  if (!auto) showResult("", full ? "Sprawdzanie: antywirus, potem reguły…" : "Sprawdzanie…");
+  let res;
+  if (full) {
+    const src = await rawSource(b64Len(phishingLimit()));
+    res = await api("/scan", { method: "POST", body: { raw_base64: src.base64, truncated: src.truncated, client: "outlook" } });
+  } else {
+    res = await api("/check", { method: "POST", body: { raw_base64: await rawBase64() } });
+  }
+  const av = res.antivirus || null;
+  const label = (av && av.infected ? "WIRUS / złośliwy załącznik – " : "") + (LABELS[res.decision] || res.decision);
+  const kind = (av && av.infected) || res.decision === "spam" ? "err" : res.decision === "quarantine" ? "warn" : "ok";
   const reasons = (res.reasons || [])
     .filter((r) => r && r.score)
     .map((r) => "<li>" + escapeHtml(r.rule) + " (" + (r.score > 0 ? "+" : "") + r.score + ")</li>")
     .join("");
   showResult(kind, "<strong>Wynik: " + escapeHtml(label) + "</strong> – " + res.score + " / " + res.spam_threshold
-    + (reasons ? "<ul>" + reasons + "</ul>" : ""));
+    + (av ? antivirusHtml(av) : "")
+    + (reasons ? "<ul>" + reasons + "</ul>" : (av ? "<div>Żadna reguła nie zadziałała.</div>" : "")));
   $("as-junk-hint").hidden = res.decision !== "spam";
   if (res.decision === "spam" || res.decision === "quarantine") {
     notifyItem("Antyspam: " + label + " (" + res.score + "/" + res.spam_threshold + ")");

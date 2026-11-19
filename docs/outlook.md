@@ -68,7 +68,7 @@ when a message is open (read mode).
 |---|---|---|
 | Zgłoś spam (shared spam DB) | ✔ (if `plugin.anonymous_reports`) | ✔ + sender on the account's e-mail blacklist |
 | To nie spam | — | ✔ sender whitelisted |
-| Sprawdź w Antyspamie | — | ✔ shows decision, score, reasons |
+| Sprawdź tę wiadomość | — | ✔ (1.3.0.0, servers with `scan`) ClamAV + VirusTotal on the whole `.eml` and its attachments first, then the rules (`/api/plugin/scan`); older servers: `/check` - decision, score, reasons |
 | Check opened messages automatically | — | ✔ optional, while the pane is **pinned** |
 | Zgłoś phishing | — | ✔ whole `.eml` (up to 10 MiB) to *Zgłoszenia phishingu*, sender blacklisted ([phishing.md](phishing.md)) |
 | Zastosuj reguły antyspamu w folderze | — | ✔ (1.2.0.0) the server checks a chosen folder with the current rules and moves spam itself |

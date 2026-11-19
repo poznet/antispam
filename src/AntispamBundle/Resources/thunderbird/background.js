@@ -923,6 +923,112 @@ async function check(message, { manual = false, ctx = null } = {}) {
   return res;
 }
 
+// --- "Sprawdź tę wiadomość": antivirus first, then the rules -----------------
+
+/*
+ * POST /api/plugin/scan (server with "scan" in /status): ClamAV on the whole
+ * message and every attachment, VirusTotal on the attachment hashes, then the
+ * same checks as /check. The message is sent whole (up to the phishing report
+ * size) so the attachments arrive intact. The answer opens in a window
+ * (scan-result.html) and is acted on like an on-arrival check (spam / suspicious
+ * settings). Older servers: falls back to /check.
+ */
+const SCAN_TIMEOUT_MS = 170 * 1000;
+const scanResults = new Map(); // id -> { result, message, ctx } for scan-result.html
+let scanSeq = 0;
+
+async function scanMessage(message) {
+  const s = await settings();
+  const ctx = await contextFor(folderAccountId(message.folder));
+  const detail = Object.assign({ akcja: "sprawdzenie (antywirus + reguły)" }, messageDetail(message, ctx));
+  if (ctx.kind !== "own" && ctx.kind !== "linked") {
+    await needsSetup(ctx.kind === "off"
+      ? "Antyspam jest wyłączony dla konta " + accountLabel(ctx.account) + "."
+      : "Sprawdzanie wiadomości wymaga zalogowania konta " + accountLabel(ctx.account) + " we wtyczce (adres skrzynki + hasło wtyczki lub IMAP).", detail);
+    return null;
+  }
+  let st = null;
+  try {
+    st = await api("/api/plugin/status", { login: ctx.login, quietOk: true, timeout: LIMITS_TIMEOUT_MS });
+  } catch (e) { /* tried below */ }
+  if (st && st.scan !== true) {
+    logEvent("check", false, "Serwer antyspamu nie obsługuje sprawdzania antywirusem (zaktualizuj antyspam) - zwykłe sprawdzenie", detail);
+    return check(message, { manual: true, ctx });
+  }
+  await notify("Antyspam", "Sprawdzam wiadomość: " + (message.subject || "(bez tematu)")
+    + (st && st.antivirus ? " - " + [st.antivirus.clamav ? "ClamAV" : "", st.antivirus.virustotal ? "VirusTotal" : ""].filter(Boolean).concat(["reguły"]).join(", ") : ""));
+
+  let res;
+  try {
+    const limits = await serverLimits();
+    const limit = Math.min(limits.phishingMax, limits.known ? limits.maxUpload : MAX_PHISHING_BYTES);
+    const src = await encodeRaw(await getRaw(message.id), limit);
+    detail["wysłano"] = Math.round(Math.min(src.size, limit) / 1024) + " KiB" + (src.truncated ? " (obcięte - załączniki mogły nie zostać sprawdzone w całości)" : "");
+    res = await api("/api/plugin/scan", { method: "POST", body: { raw_base64: src.base64, truncated: src.truncated, client: "thunderbird" }, login: ctx.login, timeout: SCAN_TIMEOUT_MS });
+  } catch (e) {
+    if (e.status === 404 || e.status === 405) {
+      logEvent("check", false, "Serwer antyspamu nie ma /api/plugin/scan - zwykłe sprawdzenie", detail);
+      return check(message, { manual: true, ctx });
+    }
+    console.warn("antispam: scan failed", e);
+    const text = "Sprawdzenie nie powiodło się (" + s.server + "): " + errorText(e) + (e.status ? " (HTTP " + e.status + ")" : "");
+    await notify("Antyspam — błąd", text);
+    await feedback(false, text, detail);
+    return null;
+  }
+
+  const action = res.decision === "spam" ? s.spamAction : res.decision === "quarantine" ? s.quarantineAction : "none";
+  if (action === "mark" || action === "move") await setJunk(message, true);
+  if (action === "move") await moveToJunk(message);
+
+  const av = res.antivirus || {};
+  const labels = { spam: "SPAM", quarantine: "podejrzana", ham: "czysta", whitelisted: "biała lista" };
+  const label = (av.infected ? "WIRUS / złośliwy załącznik - " : "") + (labels[res.decision] || res.decision);
+  const avText = scanAvSummary(av);
+  const text = (message.subject || "(bez tematu)") + " — " + label + ", wynik " + res.score + "/" + res.spam_threshold + (avText ? "; " + avText : "");
+  Object.assign(detail, { decyzja: res.decision, wynik: res.score + "/" + res.spam_threshold, antywirus: avText, akcja_lokalna: action,
+    powody: (res.reasons || []).filter(r => r && r.score).map(r => r.rule + " (" + r.score + ")").join(", ") });
+  await notify(av.infected ? "Antyspam: WIRUS" : "Antyspam: " + label, text);
+  await feedback(true, label + ": " + text, detail);
+
+  const id = String(++scanSeq);
+  scanResults.set(id, { result: res, action, target: targetText(ctx),
+    message: { id: message.id, subject: message.subject || "", author: message.author || "", date: message.date ? new Date(message.date).toISOString() : "" } });
+  while (scanResults.size > 20) scanResults.delete(scanResults.keys().next().value);
+  try {
+    await messenger.windows.create({ url: "scan-result.html?id=" + id, type: "popup", width: 640, height: 720 });
+  } catch (e) {
+    logEvent("check", false, "Nie udało się otworzyć okna z wynikiem: " + errorText(e));
+  }
+  return res;
+}
+
+/** "ClamAV: czysto (3), VirusTotal: 1 złośliwy" - one line for notifications and the event log. */
+function scanAvSummary(av) {
+  const parts = [];
+  const count = (items, status) => (items || []).filter(i => i.status === status).length;
+  if (av.clamav) {
+    if (!av.clamav.enabled) parts.push("ClamAV: wyłączony na serwerze");
+    else {
+      const bad = count(av.clamav.items, "infected");
+      const err = count(av.clamav.items, "error");
+      parts.push("ClamAV: " + (bad ? bad + " zainfekowane" : err ? "błąd skanowania (" + err + ")" : "czysto"));
+    }
+  }
+  if (av.virustotal) {
+    if (!av.virustotal.enabled) parts.push("VirusTotal: wyłączony na serwerze");
+    else if (!(av.virustotal.items || []).length) parts.push("VirusTotal: brak załączników");
+    else {
+      const bad = count(av.virustotal.items, "malicious");
+      const sus = count(av.virustotal.items, "suspicious");
+      const unk = count(av.virustotal.items, "unknown");
+      parts.push("VirusTotal: " + (bad ? bad + " złośliwe" : sus ? sus + " podejrzane" : "czysto") + (unk ? ", " + unk + " nieznane" : ""));
+    }
+  }
+  if (av.attachments !== undefined) parts.push("załączniki: " + av.attachments);
+  return parts.join(", ");
+}
+
 // --- new mail ---------------------------------------------------------------
 
 // Automatic work (on-arrival checks, Thunderbird's junk button) runs one at a
@@ -1076,6 +1182,7 @@ const MENU = {
   "antispam-phishing": "Zgłoś próbę wyłudzenia / phishing (Antyspam)",
   "antispam-ham": "To nie spam (Antyspam)",
   "antispam-check": "Sprawdź w Antyspamie",
+  "antispam-scan": "Sprawdź tę wiadomość: antywirus + reguły (Antyspam)",
 };
 for (const [id, title] of Object.entries(MENU)) {
   messenger.menus.create({ id, title, contexts: ["message_list"], icons: { "32": "icons/icon-32.png" } });
@@ -1142,6 +1249,7 @@ messenger.menus.onClicked.addListener((info, tab) => {
       if (info.menuItemId === "antispam-spam") await reportSpamAndFile(m);
       else if (info.menuItemId === "antispam-phishing") await reportPhishing(m);
       else if (info.menuItemId === "antispam-ham") await reportHam(m);
+      else if (info.menuItemId === "antispam-scan") await scanMessage(m);
       else await check(m, { manual: true });
     }
   }, MENU[info.menuItemId]);
@@ -1171,6 +1279,10 @@ if (messenger.menus.onShown && messenger.menus.update) {
       });
       await messenger.menus.update("antispam-check", {
         title: MENU["antispam-check"] + (checkOk ? " (" + to + ")" : " – wymaga zalogowania tego konta"),
+        enabled: checkOk,
+      });
+      await messenger.menus.update("antispam-scan", {
+        title: MENU["antispam-scan"] + (checkOk ? "" : " – wymaga zalogowania tego konta"),
         enabled: checkOk,
       });
       if (messenger.menus.refresh) await messenger.menus.refresh();
@@ -2171,6 +2283,22 @@ async function accountsState() {
 
 messenger.runtime.onMessage.addListener(async (msg) => {
   switch (msg && msg.cmd) {
+    case "scanResult":
+      return scanResults.get(String(msg.id)) || null;
+    case "scanJunk": {
+      // "Przenieś do Śmieci" in scan-result.html.
+      const entry = scanResults.get(String(msg.id));
+      if (!entry) return { ok: false, error: "wynik wygasł - sprawdź wiadomość ponownie" };
+      try {
+        const message = await messenger.messages.get(entry.message.id);
+        await setJunk(message, true);
+        await moveToJunk(message);
+        logEvent("check", true, "Przeniesiono do Śmieci po sprawdzeniu: " + (message.subject || "(bez tematu)"));
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, error: errorText(e) };
+      }
+    }
     case "settings": {
       const s = await settings();
       // Compatibility with the 1.2 page fields: e-mail of the default login.

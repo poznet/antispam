@@ -20,6 +20,12 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 
 ### Added
 
+- **"Sprawdź tę wiadomość"** in the plugins (Thunderbird 1.7.0 context menu,
+  Outlook add-in 1.3.0.0 button): `POST /api/plugin/scan` runs the antivirus
+  first - ClamAV on the whole message and every attachment, VirusTotal on the
+  attachment hashes - then the rules; a virus is spam even from a whitelisted
+  sender. Thunderbird shows the full report in a window (per ClamAV item,
+  per VirusTotal file with a link) with *Przenieś do Śmieci*.
 - **Account statistics** (*Konta → Statystyki*): per mailbox and period
   (today / 7 / 30 / 90 days / year / all) how much mail was checked, moved to
   SPAM, quarantined, whitelisted, blacklist hits, failed moves and errors,

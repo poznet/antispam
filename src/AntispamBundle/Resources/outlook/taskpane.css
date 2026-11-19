@@ -82,3 +82,6 @@ main { padding: 12px 14px 20px; }
 .as-folder-state { margin-top: 8px; }
 .as-folder-state.ok { color: var(--pp-green); }
 .as-folder-state.err { color: var(--pp-red); }
+
+.as-av { margin: 6px 0; }
+.as-av ul { margin: 2px 0 4px; padding-left: 18px; }

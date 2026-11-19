@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Antyspam – wynik sprawdzenia</title>
+  <link rel="stylesheet" href="options.css">
+  <link rel="stylesheet" href="scan-result.css">
+</head>
+<body>
+  <header>
+    <img src="icons/icon-64.png" alt="" width="36" height="36">
+    <div>
+      <h1>Wynik sprawdzenia wiadomości</h1>
+      <p id="msg" class="muted">Wczytywanie…</p>
+    </div>
+  </header>
+  <section id="verdict" class="sr-verdict" hidden></section>
+  <section id="av" hidden>
+    <h2>1. Antywirus</h2>
+    <div id="clamav"></div>
+    <div id="virustotal"></div>
+  </section>
+  <section id="rules" hidden>
+    <h2>2. Reguły i filtr spamu</h2>
+    <p id="score"></p>
+    <ul id="reasons" class="sr-list"></ul>
+  </section>
+  <section class="sr-actions">
+    <button type="button" id="junk" hidden>Przenieś do Śmieci</button>
+    <button type="button" id="close">Zamknij</button>
+    <span id="actionState" class="muted"></span>
+  </section>
+  <script src="scan-result.js"></script>
+</body>
+</html>

@@ -61,6 +61,7 @@ class AuditLogger
         'plugin.login' => 'Wtyczka: logowanie',
         'plugin.login_failed' => 'Wtyczka: nieudane logowanie',
         'plugin.report' => 'Wtyczka: zgłoszenie spam/nie spam',
+        'plugin.scan' => 'Wtyczka: sprawdzenie wiadomości (antywirus + reguły)',
         'plugin.phishing' => 'Wtyczka: zgłoszenie phishingu',
         'phishing.update' => 'Phishing: zmiana statusu / notatki',
         'phishing.block' => 'Phishing: blokada',

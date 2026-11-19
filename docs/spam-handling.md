@@ -29,7 +29,14 @@ The thresholds deciding ham / quarantine / spam can differ per mailbox
 delete switch above has always been per account and does not inherit the
 global `delete` setting, which belongs to the legacy mailbox only.
 
-The `SPAM` and `QUARANTINE` folders are created on first use. In IMAP the
+The `SPAM` and `QUARANTINE` folders are created on first use. IMAP: when the
+mailbox has no `SPAM` but its own spam folder (`Spam`, `INBOX.Spam`,
+`[Gmail]/Spam`, then `Junk` / `Junk E-mail` / `Wiadomości-śmieci`…), that one is
+used instead (`InboxService::getSpamFolderName($connection)`; e.g.
+poczta.interia.pl refuses `CREATE "SPAM"` next to its `Spam` - "Internal
+error"); likewise `Kwarantanna` for `QUARANTINE`. When the server refuses a
+top-level folder it is created as `INBOX.<name>`; if that fails too the scan
+error says to create it by hand. In IMAP the
 message is moved with `MOVE`/`COPY`+`\Deleted` and the INBOX is expunged at the
 end of the scan. If the move fails (quota, permissions...) the score log gets
 `move_failed`, the message stays in INBOX and is **retried on the next scan**

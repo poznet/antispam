@@ -195,7 +195,7 @@ class QuarantineService
         if (self::isImapKey($key)) {
             try {
                 $connection = $this->imapConnection($key);
-                $folder = $connection->getMailbox($this->inbox->getQuarantineFolderName());
+                $folder = $connection->getMailbox($this->inbox->getQuarantineFolderName($connection));
                 if (!self::uidValidityMatches($folder, $uidValidity)) {
                     return ['success' => false, 'message' => self::NOT_FOUND, 'sender' => ''];
                 }
@@ -244,7 +244,7 @@ class QuarantineService
         if (self::isImapKey($key)) {
             try {
                 $connection = $this->imapConnection($key);
-                $folder = $connection->getMailbox($this->inbox->getQuarantineFolderName());
+                $folder = $connection->getMailbox($this->inbox->getQuarantineFolderName($connection));
                 if (!self::uidValidityMatches($folder, $uidValidity)) {
                     return ['success' => false, 'message' => self::NOT_FOUND, 'sender' => ''];
                 }
@@ -318,8 +318,8 @@ class QuarantineService
     private function purgeImap($connection, string $mode, string $accountEmail, ?callable $progress, int $minScore = 0): array
     {
         $out = ['total' => 0, 'deleted' => 0, 'skipped' => 0, 'failed' => 0, 'errors' => []];
-        $name = $this->inbox->getQuarantineFolderName();
-        foreach (['INBOX', $this->inbox->getSpamFolderName()] as $forbidden) {
+        $name = $this->inbox->getQuarantineFolderName($connection);
+        foreach (['INBOX', $this->inbox->getSpamFolderName($connection)] as $forbidden) {
             if (strcasecmp(trim((string)$name), (string)$forbidden) === 0) {
                 throw new \LogicException('Refusing to purge ' . $name . ': not the quarantine folder');
             }
@@ -419,7 +419,7 @@ class QuarantineService
 
         try {
             $connection = $this->imapConnection($key);
-            $folder = $connection->getMailbox($this->inbox->getQuarantineFolderName());
+            $folder = $connection->getMailbox($this->inbox->getQuarantineFolderName($connection));
             $msg = $folder->getMessage((int)$id);
             $sender = $msg->getFrom() ? strtolower((string)$msg->getFrom()->getAddress()) : '';
         } catch (\Throwable $e) {
@@ -544,7 +544,7 @@ class QuarantineService
     private function listImap($connection, ?\DateTimeInterface $since = null, $limit = 200, $accountEmail = '')
     {
         $items = [];
-        $folder = $this->inbox->getQuarantineFolderName();
+        $folder = $this->inbox->getQuarantineFolderName($connection);
         if (!$connection->hasMailbox($folder)) {
             return [];
         }

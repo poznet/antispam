@@ -18,6 +18,13 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 
 ## [Unreleased]
 
+### Fixed
+
+- IMAP: the scan no longer fails with *Can not create "SPAM" mailbox* on
+  servers that refuse it (poczta.interia.pl: "Internal error") - the mailbox's
+  own spam folder (`Spam`, `INBOX.Spam`, `[Gmail]/Spam`, `Junk`…) is used, and
+  a refused top-level folder is created as `INBOX.SPAM` / `INBOX.QUARANTINE`.
+
 ### Added
 
 - **Complex rules ("Reguły złożone")**: conditions joined with I / LUB (nested

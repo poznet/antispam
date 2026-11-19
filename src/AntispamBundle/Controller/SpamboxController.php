@@ -59,7 +59,7 @@ class SpamboxController extends AbstractController
     #[Template('@Antispam/Spambox/index.html.twig')]
     public function indexAction(Request $request)
     {
-        $messages = $this->loadFolder($this->inbox->getSpamFolderName());
+        $messages = $this->loadFolder($this->legacyFolderName(true));
         // ?msg=<number> picks the previewed message; default: the first one.
         $selected = $messages[0] ?? null;
         foreach ($messages as $msg) {
@@ -293,8 +293,8 @@ class SpamboxController extends AbstractController
             return $this->redirectToRoute('antispam_spambox_index');
         }
         $allowed = [
-            $this->inbox->getSpamFolderName(),
-            $this->inbox->getQuarantineFolderName(),
+            $this->legacyFolderName(true),
+            $this->legacyFolderName(false),
         ];
         if (!in_array($folder, $allowed, true)) {
             $this->addFlash('danger', 'Nieprawidłowy folder');
@@ -396,6 +396,17 @@ class SpamboxController extends AbstractController
             'verdict' => $verdict,
             'who' => $who,
         ];
+    }
+
+    /** SPAM / QUARANTINE folder name of the legacy mailbox (its own "Spam" when it has one). */
+    private function legacyFolderName(bool $spam): string
+    {
+        try {
+            $connection = $this->inbox->legacyConnection();
+            return $spam ? $this->inbox->getSpamFolderName($connection) : $this->inbox->getQuarantineFolderName($connection);
+        } catch (\Throwable $e) {
+            return $spam ? $this->inbox->getSpamFolderName() : $this->inbox->getQuarantineFolderName();
+        }
     }
 
     private function loadFolder($folderName)

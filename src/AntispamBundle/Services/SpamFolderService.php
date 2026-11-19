@@ -89,7 +89,7 @@ class SpamFolderService
             }
             try {
                 $connection = $this->imapConnection($key);
-                $name = $this->inbox->getSpamFolderName();
+                $name = $this->inbox->getSpamFolderName($connection);
                 if (!$connection->hasMailbox($name)) {
                     return ['success' => false, 'message' => self::NOT_FOUND, 'sender' => ''];
                 }
@@ -137,7 +137,7 @@ class SpamFolderService
 
     private function listImap($connection, int $limit, string $accountEmail): array
     {
-        $name = $this->inbox->getSpamFolderName();
+        $name = $this->inbox->getSpamFolderName($connection);
         if (!$connection->hasMailbox($name)) {
             return ['items' => [], 'total' => 0];
         }

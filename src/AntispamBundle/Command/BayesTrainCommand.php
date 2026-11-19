@@ -8,6 +8,7 @@ use AntispamBundle\Services\Bayes\BayesService;
 use AntispamBundle\Services\Bayes\BayesTokenizer;
 use AntispamBundle\Services\ConnectionService;
 use AntispamBundle\Services\ImapScanService;
+use AntispamBundle\Services\InboxService;
 use Ddeboer\Imap\ConnectionInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -72,6 +73,10 @@ class BayesTrainCommand extends Command
 
         $summary = [];
         foreach ($folders as $verdict => $name) {
+            if ($verdict === 'spam' && $name === 'SPAM' && !$connection->hasMailbox($name)) {
+                // The mailbox's own spam folder ("Spam", "INBOX.Spam", "Junk"…).
+                $name = InboxService::findExisting(InboxService::KIND_SPAM, array_map('strval', array_keys($connection->getMailboxes()))) ?? $name;
+            }
             if (!$connection->hasMailbox($name)) {
                 $output->writeln(sprintf('<error>Folder "%s" not found</error>', $name));
                 return Command::FAILURE;

@@ -10,6 +10,11 @@ class InboxService
     private $mailbox;
     private $spamboxname = 'SPAM';
     private $quarantineboxname = 'QUARANTINE';
+    /** @var \WeakMap<ConnectionInterface, array<string, string>>|null folder names found per connection */
+    private ?\WeakMap $resolved = null;
+
+    public const KIND_SPAM = 'spam';
+    public const KIND_QUARANTINE = 'quarantine';
 
     public function __construct(ConnectionService $connection)
     {
@@ -39,16 +44,24 @@ class InboxService
     }
 
     /**
+     * The SPAM folder of a mailbox (created when it has none).
+     *
      * @param ConnectionInterface|null $connection mailbox to look in; null = the legacy mailbox
      */
     public function getSpamFolder(?ConnectionInterface $connection = null)
     {
-        return $this->getOrCreateFolder($this->spamboxname, $connection);
+        return $this->getOrCreateFolder(self::KIND_SPAM, $connection ?? $this->connection->getConnection());
     }
 
-    public function getSpamFolderName()
+    /**
+     * Name of the SPAM folder. With a connection: the folder that mailbox
+     * already has ("SPAM", else "Spam", "INBOX.Spam", "Junk", "[Gmail]/Spam"…
+     * - servers such as poczta.interia.pl refuse CREATE "SPAM" next to their
+     * own "Spam"), else the default "SPAM".
+     */
+    public function getSpamFolderName(?ConnectionInterface $connection = null)
     {
-        return $this->spamboxname;
+        return $connection ? $this->resolve(self::KIND_SPAM, $connection) : $this->spamboxname;
     }
 
     /**
@@ -57,20 +70,93 @@ class InboxService
      */
     public function getQuarantineFolder(?ConnectionInterface $connection = null)
     {
-        return $this->getOrCreateFolder($this->quarantineboxname, $connection);
+        return $this->getOrCreateFolder(self::KIND_QUARANTINE, $connection ?? $this->connection->getConnection());
     }
 
-    public function getQuarantineFolderName()
+    public function getQuarantineFolderName(?ConnectionInterface $connection = null)
     {
-        return $this->quarantineboxname;
+        return $connection ? $this->resolve(self::KIND_QUARANTINE, $connection) : $this->quarantineboxname;
     }
 
-    private function getOrCreateFolder($name, ?ConnectionInterface $connection = null)
+    /** The legacy (single, .env configured) mailbox. */
+    public function legacyConnection(): ConnectionInterface
     {
-        $connection = $connection ?? $this->connection->getConnection();
-        if (!$connection->hasMailbox($name)) {
-            $connection->createMailbox($name);
+        return $this->connection->getConnection();
+    }
+
+    /**
+     * Existing folder of the kind: the default name exactly, else the same
+     * name in another case / under INBOX, else (SPAM only) the server's
+     * junk folder. The default name when there is none.
+     */
+    public function resolve(string $kind, ConnectionInterface $connection): string
+    {
+        $this->resolved ??= new \WeakMap();
+        if (isset($this->resolved[$connection][$kind])) {
+            return $this->resolved[$connection][$kind];
         }
-        return $connection->getMailbox($name);
+        $default = $kind === self::KIND_SPAM ? $this->spamboxname : $this->quarantineboxname;
+        $found = $connection->hasMailbox($default) ? $default : self::findExisting($kind, array_map('strval', array_keys($connection->getMailboxes())));
+        $map = $this->resolved[$connection] ?? [];
+        $map[$kind] = $found ?? $default;
+        $this->resolved[$connection] = $map;
+        return $map[$kind];
+    }
+
+    /**
+     * @param string[] $names folder names of the mailbox
+     */
+    public static function findExisting(string $kind, array $names): ?string
+    {
+        $groups = $kind === self::KIND_SPAM
+            ? [['spam'], ['junk', 'junk e-mail', 'junk email', 'junk mail', 'bulk mail', 'wiadomości-śmieci', 'niechciane', 'śmieci']]
+            : [['quarantine', 'kwarantanna']];
+        foreach ($groups as $wanted) {
+            $best = null;
+            foreach ($names as $name) {
+                $last = mb_strtolower((string)preg_replace('~^.*[./]~', '', $name));
+                if (!in_array($last, $wanted, true)) {
+                    continue;
+                }
+                // Top level first, then INBOX.<name>, then anything deeper.
+                $rank = !preg_match('~[./]~', $name) ? 0 : (preg_match('~^inbox[./][^./]+$~i', $name) ? 1 : 2);
+                if ($best === null || $rank < $best[0]) {
+                    $best = [$rank, $name];
+                }
+            }
+            if ($best !== null) {
+                return $best[1];
+            }
+        }
+        return null;
+    }
+
+    private function getOrCreateFolder(string $kind, ConnectionInterface $connection)
+    {
+        $name = $this->resolve($kind, $connection);
+        if ($connection->hasMailbox($name)) {
+            return $connection->getMailbox($name);
+        }
+        try {
+            $folder = $connection->createMailbox($name);
+        } catch (\Throwable $e) {
+            // Some servers only allow folders under INBOX (INBOX.SPAM).
+            $delimiter = $connection->hasMailbox('INBOX') ? (string)$connection->getMailbox('INBOX')->getDelimiter() : '';
+            if ($delimiter === '' || $delimiter === 'NIL') {
+                throw $this->createError($name, $e);
+            }
+            try {
+                $folder = $connection->createMailbox('INBOX' . $delimiter . $name);
+            } catch (\Throwable) {
+                throw $this->createError($name, $e);
+            }
+        }
+        unset($this->resolved[$connection]);
+        return $folder;
+    }
+
+    private function createError(string $name, \Throwable $e): \RuntimeException
+    {
+        return new \RuntimeException(sprintf('Serwer IMAP nie pozwala utworzyć folderu „%s” (ani „INBOX/%s”) - utwórz go ręcznie w poczcie albo folder spamu skrzynki. Błąd serwera: %s', $name, $name, $e->getMessage()), 0, $e);
     }
 }

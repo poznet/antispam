@@ -120,6 +120,14 @@
                 <input type="checkbox" name="config[learn_rules]" {% if config.learn_rules %}checked{% endif %}>
                 <strong>Ucz reguł ze zgłoszeń zalogowanych</strong> — spam dodaje nadawcę do czarnej listy e-mail konta, nie-spam przenosi go na białą listę.
             </label></div>
+            <div class="checkbox"><label>
+                <input type="checkbox" name="config[complex_rules]" {% if config.complex_rules %}checked{% endif %}>
+                <strong>Reguły złożone z wtyczki</strong> — zalogowany użytkownik tworzy i edytuje we wtyczce Thunderbird reguły złożone (warunki I / LUB) swojej skrzynki. Trafiają do panelu (<a href="{{ path('antispam_complex_rule_index') }}">Reguły złożone</a>) i działają na serwerze.
+            </label></div>
+            <div class="checkbox"><label>
+                <input type="checkbox" name="config[global_rules]" {% if config.global_rules %}checked{% endif %}>
+                <strong>…także globalne</strong> — użytkownik wtyczki może tworzyć reguły złożone dla <em>wszystkich skrzynek</em> (i edytować tylko te, które sam utworzył). Włączaj tylko, jeśli ufasz wszystkim użytkownikom wtyczki.
+            </label></div>
         </div>
     </div>
 

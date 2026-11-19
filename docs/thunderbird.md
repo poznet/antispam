@@ -176,6 +176,14 @@ Since 1.3.0:
   `storage.local` (`rescanWatch`) and resumed after a restart; given up after 3
   days or when the login is removed. A second click while a rescan runs only
   shows its progress. Limit: 5 rescans a day per mailbox.
+- **Reguły złożone** (1.6.0, settings page section + message menu *Utwórz regułę
+  złożoną z tej wiadomości…*): AND / OR / NOT rules of the logged-in mailbox (or,
+  when the admin allows `plugin.global_rules`, of every mailbox), built with the
+  same builder as the panel and stored on the server (`/api/plugin/complex-rules`),
+  where they run on every scan and check. The menu entry opens the settings with a
+  draft (sender domain + subject of the message). Details, fields and permissions:
+  [complex-rules.md](complex-rules.md). Every list / save / delete is in the event
+  log (`[rules]`).
 - **Folder pane menu → Zastosuj reguły antyspamu w tym folderze** (1.5.0, any
   folder of an account logged in with its own or a linked login; not offered on
   Junk, Trash, Sent, Drafts, Outbox, Templates and virtual folders): the folder is
@@ -185,7 +193,12 @@ Since 1.3.0:
   Thunderbird already has - no message is downloaded or uploaded) locally, the
   same way as `PatternMatcher` (exact = case-insensitive equality, wildcard =
   glob over the whole value, regex = case-insensitive search; a PCRE-only regex
-  JavaScript cannot compile is skipped and listed in the log). Whitelist wins
+  JavaScript cannot compile is skipped and listed in the log). Since 1.6.0 the
+  enabled **complex rules** come with them and are evaluated locally too (whitelist
+  rules keep the message, spam / quarantine rules move it to the quarantine folder,
+  score rules are left to the *full* mode; rules on MX / domain age / sender IP are
+  only evaluated on the server; body / header fields read the message with
+  `messages.getFull`). Whitelist wins
   and keeps the message; a blacklist hit moves it to the account's quarantine
   folder - an existing `QUARANTINE` (the server's IMAP quarantine) or
   `Kwarantanna`, created at the account root when missing (permission
@@ -280,6 +293,8 @@ Shared by all mail client plugins: Thunderbird, the Outlook add-in
 | `plugin.token_ttl_days` | 90 | Login token lifetime |
 | `plugin.report_rate_limit` | 120 | Reports per hour per IP (anonymous) or account |
 | `plugin.public_url` | (empty) | Base URL baked into the downloaded plugin |
+| `plugin.complex_rules` | on | Logged-in plugin users create / edit complex rules of their mailbox ([complex-rules.md](complex-rules.md)) |
+| `plugin.global_rules` | off | …and complex rules for every mailbox (`*`; editable from the plugin only by the mailbox that created them) |
 | `plugin.max_upload_kb` | 700 | Largest message source (KiB, decoded) a plugin sends in one request; published as `max_upload_bytes` in `/status`. 64…10240 |
 
 ## HTTP API (`/api/plugin`)
@@ -322,6 +337,7 @@ the report taught; `null` for anonymous and `report_only` reports).
 | GET | `/api/plugin/rescan` | required | `?job=ID` (a job of the token's mailbox): also `finished: {id, status, ok, folder, at, total, checked, whitelisted, blacklisted, quarantined, moved_to_spam, move_failed, error}` once it ended. `{mailbox, active, job: {id, status, progress, done, total, folder} \| null, last: {at, ok, total, checked, whitelisted, blacklisted, quarantined, moved_to_spam, move_failed, error} \| null}` |
 | GET | `/api/plugin/folders` | required | Folders the token's mailbox can have the rules applied in on the server (Outlook add-in): `{mailbox, folders: [{name, messages \| null}]}`, INBOX first, SPAM / QUARANTINE / Trash / Sent / Drafts / Junk left out. IMAP: live LIST; SSH: agent 3.7+ (`folders`); `409` agent not deployed, `502` mailbox / agent unreachable |
 | GET | `/api/plugin/rules` | required | Rules the plugin matches locally ("Zastosuj reguły antyspamu w tym folderze"): `{mailbox, generated_at, truncated, whitelist, email_whitelist, blacklist, email_blacklist}`, each list `[{value, type: exact\|wildcard\|regex, global}]` - the token's mailbox rules plus the global (`*`) ones, at most 20 000 per list (`truncated: true` past that). Read-only, no rate limit |
+| GET / POST / PUT / DELETE | `/api/plugin/complex-rules[/{id}]` | required | Complex rules of the token's mailbox (1.6.0) - [complex-rules.md](complex-rules.md#plugin-api) |
 | POST | `/api/plugin/check` | required | `{raw_base64}` → `{decision, spam, score, spam_threshold, quarantine_threshold, reasons[], sender, subject}` |
 | GET | `/plugin/download` | — | The `.xpi` (`?build=instance` / `generic`; default: uploaded package if current, else instance) |
 | GET | `/plugin/thunderbird/updates.json` | — | Update manifest for the instance build's `update_url` |

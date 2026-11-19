@@ -44,7 +44,35 @@
  * PHP warnings never reach STDOUT; they are collected into "warnings".
  */
 
-const AGENT_VERSION = '3.7';
+const AGENT_VERSION = '3.8';
+// Complex rules (complex*() functions below)
+const COMPLEX_MAX_BODY = 262144;
+const COMPLEX_BACKTRACK_LIMIT = 100000;
+const COMPLEX_FREEMAIL = [
+    'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com',
+    'msn.com', 'yahoo.com', 'icloud.com', 'me.com', 'aol.com', 'gmx.com',
+    'gmx.de', 'gmx.net', 'proton.me', 'protonmail.com', 'zoho.com',
+    'yandex.ru', 'mail.ru', 'wp.pl', 'o2.pl', 'onet.pl', 'onet.eu', 'op.pl',
+    'interia.pl', 'interia.eu', 'interia.com', 'poczta.fm', 'gazeta.pl',
+    'tlen.pl', 'vp.pl', 'buziaczek.pl', 'autograf.pl', 'int.pl', 'go2.pl',
+    'spoko.pl', 'poczta.onet.pl',
+];
+// = SenderIntelService::MX_PROVIDERS
+const COMPLEX_MX_PROVIDERS = [
+    'google.com' => 'google', 'googlemail.com' => 'google', 'smtp.goog' => 'google',
+    'mail.protection.outlook.com' => 'microsoft', 'outlook.com' => 'microsoft', 'hotmail.com' => 'microsoft', 'microsoft.com' => 'microsoft',
+    'zoho.com' => 'zoho', 'zoho.eu' => 'zoho', 'zohomail.com' => 'zoho',
+    'protonmail.ch' => 'proton', 'proton.me' => 'proton',
+    'yahoodns.net' => 'yahoo', 'icloud.com' => 'icloud', 'me.com' => 'icloud',
+    'yandex.net' => 'yandex', 'yandex.ru' => 'yandex', 'mail.ru' => 'mailru',
+    'messagingengine.com' => 'fastmail',
+    'ovh.net' => 'ovh', 'ovh.com' => 'ovh',
+    'home.pl' => 'homepl', 'nazwa.pl' => 'nazwapl', 'cyberfolks.pl' => 'cyberfolks', 'cyber-folks.pl' => 'cyberfolks',
+    'lh.pl' => 'lh', 'zenbox.pl' => 'zenbox', 'wp.pl' => 'wp', 'o2.pl' => 'o2', 'onet.pl' => 'onet', 'opoczta.pl' => 'onet',
+    'poczta.onet.pl' => 'onet', 'interia.pl' => 'interia', 'interia.eu' => 'interia',
+    'mimecast.com' => 'mimecast', 'pphosted.com' => 'proofpoint', 'ppe-hosted.com' => 'proofpoint',
+    'barracudanetworks.com' => 'barracuda', 'ess.barracudanetworks.com' => 'barracuda',
+];
 const CERT_DEFAULT_URL = 'https://hole.cert.pl/domains/v2/domains.txt';
 const CERT_MAX_BYTES = 52428800;
 const CERT_MIN_ROWS = 100;
@@ -469,7 +497,7 @@ function importRules($dbPath, $input)
     if (!is_array($data) || !$data) {
         return ['success' => false, 'error' => 'Invalid JSON input (' . json_last_error_msg() . ', ' . strlen((string)$input) . ' bytes)'];
     }
-    foreach (['whitelist', 'email_whitelist', 'blacklist', 'email_blacklist', 'dnsbl', 'settings', 'bayes_tokens'] as $section) {
+    foreach (['whitelist', 'email_whitelist', 'blacklist', 'email_blacklist', 'dnsbl', 'settings', 'bayes_tokens', 'complex_rules'] as $section) {
         if (isset($data[$section]) && !is_array($data[$section])) {
             return ['success' => false, 'error' => 'Invalid JSON input: "' . $section . '" must be a list'];
         }
@@ -584,6 +612,28 @@ function importRulesInto($db, array $data)
             $counts['dnsbl_providers']++;
         }
     }
+    // Complex rules (agent 3.8+): the panel sends the full set of the mailbox;
+    // a panel without the section leaves the table as it is.
+    if (isset($data['complex_rules']) && is_array($data['complex_rules'])) {
+        $db->exec('DELETE FROM complex_rules');
+        $counts['complex_rules'] = 0;
+        $stmt = $db->prepare('INSERT INTO complex_rules (id, email, name, action, score, conditions) VALUES (:id, :email, :name, :action, :score, :cond)');
+        foreach ($data['complex_rules'] as $row) {
+            if (!is_array($row) || !isset($row['id'], $row['action'], $row['conditions']) || !is_array($row['conditions'])
+                || !in_array($row['action'], ['spam', 'quarantine', 'score', 'whitelist', 'log'], true)) {
+                continue;
+            }
+            $stmt->bindValue(':id', (int)$row['id']);
+            $stmt->bindValue(':email', (string)($row['email'] ?? ''));
+            $stmt->bindValue(':name', (string)($row['name'] ?? ''));
+            $stmt->bindValue(':action', (string)$row['action']);
+            $stmt->bindValue(':score', (int)($row['score'] ?? 0));
+            $stmt->bindValue(':cond', json_encode($row['conditions']));
+            $stmt->execute();
+            $stmt->reset();
+            $counts['complex_rules']++;
+        }
+    }
     // Attachment-scanning settings (ClamAV / VirusTotal) pushed from the web UI.
     // Stored as key/value strings; booleans are normalised to '1'/'0'.
     // The pushed set is complete: settings no longer sent fall back to defaults.
@@ -640,12 +690,12 @@ function scanConfig(array $settings, array $options)
 }
 
 /** ham / quarantine / spam for a score, like ScoringService::classify(). */
-function agentClassify($score, $forcedSpam, array $cfg)
+function agentClassify($score, $forcedSpam, array $cfg, $forcedQuarantine = false)
 {
     if ($forcedSpam || $score >= $cfg['spam_threshold']) {
         return 'spam';
     }
-    if ($score >= $cfg['quarantine_threshold']) {
+    if ($forcedQuarantine || $score >= $cfg['quarantine_threshold']) {
         return 'quarantine';
     }
     return 'ham';
@@ -911,6 +961,385 @@ function runScan($maildirPath, $dbPath, $options = [])
     return $stats;
 }
 
+/* ---------------------------------------------------------------------- */
+/* Complex rules (agent 3.8, = ComplexRuleEngine / ComplexRuleMessage /   */
+/* SenderIntelService on the web side; AgentParityTest keeps them equal)  */
+/* ---------------------------------------------------------------------- */
+
+function loadComplexRules($db)
+{
+    $rules = [];
+    $res = @$db->query('SELECT id, email, name, action, score, conditions FROM complex_rules ORDER BY id');
+    if (!$res) {
+        return $rules;
+    }
+    while ($row = $res->fetchArray(SQLITE3_ASSOC)) {
+        $tree = json_decode((string)$row['conditions'], true);
+        if (!is_array($tree) || !isset($tree['op'])) {
+            continue;
+        }
+        $rules[] = ['id' => (int)$row['id'], 'name' => (string)$row['name'], 'action' => (string)$row['action'], 'score' => (int)$row['score'], 'tree' => $tree];
+    }
+    return $rules;
+}
+
+function complexFold($value)
+{
+    $value = (string)$value;
+    if (function_exists('mb_scrub')) {
+        $value = mb_scrub($value, 'UTF-8');
+    }
+    $value = preg_replace('/\s+/u', ' ', $value) ?? preg_replace('/\s+/', ' ', $value);
+    return trim(function_exists('mb_strtolower') ? mb_strtolower($value, 'UTF-8') : strtolower($value));
+}
+
+function complexBounded($regex, $value)
+{
+    $previous = ini_get('pcre.backtrack_limit');
+    ini_set('pcre.backtrack_limit', (string)COMPLEX_BACKTRACK_LIMIT);
+    try {
+        $ok = @preg_match($regex, $value);
+        return ($ok === false || preg_last_error() !== PREG_NO_ERROR) ? false : $ok;
+    } finally {
+        ini_set('pcre.backtrack_limit', (string)$previous);
+    }
+}
+
+function complexMatchValue($value, $match, $pattern)
+{
+    $value = (string)$value;
+    $pattern = (string)$pattern;
+    switch ($match) {
+        case 'lt': return is_numeric($value) && is_numeric($pattern) && (float)$value < (float)$pattern;
+        case 'gt': return is_numeric($value) && is_numeric($pattern) && (float)$value > (float)$pattern;
+        case 'empty': return $value === '';
+        case 'contains': return $value !== '' && strpos($value, $pattern) !== false;
+        case 'equals': return $value === $pattern;
+        case 'starts': return $value !== '' && strncmp($value, $pattern, strlen($pattern)) === 0;
+        case 'ends': return $value !== '' && $pattern !== '' && substr($value, -strlen($pattern)) === $pattern;
+        case 'wildcard':
+            $re = '';
+            foreach (preg_split('//u', $pattern, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $c) {
+                $re .= $c === '*' ? '.*' : ($c === '?' ? '.' : preg_quote($c, '~'));
+            }
+            return @preg_match('~^' . $re . '$~su', $value) === 1;
+        case 'regex':
+            return complexBounded('~' . str_replace('~', '\\~', $pattern) . '~iu', $value) === 1;
+    }
+    return false;
+}
+
+/** @param callable $values fn(string $field, ?string $header): string[] */
+function complexEvaluate(array $node, callable $values)
+{
+    if (isset($node['op'])) {
+        $and = $node['op'] === 'and';
+        $result = $and;
+        foreach ((array)($node['items'] ?? []) as $item) {
+            $hit = is_array($item) && complexEvaluate($item, $values);
+            if ($and !== $hit) {
+                $result = $hit;
+                break;
+            }
+        }
+        return empty($node['negate']) ? $result : !$result;
+    }
+    $vals = $values((string)($node['field'] ?? ''), isset($node['header']) ? (string)$node['header'] : null);
+    $match = (string)($node['match'] ?? '');
+    $any = false;
+    foreach ($vals as $v) {
+        if (complexMatchValue(complexFold($v), $match, (string)($node['value'] ?? ''))) {
+            $any = true;
+            break;
+        }
+    }
+    if ($match === 'empty' && !$vals) {
+        $any = true;
+    }
+    return empty($node['negate']) ? $any : !$any;
+}
+
+/** Every value of a header in an unfolded header block, MIME-decoded. */
+function complexHeaderValues($block, $name)
+{
+    $out = [];
+    if (preg_match_all('/^' . preg_quote($name, '/') . ':[ \t]*(.*)$/mi', unfoldHeaders($block), $m)) {
+        foreach ($m[1] as $v) {
+            $out[] = decodeHeaderValue(trim($v));
+        }
+    }
+    return $out;
+}
+
+function complexAddresses(array $values)
+{
+    $out = [];
+    foreach ($values as $v) {
+        if (preg_match_all('/[^\s<>"\',;:()]+@[^\s<>"\',;:()]+/', (string)$v, $m)) {
+            foreach ($m[0] as $a) {
+                $out[] = strtolower(rtrim($a, '.'));
+            }
+        }
+    }
+    return array_values(array_unique($out));
+}
+
+function complexAuthResults($block, $method)
+{
+    $auth = strtolower(grabHeader($block, 'Authentication-Results'));
+    $out = [];
+    if (preg_match_all('/\b' . preg_quote($method, '/') . '\s*=\s*([a-z]+)/', $auth, $m)) {
+        $out = $m[1];
+    }
+    if (!$out && $method === 'spf') {
+        if (preg_match('/^([a-z]+)/', strtolower(ltrim(grabHeader($block, 'Received-SPF'))), $m)) {
+            $out = [$m[1]];
+        }
+    }
+    return array_values(array_unique($out));
+}
+
+function complexMessageTypes($block)
+{
+    $out = [];
+    $h = function ($n) use ($block) { return strtolower(trim(grabHeader($block, $n))); };
+    $auto = $h('Auto-Submitted');
+    if (($auto !== '' && $auto !== 'no') || $h('X-Autoreply') !== '' || $h('X-Autorespond') !== '' || $h('Precedence') === 'auto_reply') {
+        $out[] = 'autoreply';
+    }
+    $ct = $h('Content-Type');
+    if (strpos($ct, 'multipart/report') === 0 && strpos($ct, 'delivery-status') !== false) { $out[] = 'bounce'; }
+    if (strpos($ct, 'multipart/report') === 0 && strpos($ct, 'disposition-notification') !== false) { $out[] = 'readreceipt'; }
+    if ($h('List-Id') !== '' || $h('List-Unsubscribe') !== '' || in_array($h('Precedence'), ['bulk', 'list'], true)) { $out[] = 'list'; }
+    if (strpos($ct, 'text/calendar') !== false || strpos($ct, 'method=request') !== false) { $out[] = 'calendar'; }
+    if (strpos($ct, 'multipart/signed') === 0) { $out[] = 'signed'; }
+    if (strpos($ct, 'multipart/encrypted') === 0 || strpos($ct, 'application/pkcs7-mime') !== false) { $out[] = 'encrypted'; }
+    return $out;
+}
+
+function complexClassifyMx(array $hosts)
+{
+    if (!$hosts) {
+        return 'none';
+    }
+    foreach ($hosts as $host) {
+        $host = rtrim(strtolower((string)$host), '.');
+        foreach (COMPLEX_MX_PROVIDERS as $suffix => $slug) {
+            if ($host === $suffix || substr($host, -strlen('.' . $suffix)) === '.' . $suffix) {
+                return $slug;
+            }
+        }
+    }
+    return 'other';
+}
+
+/** Cached lookup (table intel_cache); $compute returns [value, ok]. Failures kept 6 h. */
+function complexCached($db, $key, $ttl, callable $compute)
+{
+    static $memo = [];
+    if (array_key_exists($key, $memo)) {
+        return $memo[$key];
+    }
+    $now = time();
+    if ($db) {
+        $stmt = @$db->prepare('SELECT value FROM intel_cache WHERE key = :k AND expires > :now');
+        if ($stmt) {
+            $stmt->bindValue(':k', $key);
+            $stmt->bindValue(':now', $now);
+            $row = $stmt->execute()->fetchArray(SQLITE3_NUM);
+            if ($row) {
+                return $memo[$key] = json_decode((string)$row[0], true);
+            }
+        }
+    }
+    try {
+        list($value, $ok) = $compute();
+    } catch (\Throwable $e) {
+        list($value, $ok) = [null, false];
+    }
+    if ($db) {
+        $stmt = @$db->prepare('INSERT OR REPLACE INTO intel_cache (key, value, expires) VALUES (:k, :v, :e)');
+        if ($stmt) {
+            $stmt->bindValue(':k', $key);
+            $stmt->bindValue(':v', json_encode($value));
+            $stmt->bindValue(':e', $now + ($ok ? $ttl : 21600));
+            @$stmt->execute();
+        }
+    }
+    if (count($memo) > 5000) { $memo = []; }
+    return $memo[$key] = $value;
+}
+
+/** @return string[]|null null = lookup failed */
+function complexMxHosts($db, $domain)
+{
+    return complexCached($db, 'mx:' . $domain, 86400, function () use ($domain) {
+        if (!function_exists('dns_get_record')) {
+            return [null, false];
+        }
+        $records = @dns_get_record($domain . '.', DNS_MX);
+        if ($records === false) {
+            return [null, false];
+        }
+        usort($records, function ($a, $b) { return ($a['pri'] ?? 0) <=> ($b['pri'] ?? 0); });
+        $out = [];
+        foreach ($records as $r) {
+            $t = rtrim(strtolower((string)($r['target'] ?? '')), '.');
+            if ($t !== '') { $out[] = $t; }
+        }
+        return [array_values(array_unique($out)), true];
+    });
+}
+
+function complexParseWhoisCreated($text)
+{
+    if (preg_match('/^\s*(?:creation date|created|created on|registered|registered on|registration time|domain registration date|record created)\s*[:.]+\s*(.+)$/mi', (string)$text, $m)) {
+        $value = trim(preg_replace('/\s+\(.*\)$/', '', $m[1]));
+        $value = preg_replace('/^(\d{4})\.(\d{2})\.(\d{2})/', '$1-$2-$3', $value);
+        $ts = strtotime($value);
+        return $ts ?: null;
+    }
+    return null;
+}
+
+function complexWhois($server, $query)
+{
+    if (!preg_match('/^[a-z0-9.-]+$/i', $server)) {
+        return null;
+    }
+    $fp = @fsockopen($server, 43, $errno, $errstr, 4);
+    if (!$fp) {
+        return null;
+    }
+    stream_set_timeout($fp, 4);
+    fwrite($fp, $query . "\r\n");
+    $out = '';
+    while (!feof($fp) && strlen($out) < 65536) {
+        $chunk = fread($fp, 8192);
+        if ($chunk === false || ($chunk === '' && (stream_get_meta_data($fp)['timed_out'] ?? false))) {
+            break;
+        }
+        $out .= $chunk;
+    }
+    fclose($fp);
+    return $out === '' ? null : $out;
+}
+
+/** Registration timestamp: RDAP (rdap.org), else WHOIS via whois.iana.org. */
+function complexDomainCreated($domain)
+{
+    $ctx = stream_context_create(['http' => ['timeout' => 4, 'follow_location' => 1, 'max_redirects' => 3,
+        'header' => "Accept: application/rdap+json\r\nUser-Agent: antispam-pancernapanda-agent\r\n"]]);
+    $body = @file_get_contents('https://rdap.org/domain/' . rawurlencode($domain), false, $ctx, 0, 262144);
+    $data = $body !== false ? json_decode($body, true) : null;
+    foreach ((array)($data['events'] ?? []) as $event) {
+        if (is_array($event) && ($event['eventAction'] ?? '') === 'registration' && ($ts = strtotime((string)($event['eventDate'] ?? '')))) {
+            return $ts;
+        }
+    }
+    $tld = substr($domain, strrpos($domain, '.') + 1);
+    $iana = complexWhois('whois.iana.org', $tld);
+    if ($iana !== null && preg_match('/^whois:\s*(\S+)/mi', $iana, $m)) {
+        $answer = complexWhois($m[1], $domain);
+        return $answer === null ? null : complexParseWhoisCreated($answer);
+    }
+    return null;
+}
+
+function complexDomainAgeDays($db, $domain)
+{
+    $reg = domRegistrable($domain);
+    if ($reg === '' || domIsIp($reg) || strpos($reg, '.') === false) {
+        return null;
+    }
+    $created = complexCached($db, 'age:' . $reg, 604800, function () use ($reg) {
+        $ts = complexDomainCreated($reg);
+        return [$ts, $ts !== null];
+    });
+    return $created === null ? null : max(0, intdiv(time() - (int)$created, 86400));
+}
+
+/**
+ * Field values of one message, like ComplexRuleMessage. $getParts() returns
+ * parseMessageParts() of the file (parsed once, shared with the scan).
+ */
+function complexFieldProvider($filePath, $headers, callable $getParts, array $ctx, $db)
+{
+    $cache = [];
+    $body = null;
+    $from = parseFromHeader(grabHeader($headers, 'From'));
+    $fromEmail = $from['email'];
+    $fromHost = domainOf($fromEmail);
+    $lookups = !isset($ctx['settings']['complex_lookups']) || settingBool($ctx['settings'], 'complex_lookups', true);
+    $mailbox = (string)($ctx['settings']['mailbox_email'] ?? '');
+
+    $bodyOf = function () use (&$body, $getParts) {
+        if ($body === null) {
+            $parts = $getParts();
+            $text = $parts['text'] !== '' ? $parts['text']
+                : html_entity_decode(strip_tags(preg_replace('#<(script|style)\b.*?</\1>#is', '', (string)$parts['html']) ?? ''), ENT_QUOTES, 'UTF-8');
+            $text = function_exists('mb_substr') ? mb_substr(agentUtf8($text), 0, COMPLEX_MAX_BODY, 'UTF-8') : substr($text, 0, COMPLEX_MAX_BODY);
+            $names = [];
+            $types = [];
+            foreach ($parts['attachments'] as $a) {
+                $types[] = strtolower((string)($a['type'] ?? 'application/octet-stream'));
+                if (($a['filename'] ?? '') !== '') { $names[] = decodeHeaderValue($a['filename']); }
+            }
+            $body = ['text' => $text, 'attachments' => $names, 'types' => $types,
+                'links' => array_values(array_unique(certLinkHosts($parts['html'], $parts['text'])))];
+        }
+        return $body;
+    };
+
+    return function ($field, $header = null) use (&$cache, $headers, $from, $fromEmail, $fromHost, $lookups, $mailbox, $bodyOf, $filePath, $db) {
+        $key = $field . ':' . strtolower((string)$header);
+        if (array_key_exists($key, $cache)) {
+            return $cache[$key];
+        }
+        switch ($field) {
+            case 'from': $v = [$fromEmail]; break;
+            case 'from_domain': $v = [$fromHost]; break;
+            case 'from_name': $v = [$from['name']]; break;
+            case 'subject': $v = [decodeHeaderValue(grabHeader($headers, 'Subject'))]; break;
+            case 'to': $v = complexAddresses(array_merge(complexHeaderValues($headers, 'To'), complexHeaderValues($headers, 'Cc'))); break;
+            case 'reply_to': $v = complexAddresses(complexHeaderValues($headers, 'Reply-To')); break;
+            case 'return_path': $v = complexAddresses(complexHeaderValues($headers, 'Return-Path')); break;
+            case 'from_scope':
+                $mine = strpos($mailbox, '@') !== false ? substr($mailbox, strrpos($mailbox, '@') + 1) : '';
+                $v = $fromHost === '' ? [] : [($mine !== '' && domRegistrable($mine) === domRegistrable($fromHost)) ? 'internal' : 'external'];
+                break;
+            case 'from_freemail': $v = $fromHost === '' ? [] : [in_array(domRegistrable($fromHost), COMPLEX_FREEMAIL, true) ? 'tak' : 'nie']; break;
+            case 'message_type': $v = complexMessageTypes($headers); break;
+            case 'sender_ip': $v = ($ip = extractConnectingIp($headers)) ? [$ip] : []; break;
+            case 'size_kb': $size = @filesize($filePath); $v = $size === false ? [] : [(string)intdiv($size + 1023, 1024)]; break;
+            case 'header': $v = $header === null ? [] : complexHeaderValues($headers, $header); break;
+            case 'body': $v = [$bodyOf()['text']]; break;
+            case 'attachment': $v = $bodyOf()['attachments']; break;
+            case 'attachment_type': $v = $bodyOf()['types']; break;
+            case 'attachment_count': $v = [(string)count($bodyOf()['types'])]; break;
+            case 'link_domain': $v = $bodyOf()['links']; break;
+            case 'auth_spf': case 'auth_dkim': case 'auth_dmarc': $v = complexAuthResults($headers, substr($field, 5)); break;
+            case 'mx_provider':
+                $hosts = ($lookups && $fromHost !== '' && !domIsIp($fromHost)) ? complexMxHosts($db, $fromHost) : null;
+                $v = $hosts === null ? [] : [complexClassifyMx($hosts)];
+                break;
+            case 'mx_host': $v = ($lookups && $fromHost !== '' && !domIsIp($fromHost)) ? (complexMxHosts($db, $fromHost) ?? []) : []; break;
+            case 'domain_age':
+                $days = ($lookups && $fromHost !== '') ? complexDomainAgeDays($db, $fromHost) : null;
+                $v = $days === null ? [] : [(string)$days];
+                break;
+            default: $v = [];
+        }
+        return $cache[$key] = array_values(array_filter(array_map('strval', $v), function ($x) { return $x !== ''; }));
+    };
+}
+
+function complexReason(array $rule)
+{
+    return 'complex_rule:#' . $rule['id'] . ' ' . $rule['name'] . ' (' . $rule['action'] . ')';
+}
+
+
 function loadAllLists($db)
 {
     return [
@@ -918,6 +1347,7 @@ function loadAllLists($db)
         'email_whitelist' => loadListRules($db, 'SELECT whitelistemail, pattern_type FROM email_whitelist', 'whitelistemail'),
         'blacklist' => loadListRules($db, 'SELECT host, pattern_type, score FROM blacklist', 'host'),
         'email_blacklist' => loadListRules($db, 'SELECT blacklistemail, pattern_type, score FROM email_blacklist', 'blacklistemail'),
+        'complex' => loadComplexRules($db),
     ];
 }
 
@@ -935,6 +1365,17 @@ function scoreMessage($filePath, $headers, array $cfg, array $lists, array $dnsb
     $senderHost = $parsed['sender_host'];
     $out = ['decision' => 'ham', 'score' => 0, 'reasons' => [], 'sender' => $senderEmail, 'subject' => $parsed['subject'], 'attachments_flagged' => false];
 
+    // Body + attachments are parsed once, only when a step needs them.
+    $partsCache = null;
+    $getParts = function () use (&$partsCache, $filePath) {
+        if ($partsCache === null) {
+            $partsCache = parseMessageParts($filePath);
+        }
+        return $partsCache;
+    };
+    $complex = $lists['complex'] ?? [];
+    $values = $complex ? complexFieldProvider($filePath, $headers, $getParts, $ctx, $db) : null;
+
     // Whitelist short-circuit
     if ($senderHost && ($hit = matchListReturning($lists['whitelist'], $senderHost))) {
         $out['decision'] = 'whitelisted';
@@ -945,6 +1386,14 @@ function scoreMessage($filePath, $headers, array $cfg, array $lists, array $dnsb
         $out['decision'] = 'whitelisted';
         $out['reasons'][] = ['rule' => 'email_whitelist:' . $hit['pattern'], 'score' => 0];
         return $out;
+    }
+    // Complex "whitelist" rules (like CheckComplexRules::whitelist()).
+    foreach ($complex as $rule) {
+        if ($rule['action'] === 'whitelist' && complexEvaluate($rule['tree'], $values)) {
+            $out['decision'] = 'whitelisted';
+            $out['reasons'][] = ['rule' => complexReason($rule), 'score' => 0];
+            return $out;
+        }
     }
 
     $score = 0;
@@ -963,6 +1412,20 @@ function scoreMessage($filePath, $headers, array $cfg, array $lists, array $dnsb
         $forceSpam = true; // a blacklist hit is spam whatever the threshold
     }
     $blacklisted = (bool)$reasons;
+
+    // Complex spam / quarantine / score / log rules (like CheckComplexRules::check()).
+    $forceQuarantine = false;
+    $scoringOn = !empty($cfg['scoring']) || !array_key_exists('scoring', $cfg);
+    foreach ($complex as $rule) {
+        if ($rule['action'] === 'whitelist' || ($rule['action'] === 'score' && !$scoringOn) || !complexEvaluate($rule['tree'], $values)) {
+            continue;
+        }
+        $points = ($scoringOn && $rule['action'] !== 'log') ? (int)$rule['score'] : 0;
+        $score += $points;
+        $reasons[] = ['rule' => complexReason($rule), 'score' => $points];
+        if ($rule['action'] === 'spam') { $forceSpam = true; }
+        if ($rule['action'] === 'quarantine') { $forceQuarantine = true; }
+    }
 
     $add = function (array $r) use (&$score, &$reasons) {
         $score += $r['score'];
@@ -991,10 +1454,9 @@ function scoreMessage($filePath, $headers, array $cfg, array $lists, array $dnsb
         }
     }
 
-    // Body + attachments are parsed once, only when a step needs them.
     $parts = ['attachments' => [], 'html' => '', 'text' => ''];
     if ($cfg['urls'] || $cfg['cert'] || $cfg['policy'] || $cfg['clamav'] || $cfg['vt'] || !empty($cfg['bayes'])) {
-        $parts = parseMessageParts($filePath);
+        $parts = $getParts();
     }
 
     if ($cfg['urls'] && ($parts['html'] !== '' || $parts['text'] !== '')) {
@@ -1042,7 +1504,7 @@ function scoreMessage($filePath, $headers, array $cfg, array $lists, array $dnsb
 
     $out['score'] = $score;
     $out['reasons'] = $reasons;
-    $out['decision'] = agentClassify($score, $forceSpam, $cfg);
+    $out['decision'] = agentClassify($score, $forceSpam, $cfg, $forceQuarantine);
     return $out;
 }
 
@@ -1750,7 +2212,7 @@ function walkMimePart($headerBlock, $body, &$bodies = null)
     if ($data === '') {
         return [];
     }
-    return [['filename' => $filename, 'data' => $data]];
+    return [['filename' => $filename, 'data' => $data, 'type' => strtolower(trim(explode(';', $contentType)[0])) ?: 'application/octet-stream']];
 }
 
 function splitMultipart($body, $boundary)
@@ -3557,6 +4019,8 @@ function getDb($dbPath)
     $db->exec('CREATE TABLE IF NOT EXISTS cert_meta (key TEXT PRIMARY KEY, value TEXT)');
     $db->exec('CREATE TABLE IF NOT EXISTS bayes_tokens (hash TEXT PRIMARY KEY, prob REAL)');
     $db->exec('CREATE TABLE IF NOT EXISTS rescan_done (message_id TEXT PRIMARY KEY)');
+    $db->exec('CREATE TABLE IF NOT EXISTS complex_rules (id INTEGER PRIMARY KEY, email TEXT, name TEXT, action TEXT, score INTEGER DEFAULT 0, conditions TEXT)');
+    $db->exec('CREATE TABLE IF NOT EXISTS intel_cache (key TEXT PRIMARY KEY, value TEXT, expires INTEGER)');
 
     // pattern_type column may not exist on old agent databases; ALTER if needed.
     if (!$isNew) {

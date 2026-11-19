@@ -94,6 +94,12 @@ class DomainHelper
         return $p === false ? '' : substr($reg, $p + 1);
     }
 
+    /** @return string[] (the Maildir agent has a copy, AgentParityTest) */
+    public static function freemailList(): array
+    {
+        return self::$freemail;
+    }
+
     public static function isFreemail($domain)
     {
         return in_array(self::registrable($domain), self::$freemail, true);

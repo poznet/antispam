@@ -6,6 +6,7 @@ use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\Blacklist;
 use AntispamBundle\Entity\Config;
 use AntispamBundle\Entity\DnsblProvider;
+use AntispamBundle\Entity\ComplexRule;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Entity\EmailWhitelist;
 use AntispamBundle\Entity\ListSetting;
@@ -131,6 +132,25 @@ class BackupExporter
                 $item['hits'] = (int)$rule->getCounter();
                 $out[$type][] = $item;
             }
+        }
+        // Complex rules (docs/complex-rules.md).
+        $out['complex'] = [];
+        try {
+            foreach ($this->em->getRepository(ComplexRule::class)->findBy([], ['id' => 'ASC']) as $rule) {
+                $out['complex'][] = [
+                    'owner' => $rule->getEmail(),
+                    'name' => $rule->getName(),
+                    'enabled' => $rule->isEnabled(),
+                    'action' => $rule->getAction(),
+                    'score' => $rule->getScore(),
+                    'conditions' => $rule->getConditionTree(),
+                    'source' => $rule->getSource(),
+                    'created_by' => $rule->getCreatedBy(),
+                    'hits' => $rule->getCounter(),
+                ];
+            }
+        } catch (\Throwable $e) {
+            unset($out['complex']); // table not migrated yet
         }
 
         return $out;

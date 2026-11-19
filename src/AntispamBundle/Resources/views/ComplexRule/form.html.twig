@@ -1,0 +1,70 @@
+{% extends '@Antispam/main.html.twig' %}
+{% block title %}{{ new ? 'Nowa reguła złożona' : 'Edycja reguły złożonej' }}{% endblock %}
+{% block page_title %}{{ new ? 'Nowa reguła złożona' : 'Reguła złożona: ' ~ rule.name }}{% endblock %}
+
+{% block stylesheets %}
+    <link rel="stylesheet" href="{{ asset('bundles/antispam/css/complex-rules.css') }}">
+{% endblock %}
+
+{% block body %}
+    {% for e in errors %}
+        <div class="alert alert-danger">{{ e }}</div>
+    {% endfor %}
+
+    <form method="post" id="complex-rule-form" action="{{ new ? path('antispam_complex_rule_new') : path('antispam_complex_rule_edit', {id: rule.id}) }}">
+        <input type="hidden" name="_token" value="{{ csrf_token('complex_rules') }}">
+        <input type="hidden" name="conditions" id="cr-conditions" value="{{ values.conditions|json_encode }}">
+
+        <div class="row">
+            <div class="col-sm-6 form-group">
+                <label for="cr-name">Nazwa</label>
+                <input type="text" name="name" id="cr-name" class="form-control" maxlength="120" value="{{ values.name }}" placeholder="np. Fałszywe faktury z nowych domen (pusta = opis warunków)">
+            </div>
+            <div class="col-sm-6 form-group">
+                <label for="cr-owner">Skrzynka</label>
+                <select name="owner" id="cr-owner" class="form-control">
+                    {% for value, label in choices %}
+                        <option value="{{ value }}"{% if value|lower == values.owner|lower %} selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Warunki</label>
+            <div id="cr-builder" class="crb" data-vocab="{{ vocab|json_encode }}"></div>
+            <p class="help-block">Wartości porównywane są bez wielkości liter, wielokrotne spacje liczą się jak jedna. Wildcard: <code>*</code> = dowolny ciąg, <code>?</code> = jeden znak, wzorzec obejmuje całą wartość (np. <code>*faktura*</code>). Regex szuka w dowolnym miejscu (PCRE, bez ograniczników). Pola oznaczone ⌁ wymagają zapytania DNS / WHOIS (sprawdzane tylko na serwerze).</p>
+        </div>
+
+        <div class="row">
+            <div class="col-sm-4 form-group">
+                <label for="cr-action">Gdy pasuje</label>
+                <select name="action" id="cr-action" class="form-control">
+                    {% for key, label in actions %}
+                        <option value="{{ key }}"{% if key == values.action %} selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-sm-3 form-group">
+                <label for="cr-score">Punkty</label>
+                <input type="number" name="score" id="cr-score" class="form-control" min="{{ vocab.limits.score_min }}" max="{{ vocab.limits.score_max }}" value="{{ values.score }}">
+            </div>
+            <div class="col-sm-5 form-group">
+                <label>&nbsp;</label>
+                <div class="checkbox"><label><input type="checkbox" name="enabled" {% if values.enabled %}checked{% endif %}> Reguła włączona</label></div>
+            </div>
+        </div>
+        <p class="help-block">
+            <strong>Spam</strong> - zawsze spam (jak czarna lista); <strong>Kwarantanna</strong> - co najmniej kwarantanna; <strong>Dodaj punkty</strong> - punkty do wyniku (ujemne obniżają);
+            <strong>Biała lista</strong> - przepuść bez dalszej oceny; <strong>Tylko zapisz</strong> - tryb testowy, trafienie widać w dzienniku ocen (0 pkt).
+        </p>
+
+        <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-ok"></span> Zapisz</button>
+        <a href="{{ path('antispam_complex_rule_index') }}" class="btn btn-default">Anuluj</a>
+    </form>
+{% endblock %}
+
+{% block javascripts %}
+    <script src="{{ asset('bundles/antispam/js/complex-rule-builder.js') }}"></script>
+    <script src="{{ asset('bundles/antispam/js/complex-rules-page.js') }}"></script>
+{% endblock %}

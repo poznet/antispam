@@ -47,7 +47,7 @@
         "@context": "https://schema.org",
         "@type": "FAQPage",
         "mainEntity": [
-            { "@type": "Question", "name": "Czy poczta firmy trafia do zewnętrznej chmury?", "acceptedAnswer": { "@type": "Answer", "text": "Nie. Antispam Pancernapanda działa na Twoim serwerze lub VPS i tam analizuje treść oraz załączniki. Na zewnątrz mogą wyjść tylko dane z opcjonalnych sprawdzeń: adres IP serwera nadawcy i domeny z linków (zapytania DNS), skrót SHA-256 załącznika (VirusTotal), adresy linków (Google Safe Browsing) i skróty SHA-256 spamu (wspólna baza, do wskazanego huba). Lista CERT Polska jest tylko pobierana. Każde z tych sprawdzeń można wyłączyć." } },
+            { "@type": "Question", "name": "Czy poczta firmy trafia do zewnętrznej chmury?", "acceptedAnswer": { "@type": "Answer", "text": "Nie. Antispam Pancernapanda działa na Twoim serwerze lub VPS i tam analizuje treść oraz załączniki. Na zewnątrz mogą wyjść tylko dane z opcjonalnych sprawdzeń: adres IP serwera nadawcy i domeny z linków (zapytania DNS), skrót SHA-256 załącznika (VirusTotal), adresy linków (Google Safe Browsing) i skróty SHA-256 spamu (wspólna baza, do wskazanego huba), a przy regułach złożonych opartych na rekordach MX lub wieku domeny także nazwa domeny nadawcy (DNS, RDAP / WHOIS). Lista CERT Polska jest tylko pobierana. Każde z tych sprawdzeń można wyłączyć." } },
             { "@type": "Question", "name": "Czy trzeba zmieniać rekordy MX albo serwer poczty?", "acceptedAnswer": { "@type": "Answer", "text": "Nie. Antispam nie jest bramką SMTP. Łączy się z istniejącymi skrzynkami przez IMAP albo działa jako agent na serwerze poczty (SSH + Maildir) i porządkuje skrzynki po dostarczeniu wiadomości." } },
             { "@type": "Question", "name": "Jaki serwer jest potrzebny do instalacji?", "acceptedAnswer": { "@type": "Answer", "text": "Serwer lub VPS z Linuksem i Dockerem (Docker Compose albo Coolify). Stos składa się z aplikacji (PHP 8.2 + Apache), bazy MariaDB, harmonogramu zadań i skanera ClamAV, który sam potrzebuje około 1,5–2 GB RAM. Agent Maildir na serwerze poczty wymaga PHP 7.1+ z SQLite3." } },
             { "@type": "Question", "name": "Czy filtr działa z Microsoft 365 i Gmailem?", "acceptedAnswer": { "@type": "Answer", "text": "Tak. Skrzynki Microsoft 365 (także Outlook.com) i Gmail / Google Workspace są skanowane przez IMAP z logowaniem OAuth2, bez zapisywania hasła. Administrator raz rejestruje aplikację w Microsoft Entra lub Google Cloud i łączy każdą skrzynkę przyciskiem Połącz; w Microsoft 365 można też użyć logowania aplikacji dla wielu skrzynek naraz. W organizacji musi być włączony dostęp IMAP. Filtr działa na skrzynce po dostarczeniu poczty (przenosi spam do folderu SPAM) i nie zastępuje filtrów Microsoftu ani Google. Inne serwery działają z loginem i hasłem IMAP." } },
@@ -69,6 +69,7 @@
         <ul class="nav-links">
             <li><a href="#wdrozenie">Wdrożenie</a></li>
             <li><a href="#ochrona">Ochrona</a></li>
+            <li><a href="#reguly">Reguły</a></li>
             <li><a href="#dane">Twoje dane</a></li>
             <li><a href="#funkcje">Funkcje</a></li>
             <li><a href="#faq">FAQ</a></li>
@@ -465,6 +466,110 @@
     </div>
 </section>
 
+<!-- ============ Complex rules ============ -->
+<section class="section" id="reguly">
+    <div class="wrap">
+        <div class="rules-split">
+            <div class="reveal">
+                <span class="eyebrow">Reguły złożone</span>
+                <h2>Własne reguły z warunków I / LUB</h2>
+                <p class="lead-p">Gdy zwykła czarna lub biała lista to za mało, budujesz regułę z kilku warunków. Warunki łączysz spójnikami <b>I</b> oraz <b>LUB</b>, grupujesz je, a wyjątki zapisujesz jako <b>NIE (…)</b>.</p>
+                <ul class="checklist">
+                    <li><b>Drzewo warunków</b> – grupy zagnieżdżone do 4 poziomów, do 30 warunków w regule. Zanegować można pojedynczy warunek albo całą grupę.</li>
+                    <li><b>Działa na serwerze</b> – przy skanowaniu IMAP, w agencie SSH + Maildir na serwerze poczty i przy sprawdzaniu nowej poczty z wtyczek.</li>
+                    <li><b>Lokalna albo globalna</b> – reguła dla jednej skrzynki albo dla wszystkich skrzynek naraz.</li>
+                    <li><b>Bez zgadywania</b> – „Testuj na wiadomości” w kreatorze: wklejasz źródło maila i widzisz, które reguły pasują i jakie wartości mają pola.</li>
+                </ul>
+            </div>
+
+            <div class="rule-card reveal" aria-label="Przykładowa reguła złożona">
+                <div class="rc-head">
+                    <div><small>Reguła złożona · globalna</small><b>Faktury z nowych domen</b></div>
+                    <span class="tag tag-q">kwarantanna</span>
+                </div>
+                <div class="rc-group rc-and">
+                    <span class="rc-join">I · wszystkie warunki</span>
+                    <ul>
+                        <li class="rc-cond"><span class="rc-field">Temat</span><span class="rc-op">zawiera</span><code>faktura</code></li>
+                        <li class="rc-cond"><span class="rc-field">Treść</span><span class="rc-op rc-not">NIE zawiera</span><code>umowa</code></li>
+                        <li>
+                            <div class="rc-group rc-or">
+                                <span class="rc-join">LUB · dowolny warunek</span>
+                                <ul>
+                                    <li class="rc-cond"><span class="rc-field">Wiek domeny nadawcy</span><span class="rc-op">mniej niż</span><code>30 dni</code></li>
+                                    <li class="rc-cond"><span class="rc-field">Domena nadawcy</span><span class="rc-op">wildcard</span><code>*.ru</code></li>
+                                    <li class="rc-cond"><span class="rc-field">Nazwa załącznika</span><span class="rc-op">regex</span><code>\.exe$</code></li>
+                                </ul>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                <div class="rc-foot">Temat zawiera „faktura” I treść NIE zawiera „umowa” I (domena młodsza niż 30 dni LUB domena *.ru LUB plik .exe) → kwarantanna</div>
+            </div>
+        </div>
+
+        <div class="rules-cols">
+            <article class="rules-box reveal">
+                <h3>Pola wiadomości</h3>
+                <div class="chips">
+                    <span>nadawca: adres, domena, nazwa wyświetlana</span><span>odbiorcy Do / DW</span><span>Reply-To</span><span>Return-Path</span><span>temat</span><span>treść</span><span>dowolny nagłówek, np. <code>X-Mailer</code></span><span>nazwa, typ MIME i liczba załączników</span><span>rozmiar wiadomości (KB)</span><span>domeny linków w treści</span><span>wynik SPF / DKIM / DMARC</span><span>nadawca wewnętrzny / zewnętrzny</span><span>darmowa poczta (gmail, wp, onet, interia…)</span><span>IP serwera nadawcy (nagłówki Received)</span>
+                </div>
+                <h4 class="rules-sub">Typ wiadomości</h4>
+                <div class="chips">
+                    <span>autoodpowiedź</span><span>zwrot / NDR</span><span>lista mailingowa</span><span>zaproszenie z kalendarza</span><span>podpisana</span><span>zaszyfrowana</span><span>potwierdzenie odczytu</span>
+                </div>
+                <h4 class="rules-sub">Domena nadawcy w sieci</h4>
+                <div class="chips">
+                    <span>dostawca poczty wg rekordów MX: google, microsoft, home.pl, nazwa.pl, cyber_Folks, OVH, zoho, proton, mimecast, proofpoint, barracuda… / brak MX</span><span>serwery MX</span><span>wiek domeny w dniach (RDAP / WHOIS)</span>
+                </div>
+            </article>
+
+            <div class="rules-stack">
+                <article class="rules-box reveal">
+                    <h3>Sposoby dopasowania</h3>
+                    <div class="chips chips-mono">
+                        <span>zawiera</span><span>jest równe</span><span>zaczyna się od</span><span>kończy się na</span><span>wildcard <code>*faktura*</code></span><span>regex (PCRE)</span><span>jest puste / istnieje</span><span>mniej niż / więcej niż</span>
+                    </div>
+                    <p class="small-p">Każde dopasowanie można zanegować. Wielkość liter nie ma znaczenia, a nadmiarowe spacje są scalane. Wildcard (<code>*</code> i <code>?</code>) obejmuje całą wartość. Wyrażenia regularne są chronione przed ReDoS.</p>
+                </article>
+                <article class="rules-box reveal">
+                    <h3>Akcje</h3>
+                    <ul class="rules-actions">
+                        <li><span class="tag tag-spam">spam</span><span>Zawsze spam</span></li>
+                        <li><span class="tag tag-q">kwarantanna</span><span>Co najmniej kwarantanna</span></li>
+                        <li><span class="tag tag-pts">±50 pkt</span><span>Dodaj punkty do wyniku, także ujemne (od −50 do 50)</span></li>
+                        <li><span class="tag tag-wl">biała lista</span><span>Przepuść wiadomość</span></li>
+                        <li><span class="tag tag-log">dziennik</span><span>Tylko zapisz w dzienniku (tryb testowy, 0 pkt)</span></li>
+                    </ul>
+                </article>
+            </div>
+        </div>
+
+        <div class="features rules-where">
+            <article class="feature reveal">
+                <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div>
+                <h3>Kreator w panelu</h3>
+                <p>Administrator układa warunki w kreatorze reguł i od razu sprawdza je narzędziem „Testuj na wiadomości” na wklejonym źródle maila.</p>
+            </article>
+            <article class="feature reveal">
+                <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg></div>
+                <h3>Prosto z Thunderbirda</h3>
+                <p>W ustawieniach wtyczki (Reguły złożone) albo z menu wiadomości: „Utwórz regułę złożoną z tej wiadomości” wypełnia nadawcę i temat. Reguła trafia do panelu z oznaczeniem „wtyczka”. Reguły globalne z wtyczki są możliwe tylko wtedy, gdy administrator na to pozwoli.</p>
+            </article>
+            <article class="feature reveal">
+                <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h12"/><path d="m17 16 2 2 4-4"/></svg></div>
+                <h3>Porządek w starym folderze</h3>
+                <p>„Zastosuj reguły antyspamu w tym folderze” w Thunderbirdzie stosuje reguły złożone także lokalnie. Pola oparte na DNS i WHOIS (MX, wiek domeny) ocenia tylko serwer.</p>
+            </article>
+        </div>
+
+        <div class="privacy-note reveal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+            <span><strong>Sprawdzenia domeny nadawcy są buforowane i można je wyłączyć.</strong> Rekordy MX i wiek domeny są pobierane tylko wtedy, gdy reguła korzysta z tych pól, a wynik jest trzymany w pamięci podręcznej (MX przez dzień, wiek domeny przez 7 dni). Na zewnątrz idzie wyłącznie nazwa domeny nadawcy.</span>
+        </div>
+    </div>
+</section>
+
 <!-- ============ Data / privacy ============ -->
 <section class="section section-soft" id="dane">
     <div class="wrap">
@@ -518,6 +623,11 @@
                     <div class="lookup-head"><h4>Wspólna baza spamu</h4><span class="pill pill-off">wyłączone</span></div>
                     <p><b>Wysyła:</b> jednokierunkowe skróty SHA-256 adresu nadawcy i znormalizowanej treści spamu, tylko do huba, który wskażesz. Hub może stać u Ciebie.</p>
                     <p><b>Domyślnie:</b> wyłączone.</p>
+                </article>
+                <article class="lookup">
+                    <div class="lookup-head"><h4>MX i wiek domeny nadawcy</h4><span class="pill pill-on">włączone</span></div>
+                    <p><b>Wysyła:</b> samą nazwę domeny nadawcy: zapytanie DNS o rekordy MX oraz RDAP / WHOIS o datę rejestracji. Tylko gdy <a href="#reguly">reguła złożona</a> używa tych pól, z buforem (MX dzień, wiek 7 dni).</p>
+                    <p><b>Domyślnie:</b> włączone, można wyłączyć na stronie Reguły złożone.</p>
                 </article>
             </div>
         </div>
@@ -731,7 +841,7 @@
         <div class="faq reveal">
             <details open>
                 <summary>Czy poczta firmy trafia do zewnętrznej chmury?</summary>
-                <p>Nie. Antispam Pancernapanda działa na Twoim serwerze lub VPS i tam analizuje treść oraz załączniki. Na zewnątrz mogą wyjść tylko dane z opcjonalnych sprawdzeń: adres IP serwera nadawcy i domeny z linków (zapytania DNS), skrót SHA-256 załącznika (VirusTotal), adresy linków (Google Safe Browsing) i skróty SHA-256 spamu (wspólna baza, do wskazanego huba). Lista CERT Polska jest tylko pobierana. Każde z tych sprawdzeń można wyłączyć. Pełną listę znajdziesz w sekcji <a href="#dane">Twoje dane</a>.</p>
+                <p>Nie. Antispam Pancernapanda działa na Twoim serwerze lub VPS i tam analizuje treść oraz załączniki. Na zewnątrz mogą wyjść tylko dane z opcjonalnych sprawdzeń: adres IP serwera nadawcy i domeny z linków (zapytania DNS), skrót SHA-256 załącznika (VirusTotal), adresy linków (Google Safe Browsing) i skróty SHA-256 spamu (wspólna baza, do wskazanego huba), a przy regułach złożonych opartych na rekordach MX lub wieku domeny także nazwa domeny nadawcy (DNS, RDAP / WHOIS). Lista CERT Polska jest tylko pobierana. Każde z tych sprawdzeń można wyłączyć. Pełną listę znajdziesz w sekcji <a href="#dane">Twoje dane</a>.</p>
             </details>
             <details>
                 <summary>Czy trzeba zmieniać rekordy MX albo serwer poczty?</summary>
@@ -795,7 +905,7 @@
             </div>
             <div>
                 <h4>Produkt</h4>
-                <ul><li><a href="#wdrozenie">Wdrożenie</a></li><li><a href="#ochrona">Ochrona</a></li><li><a href="#zalaczniki">Załączniki i linki</a></li><li><a href="#dane">Twoje dane</a></li></ul>
+                <ul><li><a href="#wdrozenie">Wdrożenie</a></li><li><a href="#ochrona">Ochrona</a></li><li><a href="#zalaczniki">Załączniki i linki</a></li><li><a href="#reguly">Reguły złożone</a></li><li><a href="#dane">Twoje dane</a></li></ul>
             </div>
             <div>
                 <h4>Narzędzia</h4>

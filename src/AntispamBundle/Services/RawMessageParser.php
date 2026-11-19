@@ -78,6 +78,12 @@ class RawMessageParser
         return $this->headers[strtolower($name)] ?? [];
     }
 
+    /** @return string[] all values of a header, unfolded and MIME-decoded (valid UTF-8) */
+    public function getDecodedHeaders($name)
+    {
+        return array_map(fn ($v) => mb_scrub(self::decodeWords($v), 'UTF-8'), $this->getHeaders($name));
+    }
+
     public function getSubject()
     {
         return $this->getHeader('subject');

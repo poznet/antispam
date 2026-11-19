@@ -14,7 +14,7 @@ use Doctrine\ORM\EntityManagerInterface;
  * Scores a raw RFC 822 message (as submitted by the Thunderbird plugin) with
  * the same rules as the IMAP event pipeline: domain/e-mail whitelists and
  * blacklists of the account, header heuristics, impersonation, DNSBL, link
- * protection, the shared spam feed, the CERT Polska domain list and the attachment policy. The result is logged to SpamScoreLog like any other scan, but the
+ * protection, the shared spam feed, the CERT Polska domain list, the attachment policy and the complex rules. The result is logged to SpamScoreLog like any other scan, but the
  * message itself is never moved here — the plugin acts on the decision
  * inside the user's mail client.
  */
@@ -42,6 +42,7 @@ class RawMessageScanner
         CertHoleService $cert,
         private ?MailboxSettingsResolver $mailboxSettings = null,
         private ?Bayes\BayesService $bayes = null,
+        private ?ComplexRuleService $complex = null,
     ) {
         $this->em = $em;
         $this->headers = $headers;
@@ -82,8 +83,11 @@ class RawMessageScanner
         $score = 0;
         $reasons = [];
         $forcedSpam = false;
+        $forcedQuarantine = false;
         $whitelisted = false;
         $scoringOn = $this->scoring->isScoringEnabled();
+        $complexRules = $this->complex ? $this->complex->rulesFor($accountEmail) : [];
+        $complexMsg = $complexRules ? $this->complex->messageFromRaw((string)$raw, (string)$accountEmail) : null;
 
         // Whitelists short-circuit, exactly like CheckWhitelist / CheckEmailWhitelist.
         if ($host && ($rule = $this->matchRule(Whitelist::class, $accountEmail, $host, 'getHost'))) {
@@ -92,6 +96,11 @@ class RawMessageScanner
         } elseif ($sender && ($rule = $this->matchRule(EmailWhitelist::class, $accountEmail, $sender, 'getWhitelistemail'))) {
             $whitelisted = true;
             $reasons[] = ['rule' => 'email_whitelist:' . $rule->getWhitelistemail(), 'score' => 0];
+        } elseif ($complexMsg && ($rule = $this->complex->matchWhitelist($complexRules, $complexMsg))) {
+            // Complex "whitelist" rule (docs/complex-rules.md), like CheckComplexRules::whitelist().
+            $whitelisted = true;
+            $this->complex->countHit($rule);
+            $reasons[] = ['rule' => $rule->reasonRule(), 'score' => 0];
         }
 
         if (!$whitelisted) {
@@ -104,6 +113,17 @@ class RawMessageScanner
                 $score += $rule->getScore();
                 $reasons[] = ['rule' => 'email_blacklist:' . $rule->getBlacklistemail() . ' (' . $rule->getPatternType() . ')', 'score' => $rule->getScore()];
                 $forcedSpam = true; // a blacklist hit is spam whatever the threshold
+            }
+            // Complex spam / quarantine / score rules, like CheckComplexRules::check().
+            if ($complexMsg) {
+                $result = $this->complex->matchOthers($complexRules, $complexMsg, $scoringOn);
+                foreach ($result['hits'] as $hit) {
+                    $this->complex->countHit($hit);
+                }
+                $score += $result['score'];
+                $reasons = array_merge($reasons, $result['reasons']);
+                $forcedSpam = $forcedSpam || $result['spam'];
+                $forcedQuarantine = $result['quarantine'];
             }
         }
 
@@ -197,7 +217,7 @@ class RawMessageScanner
             }
         }
 
-        $decision = $this->scoring->classify($score, $forcedSpam, $whitelisted);
+        $decision = $this->scoring->classify($score, $forcedSpam, $whitelisted, $forcedQuarantine);
         $reasons[] = ['rule' => 'source:thunderbird_plugin', 'score' => 0];
         $this->scoring->logDecision($accountEmail, $score, $decision, $reasons, $sender, $subject, SpamScoreLog::SOURCE_PLUGIN, SpamScoreLog::OUTCOME_NONE);
 

@@ -44,6 +44,42 @@
     <p class="muted" id="foreignHint"></p>
   </section>
 
+  <section id="rules">
+    <h2>Reguły złożone</h2>
+    <p class="muted">Warunki łączone przez I / LUB (z grupami i „NIE”), np. <em>temat zawiera „faktura” I treść nie zawiera „umowa”</em>.
+      Dopasowania: zawiera, równe, zaczyna / kończy się, wildcard (<code>*</code>, <code>?</code>), regex, puste, mniej / więcej niż.
+      Reguły zapisują się na serwerze antyspamu (administrator widzi je w panelu) i działają na serwerze - przy skanowaniu skrzynki i sprawdzaniu nowej poczty -
+      oraz w „Zastosuj reguły antyspamu w tym folderze”. Regułę możesz też zacząć z menu wiadomości: <em>Utwórz regułę złożoną z tej wiadomości</em>.</p>
+    <label>Konto <select id="rulesAccount"></select></label>
+    <p id="rulesInfo" class="muted"></p>
+    <div id="rulesList" class="rules-list"></div>
+    <button type="button" id="ruleNew" class="secondary" disabled>+ Nowa reguła</button>
+    <span id="rulesMsg" class="msg" hidden></span>
+
+    <div id="ruleEditor" class="rule-editor" hidden>
+      <h3 id="ruleEditorTitle">Nowa reguła</h3>
+      <label>Nazwa <input type="text" id="ruleName" maxlength="120" placeholder="pusta = opis warunków"></label>
+      <label>Dotyczy
+        <select id="ruleScope">
+          <option value="local">tego konta (skrzynka zalogowana we wtyczce)</option>
+          <option value="global">wszystkich skrzynek (globalna)</option>
+        </select>
+      </label>
+      <div class="field-label">Warunki</div>
+      <div id="ruleBuilder" class="crb"></div>
+      <div class="rule-row">
+        <label>Gdy pasuje <select id="ruleAction"></select></label>
+        <label>Punkty <input type="number" id="ruleScore" min="-50" max="50"></label>
+      </div>
+      <label class="check"><input type="checkbox" id="ruleEnabled" checked> Reguła włączona</label>
+      <p class="muted">Spam = zawsze spam · Kwarantanna = co najmniej kwarantanna · Dodaj punkty = do wyniku (ujemne obniżają) · Biała lista = przepuść ·
+        Tylko zapisz = tryb testowy (trafienie w dzienniku ocen). Pola oznaczone ⌁ (MX, wiek domeny, IP nadawcy) sprawdza tylko serwer.</p>
+      <button type="button" id="ruleSave">Zapisz regułę</button>
+      <button type="button" id="ruleCancel" class="secondary">Anuluj</button>
+      <span id="ruleMsg" class="msg" hidden></span>
+    </div>
+  </section>
+
   <section>
     <h2>Działanie</h2>
     <label class="check"><input type="checkbox" id="reportOnJunk"> Zgłaszaj do antyspamu, gdy oznaczę wiadomość jako śmieci / nie-śmieci</label>
@@ -102,5 +138,7 @@
 
   <script src="common.js"></script>
   <script src="options.js"></script>
+  <script src="complex-rule-builder.js"></script>
+  <script src="options-rules.js"></script>
 </body>
 </html>

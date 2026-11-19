@@ -29,7 +29,7 @@ class RuleFixtures
 
     public function __construct(TestCase $test, ?string $legacyEmail, array $accountEmails = [])
     {
-        foreach ([Account::class, DnsblProvider::class, Blacklist::class, Whitelist::class, EmailBlacklist::class, EmailWhitelist::class] as $class) {
+        foreach ([Account::class, DnsblProvider::class, Blacklist::class, Whitelist::class, EmailBlacklist::class, EmailWhitelist::class, \AntispamBundle\Entity\ComplexRule::class] as $class) {
             $this->repos[$class] = new InMemoryRepository();
         }
         foreach ($accountEmails as $i => $email) {

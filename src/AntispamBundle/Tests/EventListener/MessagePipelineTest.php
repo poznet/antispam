@@ -215,8 +215,8 @@ class MessagePipelineTest extends KernelTestCase
             $names[] = is_array($listener) ? (new \ReflectionClass($listener[0]))->getShortName() : 'closure';
         }
         $this->assertSame([
-            'CheckIfIsAlreadyChecked', 'CheckWhitelist', 'CheckEmailWhitelist', 'CheckBlacklist', 'CheckEmailBlacklist',
-            'CheckHeaders', 'CheckImpersonation', 'CheckDnsbl', 'CheckUrls', 'CheckSharedFeed', 'CheckCertHole',
+            'CheckIfIsAlreadyChecked', 'CheckWhitelist', 'CheckComplexRules', 'CheckEmailWhitelist', 'CheckBlacklist', 'CheckEmailBlacklist',
+            'CheckComplexRules', 'CheckHeaders', 'CheckImpersonation', 'CheckDnsbl', 'CheckUrls', 'CheckSharedFeed', 'CheckCertHole',
             'CheckAttachmentPolicy', 'CheckAttachments', 'CheckAttachmentsVirusTotal', 'CheckBayes', 'ApplyScoreDecision',
             'RecordSpamSignals', 'MoveToSpam', 'SetAsChecked',
         ], $names);

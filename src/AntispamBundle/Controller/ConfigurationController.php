@@ -386,7 +386,7 @@ class ConfigurationController extends AbstractController
             }
             $post = $request->request->all('config');
             // Stored as '1'/'0' so an unchecked box is not mistaken for "unset" (default on).
-            foreach (['enabled', 'anonymous_reports', 'check_enabled', 'learn_rules'] as $flag) {
+            foreach (['enabled', 'anonymous_reports', 'check_enabled', 'learn_rules', 'complex_rules', 'global_rules'] as $flag) {
                 $c->set('plugin.' . $flag, array_key_exists($flag, $post) ? '1' : '0');
             }
             $c->set('plugin.token_ttl_days', max(1, (int)($post['token_ttl_days'] ?? 90)));
@@ -412,6 +412,8 @@ class ConfigurationController extends AbstractController
             'anonymous_reports' => $this->plugin->isAnonymousReportEnabled(),
             'check_enabled' => $this->plugin->isCheckEnabled(),
             'learn_rules' => $this->plugin->isLearnRulesEnabled(),
+            'complex_rules' => $this->plugin->isComplexRulesEnabled(),
+            'global_rules' => $this->plugin->isGlobalComplexRulesEnabled(),
             'token_ttl_days' => $this->plugin->getTokenTtlDays(),
             'report_rate_limit' => $this->plugin->getReportRateLimit(),
             'max_upload_kb' => intdiv($this->plugin->getMaxUploadBytes(), 1024),

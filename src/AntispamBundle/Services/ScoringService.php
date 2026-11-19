@@ -372,7 +372,7 @@ class ScoringService implements RuntimeCacheInterface
     public function decide(MessageEvent $event, array $reasons, $sender = null, $subject = null)
     {
         $score = $event->getSpamscore();
-        $decision = $this->classify($score, $event->isSpam(), $event->isWhitelist());
+        $decision = $this->classify($score, $event->isSpam(), $event->isWhitelist(), $event->isForcedQuarantine());
         if ($decision === SpamScoreLog::DECISION_SPAM) {
             $event->setSpam(true);
         }
@@ -389,7 +389,7 @@ class ScoringService implements RuntimeCacheInterface
      * Turn a score into ham/quarantine/spam/whitelisted. Shared by the IMAP
      * pipeline and the raw-message scanner used by the Thunderbird plugin.
      */
-    public function classify($score, $forcedSpam = false, $whitelisted = false)
+    public function classify($score, $forcedSpam = false, $whitelisted = false, $forcedQuarantine = false)
     {
         if ($whitelisted) {
             return SpamScoreLog::DECISION_WHITELISTED;
@@ -397,7 +397,7 @@ class ScoringService implements RuntimeCacheInterface
         if ($forcedSpam || $score >= $this->getSpamThreshold()) {
             return SpamScoreLog::DECISION_SPAM;
         }
-        if ($score >= $this->getQuarantineThreshold()) {
+        if ($forcedQuarantine || $score >= $this->getQuarantineThreshold()) {
             return SpamScoreLog::DECISION_QUARANTINE;
         }
         return SpamScoreLog::DECISION_HAM;

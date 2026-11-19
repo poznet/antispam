@@ -54,4 +54,20 @@ class ThunderbirdPluginJsTest extends TestCase
         $this->assertSame(0, $code, implode("\n", $out));
         $this->assertStringContainsString('all checks passed', implode("\n", $out));
     }
+
+    /** Complex rules: local evaluation like the server and the settings commands (tests/js/thunderbird-complex-rules.mjs). */
+    public function testComplexRules()
+    {
+        $node = $this->node();
+        exec(escapeshellarg($node) . ' ' . escapeshellarg(dirname(__DIR__, 4) . '/tests/js/thunderbird-complex-rules.mjs') . ' 2>&1', $out, $code);
+        $this->assertSame(0, $code, implode("\n", $out));
+        $this->assertStringContainsString('all checks passed', implode("\n", $out));
+    }
+
+    /** The rule builder is shipped twice (panel and plugin) - the copies must not drift. */
+    public function testRuleBuilderCopiesAreIdentical()
+    {
+        $res = dirname(__DIR__, 2) . '/Resources';
+        $this->assertFileEquals($res . '/public/js/complex-rule-builder.js', $res . '/thunderbird/complex-rule-builder.js');
+    }
 }

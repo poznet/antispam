@@ -6,11 +6,14 @@ use AntispamBundle\AppVersion;
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\AuditLog;
 use AntispamBundle\Entity\BackgroundJob;
+use AntispamBundle\Entity\ComplexRule;
 use AntispamBundle\Entity\Blacklist;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Entity\EmailWhitelist;
 use AntispamBundle\Entity\Whitelist;
 use AntispamBundle\Services\AccountScanner;
+use AntispamBundle\Services\ComplexRuleService;
+use AntispamBundle\Services\DeferredAgentSync;
 use AntispamBundle\Services\DeferredRetroactivePass;
 use AntispamBundle\Services\ImapScanService;
 use AntispamBundle\Services\Jobs\Handler\AccountRescanHandler;
@@ -58,6 +61,8 @@ class PluginApiController extends AbstractController
         private ?RescanScheduler $rescans = null,
         private ?JobQueue $jobs = null,
         private ?AccountScanner $scanner = null,
+        private ?ComplexRuleService $complex = null,
+        private ?DeferredAgentSync $agentSync = null,
     ) {
         $this->tb = $tb ?? new ThunderbirdPluginBuilder();
     }
@@ -74,7 +79,10 @@ class PluginApiController extends AbstractController
     /** Rules per list sent to the plugin by /api/plugin/rules. */
     const RULES_MAX = 20000;
 
-    const PLUGIN_VERSION = '1.5.0';
+    /** Complex rule changes (create / update / delete) per account and hour. */
+    const COMPLEX_RULES_RATE_LIMIT = 120;
+
+    const PLUGIN_VERSION = '1.6.0';
 
     /**
      * The Thunderbird .xpi. Default: the uploaded generic package (e.g. the
@@ -173,6 +181,10 @@ class PluginApiController extends AbstractController
             // token's mailbox). Missing on servers before plugin 1.3.0.
             'report_only' => true,
             'report_scopes' => PluginService::SCOPES,
+            // /api/plugin/complex-rules (plugin 1.6.0+): complex rules of the
+            // token's mailbox, created and edited in the plugin, run on the server.
+            'complex_rules' => $this->complex !== null && $this->plugin->isComplexRulesEnabled(),
+            'complex_rules_global' => $this->complex !== null && $this->plugin->isGlobalComplexRulesEnabled(),
             'phishing_max_bytes' => PhishingReportService::MAX_RAW_BYTES,
             // Largest message source (decoded) the plugins should send in one request -
             // reflects the body limit of a proxy in front of antispam (plugin.max_upload_kb).
@@ -577,7 +589,183 @@ class PluginApiController extends AbstractController
                 ];
             }
         }
+        // Enabled complex rules (plugin 1.6.0+ evaluates them locally too) and
+        // the free-mail domains of the from_freemail field.
+        $out['complex_rules'] = [];
+        $out['freemail'] = \AntispamBundle\Services\DomainHelper::freemailList();
+        if ($this->complex) {
+            foreach ($this->complex->rulesFor($account->getEmail()) as $rule) {
+                $out['complex_rules'][] = ComplexRuleService::toArray($rule);
+            }
+        }
         return new JsonResponse($out);
+    }
+
+    // --- complex rules (docs/complex-rules.md) --------------------------------
+
+    /**
+     * Complex rules of the token's mailbox: its own plus the global ones, the
+     * disabled ones included. "editable": own rules, and global rules the
+     * mailbox created from the plugin while global plugin rules are allowed.
+     */
+    #[Route('/api/plugin/complex-rules', name: 'antispam_plugin_api_complex_rules', methods: ['GET'])]
+    public function complexRulesAction(Request $request)
+    {
+        if (($account = $this->complexAccount($request)) instanceof JsonResponse) {
+            return $account;
+        }
+        $rules = [];
+        foreach ($this->em->getRepository(ComplexRule::class)->forMailbox($account->getEmail(), false) as $rule) {
+            $rules[] = ComplexRuleService::toArray($rule) + ['editable' => $this->canEdit($rule, $account)];
+        }
+        return new JsonResponse([
+            'mailbox' => $account->getEmail(),
+            'can_global' => $this->plugin->isGlobalComplexRulesEnabled(),
+            'rules' => $rules,
+        ] + ComplexRuleService::vocabulary());
+    }
+
+    /**
+     * Create: {name, enabled, action, score, conditions, global}. A global
+     * rule needs plugin.global_rules (403 otherwise).
+     */
+    #[Route('/api/plugin/complex-rules', name: 'antispam_plugin_api_complex_rules_create', methods: ['POST'])]
+    public function complexRuleCreateAction(Request $request)
+    {
+        if (($account = $this->complexAccount($request)) instanceof JsonResponse) {
+            return $account;
+        }
+        $data = json_decode($request->getContent(), true);
+        if (!is_array($data)) {
+            return new JsonResponse(['error' => 'invalid JSON'], 400);
+        }
+        $global = !empty($data['global']);
+        if ($global && !$this->plugin->isGlobalComplexRulesEnabled()) {
+            return new JsonResponse(['error' => 'global rules disabled', 'message' => 'Administrator nie zezwolił na tworzenie reguł globalnych z wtyczki - utwórz regułę dla tego konta.'], 403);
+        }
+        $owner = $global ? RuleOwnership::ALL : $account->getEmail();
+        if ($this->em->getRepository(ComplexRule::class)->countOwnedBy($owner) >= ComplexRuleService::MAX_PER_OWNER) {
+            return new JsonResponse(['error' => 'too many rules', 'message' => 'Osiągnięto limit ' . ComplexRuleService::MAX_PER_OWNER . ' reguł złożonych.'], 409);
+        }
+        $rule = (new ComplexRule())->setEmail($owner)->setSource(ComplexRule::SOURCE_PLUGIN)->setCreatedBy('plugin:' . $account->getEmail());
+        if ($errors = $this->complex->apply($rule, $data)) {
+            return new JsonResponse(['error' => 'invalid rule', 'message' => implode(' ', $errors), 'errors' => $errors], 400);
+        }
+        if (!$this->plugin->hit('complex', $account->getId(), self::COMPLEX_RULES_RATE_LIMIT, 3600)) {
+            return new JsonResponse(['error' => 'rate limit'], 429);
+        }
+        $this->em->persist($rule);
+        $this->em->flush();
+        $this->complexChanged($rule, 'rule.add', $account);
+        return new JsonResponse(['rule' => ComplexRuleService::toArray($rule) + ['editable' => true]], 201);
+    }
+
+    /** Update (same body as create; "global" moves the rule between the mailbox and every mailbox). */
+    #[Route('/api/plugin/complex-rules/{id}', name: 'antispam_plugin_api_complex_rules_update', requirements: ['id' => '\d+'], methods: ['PUT', 'POST'])]
+    public function complexRuleUpdateAction($id, Request $request)
+    {
+        if (($account = $this->complexAccount($request)) instanceof JsonResponse) {
+            return $account;
+        }
+        if (($rule = $this->editableRule($id, $account)) instanceof JsonResponse) {
+            return $rule;
+        }
+        $data = json_decode($request->getContent(), true);
+        if (!is_array($data)) {
+            return new JsonResponse(['error' => 'invalid JSON'], 400);
+        }
+        $oldOwner = $rule->getEmail();
+        if (array_key_exists('global', $data)) {
+            $global = !empty($data['global']);
+            if ($global && !$this->plugin->isGlobalComplexRulesEnabled()) {
+                return new JsonResponse(['error' => 'global rules disabled', 'message' => 'Administrator nie zezwolił na reguły globalne z wtyczki.'], 403);
+            }
+            $owner = $global ? RuleOwnership::ALL : $account->getEmail();
+            if ($owner !== $oldOwner && $this->em->getRepository(ComplexRule::class)->countOwnedBy($owner) >= ComplexRuleService::MAX_PER_OWNER) {
+                return new JsonResponse(['error' => 'too many rules', 'message' => 'Osiągnięto limit ' . ComplexRuleService::MAX_PER_OWNER . ' reguł złożonych.'], 409);
+            }
+        }
+        $data += ['name' => $rule->getName(), 'action' => $rule->getAction(), 'score' => $rule->getScore(), 'enabled' => $rule->isEnabled(), 'conditions' => $rule->getConditionTree()];
+        if ($errors = $this->complex->apply($rule, $data)) {
+            $this->em->refresh($rule);
+            return new JsonResponse(['error' => 'invalid rule', 'message' => implode(' ', $errors), 'errors' => $errors], 400);
+        }
+        if (!$this->plugin->hit('complex', $account->getId(), self::COMPLEX_RULES_RATE_LIMIT, 3600)) {
+            $this->em->refresh($rule);
+            return new JsonResponse(['error' => 'rate limit'], 429);
+        }
+        if (isset($owner)) {
+            $rule->setEmail($owner);
+        }
+        $this->em->flush();
+        $this->complexChanged($rule, 'rule.update', $account, $oldOwner);
+        return new JsonResponse(['rule' => ComplexRuleService::toArray($rule) + ['editable' => true]]);
+    }
+
+    #[Route('/api/plugin/complex-rules/{id}', name: 'antispam_plugin_api_complex_rules_delete', requirements: ['id' => '\d+'], methods: ['DELETE'])]
+    public function complexRuleDeleteAction($id, Request $request)
+    {
+        if (($account = $this->complexAccount($request)) instanceof JsonResponse) {
+            return $account;
+        }
+        if (($rule = $this->editableRule($id, $account)) instanceof JsonResponse) {
+            return $rule;
+        }
+        if (!$this->plugin->hit('complex', $account->getId(), self::COMPLEX_RULES_RATE_LIMIT, 3600)) {
+            return new JsonResponse(['error' => 'rate limit'], 429);
+        }
+        $snapshot = clone $rule;
+        $this->em->remove($rule);
+        $this->em->flush();
+        $this->complexChanged($snapshot, 'rule.delete', $account, null, (int)$id);
+        return new JsonResponse(['deleted' => (int)$id]);
+    }
+
+    /** @return Account|JsonResponse */
+    private function complexAccount(Request $request)
+    {
+        if (!$this->plugin->isEnabled() || $this->complex === null || !$this->plugin->isComplexRulesEnabled()) {
+            return new JsonResponse(['error' => 'complex rules disabled', 'message' => 'Reguły złożone z wtyczki są wyłączone na serwerze antyspamu.'], 403);
+        }
+        $account = $this->plugin->accountForToken($this->bearer($request));
+        return $account ?: new JsonResponse(['error' => 'login required'], 401);
+    }
+
+    private function canEdit(ComplexRule $rule, Account $account): bool
+    {
+        if (strcasecmp($rule->getEmail(), (string)$account->getEmail()) === 0) {
+            return true;
+        }
+        return RuleOwnership::isGlobal($rule->getEmail()) && $this->plugin->isGlobalComplexRulesEnabled()
+            && strcasecmp((string)$rule->getCreatedBy(), 'plugin:' . $account->getEmail()) === 0;
+    }
+
+    /** @return ComplexRule|JsonResponse */
+    private function editableRule($id, Account $account)
+    {
+        $rule = $this->em->getRepository(ComplexRule::class)->find((int)$id);
+        if (!$rule || !in_array($rule->getEmail(), RuleOwnership::scope($account->getEmail()), true)) {
+            return new JsonResponse(['error' => 'not found'], 404);
+        }
+        if (!$this->canEdit($rule, $account)) {
+            return new JsonResponse(['error' => 'forbidden', 'message' => 'Tę regułę może zmienić tylko administrator (panel antyspamu).'], 403);
+        }
+        return $rule;
+    }
+
+    /** Audit + push to the SSH agents that export the rule (old and new owner). */
+    private function complexChanged(ComplexRule $rule, string $action, Account $account, ?string $oldOwner = null, ?int $id = null): void
+    {
+        $this->audit($action, targetType: 'complex_rule', targetId: $id ?? $rule->getId(), label: $rule->getName(), mailbox: $rule->getEmail(),
+            details: ['source' => 'plugin', 'action' => $rule->getAction(), 'score' => $rule->getScore(), 'enabled' => $rule->isEnabled(), 'conditions' => $rule->describe()],
+            actor: $account->getEmail(), actorType: 'plugin');
+        $this->complex?->clearRuntimeCache();
+        if (!$this->agentSync) {
+            return;
+        }
+        foreach (array_unique(array_filter([$rule->getEmail(), $oldOwner])) as $owner) {
+            RuleOwnership::isGlobal($owner) ? $this->agentSync->deferAll('reguła złożona z wtyczki') : $this->agentSync->deferForOwner($owner);
+        }
     }
 
     private function rescanState(Account $account, ?int $jobId = null, bool $withFinished = false): array

@@ -111,6 +111,8 @@ async function loadAccounts() {
   try {
     const state = await send({ cmd: "accounts" });
     renderAccounts(state);
+    // Reguły złożone (options-rules.js): accounts that can edit rules.
+    if (typeof globalThis.rulesAccountsChanged === "function") globalThis.rulesAccountsChanged(state);
     return state;
   } catch (e) {
     $("accounts").textContent = "";

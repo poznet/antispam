@@ -101,6 +101,21 @@ class PluginService
         return $this->readBool('plugin.learn_rules', true);
     }
 
+    /** May logged-in plugin users create / edit complex rules of their mailbox (docs/complex-rules.md)? */
+    public function isComplexRulesEnabled()
+    {
+        return $this->readBool('plugin.complex_rules', true);
+    }
+
+    /**
+     * May they also create complex rules for every mailbox (owner '*')? Off
+     * by default: a global rule filters the mail of all users.
+     */
+    public function isGlobalComplexRulesEnabled()
+    {
+        return $this->isComplexRulesEnabled() && $this->readBool('plugin.global_rules', false);
+    }
+
     public function getTokenTtlDays()
     {
         return max(1, $this->readInt('plugin.token_ttl_days', self::DEFAULT_TOKEN_TTL_DAYS));

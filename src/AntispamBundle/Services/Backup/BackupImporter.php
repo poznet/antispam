@@ -269,6 +269,10 @@ class BackupImporter
     private function importRules(array $rules, bool $replace): void
     {
         foreach ($rules as $type => $items) {
+            if ($type === 'complex') {
+                $this->importComplexRules($items, $replace);
+                continue;
+            }
             if (!isset(BackupExporter::RULE_LISTS[$type])) {
                 $this->report->warn('Unknown rule list "' . mb_substr((string)$type, 0, 40) . '" - skipped.');
                 continue;
@@ -335,6 +339,64 @@ class BackupImporter
                 }
             }
         }
+    }
+
+    /** rules.complex: matched by owner + name + conditions; the rest is updated. */
+    private function importComplexRules(array $items, bool $replace): void
+    {
+        $existing = [];
+        foreach ($this->em->getRepository(\AntispamBundle\Entity\ComplexRule::class)->findAll() as $rule) {
+            $existing[self::complexKey($rule->getEmail(), $rule->getName(), $rule->getConditionTree())] ??= $rule;
+        }
+        $seen = [];
+        foreach ($items as $i => $item) {
+            $label = 'complex #' . ($i + 1);
+            $owner = trim((string)($item['owner'] ?? ''));
+            if ($owner === '' || strlen($owner) > 255 || preg_match('/[\x00-\x1f\x7f]/', $owner)) {
+                $this->skip('rules', $label . ': invalid owner - skipped.');
+                continue;
+            }
+            $action = (string)($item['action'] ?? '');
+            $tree = \AntispamBundle\Services\ComplexRuleEngine::normalize($item['conditions'] ?? null, $errors);
+            if ($tree === null || !isset(\AntispamBundle\Services\ComplexRuleEngine::ACTIONS[$action])) {
+                $this->skip('rules', $label . ': ' . ($errors ? implode(' ', $errors) : 'unknown action') . ' - skipped.');
+                continue;
+            }
+            $name = mb_substr(trim((string)($item['name'] ?? '')), 0, \AntispamBundle\Services\ComplexRuleEngine::MAX_NAME) ?: \AntispamBundle\Services\ComplexRuleEngine::describe($tree);
+            $key = self::complexKey($owner, $name, $tree);
+            if (isset($seen[$key])) {
+                $this->skip('rules', $label . ': duplicate in the file - skipped.');
+                continue;
+            }
+            $seen[$key] = true;
+            $score = \AntispamBundle\Services\ComplexRuleEngine::clampScore($item['score'] ?? 0, $action);
+            $enabled = !array_key_exists('enabled', $item) || (bool)$item['enabled'];
+            $rule = $existing[$key] ?? null;
+            if ($rule === null) {
+                $rule = (new \AntispamBundle\Entity\ComplexRule())->setEmail($owner)->setName($name)->setConditionTree($tree)
+                    ->setAction($action)->setScore($score)->setEnabled($enabled)
+                    ->setSource(\AntispamBundle\Entity\ComplexRule::SOURCE_IMPORT)
+                    ->setCreatedBy(self::nullable($item['created_by'] ?? null))
+                    ->setCounter(max(0, (int)($item['hits'] ?? 0)));
+                $this->persist($rule, 'rules');
+            } elseif ($rule->getAction() !== $action || $rule->getScore() !== $score || $rule->isEnabled() !== $enabled) {
+                $this->change(fn() => $rule->setAction($action)->setScore($score)->setEnabled($enabled)->touch(), 'rules');
+            } else {
+                $this->report->count('rules', 'unchanged');
+            }
+        }
+        if ($replace) {
+            foreach ($existing as $key => $rule) {
+                if (!isset($seen[$key])) {
+                    $this->remove($rule, 'rules');
+                }
+            }
+        }
+    }
+
+    private static function complexKey($owner, string $name, array $tree): string
+    {
+        return strtolower(trim((string)$owner)) . "\0" . mb_strtolower($name) . "\0" . json_encode($tree, JSON_UNESCAPED_UNICODE);
     }
 
     private static function ruleKey($owner, string $patternType, $value): string

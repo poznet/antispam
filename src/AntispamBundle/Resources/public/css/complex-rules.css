@@ -1,0 +1,16 @@
+/* Complex rule builder (complex-rule-builder.js) in the panel. */
+.crb-group { border: 1px solid var(--border, #d6dbe1); border-radius: 6px; padding: 8px 10px; margin: 4px 0; background: var(--surface, transparent); }
+.crb-nested { margin-left: 18px; border-style: dashed; background: var(--accent-soft, transparent); }
+.crb-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
+.crb-head select.form-control { width: auto; display: inline-block; }
+.crb-neg { font-weight: normal; margin: 0 4px; }
+.crb-cond { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0; }
+.crb-cond .form-control { width: auto; display: inline-block; max-width: 100%; }
+.crb-cond select.form-control { max-width: 280px; }
+.crb-cond input.form-control { min-width: 160px; flex: 1 1 160px; }
+.crb-join { font-size: 11px; font-weight: 700; color: var(--muted, #888); margin: 2px 0 2px 4px; }
+.crb-hint { color: var(--muted, #888); }
+@media (max-width: 600px) { .crb-cond .form-control { width: 100%; } .crb-nested { margin-left: 6px; } }
+/* panel.css sizes .form-control at 40px; Bootstrap's .input-sm (30px) clipped the text */
+.crb .form-control.input-sm { height: 34px; padding: 4px 10px; line-height: 1.4; font-size: 13px; }
+.crb select.form-control.input-sm { padding-right: 30px; background-position: right 10px center; }

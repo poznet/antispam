@@ -218,6 +218,7 @@ Full reference: **[thunderbird.md](thunderbird.md)**, clients:
 | POST | `/api/plugin/login` | Mailbox e-mail + plugin/IMAP password → token (OAuth accounts: plugin password only; a 401 carries a Polish `message` saying so) |
 | POST | `/api/plugin/report` | User verdict (`spam` anonymous or logged in, `ham` logged in). Optional `scope` (`mailbox` default / `report_only`: message from another mail client account - shared fingerprints only, no rules or retroactive pass for the token's mailbox; not with `ham`) and informational `reported_from` |
 | POST | `/api/plugin/check` | Score a raw message (logged in) |
+| GET / POST / PUT / DELETE | `/api/plugin/complex-rules[/{id}]` | Complex rules of the token's mailbox (plugin 1.6.0) - [complex-rules.md](complex-rules.md#plugin-api) |
 | POST / GET | `/api/plugin/rescan` | Queue / follow the full INBOX rescan of the token's mailbox (logged in, 5/day, one at a time) - see [thunderbird.md](thunderbird.md#http-api-apiplugin) |
 | POST | `/api/plugin/phishing` | Phishing report: full message stored for the admin + spam report (logged in). Optional `scope` / `reported_from` as for `/report`: `report_only` stores the copy with the foreign address but learns nothing for the token's mailbox |
 | GET | `/plugin/download` | Download the `.xpi` (public, `Cache-Control: private, no-store`; `?build=instance\|generic`, default = uploaded package when current, else instance build) |
@@ -255,6 +256,18 @@ Full reference: **[thunderbird.md](thunderbird.md)**, clients:
 | POST | `/emailblacklst/del/{id}` | Remove from email blacklist (CSRF token `list_rules`) |
 | POST | `/domainblacklst/global/{id}`, `/emailblacklst/global/{id}` | Make one rule global, as for the whitelists; a moved rule queues the retroactive pass over every mailbox (`rule.retroactive`) |
 | POST | `/domainblacklst/global`, `/emailblacklst/global` | Bulk (`ids[]` or `all_of`), as above; one retroactive job per moved rule; deployed SSH agents get `account.sync` (all four lists) |
+
+## Complex rules (`/complex-rules`, ROLE_ADMIN)
+
+AND / OR condition trees per mailbox or global - [complex-rules.md](complex-rules.md). CSRF token `complex_rules` on every POST.
+
+| Method | URL | Description |
+|--------|-----|-------------|
+| GET | `/complex-rules` | List (`?owner=` filter), test form, lookup switch |
+| GET / POST | `/complex-rules/new`, `/complex-rules/{id}/edit` | Builder form: `name`, `owner`, `action`, `score`, `enabled`, `conditions` (JSON tree) |
+| POST | `/complex-rules/{id}/toggle`, `/complex-rules/{id}/delete` | Enable / disable, delete (deployed SSH agents get `account.sync`) |
+| POST | `/complex-rules/test` | `raw` (message source) + `owner`: which rules match and the field values; nothing is stored |
+| POST | `/complex-rules/lookups` | `lookups` checkbox → `complex.lookups` (MX / domain age lookups) |
 
 ## Bulk import / export
 

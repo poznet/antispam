@@ -4,6 +4,7 @@ namespace AntispamBundle\Services;
 
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\Blacklist;
+use AntispamBundle\Entity\ComplexRule;
 use AntispamBundle\Entity\DnsblProvider;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Entity\EmailWhitelist;
@@ -19,7 +20,7 @@ class AgentRulesExporter
     private $em;
     private $scoring;
 
-    public function __construct(EntityManagerInterface $em, ScoringService $scoring, private ?MailboxSettingsResolver $mailboxSettings = null, private ?Bayes\BayesService $bayes = null)
+    public function __construct(EntityManagerInterface $em, ScoringService $scoring, private ?MailboxSettingsResolver $mailboxSettings = null, private ?Bayes\BayesService $bayes = null, private ?SenderIntelService $intel = null)
     {
         $this->em = $em;
         $this->scoring = $scoring;
@@ -70,6 +71,23 @@ class AgentRulesExporter
                 'score' => $item->getScore(),
             ];
         }
+        // Complex rules (agent 3.8+; older agents ignore the section).
+        $rules['complex_rules'] = [];
+        try {
+            $repo = $this->em->getRepository(ComplexRule::class);
+            foreach ($repo && method_exists($repo, 'forMailbox') ? $repo->forMailbox($email) : [] as $item) {
+                $rules['complex_rules'][] = [
+                    'id' => $item->getId(),
+                    'email' => $item->getEmail(),
+                    'name' => $item->getName(),
+                    'action' => $item->getAction(),
+                    'score' => $item->getScore(),
+                    'conditions' => $item->getConditionTree(),
+                ];
+            }
+        } catch (\Throwable $e) {
+            // table not migrated yet
+        }
         foreach ($this->em->getRepository(DnsblProvider::class)->findAll() as $prov) {
             $rules['dnsbl'][] = [
                 'name' => $prov->getName(),
@@ -85,6 +103,10 @@ class AgentRulesExporter
                 fn () => $this->scoring->exportAgentSettings($email)
             )
             : $this->scoring->exportAgentSettings($email);
+
+        // Sender lookups of the complex rules (MX, domain age) - complex.lookups.
+        $rules['settings']['complex_lookups'] = $this->intel ? $this->intel->isEnabled() : true;
+        $rules['settings']['mailbox_email'] = (string)$email; // internal / external sender
 
         // Bayes classifier (docs/bayes.md): token probabilities of the scope
         // the mailbox is scored with, capped at bayes.agent_max_tokens. An

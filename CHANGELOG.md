@@ -20,6 +20,29 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 
 ### Added
 
+- **Complex rules ("Reguły złożone")**: conditions joined with I / LUB (nested
+  groups up to 4 levels, negation of a condition or a whole group) on the sender
+  (address, domain, name, internal / external, free mail), To / Cc, Reply-To,
+  Return-Path, subject, body, any header, attachment name / type / count, size,
+  link domains, SPF / DKIM / DMARC results, message type (auto-reply, bounce,
+  list, invitation, signed…), sender IP, the **mail provider of the sender's
+  domain by its MX** (google, microsoft, home.pl, nazwa.pl…) and the **age of the
+  sender's domain** (RDAP, WHOIS fallback; cached, switchable). Matches: contains,
+  equals, starts / ends, wildcard, regex (ReDoS-guarded), empty, less / more than.
+  Actions: spam, at least quarantine, points (also negative), whitelist, log only
+  (test mode). Per mailbox or global. Panel *Blacklisty → Reguły złożone*
+  (`/complex-rules`) with a builder and *Testuj na wiadomości*; applied in the IMAP
+  pipeline, the plugin checks and the agent. New table `antispam_complex_rule`
+  (migration `Version20261119120000`), backup section `rules.complex`, plugin API
+  `/api/plugin/complex-rules` (settings `plugin.complex_rules`, default on, and
+  `plugin.global_rules`, default off). See `docs/complex-rules.md`.
+- **Thunderbird plugin 1.6.0: complex rules** - section *Reguły złożone* in the
+  settings (list, builder, local / global, enable, delete) and *Utwórz regułę
+  złożoną z tej wiadomości…* in the message menu; the rules are stored on the
+  server and appear in the panel (*wtyczka*). *Zastosuj reguły antyspamu w tym
+  folderze* evaluates them locally too.
+- **SSH+Maildir agent 3.8**: complex rules (`complex_rules` in `rules.json`, tables
+  `complex_rules` and `intel_cache`); redeploy with *Konta → Wdróż*.
 - **Outlook add-in 1.2.0.0: "Zastosuj reguły antyspamu w folderze"** (logged
   in): pick a folder of the mailbox (new `GET /api/plugin/folders`) and the
   server checks it with the current rules - the full rescan (`account.rescan`)

@@ -36,6 +36,8 @@ class MessageEvent extends Event
      * deleted) and, like the initial scan, nothing counts in the statistics.
      */
     private $rescan = false;
+    /** A complex rule with the "quarantine" action matched: at least quarantine, whatever the score. */
+    private $forcedQuarantine = false;
 
     public function __construct(MessageInterface $message, $email = null, ?ConnectionInterface $connection = null, ?bool $deleteSpam = null)
     {
@@ -159,6 +161,16 @@ class MessageEvent extends Event
     public function setCheckedbefore($checkedbefore)
     {
         $this->checkedbefore = $checkedbefore;
+    }
+
+    public function isForcedQuarantine(): bool
+    {
+        return $this->forcedQuarantine;
+    }
+
+    public function setForcedQuarantine(bool $forced)
+    {
+        $this->forcedQuarantine = $forced;
     }
 
     public function isSpam()

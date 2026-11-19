@@ -385,6 +385,9 @@ CREATE TABLE email_whitelist (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT, 
 CREATE TABLE blacklist (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT, host TEXT, pattern_type TEXT DEFAULT "exact", score INTEGER DEFAULT 10);
 CREATE TABLE email_blacklist (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT, blacklistemail TEXT, pattern_type TEXT DEFAULT "exact", score INTEGER DEFAULT 10);
 CREATE TABLE checked (id INTEGER PRIMARY KEY AUTOINCREMENT, message_id TEXT UNIQUE, checked_ts INTEGER);
+-- 3.8: complex rules (docs/complex-rules.md) and the cache of their MX / domain age lookups
+CREATE TABLE complex_rules (id INTEGER PRIMARY KEY, email TEXT, name TEXT, action TEXT, score INTEGER DEFAULT 0, conditions TEXT);
+CREATE TABLE intel_cache (key TEXT PRIMARY KEY, value TEXT, expires INTEGER);
 CREATE TABLE dnsbl_providers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, zone TEXT UNIQUE, score INTEGER DEFAULT 5,
                               enabled INTEGER DEFAULT 1, cache_ttl INTEGER DEFAULT 3600);
 CREATE TABLE dnsbl_cache (id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT, zone TEXT, listed INTEGER, checked_at TEXT, UNIQUE(ip, zone));
@@ -456,6 +459,11 @@ after Wdróż, and before a retroactive blacklist pass):
   ],
   "email_blacklist": [
     {"email": "user@example.com", "blacklistemail": "^promo\\d+@", "pattern_type": "regex", "score": 6}
+  ],
+  "complex_rules": [
+    {"id": 7, "email": "*", "name": "Faktury z nowych domen", "action": "quarantine", "score": 5,
+     "conditions": {"op": "and", "items": [{"field": "subject", "match": "contains", "value": "faktura", "negate": false},
+                                           {"field": "domain_age", "match": "lt", "value": "30", "negate": false}]}}
   ],
   "dnsbl": [
     {"name": "Spamhaus ZEN", "zone": "zen.spamhaus.org", "score": 5, "enabled": true, "cache_ttl": 3600}

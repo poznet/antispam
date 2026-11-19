@@ -65,6 +65,7 @@ jobs:
           for f in src/AntispamBundle/Resources/thunderbird/*.js; do node --check "$f"; done
           node tests/js/thunderbird-first-run.mjs
           node tests/js/thunderbird-accounts.mjs
+          node tests/js/thunderbird-complex-rules.mjs
 
       - name: Build generic .xpi (reproducible)
         run: |

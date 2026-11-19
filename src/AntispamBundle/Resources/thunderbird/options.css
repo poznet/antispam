@@ -75,3 +75,34 @@ button.secondary { background: #fff; color: #005bba; }
   .badge { background: #1d2163; color: #e8ecfa; }
   .events .ev-time, .events .ev-kind, .events summary { color: #9aa8c7; }
 }
+
+/* complex rules (1.6.0): list + builder (complex-rule-builder.js) */
+.rules-list { margin: 8px 0; }
+.rule-item { border: 1px solid #e3ecf7; border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; }
+.rule-item.off { opacity: .6; }
+.rule-item .rule-desc { font-size: 13px; margin: 4px 0; word-break: break-word; }
+.rule-item .buttons button { padding: 3px 10px; font-size: 13px; margin-right: 4px; }
+.tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 4px; margin-left: 4px; background: #e3ecf7; color: #060735; }
+.tag.spam { background: #fde2e2; color: #a12; } .tag.quarantine { background: #fff1d6; color: #8a5300; }
+.tag.whitelist { background: #dff5e7; color: #1b6b36; } .tag.global { background: #005bba; color: #fff; }
+.rule-editor { border: 2px solid #005bba; border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+.rule-editor h3 { margin: 0 0 6px; font-size: 14px; }
+.rule-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.rule-row label { flex: 1 1 180px; }
+.field-label { font-weight: 600; margin: 8px 0 4px; }
+.crb-group { border: 1px solid #c5d3ea; border-radius: 6px; padding: 6px 8px; margin: 4px 0; }
+.crb-nested { margin-left: 12px; border-style: dashed; background: rgba(0, 91, 186, .05); }
+.crb-head, .crb-cond { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 4px 0; }
+.crb input[type=text], .crb input[type=number], .crb select { display: inline-block; width: auto; max-width: 100%; margin: 0; padding: 4px 6px; }
+.crb button { padding: 3px 8px; font-size: 12px; }
+.crb button.danger { background: #fff; color: #a94442; border-color: #a94442; }
+.crb-neg { display: inline; margin: 0 4px; font-weight: normal; }
+.crb-join { font-size: 11px; font-weight: 700; color: #636a8a; margin-left: 4px; }
+.crb-hint { color: #636a8a; font-size: 11px; }
+@media (prefers-color-scheme: dark) {
+  .rule-item, .crb-group { border-color: #2a2f78; }
+  .tag { background: #1d2163; color: #e8ecfa; }
+  .rule-editor { border-color: #1fd7fd; }
+  .crb input[type=number] { background: #0b0d40; color: #e8ecfa; border: 1px solid #2a2f78; }
+  .crb button.danger { background: transparent; color: #ff8a80; border-color: #ff8a80; }
+}

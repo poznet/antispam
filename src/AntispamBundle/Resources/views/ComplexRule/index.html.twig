@@ -1,0 +1,116 @@
+{% extends '@Antispam/main.html.twig' %}
+{% import '@Antispam/RuleOwner/macros.html.twig' as owner %}
+{% block title %}Reguły złożone{% endblock %}
+{% block page_title %}Reguły złożone{% endblock %}
+
+{% block body %}
+    <p class="text-muted">
+        Warunki łączone przez <strong>I</strong> / <strong>LUB</strong> (z grupami i negacją), np. <em>temat zawiera „faktura” I treść nie zawiera „umowa”</em>.
+        Pola: nadawca, odbiorcy, temat, treść, dowolny nagłówek, załączniki, linki, SPF/DKIM/DMARC, dostawca poczty nadawcy (MX), wiek domeny (WHOIS/RDAP) i inne;
+        dopasowania: zawiera, równe, zaczyna / kończy się, wildcard (<code>*</code>, <code>?</code>), regex, puste, mniej / więcej niż.
+        Reguły działają na serwerze (skanowanie IMAP, agent SSH, sprawdzanie z wtyczek). Reguły utworzone we wtyczce Thunderbird mają źródło <span class="label label-default">wtyczka</span>.
+    </p>
+
+    <p>
+        <a href="{{ path('antispam_complex_rule_new') }}" class="btn btn-primary"><span class="glyphicon glyphicon-plus"></span> Nowa reguła złożona</a>
+    </p>
+
+    {{ owner.filter('antispam_complex_rule_index', owners, owner_filter) }}
+
+    {% if list|length > 0 %}
+    <ul class="list-group">
+        {% for r in list %}
+        <li class="list-group-item{% if not r.enabled %} text-muted{% endif %}">
+            <div class="pull-right">
+                <a href="{{ path('antispam_complex_rule_edit', {id: r.id}) }}" class="btn btn-default btn-xs"><span class="glyphicon glyphicon-pencil"></span> Edytuj</a>
+                <form method="post" action="{{ path('antispam_complex_rule_toggle', {id: r.id}) }}" style="display:inline;">
+                    <input type="hidden" name="_token" value="{{ csrf_token('complex_rules') }}">
+                    <input type="hidden" name="return_owner" value="{{ owner_filter }}">
+                    <button type="submit" class="btn btn-default btn-xs">{{ r.enabled ? 'Wyłącz' : 'Włącz' }}</button>
+                </form>
+                <form method="post" action="{{ path('antispam_complex_rule_delete', {id: r.id}) }}" style="display:inline;">
+                    <input type="hidden" name="_token" value="{{ csrf_token('complex_rules') }}">
+                    <input type="hidden" name="return_owner" value="{{ owner_filter }}">
+                    <button type="submit" class="btn btn-danger btn-xs" data-confirm="Usunąć regułę złożoną „{{ r.name }}”?"><span class="glyphicon glyphicon-remove"></span> Usuń</button>
+                </form>
+            </div>
+            <strong>{{ r.name }}</strong>
+            {% set cls = {spam: 'danger', quarantine: 'warning', score: 'info', whitelist: 'success', log: 'default'} %}
+            <span class="label label-{{ cls[r.action]|default('default') }}">{{ r.actionLabel }}{% if r.action in ['spam', 'quarantine', 'score'] %} · {{ r.score }} pkt{% endif %}</span>
+            {% if not r.enabled %}<span class="label label-default">wyłączona</span>{% endif %}
+            {% if r.source == 'plugin' %}<span class="label label-default" title="{{ r.createdBy }}">wtyczka</span>{% endif %}
+            {{ owner.label(r.email) }}
+            <span class="badge badge-counter">{{ r.counter }} trafień</span>
+            <div class="small" style="margin-top:4px;">{{ r.describe }}</div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <div class="empty-state">
+        <span class="glyphicon glyphicon-filter"></span>
+        <p>Nie ma jeszcze reguł złożonych</p>
+        <p class="text-muted">Utwórz pierwszą tutaj albo we wtyczce Thunderbird (Ustawienia wtyczki → Reguły złożone).</p>
+    </div>
+    {% endif %}
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><strong>Testuj na wiadomości</strong></div>
+        <div class="panel-body">
+            <form method="post" action="{{ path('antispam_complex_rule_test') }}">
+                <input type="hidden" name="_token" value="{{ csrf_token('complex_rules') }}">
+                <div class="form-group">
+                    <label for="test-raw">Źródło wiadomości (.eml, „Pokaż źródło” w programie pocztowym)</label>
+                    <textarea name="raw" id="test-raw" class="form-control" rows="6" style="font-family:monospace;font-size:12px;" placeholder="Return-Path: …&#10;From: …&#10;Subject: …&#10;&#10;treść"></textarea>
+                </div>
+                <div class="form-inline">
+                    {{ owner.select(choices, test_owner, 'test-owner') }}
+                    <button type="submit" class="btn btn-default"><span class="glyphicon glyphicon-play"></span> Testuj reguły tej skrzynki</button>
+                    <span class="text-muted small">Nic nie jest zapisywane ani przenoszone; liczniki trafień bez zmian. Wyłączone reguły też są sprawdzane.</span>
+                </div>
+            </form>
+            {% if test %}
+                <hr>
+                {% if test.empty %}
+                    <p class="text-danger">Wklej źródło wiadomości.</p>
+                {% else %}
+                    <h4>Wynik</h4>
+                    {% if test.results|length == 0 %}<p class="text-muted">Ta skrzynka nie ma reguł złożonych.</p>{% endif %}
+                    <ul class="list-unstyled">
+                        {% for t in test.results %}
+                            <li>
+                                {% if t.match %}<span class="label label-danger">pasuje</span>{% else %}<span class="label label-default">nie pasuje</span>{% endif %}
+                                <strong>{{ t.rule.name }}</strong> → {{ t.rule.actionLabel }}{% if not t.rule.enabled %} <em>(wyłączona)</em>{% endif %}
+                                <span class="small text-muted">{{ t.rule.describe }}</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                    <h4>Wartości pól tej wiadomości</h4>
+                    <table class="table table-condensed small">
+                        {% for label, value in test.fields %}
+                            <tr><th style="width:35%">{{ label }}</th><td>{{ value is empty ? '—' : value }}</td></tr>
+                        {% endfor %}
+                    </table>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><strong>Zapytania o domenę nadawcy</strong></div>
+        <div class="panel-body">
+            <form method="post" action="{{ path('antispam_complex_rule_lookups') }}" class="form-inline">
+                <input type="hidden" name="_token" value="{{ csrf_token('complex_rules') }}">
+                <div class="checkbox"><label>
+                    <input type="checkbox" name="lookups" {% if lookups %}checked{% endif %}>
+                    Sprawdzaj MX (dostawcę poczty) i wiek domeny nadawcy (RDAP <code>rdap.org</code>, zapasowo WHOIS) dla warunków, które ich używają
+                </label></div>
+                <button type="submit" class="btn btn-default btn-sm">Zapisz</button>
+                <p class="help-block">Wyniki są zapamiętywane (MX 1 dzień, wiek domeny 7 dni), więc domena kosztuje jedno zapytanie na okres. Wyłączone: takie warunki nie pasują (zanegowane - pasują).</p>
+            </form>
+        </div>
+    </div>
+{% endblock %}
+
+{% block javascripts %}
+    <script src="{{ asset('bundles/antispam/js/data-confirm.js') }}"></script>
+{% endblock %}

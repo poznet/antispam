@@ -1118,6 +1118,17 @@ async function selectedMessages(info, tab) {
 messenger.menus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === RESCAN_MENU) return rescanClicked(info);
   if (info.menuItemId === FOLDER_RULES_MENU) return folderRulesClicked(info);
+  if (info.menuItemId === COMPLEX_MENU) {
+    logEvent("click", true, "Menu: " + COMPLEX_MENU_TITLE);
+    return enqueueManual(async () => {
+      const { messages } = await selectedMessages(info, tab);
+      if (!messages.length) {
+        await feedback(false, "Nic nie zaznaczono - zaznacz wiadomość na liście i spróbuj ponownie.", { menu: COMPLEX_MENU_TITLE });
+        return;
+      }
+      await complexDraftFrom(messages[0]);
+    }, COMPLEX_MENU_TITLE);
+  }
   if (!MENU[info.menuItemId]) return;
   logEvent("click", true, "Menu: " + MENU[info.menuItemId]);
   enqueueManual(async () => {
@@ -1486,9 +1497,14 @@ async function fetchRules(ctx) {
     ebl: compileRules(res.email_blacklist, bad),
     truncated: !!res.truncated,
     bad,
+    complex: compileComplexRules(res.complex_rules),
+    freemail: Array.isArray(res.freemail) ? res.freemail : [],
   };
   rules.counts = "biała lista domen " + rules.wl.length + ", adresów " + rules.ewl.length
-    + "; czarna lista domen " + rules.bl.length + ", adresów " + rules.ebl.length;
+    + "; czarna lista domen " + rules.bl.length + ", adresów " + rules.ebl.length
+    + "; reguły złożone " + rules.complex.local.length
+    + (rules.complex.serverOnly.length ? " (+" + rules.complex.serverOnly.length + " tylko na serwerze)" : "");
+  for (const name of rules.complex.bad) rules.bad.push("reguła złożona „" + name + "”");
   return rules;
 }
 
@@ -1684,6 +1700,30 @@ async function applyFolderRules(folder) {
             Object.assign(messageDetail(m), { nadawca_adres: address, reguła: hit.rule }));
           continue;
         }
+        // Complex rules evaluated locally (whitelist keeps, spam / quarantine -> quarantine folder).
+        if (rules.complex && rules.complex.local.length) {
+          let ch = { verdict: "" };
+          try {
+            ch = await matchComplex(rules.complex, complexProvider(m, ctx.login.email, rules.freemail));
+          } catch (e) {
+            logEvent("folder", false, "Folder " + label + ": reguły złożone - nie udało się odczytać wiadomości: " + errorText(e), messageDetail(m));
+          }
+          if (ch.verdict === "white") {
+            c.whitelisted++;
+            continue;
+          }
+          if (ch.verdict === "log") {
+            logEvent("folder", true, "Folder " + label + ": reguła złożona (tryb testowy) pasuje: " + (m.subject || "(bez tematu)"), Object.assign(messageDetail(m), { reguła: ch.rule }));
+          }
+          if (ch.verdict === "black") {
+            c.blacklisted++;
+            const moved = await moveTo("quarantine", m);
+            if (moved) c.quarantined++;
+            logEvent("folder", true, "Folder " + label + ": reguła złożona → " + (moved ? "kwarantanna" : "zostaje (brak folderu)") + ": " + (m.subject || "(bez tematu)"),
+              Object.assign(messageDetail(m), { nadawca_adres: address, reguła: ch.rule }));
+            continue;
+          }
+        }
         if (mode !== "full") {
           c.unmatched++;
           continue;
@@ -1739,6 +1779,280 @@ async function applyFolderRules(folder) {
   const text = how + ": " + folderRulesCounters(c, run.done) + ".";
   await notify(abort ? "Antyspam — błąd" : "Antyspam", text);
   await feedback(!abort && !c.failed && !c.move_failed, text, Object.assign({}, base, { tryb: mode, czas: secs + " s", wiadomości: run.total }));
+}
+
+// --- complex rules (1.6.0, docs/complex-rules.md) ----------------------------
+
+/*
+ * Complex rules are kept on the server (GET/POST/PUT/DELETE
+ * /api/plugin/complex-rules): created on the settings page for the logged-in
+ * mailbox (local) or - when the admin allows it - for every mailbox (global).
+ * The server applies them everywhere (IMAP scan, SSH agent, /check); the
+ * folder pass below also evaluates them locally, the same way as
+ * ComplexRuleEngine. Fields that need DNS / WHOIS (or the trusted Received
+ * hop) cannot be read here: rules using them are left to the server.
+ */
+const COMPLEX_MENU = "antispam-complex";
+const COMPLEX_MENU_TITLE = "Utwórz regułę złożoną z tej wiadomości (Antyspam)…";
+const COMPLEX_SERVER_ONLY = ["mx_provider", "mx_host", "domain_age", "sender_ip"];
+const COMPLEX_BODY_FIELDS = ["body", "attachment", "attachment_type", "attachment_count", "link_domain", "reply_to", "return_path", "header", "auth_spf", "auth_dkim", "auth_dmarc", "message_type"];
+const COMPLEX_MAX_BODY = 262144;
+
+messenger.menus.create({ id: COMPLEX_MENU, title: COMPLEX_MENU_TITLE, contexts: ["message_list"], icons: { "32": "icons/icon-32.png" } });
+
+function complexFold(v) {
+  return String(v == null ? "" : v).replace(/\s+/gu, " ").trim().toLowerCase();
+}
+
+function complexGlob(glob) {
+  let out = "";
+  for (const ch of glob) out += ch === "*" ? ".*" : ch === "?" ? "." : ch.replace(/[.*+?^${}()|[\]\\\/~#-]/g, "\\$&");
+  return new RegExp("^" + out + "$", "su");
+}
+
+/** Compile a tree once: regex / glob objects; throws when JavaScript cannot compile a regex. */
+function complexCompile(node) {
+  if (node.op) return { op: node.op, negate: !!node.negate, items: (node.items || []).map(complexCompile) };
+  const c = Object.assign({}, node);
+  if (c.match === "regex") c.re = new RegExp(c.value || "", "iu");
+  if (c.match === "wildcard") c.re = complexGlob(c.value || "");
+  return c;
+}
+
+function complexMatchValue(value, c) {
+  const p = c.value == null ? "" : String(c.value);
+  switch (c.match) {
+    case "lt": return value !== "" && !isNaN(value) && Number(value) < Number(p);
+    case "gt": return value !== "" && !isNaN(value) && Number(value) > Number(p);
+    case "empty": return value === "";
+    case "contains": return value !== "" && value.includes(p);
+    case "equals": return value === p;
+    case "starts": return value !== "" && value.startsWith(p);
+    case "ends": return value !== "" && value.endsWith(p);
+    case "wildcard":
+    case "regex": return c.re.test(value);
+  }
+  return false;
+}
+
+/** values(field, header) -> string[] (async: body fields read the full message). */
+async function complexEval(node, values) {
+  if (node.op) {
+    const and = node.op === "and";
+    let result = and;
+    for (const item of node.items) {
+      const hit = await complexEval(item, values);
+      if (and !== hit) { result = hit; break; }
+    }
+    return node.negate ? !result : result;
+  }
+  const vals = await values(node.field, node.header || null);
+  let any = vals.some(v => complexMatchValue(complexFold(v), node));
+  if (node.match === "empty" && !vals.length) any = true;
+  return node.negate ? !any : any;
+}
+
+function complexFieldsUsed(node, out = []) {
+  if (node.op) (node.items || []).forEach(i => complexFieldsUsed(i, out));
+  else out.push(node.field);
+  return out;
+}
+
+function complexAddresses(list) {
+  const out = [];
+  for (const v of list || []) {
+    for (const a of String(v || "").match(/[^\s<>"',;:()]+@[^\s<>"',;:()]+/g) || []) out.push(a.replace(/\.$/, "").toLowerCase());
+  }
+  return [...new Set(out)];
+}
+
+function complexRegistrable(domain) {
+  const multi = ["com.pl", "net.pl", "org.pl", "info.pl", "biz.pl", "edu.pl", "gov.pl", "waw.pl", "co.uk", "org.uk", "com.au", "com.br", "com.ru", "com.ua", "com.tr"];
+  const labels = String(domain || "").toLowerCase().replace(/^\.+|\.+$/g, "").split(".");
+  if (labels.length <= 2) return labels.join(".");
+  const lastTwo = labels.slice(-2).join(".");
+  return multi.includes(lastTwo) ? labels.slice(-3).join(".") : lastTwo;
+}
+
+/** Walk getFull() parts: first text/plain, first text/html, attachments [{name, type}]. */
+function complexParts(part, out) {
+  const type = String(part.contentType || "").toLowerCase();
+  if (part.parts && part.parts.length) {
+    for (const p of part.parts) complexParts(p, out);
+    return out;
+  }
+  const isText = type === "text/plain" || type === "text/html";
+  const disposition = String(((part.headers || {})["content-disposition"] || [""])[0]).toLowerCase();
+  if (part.name || disposition.startsWith("attachment") || (!isText && type && !type.startsWith("multipart/") && type !== "message/rfc822")) {
+    out.attachments.push({ name: part.name || "", type: type || "application/octet-stream" });
+  } else if (type === "text/plain" && out.text === null) out.text = part.body || "";
+  else if (type === "text/html" && out.html === null) out.html = part.body || "";
+  return out;
+}
+
+/**
+ * Field values of a Thunderbird message (ComplexRuleMessage). Header fields
+ * come from the message list entry; the rest from messages.getFull(), read
+ * once and only when a rule needs it.
+ */
+function complexProvider(m, mailbox, freemail) {
+  const cache = new Map();
+  let full = null;
+  const fullOf = async () => {
+    if (!full) {
+      const f = await step("odczyt wiadomości (messages.getFull)", () => messenger.messages.getFull(m.id), GETRAW_TIMEOUT_MS);
+      const parts = complexParts(f, { text: null, html: null, attachments: [] });
+      const headers = {};
+      for (const [k, v] of Object.entries(f.headers || {})) headers[k.toLowerCase()] = Array.isArray(v) ? v.map(String) : [String(v)];
+      const html = parts.html || "";
+      const text = parts.text !== null && parts.text.trim() !== "" ? parts.text
+        : html.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, "").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
+      const links = new Set();
+      for (const blob of [parts.text || "", html]) {
+        for (const u of blob.match(/\bhttps?:\/\/[^\s<>"'()[\]{}]+/gi) || []) {
+          try { const h = new URL(u).hostname.toLowerCase().replace(/\.$/, ""); if (h && !/^[\d.]+$|:/.test(h)) links.add(h); } catch (e) { /* bad URL */ }
+        }
+        for (const mm of blob.matchAll(/href\s*=\s*["']?(https?:\/\/[^"'\s>]+)/gi)) {
+          try { const h = new URL(mm[1]).hostname.toLowerCase().replace(/\.$/, ""); if (h && !/^[\d.]+$|:/.test(h)) links.add(h); } catch (e) { /* bad URL */ }
+        }
+      }
+      full = { headers, text: text.slice(0, COMPLEX_MAX_BODY), attachments: parts.attachments, links: [...links] };
+    }
+    return full;
+  };
+  const h1 = async name => ((await fullOf()).headers[name.toLowerCase()] || []);
+  const fromAddr = senderAddress(m.author);
+  const fromHost = fromAddr.includes("@") ? fromAddr.split("@").pop() : "";
+  return async (field, header) => {
+    const key = field + ":" + String(header || "").toLowerCase();
+    if (cache.has(key)) return cache.get(key);
+    let v = [];
+    switch (field) {
+      case "from": v = [fromAddr]; break;
+      case "from_domain": v = [fromHost]; break;
+      case "from_name": {
+        const a = String(m.author || "");
+        v = [a.includes("<") ? a.slice(0, a.lastIndexOf("<")).trim().replace(/^["'\s]+|["'\s]+$/g, "") : ""];
+        break;
+      }
+      case "subject": v = [m.subject || ""]; break;
+      case "to": v = complexAddresses([].concat(m.recipients || [], m.ccList || [])); break;
+      case "from_scope": {
+        const mine = String(mailbox || "").includes("@") ? String(mailbox).split("@").pop() : "";
+        v = fromHost ? [mine && complexRegistrable(mine) === complexRegistrable(fromHost) ? "internal" : "external"] : [];
+        break;
+      }
+      case "from_freemail": v = fromHost ? [(freemail || []).includes(complexRegistrable(fromHost)) ? "tak" : "nie"] : []; break;
+      case "size_kb": v = typeof m.size === "number" ? [String(Math.ceil(m.size / 1024))] : []; break;
+      case "reply_to": v = complexAddresses(await h1("reply-to")); break;
+      case "return_path": v = complexAddresses(await h1("return-path")); break;
+      case "header": v = header ? await h1(header) : []; break;
+      case "body": v = [(await fullOf()).text]; break;
+      case "attachment": v = (await fullOf()).attachments.map(a => a.name).filter(Boolean); break;
+      case "attachment_type": v = (await fullOf()).attachments.map(a => a.type); break;
+      case "attachment_count": v = [String((await fullOf()).attachments.length)]; break;
+      case "link_domain": v = (await fullOf()).links; break;
+      case "auth_spf": case "auth_dkim": case "auth_dmarc": {
+        const method = field.slice(5);
+        const auth = String((await h1("authentication-results"))[0] || "").toLowerCase();
+        v = [...new Set([...auth.matchAll(new RegExp("\\b" + method + "\\s*=\\s*([a-z]+)", "g"))].map(x => x[1]))];
+        if (!v.length && method === "spf") {
+          const r = String((await h1("received-spf"))[0] || "").trim().toLowerCase().match(/^([a-z]+)/);
+          if (r) v = [r[1]];
+        }
+        break;
+      }
+      case "message_type": {
+        const hv = async n => String((await h1(n))[0] || "").trim().toLowerCase();
+        const auto = await hv("auto-submitted");
+        const ct = await hv("content-type");
+        const prec = await hv("precedence");
+        if ((auto && auto !== "no") || await hv("x-autoreply") || await hv("x-autorespond") || prec === "auto_reply") v.push("autoreply");
+        if (ct.startsWith("multipart/report") && ct.includes("delivery-status")) v.push("bounce");
+        if (ct.startsWith("multipart/report") && ct.includes("disposition-notification")) v.push("readreceipt");
+        if (await hv("list-id") || await hv("list-unsubscribe") || prec === "bulk" || prec === "list") v.push("list");
+        if (ct.includes("text/calendar") || ct.includes("method=request")) v.push("calendar");
+        if (ct.startsWith("multipart/signed")) v.push("signed");
+        if (ct.startsWith("multipart/encrypted") || ct.includes("application/pkcs7-mime")) v.push("encrypted");
+        break;
+      }
+      default: v = [];
+    }
+    v = v.map(String).filter(x => x !== "");
+    cache.set(key, v);
+    return v;
+  };
+}
+
+/**
+ * Rules from /api/plugin/rules (complex_rules), compiled for the folder
+ * pass: {local: [...], serverOnly: [names], bad: [names]}.
+ */
+function compileComplexRules(list) {
+  const out = { local: [], serverOnly: [], bad: [] };
+  for (const r of Array.isArray(list) ? list : []) {
+    if (!r || !r.conditions || r.enabled === false) continue;
+    const used = complexFieldsUsed(r.conditions);
+    if (used.some(f => COMPLEX_SERVER_ONLY.includes(f))) { out.serverOnly.push(r.name); continue; }
+    try {
+      out.local.push({ id: r.id, name: r.name, action: r.action, score: r.score, global: !!r.global, tree: complexCompile(r.conditions) });
+    } catch (e) {
+      out.bad.push(r.name);
+    }
+  }
+  return out;
+}
+
+/** {verdict: "white"|"black"|"log"|"", rule} for one message; spam / quarantine rules = "black". */
+async function matchComplex(compiled, values) {
+  const logged = [];
+  for (const r of compiled.local) {
+    if (r.action === "whitelist" && await complexEval(r.tree, values)) return { verdict: "white", rule: "complex_rule:#" + r.id + " " + r.name };
+  }
+  for (const r of compiled.local) {
+    if (r.action === "whitelist" || r.action === "score") continue;
+    if (!await complexEval(r.tree, values)) continue;
+    if (r.action === "log") { logged.push("complex_rule:#" + r.id + " " + r.name + " (log)"); continue; }
+    return { verdict: "black", rule: "complex_rule:#" + r.id + " " + r.name + " (" + r.action + (r.global ? ", wszystkie skrzynki" : "") + ")", logged };
+  }
+  return { verdict: logged.length ? "log" : "", rule: logged.join(", "), logged };
+}
+
+/** Login of a Thunderbird account for the rules page: its own (or the general) login. */
+async function complexLoginFor(accountId) {
+  const logins = await getLogins();
+  const key = String(accountId || "");
+  if (!logins[key]) throw new Error("To konto nie jest zalogowane we wtyczce - zaloguj je w sekcji „Konta”.");
+  return Object.assign({ key }, logins[key]);
+}
+
+function complexRuleBody(rule) {
+  return {
+    name: String(rule.name || ""),
+    enabled: rule.enabled !== false,
+    action: rule.action,
+    score: rule.score === "" || rule.score == null ? null : Number(rule.score),
+    conditions: rule.conditions,
+    global: !!rule.global,
+  };
+}
+
+/** "Utwórz regułę złożoną z tej wiadomości": a draft with the sender / subject, then the settings page. */
+async function complexDraftFrom(message) {
+  const address = senderAddress(message.author);
+  const accountId = message.folder ? message.folder.accountId : "";
+  const items = [];
+  if (address) items.push({ field: "from_domain", match: "equals", value: address.split("@").pop(), negate: false });
+  if (message.subject) items.push({ field: "subject", match: "contains", value: String(message.subject).slice(0, 200), negate: false });
+  if (!items.length) items.push({ field: "subject", match: "contains", value: "", negate: false });
+  const draft = {
+    accountId, created: Date.now(),
+    rule: { name: "", action: "quarantine", score: 5, enabled: true, global: false, conditions: { op: "and", negate: false, items } },
+    from: address, subject: message.subject || "",
+  };
+  await messenger.storage.local.set({ complexDraft: draft });
+  logEvent("rules", true, "Szkic reguły złożonej z wiadomości: " + (message.subject || "(bez tematu)"), Object.assign(messageDetail(message), { konto: accountId }));
+  await step("otwarcie ustawień (openOptionsPage)", () => messenger.runtime.openOptionsPage());
 }
 
 // --- connection test ("Testuj połączenie" on the settings page) --------------
@@ -1914,6 +2228,33 @@ messenger.runtime.onMessage.addListener(async (msg) => {
     case "clearEvents":
       await messenger.storage.local.set({ eventLog: [] });
       return { ok: true };
+    case "complexRules": {
+      const login = await complexLoginFor(msg.accountId);
+      const res = await api("/api/plugin/complex-rules", { login, quietOk: true });
+      res.login = { key: login.key, email: login.email };
+      return res;
+    }
+    case "complexSave": {
+      const login = await complexLoginFor(msg.accountId);
+      const rule = msg.rule || {};
+      const id = Number(rule.id) || 0;
+      const res = await api("/api/plugin/complex-rules" + (id ? "/" + id : ""), { method: id ? "PUT" : "POST", body: complexRuleBody(rule), login });
+      logEvent("rules", true, (id ? "Zapisano" : "Utworzono") + " regułę złożoną „" + ((res.rule && res.rule.name) || rule.name || "") + "” (" + ((res.rule && res.rule.global) ? "wszystkie skrzynki" : "skrzynka " + login.email) + ")",
+        { akcja: rule.action, warunki: (res.rule && res.rule.description) || "" });
+      return res;
+    }
+    case "complexDelete": {
+      const login = await complexLoginFor(msg.accountId);
+      const res = await api("/api/plugin/complex-rules/" + Number(msg.id), { method: "DELETE", login });
+      logEvent("rules", true, "Usunięto regułę złożoną #" + Number(msg.id) + " (" + login.email + ")");
+      return res;
+    }
+    case "complexDraft": {
+      const { complexDraft = null } = await messenger.storage.local.get("complexDraft");
+      if (complexDraft) await messenger.storage.local.remove("complexDraft");
+      // A draft older than an hour is stale (the settings page was never opened).
+      return complexDraft && Date.now() - (complexDraft.created || 0) < 3600 * 1000 ? complexDraft : null;
+    }
     default:
       return undefined;
   }

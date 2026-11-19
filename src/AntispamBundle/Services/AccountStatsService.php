@@ -138,11 +138,15 @@ class AccountStatsService
     }
 
     /**
-     * One entry per day of the period (oldest first), every kind summed.
+     * One entry per day of the period (oldest first), the given kinds summed
+     * (default: new mail only - a rescan of thousands of old messages would
+     * flatten the chart).
+     *
+     * @param string[] $kinds
      *
      * @return array<string, array<string,int>> 'Y-m-d' => counters
      */
-    public function daily(int $accountId, int $days): array
+    public function daily(int $accountId, int $days, array $kinds = [AccountDailyStat::KIND_SCAN, AccountDailyStat::KIND_INITIAL]): array
     {
         $since = self::since($days);
         $out = [];
@@ -150,8 +154,9 @@ class AccountStatsService
             $out[$d->format('Y-m-d')] = array_fill_keys(AccountDailyStat::COUNTERS, 0);
         }
         $cols = implode(', ', array_map(fn ($c) => 'SUM(' . $c . ') AS ' . $c, AccountDailyStat::COUNTERS));
-        $rows = $this->db()->fetchAllAssociative('SELECT day, ' . $cols . ' FROM ' . self::TABLE . ' WHERE account_id = ? AND day >= ? GROUP BY day',
-            [$accountId, $since->format('Y-m-d')]);
+        $kinds = array_values(array_intersect($kinds, array_keys(AccountDailyStat::KINDS))) ?: [AccountDailyStat::KIND_SCAN];
+        $rows = $this->db()->fetchAllAssociative('SELECT day, ' . $cols . ' FROM ' . self::TABLE . ' WHERE account_id = ? AND day >= ? AND kind IN ('
+            . implode(', ', array_fill(0, count($kinds), '?')) . ') GROUP BY day', array_merge([$accountId, $since->format('Y-m-d')], $kinds));
         foreach ($rows as $row) {
             $day = substr((string)$row['day'], 0, 10);
             if (isset($out[$day])) {

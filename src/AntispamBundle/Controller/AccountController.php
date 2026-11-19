@@ -3,8 +3,8 @@
 namespace AntispamBundle\Controller;
 
 use AntispamBundle\Entity\Account;
-use AntispamBundle\Entity\AccountDailyStat;
 use AntispamBundle\Entity\BackgroundJob;
+use AntispamBundle\Services\AccountStatsPage;
 use AntispamBundle\Services\AccountStatsService;
 use AntispamBundle\Services\AuditLogger;
 use AntispamBundle\Services\ConfigService;
@@ -54,6 +54,7 @@ class AccountController extends AbstractController
         private ?OAuthSettings $oauthSettings = null,
         private ?RescanScheduler $rescans = null,
         private ?AccountStatsService $stats = null,
+        private ?AccountStatsPage $statsPage = null,
     ) {
     }
 
@@ -145,9 +146,6 @@ class AccountController extends AbstractController
         ];
     }
 
-    /** Periods of the statistics page: ?days= value => label (0 = everything recorded). */
-    public const STATS_PERIODS = [1 => 'dziś', 7 => '7 dni', 30 => '30 dni', 90 => '90 dni', 365 => 'rok', 0 => 'od początku'];
-
     /**
      * "Statystyki konta": what the scans found and where it went (every scan /
      * rescan pass, IMAP and SSH, antispam_account_daily_stat), the score log of
@@ -159,42 +157,10 @@ class AccountController extends AbstractController
     public function statsAction($id, Request $request)
     {
         $account = $this->em->getRepository(Account::class)->find($id);
-        if (!$account || !$this->stats) {
+        if (!$account || !$this->statsPage) {
             return $this->redirectToRoute('antispam_account_index');
         }
-        $days = $request->query->getInt('days', 30);
-        if (!array_key_exists($days, self::STATS_PERIODS)) {
-            $days = 30;
-        }
-        $since = AccountStatsService::since($days ?: null);
-        $email = (string)$account->getEmail();
-
-        $agent = null;
-        if ($account->isSsh() && $request->query->getBoolean('agent')) {
-            try {
-                $agent = $this->ssh->runStats($account, $days);
-            } catch (\Throwable $e) {
-                $agent = ['success' => false, 'error' => $e->getMessage()];
-            }
-            if (empty($agent['success']) || !isset($agent['decisions'])) {
-                $agent = ['success' => false, 'error' => (string)($agent['error'] ?? 'nieprawidłowa odpowiedź agenta')
-                    . (isset($agent['agent_warning']) ? ' ' . $agent['agent_warning'] : '')];
-            }
-        }
-
-        return [
-            'account' => $account,
-            'days' => $days,
-            'periods' => self::STATS_PERIODS,
-            'kinds' => AccountDailyStat::KINDS,
-            'totals' => $this->stats->totals((int)$account->getId(), $since),
-            'daily' => $this->stats->daily((int)$account->getId(), in_array($days, [0, 1, 7], true) ? 30 : min($days, 90)),
-            'log' => $this->stats->scoreLog($email, $since),
-            'plugin_reports' => $this->stats->pluginReports($email, $since),
-            'agent' => $agent,
-            'last_scan' => $account->getLastScanResultDecoded(),
-            'last_rescan' => $account->getLastRescanResultDecoded(),
-        ];
+        return $this->statsPage->build($account, $request->query->getInt('days', 30), $request->query->getBoolean('agent'));
     }
 
     /** @return array<string, bool> provider => client id + secret set */

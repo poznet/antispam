@@ -2,6 +2,10 @@
 
 *Konta → Statystyki* (`/account/stats/{id}?days=1|7|30|90|365|0`, admin; also
 from the account form): what the scans of one mailbox found and where it went.
+Users (ROLE_USER) have the same page for their assigned mailboxes under *Moja
+poczta → Statystyki* (`/my/stats/{id}`, another account's id = 404, agent
+errors without host details, no admin links). Both are built by
+`AccountStatsPage::build()`.
 
 ## Scan counters (IMAP and SSH)
 
@@ -25,7 +29,7 @@ kind); deleting the account drops its rows. Collected from this version on:
 older scans only exist in the score log.
 
 The page shows the period totals (tiles with the share of the checked mail),
-a daily chart (last 30 / 90 days), the totals per kind, blacklist hits,
+a daily chart of new mail (kinds `scan` + `initial`, last 30 / 90 days - a rescan would flatten it), the totals per kind, blacklist hits,
 skipped, failed moves, errors and the plugin reports (`antispam_plugin_report`).
 
 ## Per-message detail

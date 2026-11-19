@@ -41,7 +41,9 @@ class AccountStatsServiceTest extends TestCase
 
         $daily = $this->stats->daily(7, 30);
         $this->assertCount(30, $daily);
-        $this->assertSame(115, end($daily)['checked']);
+        $this->assertSame(15, end($daily)['checked'], 'new mail only by default');
+        $all = $this->stats->daily(7, 30, array_keys(AccountDailyStat::KINDS));
+        $this->assertSame(115, end($all)['checked']);
         $this->assertSame(0, reset($daily)['checked']);
 
         $this->stats->forget(7);

@@ -34,16 +34,17 @@ class MyControllerTest extends TestCase
     /** @var QuarantineService&MockObject */
     private $quarantine;
 
-    private function controller(User $user): MyController
+    private function controller(User $user, ?EntityManagerInterface $em = null, ?\AntispamBundle\Services\AccountStatsPage $statsPage = null): MyController
     {
         $this->quarantine = $this->createMock(QuarantineService::class);
         $controller = new MyController(
-            $this->createMock(EntityManagerInterface::class),
+            $em ?? $this->createMock(EntityManagerInterface::class),
             $this->quarantine,
             new MailboxAccess(),
             $this->createMock(UserPasswordHasherInterface::class),
             $this->createMock(\AntispamBundle\Services\SpamFolderService::class),
             $this->createMock(\AntispamBundle\Services\DeferredAgentSync::class),
+            null, null, null, $statsPage,
         );
 
         $tokens = new TokenStorage();
@@ -146,5 +147,17 @@ class MyControllerTest extends TestCase
             ->willReturn(['success' => true, 'message' => 'ok', 'sender' => '']);
 
         $controller->quarantineItemAction($this->post(['mailbox' => 'ssh-77', 'id' => 'x', 'action' => 'release']));
+    }
+
+    public function testStatsOfAForeignAccountAre404()
+    {
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->expects($this->never())->method('getRepository');
+        $page = $this->createMock(\AntispamBundle\Services\AccountStatsPage::class);
+        $page->expects($this->never())->method('build');
+        $controller = $this->controller($this->jan(), $em, $page);
+
+        $this->expectException(\Symfony\Component\HttpKernel\Exception\NotFoundHttpException::class);
+        $controller->statsAction(6, new Request());
     }
 }

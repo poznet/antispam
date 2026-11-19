@@ -32,7 +32,8 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   per kind of scan (new mail, first scan, rescan, retroactive) and per day;
   the score log breakdown (sources, outcomes, top senders, domains and rules)
   and the newest spam / quarantine entries. Scan counters are recorded from
-  now on for IMAP and SSH accounts (`antispam_account_daily_stat`).
+  now on for IMAP and SSH accounts (`antispam_account_daily_stat`). Users see
+  their own mailboxes under *Moja poczta → Statystyki*.
 - Agent 3.9: `stats` command (the agent's own log for the statistics page).
 - **Complex rules ("Reguły złożone")**: conditions joined with I / LUB (nested
   groups up to 4 levels, negation of a condition or a whole group) on the sender

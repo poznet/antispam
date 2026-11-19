@@ -2,11 +2,13 @@
 
 namespace AntispamBundle\Controller;
 
+use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\AuditLog;
 use AntispamBundle\Entity\BackgroundJob;
 use AntispamBundle\Entity\SpamScoreLog;
 use AntispamBundle\Entity\User;
 use AntispamBundle\Security\MailboxAccess;
+use AntispamBundle\Services\AccountStatsPage;
 use AntispamBundle\Services\DeferredAgentSync;
 use AntispamBundle\Services\Jobs\JobQueue;
 use AntispamBundle\Services\QuarantineDigestService;
@@ -48,7 +50,30 @@ class MyController extends AbstractController
         private ?QuarantinePurge $purger = null,
         private ?JobQueue $jobs = null,
         private ?DeferredRetroactivePass $retroactive = null,
+        private ?AccountStatsPage $statsPage = null,
     ) {
+    }
+
+    /**
+     * Statistics of the user's own mailbox (docs/account-stats.md): the same
+     * page as the admin's, only for an assigned account; without {id} the
+     * first one. Another account's id: 404.
+     */
+    #[Route('/stats/{id}', name: 'antispam_my_stats', requirements: ['id' => '\d+'], defaults: ['id' => null], methods: ['GET'])]
+    public function statsAction(?int $id, Request $request)
+    {
+        $user = $this->getUser();
+        $ids = $this->access->accountIds($user);
+        if (!$this->statsPage || !$ids) {
+            return $this->render('@Antispam/Account/stats_none.html.twig');
+        }
+        $id ??= $ids[0];
+        if (!in_array($id, $ids, true) || !($account = $this->em->getRepository(Account::class)->find($id))) {
+            throw $this->createNotFoundException();
+        }
+        $vars = $this->statsPage->build($account, $request->query->getInt('days', 30), $request->query->getBoolean('agent'), false);
+        $vars['own_accounts'] = $this->em->getRepository(Account::class)->findBy(['id' => $ids], ['email' => 'ASC']);
+        return $this->render('@Antispam/Account/stats.html.twig', $vars);
     }
 
     #[Route('/quarantine', name: 'antispam_my_quarantine', methods: ['GET'])]

@@ -31,7 +31,7 @@ class AccountStatsPageTest extends KernelTestCase
         $stats = new AccountStatsService($db->em);
         $since = AccountStatsService::since(30);
         return $c->get('twig')->render('@Antispam/Account/stats.html.twig', [
-            'account' => $account, 'days' => 30, 'periods' => AccountController::STATS_PERIODS, 'kinds' => AccountDailyStat::KINDS,
+            'account' => $account, 'days' => 30, 'periods' => \AntispamBundle\Services\AccountStatsPage::PERIODS, 'kinds' => AccountDailyStat::KINDS,
             'totals' => $stats->totals((int)$account->getId(), $since), 'daily' => $stats->daily((int)$account->getId(), 30),
             'log' => $stats->scoreLog((string)$account->getEmail(), $since), 'plugin_reports' => ['spam' => 2],
             'agent' => $agent, 'last_scan' => null, 'last_rescan' => null,

@@ -65,7 +65,7 @@ class AgentParityTest extends TestCase
     {
         $html = '<a href="http://evil-login.ru/pko">www.pkobp.pl</a><a href="http://10.0.0.1/x">x</a>'
             . '<a href="https://bit.ly/q">q</a><a href="https://xn--pkobp-4ua.pl/">bank</a>'
-            . '<a href="https://www.firma.pl/oferta">firma.pl</a>';
+            . '<a href="https://www.firma.pl/oferta">firma.pl</a><a href="https://gov.pl/web">www.gov.pl</a>';
         $text = "Zobacz https://firma.pl/kontakt.\nhttp://t.co/abc";
 
         $web = (new UrlAnalyzer(function () { return []; }))->analyze($html, $text, ['dbl_enabled' => false]);

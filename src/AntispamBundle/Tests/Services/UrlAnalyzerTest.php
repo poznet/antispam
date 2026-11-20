@@ -36,6 +36,17 @@ class UrlAnalyzerTest extends TestCase
         $this->assertSame(['firma.pl'], $r['domains']);
     }
 
+    public function testOnlyWwwPrefixDifferingIsNotAMismatch()
+    {
+        // gov.pl is a public suffix: "www.gov.pl" and "gov.pl" were different registrable domains.
+        $html = '<a href="https://gov.pl/web/zus">www.gov.pl</a> <a href="https://www.gov.pl/">gov.pl</a>'
+            . '<a href="https://firma.pl/">www2.firma.pl</a>';
+        $this->assertSame([], $this->rules($this->offline()->analyze($html, '', ['dbl_enabled' => false])));
+        // A different site behind "www." still counts.
+        $r = $this->offline()->analyze('<a href="https://gov.pl.evil.ru/">www.gov.pl</a>', '', ['dbl_enabled' => false]);
+        $this->assertSame(['url_text_mismatch'], $this->rules($r));
+    }
+
     public function testRulesFireOncePerMessage()
     {
         $html = str_repeat('<a href="https://bit.ly/x">x</a>', 20);

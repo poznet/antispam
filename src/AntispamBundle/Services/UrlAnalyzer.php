@@ -163,7 +163,8 @@ class UrlAnalyzer
             }
             if ($link['text'] !== null && $link['text'] !== '') {
                 $shown = self::domainInText($link['text']);
-                if ($shown !== '' && DomainHelper::registrable($shown) !== $reg) {
+                // Only "www." differs (www.gov.pl -> gov.pl): the same site, not a mismatch.
+                if ($shown !== '' && DomainHelper::registrable(self::stripWww($shown)) !== DomainHelper::registrable(self::stripWww($host))) {
                     $add('mismatch', 'url_text_mismatch:' . $shown . '->' . $reg, $config['mismatch_score']);
                 }
             }
@@ -196,6 +197,12 @@ class UrlAnalyzer
     /**
      * Domain shown in link text, e.g. "www.paypal.com" or "https://bank.pl/login".
      */
+    /** "www.firma.pl" -> "firma.pl" (also www2. / www3.); other hosts unchanged. */
+    private static function stripWww(string $host): string
+    {
+        return preg_replace('/^www\d*\./', '', $host) ?? $host;
+    }
+
     private static function domainInText($text)
     {
         $text = trim($text);

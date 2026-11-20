@@ -298,13 +298,31 @@ class MyController extends AbstractController
         return true;
     }
 
-    /** Newest messages of the SPAM folder of each own mailbox (IMAP or SSH agent). */
+    /** Up to this many mailboxes the SPAM page loads all of them at once; above it one at a time. */
+    public const SPAM_ALL_AT_ONCE = 5;
+
+    /**
+     * Newest messages of the SPAM folder of each own mailbox (IMAP or SSH
+     * agent). Administrators see every mailbox (also linked from the admin
+     * menu as "Spam w skrzynkach"). ?mailbox=<key> shows one mailbox,
+     * ?mailbox=all every one; default: all up to SPAM_ALL_AT_ONCE mailboxes,
+     * otherwise the first one (every folder is a separate IMAP / SSH call).
+     */
     #[Route('/spam', name: 'antispam_my_spam', methods: ['GET'])]
     #[Template('@Antispam/My/spam.html.twig')]
-    public function spamAction()
+    public function spamAction(?Request $request = null)
     {
+        $all = $this->access->filterMailboxes($this->getUser(), $this->quarantine->getMailboxes());
+        $selected = (string)($request?->query->get('mailbox') ?? '');
+        $keys = array_column($all, 'key');
+        if ($selected !== 'all' && !in_array($selected, $keys, true)) {
+            $selected = count($all) <= self::SPAM_ALL_AT_ONCE ? 'all' : (string)($keys[0] ?? 'all');
+        }
         $mailboxes = [];
-        foreach ($this->access->filterMailboxes($this->getUser(), $this->quarantine->getMailboxes()) as $mailbox) {
+        foreach ($all as $mailbox) {
+            if ($selected !== 'all' && $mailbox['key'] !== $selected) {
+                continue;
+            }
             $items = [];
             $total = 0;
             $error = null;
@@ -323,7 +341,11 @@ class MyController extends AbstractController
             $mailboxes[] = $mailbox + ['items' => $items, 'total' => $total, 'error' => $error];
         }
 
-        return ['mailboxes' => $mailboxes, 'limit' => SpamFolderService::DEFAULT_LIMIT];
+        return [
+            'mailboxes' => $mailboxes, 'limit' => SpamFolderService::DEFAULT_LIMIT,
+            'all_mailboxes' => array_map(fn ($m) => ['key' => $m['key'], 'label' => $m['label']], $all),
+            'selected' => $selected, 'admin' => $this->access->isAdmin($this->getUser()),
+        ];
     }
 
     /** "Przywróć do skrzynki" / "Przywróć i zawsze akceptuj" from the SPAM folder of an own mailbox. */
@@ -369,7 +391,8 @@ class MyController extends AbstractController
         }
 
         $this->addFlash($result['success'] ? 'success' : 'danger', $result['message']);
-        return $this->redirectToRoute('antispam_my_spam');
+        $view = (string)$request->request->get('view');
+        return $this->redirectToRoute('antispam_my_spam', $view === 'all' || $view === $key ? ['mailbox' => $view] : []);
     }
 
     /** Fail closed, like the quarantine: unlisted / unknown-score / risky messages get no whitelist. */

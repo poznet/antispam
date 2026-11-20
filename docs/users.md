@@ -147,6 +147,15 @@ the folder from the settings, `InboxService::getSpamFolderName()`; SSH accounts:
 log (IMAP: newest `spam` decision of the same mailbox, sender and subject; agent: its
 `score_log.file` link).
 
+Administrators open the same page from the admin menu (*Spam w skrzynkach*) and see
+every mailbox (IMAP accounts, SSH accounts with a deployed agent, the legacy IMAP
+mailbox). Above the list there is one tab per mailbox plus *Wszystkie*
+(`?mailbox=<key>` / `?mailbox=all`); by default all mailboxes are loaded when there are
+at most `MyController::SPAM_ALL_AT_ONCE` (5), otherwise only the first one, because every
+folder is a separate IMAP / SSH call. A user's own `?mailbox=` key is checked against
+their mailboxes - a foreign key falls back to the default. After *Przywróć* the page
+returns to the same tab.
+
 - **Przywróć do skrzynki** - moves the message back to INBOX and marks it checked
   (IMAP: `MessageService::setAsChecked` for that mailbox; agent: `checked` table), so the
   next scan does not move it back.

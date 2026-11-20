@@ -122,6 +122,26 @@ class MySpamControllerTest extends TestCase
         $this->assertStringNotContainsString('/home/u', $vars['mailboxes'][1]['error']);
     }
 
+    public function testAdminPicksOneMailboxAndUserCannotPickAForeignOne()
+    {
+        $admin = new InMemoryUser('admin', 'x', ['ROLE_ADMIN']);
+        $controller = $this->controller($admin);
+        $this->spam->expects($this->once())->method('listItems')->with('imap-6')->willReturn(['items' => [], 'total' => 0]);
+        $vars = $controller->spamAction(new Request(['mailbox' => 'imap-6']));
+        $this->assertSame(['imap-6'], array_column($vars['mailboxes'], 'key'));
+        $this->assertSame('imap-6', $vars['selected']);
+        $this->assertTrue($vars['admin']);
+        $this->assertSame(['imap-5', 'imap-6', 'ssh-7', 'imap'], array_column($vars['all_mailboxes'], 'key'));
+
+        // ROLE_USER asking for someone else's mailbox: the key is ignored, only own mailboxes load.
+        $controller = $this->controller($this->jan());
+        $this->spam->expects($this->exactly(2))->method('listItems')
+            ->with($this->callback(fn($key) => in_array($key, ['imap-5', 'ssh-7'], true)))->willReturn(['items' => [], 'total' => 0]);
+        $vars = $controller->spamAction(new Request(['mailbox' => 'imap-6']));
+        $this->assertSame('all', $vars['selected']);
+        $this->assertSame(['imap-5', 'ssh-7'], array_column($vars['all_mailboxes'], 'key'));
+    }
+
     public static function foreignKeys(): iterable
     {
         foreach (['imap-6', 'ssh-5', 'imap-7', 'ssh-99', 'imap', '', 'imap-5 '] as $key) {

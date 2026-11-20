@@ -44,7 +44,7 @@
  * PHP warnings never reach STDOUT; they are collected into "warnings".
  */
 
-const AGENT_VERSION = '3.9';
+const AGENT_VERSION = '3.10';
 // Complex rules (complex*() functions below)
 const COMPLEX_MAX_BODY = 262144;
 const COMPLEX_BACKTRACK_LIMIT = 100000;
@@ -2990,7 +2990,8 @@ function analyzeUrls($html, $text, array $config, $db, array &$dblCache)
         }
         if ($link['text'] !== null && $link['text'] !== '') {
             $shown = domainInLinkText($link['text']);
-            if ($shown !== '' && domRegistrable($shown) !== $reg) {
+            // Only "www." differs (www.gov.pl -> gov.pl): the same site, not a mismatch.
+            if ($shown !== '' && domRegistrable(preg_replace('/^www\d*\./', '', $shown)) !== domRegistrable(preg_replace('/^www\d*\./', '', $host))) {
                 $add('mismatch', 'url_text_mismatch:' . $shown . '->' . $reg, $config['mismatch_score']);
             }
         }

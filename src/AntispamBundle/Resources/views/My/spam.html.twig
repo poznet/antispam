@@ -3,7 +3,22 @@
 {% block page_title %}Folder SPAM{% endblock %}
 
 {% block body %}
+    {% if admin|default(false) %}
+    <p class="text-muted">Folder SPAM każdej skrzynki (konta IMAP i SSH z wdrożonym agentem, najnowsze {{ limit }} na skrzynkę). Przywrócona wiadomość nie zostanie ponownie odfiltrowana; „Przywróć i zawsze akceptuj” dodaje nadawcę do zaufanych właściciela skrzynki.</p>
+    {% else %}
     <p class="text-muted">Wiadomości, które filtr przeniósł do folderu SPAM Twojej skrzynki (najnowsze {{ limit }}). Jeśli któraś jest potrzebna, przywróć ją do skrzynki odbiorczej - nie zostanie ponownie odfiltrowana. „Przywróć i zawsze akceptuj” dodaje też nadawcę do Twoich <a href="{{ path('antispam_my_rules') }}">zaufanych nadawców</a>.</p>
+    {% endif %}
+
+    {% set all_mailboxes = all_mailboxes|default([]) %}
+    {% set selected = selected|default('all') %}
+    {% if all_mailboxes|length > 1 %}
+    <ul class="nav nav-pills" style="margin-bottom:15px;">
+        <li class="{{ selected == 'all' ? 'active' }}"><a href="{{ path('antispam_my_spam', {mailbox: 'all'}) }}">Wszystkie</a></li>
+        {% for m in all_mailboxes %}
+            <li class="{{ selected == m.key ? 'active' }}"><a href="{{ path('antispam_my_spam', {mailbox: m.key}) }}">{{ m.label }}</a></li>
+        {% endfor %}
+    </ul>
+    {% endif %}
 
     {% set token = csrf_token('my_spam_action') %}
 
@@ -36,6 +51,7 @@
                         <form method="post" action="{{ path('antispam_my_spam_action') }}" style="display:inline;">
                             <input type="hidden" name="_token" value="{{ token }}">
                             <input type="hidden" name="mailbox" value="{{ mailbox.key }}">
+                            <input type="hidden" name="view" value="{{ selected }}">
                             <input type="hidden" name="id" value="{{ item.id }}">
                             {% if item.uidvalidity is not null %}<input type="hidden" name="uidvalidity" value="{{ item.uidvalidity }}">{% endif %}
                             <button type="submit" name="action" value="release" class="btn btn-xs btn-success" title="Przywróć do skrzynki odbiorczej"{% if item.high_risk %} data-confirm="Ta wiadomość ma wysokie ryzyko (phishing / złośliwy załącznik) albo nie ma zapisanej oceny. Na pewno przywrócić ją do skrzynki?"{% endif %}>
@@ -61,11 +77,11 @@
     <div class="empty-state">
         <span class="glyphicon glyphicon-ok-circle"></span>
         <p>Brak skrzynek</p>
-        <p class="text-muted">Do Twojego konta nie przypisano żadnej skrzynki. Skontaktuj się z administratorem.</p>
+        <p class="text-muted">{% if admin|default(false) %}Brak kont IMAP ani kont SSH z wdrożonym agentem.{% else %}Do Twojego konta nie przypisano żadnej skrzynki. Skontaktuj się z administratorem.{% endif %}</p>
     </div>
     {% endfor %}
 
-    <p class="text-muted">Dlaczego wiadomość uznano za spam - zobacz <a href="{{ path('antispam_my_scorelog', {decision: 'spam'}) }}">dziennik ocen</a>.</p>
+    <p class="text-muted">Dlaczego wiadomość uznano za spam - zobacz <a href="{{ admin|default(false) ? path('antispam_spambox_scorelog') : path('antispam_my_scorelog', {decision: 'spam'}) }}">dziennik ocen</a>.</p>
 {% endblock %}
 
 {% block javascripts %}

@@ -70,7 +70,7 @@ counts **once per message**, so a newsletter with 50 links can't stack points.
 
 | Rule | Default | Fires when |
 |------|---------|------------|
-| `url_text_mismatch:<shown>-><real>` | 3 | Link text shows a domain (`www.pkobp.pl`) but the link goes to another one |
+| `url_text_mismatch:<shown>-><real>` | 3 | Link text shows a domain (`www.pkobp.pl`) but the link goes to another one (registrable domains compared after stripping a leading `www.` / `www2.`, so `www.gov.pl` -> `gov.pl` is not a mismatch) |
 | `url_ip_host:<ip>` | 3 | Link points at a raw IP address |
 | `url_shortener:<domain>` | 2 | bit.ly, tinyurl.com, t.co, cutt.ly, … |
 | `url_punycode:<host>` | 3 | IDN host (`xn--…`), the usual vehicle for homograph phishing |

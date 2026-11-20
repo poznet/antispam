@@ -20,6 +20,9 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 
 ### Added
 
+- **Spam w skrzynkach** (admin menu): the SPAM folder of every mailbox on
+  `/my/spam` with one tab per mailbox plus *Wszystkie* (`?mailbox=`); release /
+  release + whitelist like the users; above 5 mailboxes one is loaded at a time.
 - **Plugin downloads for users**: *Moja poczta → Wtyczki pocztowe*
   (`/my/plugins`) - Thunderbird `.xpi`, Outlook manifest (https only), the
   server address to copy and which own mailboxes have a plugin password or
@@ -359,6 +362,12 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
   server request and each job has a watchdog. A menu click with an empty
   `selectedMessages` falls back to the tab's selection / displayed message
   instead of silently doing nothing.
+
+### Fixed
+
+- `url_text_mismatch` no longer fires when the link text and the target differ
+  only by a leading `www.` (`www.gov.pl` -> `gov.pl`: gov.pl is a public suffix,
+  so the registrable domains differed). Server and agent 3.10.
 
 ## [2.0.0] - 2026-10-28 (current)
 

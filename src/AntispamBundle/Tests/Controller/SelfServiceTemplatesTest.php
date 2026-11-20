@@ -47,7 +47,8 @@ class SelfServiceTemplatesTest extends KernelTestCase
         ]], $this->user(), 'antispam_my_spam');
 
         $this->assertStringContainsString('action="/my/spam/action"', $html);
-        $this->assertSame(2, substr_count($html, 'name="_token"'));
+        $this->assertSame(3, substr_count($html, 'name="_token"'), 'two messages + "Przywróć z domeny"');
+        $this->assertSame(1, substr_count($html, 'action="/my/spam/domain"'));
         $this->assertSame(1, substr_count($html, 'value="whitelist"'), 'no "always accept" for the high-risk one');
         $this->assertStringContainsString('name="uidvalidity" value="42"', $html);
         $this->assertMatchesRegularExpression('~<a href="/my/spam" class="active"[^>]*>\s*<span[^>]*></span> Spam~', $html);

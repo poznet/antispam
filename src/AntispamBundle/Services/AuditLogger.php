@@ -58,6 +58,8 @@ class AuditLogger
         'spambox.restore' => 'Folder spamu: przywrócenie',
         'spam.release' => 'SPAM: przywrócenie (użytkownik)',
         'spam.whitelist' => 'SPAM: przywróć i zawsze akceptuj (użytkownik)',
+        'spam.domain_release' => 'SPAM: przywrócenie z domeny',
+        'spam.domain_whitelist' => 'SPAM: przywrócenie z domeny + domena zaufana',
         'plugin.login' => 'Wtyczka: logowanie',
         'plugin.login_failed' => 'Wtyczka: nieudane logowanie',
         'plugin.report' => 'Wtyczka: zgłoszenie spam/nie spam',

@@ -45,7 +45,7 @@ class SshService
         // bulk delete of a whole quarantine (one unlink per file, no network)
         'quarantine-purge' => 600,
         'spam-list' => 180,
-        'spam-release' => 60,
+        'spam-release' => 180,
     ];
 
     /** Directory under which every account's SSH private key must live. */
@@ -589,6 +589,17 @@ class SshService
             $args .= ' --whitelist';
         }
         return $this->runAgent($account, 'spam-release', $args);
+    }
+
+    /**
+     * Several messages .SPAM -> INBOX in one call (agent 3.11+ `--ids`):
+     * ['success', 'released' => [['id','sender']], 'failed' => [['id','error']]].
+     * An older agent answers without 'released' - the caller falls back to one call per id.
+     */
+    public function spamReleaseMany(Account $account, array $ids)
+    {
+        $ids = array_values(array_filter(array_map('strval', $ids), fn ($id) => $id !== '' && !str_contains($id, '/')));
+        return $this->runAgent($account, 'spam-release', $this->maildirArg($account) . ' --ids=' . escapeshellarg(implode('/', $ids)));
     }
 
     /** The agent's own score log / scan log of the last $days days, 0 = all (agent 3.9+ `stats`). */

@@ -6,6 +6,7 @@ use AntispamBundle\Entity\SpamScoreLog;
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Entity\EmailWhitelist;
+use AntispamBundle\Entity\Whitelist;
 use Ddeboer\Imap\Search\Date\Since;
 use Ddeboer\Imap\Search\Email\From;
 use Doctrine\ORM\EntityManagerInterface;
@@ -515,6 +516,20 @@ class QuarantineService
         $rule->setEmail($accountEmail)
             ->setWhitelistemail($sender)
             ->setPatternType(EmailWhitelist::PATTERN_EXACT);
+        $this->em->persist($rule);
+        $this->em->flush();
+        return true;
+    }
+
+    /** A domain whitelist rule of the mailbox owner (no duplicate); true = added. */
+    public function whitelistDomain($accountEmail, $host, $patternType = Whitelist::PATTERN_EXACT)
+    {
+        $repo = $this->em->getRepository(Whitelist::class);
+        if ($repo->findOneBy(['email' => $accountEmail, 'host' => $host])) {
+            return false;
+        }
+        $rule = new Whitelist();
+        $rule->setEmail($accountEmail)->setHost($host)->setPatternType($patternType);
         $this->em->persist($rule);
         $this->em->flush();
         return true;

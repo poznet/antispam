@@ -3,6 +3,7 @@
 namespace AntispamBundle\Services;
 
 use AntispamBundle\Entity\Account;
+use AntispamBundle\Entity\Whitelist;
 use AntispamBundle\Entity\SpamScoreLog;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -102,8 +103,7 @@ class SpamFolderService
                 // Released from SPAM = "not spam" for the Bayes classifier (read before the move).
                 $this->bayes?->learnImap($msg, 'ham', $mailbox['account_email'] ?: null, 'spam_release');
                 $this->messages->setAsChecked($msg, $mailbox['account_email'] ?: null);
-                $msg->move($connection->getMailbox('INBOX'));
-                $connection->expunge();
+                $this->moveToInbox($connection, $msg);
             } catch (\Throwable $e) {
                 return ['success' => false, 'message' => self::NOT_FOUND, 'sender' => ''];
             }
@@ -133,6 +133,171 @@ class SpamFolderService
             'sender' => $sender,
             'whitelisted' => $whitelisted,
         ];
+    }
+
+    /**
+     * SPAM -> INBOX without the spam marks (SpamTagCleaner: "[SPAM]" subject
+     * tag, X-Spam-Flag) and with the original date: a message with marks is
+     * re-added to INBOX (APPEND with the message's Date as INTERNALDATE, the
+     * \\Seen flag kept) and removed from SPAM; one without marks is moved (MOVE /
+     * COPY keep INTERNALDATE). The junk keywords ($Junk, Junk) set by mail
+     * clients are cleared first. A failed APPEND falls back to the plain move.
+     */
+    private function moveToInbox($connection, $msg): void
+    {
+        $inbox = $connection->getMailbox('INBOX');
+        try {
+            $msg->clearFlag('$Junk Junk');
+        } catch (\Throwable) {
+            // keywords not supported by the server
+        }
+        $clean = null;
+        try {
+            $clean = SpamTagCleaner::clean($msg->getRawMessage());
+        } catch (\Throwable) {
+        }
+        if ($clean !== null) {
+            try {
+                $seen = false;
+                try {
+                    $seen = $msg->isSeen();
+                } catch (\Throwable) {
+                }
+                $date = null;
+                try {
+                    $date = $msg->getDate();
+                } catch (\Throwable) {
+                }
+                $inbox->addMessage($clean, $seen ? '\\Seen' : null, $date);
+                $msg->delete();
+                $connection->expunge();
+                return;
+            } catch (\Throwable) {
+                // APPEND refused (size, quota): the original message is still in SPAM, move it as is
+            }
+        }
+        $msg->move($inbox);
+        $connection->expunge();
+    }
+
+    /**
+     * Normalised domain pattern for "Przywróć z domeny": "firma.pl" (that
+     * domain only) or "*.firma.pl" (the domain and every subdomain); also
+     * accepts "@firma.pl" / "*@firma.pl". null = not a domain.
+     */
+    public static function domainPattern(string $input): ?string
+    {
+        $p = strtolower(trim($input));
+        $p = (string)preg_replace('/^\*?@/', '', $p);
+        $wild = str_starts_with($p, '*.');
+        $base = $wild ? substr($p, 2) : $p;
+        $base = rtrim($base, '.');
+        if (!preg_match('/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/', $base)) {
+            return null;
+        }
+        return ($wild ? '*.' : '') . $base;
+    }
+
+    /** Does the sender address belong to the domain pattern (see domainPattern())? */
+    public static function senderInDomain(string $sender, string $pattern): bool
+    {
+        $at = strrpos($sender, '@');
+        if ($at === false) {
+            return false;
+        }
+        $domain = rtrim(strtolower(substr($sender, $at + 1)), '.>');
+        if (str_starts_with($pattern, '*.')) {
+            $base = substr($pattern, 2);
+            return $domain === $base || str_ends_with($domain, '.' . $base);
+        }
+        return $domain === $pattern;
+    }
+
+    /** At most this many messages per "Przywróć z domeny". */
+    public const DOMAIN_RELEASE_LIMIT = 500;
+
+    /**
+     * "Przywróć z domeny": every message of the mailbox's SPAM folder from the
+     * domain pattern back to INBOX (like release()). High-risk messages
+     * (phishing, virus, unknown score) are skipped - they can still be
+     * released one by one. $whitelist adds the domain to the mailbox owner's
+     * domain whitelist ("firma.pl" exact, "*.firma.pl" also the wildcard
+     * rule); free-mail domains (gmail.com, wp.pl…) are never whitelisted.
+     *
+     * @return array{success: bool, message: string, released: int, skipped: int, failed: int, whitelisted: bool}
+     */
+    public function releaseDomain(string $key, string $pattern, bool $whitelist = false): array
+    {
+        $out = ['success' => false, 'message' => '', 'released' => 0, 'skipped' => 0, 'failed' => 0, 'whitelisted' => false];
+        $mailbox = $this->quarantine->getMailbox($key);
+        $pattern = self::domainPattern($pattern);
+        if (!$mailbox || $pattern === null) {
+            $out['message'] = $pattern === null ? 'Podaj domenę, np. firma.pl albo *.firma.pl (z subdomenami).' : 'Ta skrzynka nie jest już obsługiwana.';
+            return $out;
+        }
+        $base = ltrim($pattern, '*.');
+        $freemail = DomainHelper::isFreemail($base);
+
+        $ids = [];
+        foreach ($this->listItems($key, self::DOMAIN_RELEASE_LIMIT)['items'] as $item) {
+            if (!self::senderInDomain((string)$item['from'], $pattern)) {
+                continue;
+            }
+            if (QuarantineDigestService::isHighRisk($item['reasons'])) {
+                $out['skipped']++;
+                continue;
+            }
+            $ids[] = ['id' => (string)$item['id'], 'uidvalidity' => $item['uidvalidity']];
+        }
+
+        if (self::isImapKey($key)) {
+            foreach ($ids as $row) {
+                $r = $this->release($key, $row['id'], false, $row['uidvalidity']);
+                $r['success'] ? $out['released']++ : $out['failed']++;
+            }
+        } elseif ($ids) {
+            $account = $this->sshAccount($key);
+            foreach (array_chunk(array_column($ids, 'id'), 100) as $chunk) {
+                $res = $this->ssh->spamReleaseMany($account, $chunk);
+                if (!empty($res['success']) && isset($res['released'])) {
+                    $out['released'] += count((array)$res['released']);
+                    $out['failed'] += count((array)($res['failed'] ?? []));
+                    continue;
+                }
+                foreach ($chunk as $id) { // agent older than 3.11: one call per message
+                    $r = $this->release($key, $id);
+                    $r['success'] ? $out['released']++ : $out['failed']++;
+                }
+            }
+        }
+
+        if ($whitelist && !$freemail) {
+            $owner = (string)$mailbox['account_email'];
+            $this->quarantine->whitelistDomain($owner, $base, Whitelist::PATTERN_EXACT);
+            if (str_starts_with($pattern, '*.')) {
+                $this->quarantine->whitelistDomain($owner, $pattern, Whitelist::PATTERN_WILDCARD);
+            }
+            $out['whitelisted'] = true;
+        }
+
+        $out['success'] = true;
+        $msg = sprintf('Przywrócono z domeny %s: %d.', $pattern, $out['released']);
+        if ($out['skipped']) {
+            $msg .= sprintf(' Pominięto %d o wysokim ryzyku (phishing, wirus lub brak oceny) - przywróć je pojedynczo, jeśli na pewno są potrzebne.', $out['skipped']);
+        }
+        if ($out['failed']) {
+            $msg .= sprintf(' Nie udało się: %d.', $out['failed']);
+        }
+        if ($out['whitelisted']) {
+            $msg .= sprintf(' Poczta z %s nie będzie już filtrowana.', $pattern);
+        } elseif ($whitelist && $freemail) {
+            $msg .= sprintf(' %s to darmowa poczta (każdy może mieć tam adres) - domena nie została dodana do zaufanych; dodaj pojedynczych nadawców.', $base);
+        }
+        if (!$ids && !$out['skipped']) {
+            $msg = sprintf('W folderze SPAM nie ma wiadomości z domeny %s.', $pattern);
+        }
+        $out['message'] = $msg;
+        return $out;
     }
 
     private function listImap($connection, int $limit, string $accountEmail): array

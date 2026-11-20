@@ -1,33 +1,59 @@
 {% extends '@Antispam/main.html.twig' %}
-{% block title %}Mój spam{% endblock %}
+{% block title %}{{ admin|default(false) ? 'Spam w skrzynkach' : 'Mój spam' }}{% endblock %}
 {% block page_title %}Folder SPAM{% endblock %}
 
 {% block body %}
     {% if admin|default(false) %}
-    <p class="text-muted">Folder SPAM każdej skrzynki (konta IMAP i SSH z wdrożonym agentem, najnowsze {{ limit }} na skrzynkę). Przywrócona wiadomość nie zostanie ponownie odfiltrowana; „Przywróć i zawsze akceptuj” dodaje nadawcę do zaufanych właściciela skrzynki.</p>
+    <p class="text-muted">Folder SPAM każdej skrzynki (konta IMAP i SSH z wdrożonym agentem, najnowsze {{ limit }} na skrzynkę). Przywrócona wiadomość wraca bez dopisku SPAM w temacie, z oryginalną datą, i nie zostanie ponownie odfiltrowana; „Przywróć i zawsze akceptuj” dodaje nadawcę do zaufanych właściciela skrzynki.</p>
     {% else %}
-    <p class="text-muted">Wiadomości, które filtr przeniósł do folderu SPAM Twojej skrzynki (najnowsze {{ limit }}). Jeśli któraś jest potrzebna, przywróć ją do skrzynki odbiorczej - nie zostanie ponownie odfiltrowana. „Przywróć i zawsze akceptuj” dodaje też nadawcę do Twoich <a href="{{ path('antispam_my_rules') }}">zaufanych nadawców</a>.</p>
+    <p class="text-muted">Wiadomości, które filtr przeniósł do folderu SPAM Twojej skrzynki (najnowsze {{ limit }}). Jeśli któraś jest potrzebna, przywróć ją do skrzynki odbiorczej - wróci bez dopisku SPAM w temacie, z oryginalną datą, i nie zostanie ponownie odfiltrowana. „Przywróć i zawsze akceptuj” dodaje też nadawcę do Twoich <a href="{{ path('antispam_my_rules') }}">zaufanych nadawców</a>.</p>
     {% endif %}
 
     {% set all_mailboxes = all_mailboxes|default([]) %}
-    {% set selected = selected|default('all') %}
-    {% if all_mailboxes|length > 1 %}
-    <ul class="nav nav-pills" style="margin-bottom:15px;">
-        <li class="{{ selected == 'all' ? 'active' }}"><a href="{{ path('antispam_my_spam', {mailbox: 'all'}) }}">Wszystkie</a></li>
-        {% for m in all_mailboxes %}
-            <li class="{{ selected == m.key ? 'active' }}"><a href="{{ path('antispam_my_spam', {mailbox: m.key}) }}">{{ m.label }}</a></li>
-        {% endfor %}
-    </ul>
-    {% endif %}
-
+    {% set selected = selected|default('') %}
     {% set token = csrf_token('my_spam_action') %}
 
+    {% if mailboxes|length == 0 and all_mailboxes|length == 0 %}
+    <div class="empty-state">
+        <span class="glyphicon glyphicon-ok-circle"></span>
+        <p>Brak skrzynek</p>
+        <p class="text-muted">{% if admin|default(false) %}Brak kont IMAP ani kont SSH z wdrożonym agentem.{% else %}Do Twojego konta nie przypisano żadnej skrzynki. Skontaktuj się z administratorem.{% endif %}</p>
+    </div>
+    {% else %}
+    <div class="row">
+        {% if all_mailboxes|length > 1 %}
+        <div class="col-md-3">
+            <div class="list-group pp-spam-mailboxes" aria-label="Skrzynki">
+                {% for m in all_mailboxes %}
+                    <a href="{{ path('antispam_my_spam', {mailbox: m.key}) }}" class="list-group-item{{ selected == m.key ? ' active' }}"{% if selected == m.key %} aria-current="page"{% endif %}>
+                        <span class="glyphicon glyphicon-inbox" aria-hidden="true"></span> {{ m.label }}
+                    </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        <div class="{{ all_mailboxes|length > 1 ? 'col-md-9' : 'col-md-12' }}">
     {% for mailbox in mailboxes %}
     <div class="panel panel-default">
         <div class="panel-heading">
             <span class="glyphicon glyphicon-inbox"></span> {{ mailbox.label }}
             <span class="badge pull-right" title="Wiadomości w folderze SPAM">{{ mailbox.total }}</span>
         </div>
+        {% if not mailbox.error and mailbox.items|length > 0 %}
+        <div class="panel-body" style="border-bottom:1px solid var(--pp-border, #e3e8f0);">
+            <form method="post" action="{{ path('antispam_my_spam_domain') }}" class="form-inline pp-spam-domain">
+                <input type="hidden" name="_token" value="{{ token }}">
+                <input type="hidden" name="mailbox" value="{{ mailbox.key }}">
+                <label for="pp-domain-{{ loop.index }}"><span class="glyphicon glyphicon-globe" aria-hidden="true"></span> Przywróć z domeny</label>
+                <input type="text" class="form-control input-sm" id="pp-domain-{{ loop.index }}" name="domain" placeholder="firma.pl albo *.firma.pl" required title="Domena, np. firma.pl; *.firma.pl = razem z subdomenami" style="min-width:220px">
+                <label class="checkbox-inline small"><input type="checkbox" name="whitelist" value="1"> i dodaj domenę do zaufanych</label>
+                <button type="submit" class="btn btn-sm btn-success" data-confirm="Przywrócić do skrzynki wszystkie wiadomości z tej domeny? Wiadomości o wysokim ryzyku zostaną pominięte.">
+                    <span class="glyphicon glyphicon-ok" aria-hidden="true"></span> Przywróć wszystkie
+                </button>
+            </form>
+            <p class="help-block small" style="margin:6px 0 0;"><code>firma.pl</code> - tylko ta domena, <code>*.firma.pl</code> - razem z subdomenami (np. mail.firma.pl). Wiadomości o wysokim ryzyku (phishing, wirus, brak oceny) są pomijane. Darmowej poczty (gmail.com, wp.pl…) nie da się dodać do zaufanych jako domeny.</p>
+        </div>
+        {% endif %}
         {% if mailbox.error %}
             <div class="panel-body">
                 <div class="alert alert-danger" style="margin:0;">{{ mailbox.error }}</div>
@@ -38,9 +64,11 @@
             <thead><tr><th>Data</th><th>Nadawca</th><th>Temat</th><th>Punkty</th><th>Powód</th><th></th></tr></thead>
             <tbody>
             {% for item in mailbox.items %}
+                {% set sender_domain = item.sender_domain|default('') %}
                 <tr>
                     <td class="pp-cell-nowrap">{{ item.date ? item.date|date('Y-m-d H:i') : '—' }}</td>
-                    <td class="pp-cell-wrap">{% if item.from_name %}{{ item.from_name }}<br>{% endif %}<small>{{ item.from }}</small></td>
+                    <td class="pp-cell-wrap">{% if item.from_name %}{{ item.from_name }}<br>{% endif %}<small>{{ item.from }}</small>
+                        {% if sender_domain %}<br><button type="button" class="btn btn-link btn-xs pp-pick-domain" style="padding:0" data-domain="*.{{ sender_domain }}" data-target="pp-domain-{{ loop.parent.loop.index }}" title="Wstaw *.{{ sender_domain }} do „Przywróć z domeny”">domena {{ sender_domain }}</button>{% endif %}</td>
                     <td class="pp-cell-wrap" title="{{ item.subject }}">{{ item.subject|length > 80 ? item.subject[:80] ~ '…' : item.subject }}</td>
                     <td>{% if item.score is not null %}<strong>{{ item.score }}</strong>{% endif %}</td>
                     <td>
@@ -51,7 +79,6 @@
                         <form method="post" action="{{ path('antispam_my_spam_action') }}" style="display:inline;">
                             <input type="hidden" name="_token" value="{{ token }}">
                             <input type="hidden" name="mailbox" value="{{ mailbox.key }}">
-                            <input type="hidden" name="view" value="{{ selected }}">
                             <input type="hidden" name="id" value="{{ item.id }}">
                             {% if item.uidvalidity is not null %}<input type="hidden" name="uidvalidity" value="{{ item.uidvalidity }}">{% endif %}
                             <button type="submit" name="action" value="release" class="btn btn-xs btn-success" title="Przywróć do skrzynki odbiorczej"{% if item.high_risk %} data-confirm="Ta wiadomość ma wysokie ryzyko (phishing / złośliwy załącznik) albo nie ma zapisanej oceny. Na pewno przywrócić ją do skrzynki?"{% endif %}>
@@ -73,17 +100,22 @@
             <div class="panel-body text-muted">Folder SPAM jest pusty</div>
         {% endif %}
     </div>
-    {% else %}
-    <div class="empty-state">
-        <span class="glyphicon glyphicon-ok-circle"></span>
-        <p>Brak skrzynek</p>
-        <p class="text-muted">{% if admin|default(false) %}Brak kont IMAP ani kont SSH z wdrożonym agentem.{% else %}Do Twojego konta nie przypisano żadnej skrzynki. Skontaktuj się z administratorem.{% endif %}</p>
-    </div>
     {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 
     <p class="text-muted">Dlaczego wiadomość uznano za spam - zobacz <a href="{{ admin|default(false) ? path('antispam_spambox_scorelog') : path('antispam_my_scorelog', {decision: 'spam'}) }}">dziennik ocen</a>.</p>
 {% endblock %}
 
 {% block javascripts %}
     <script src="{{ asset('bundles/antispam/js/data-confirm.js') }}"></script>
+    <script>
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest && e.target.closest('.pp-pick-domain');
+            if (!btn) { return; }
+            var input = document.getElementById(btn.getAttribute('data-target'));
+            if (input) { input.value = btn.getAttribute('data-domain'); input.focus(); input.scrollIntoView({block: 'center', behavior: 'smooth'}); }
+        });
+    </script>
 {% endblock %}

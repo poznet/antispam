@@ -44,7 +44,7 @@
  * PHP warnings never reach STDOUT; they are collected into "warnings".
  */
 
-const AGENT_VERSION = '3.10';
+const AGENT_VERSION = '3.11';
 // Complex rules (complex*() functions below)
 const COMPLEX_MAX_BODY = 262144;
 const COMPLEX_BACKTRACK_LIMIT = 100000;
@@ -213,7 +213,7 @@ try {
             echo "  php antispam-agent.php quarantine-purge --mode=all|high_risk|min_score [--min-score=N] [--maildir=path] [--account=ID] [--db=path]\n";
             echo "  php antispam-agent.php quarantine-to-spam --id=ID [--maildir=path] [--account=ID] [--db=path]\n";
             echo "  php antispam-agent.php spam-list [--maildir=path] [--account=ID] [--db=path] [--limit=N]\n";
-            echo "  php antispam-agent.php spam-release --id=ID [--whitelist] [--maildir=path] [--account=ID] [--db=path]\n";
+            echo "  php antispam-agent.php spam-release --id=ID|--ids=ID1/ID2 [--whitelist] [--maildir=path] [--account=ID] [--db=path]\n";
             echo "  php antispam-agent.php stats [--days=30] [--account=ID] [--db=path]\n";
             break;
     }
@@ -3569,7 +3569,37 @@ function spamList($maildirPath, $dbPath, array $options)
 /** Move a message from .SPAM back to INBOX and mark it checked (it is not filtered again). */
 function spamRelease($maildirPath, $dbPath, array $options)
 {
+    $whitelist = !empty($options['whitelist']);
+    // --ids=a/b/c (3.11): several messages in one call ("/" never occurs in a Maildir file name).
+    if (isset($options['ids']) && $options['ids'] !== '') {
+        $db = getDb($dbPath);
+        $released = [];
+        $failed = [];
+        foreach (array_slice(array_unique(explode('/', (string)$options['ids'])), 0, 500) as $id) {
+            $r = spamReleaseOne($maildirPath, $db, $id, $whitelist);
+            if ($r['success']) {
+                $released[] = ['id' => $id, 'sender' => $r['sender']];
+            } else {
+                $failed[] = ['id' => $id, 'error' => $r['error']];
+            }
+        }
+        return ['success' => true, 'released' => $released, 'failed' => $failed];
+    }
     $id = $options['id'] ?? '';
+    if (!validQuarantineId($id)) {
+        return ['success' => false, 'error' => 'Invalid id'];
+    }
+    $r = spamReleaseOne($maildirPath, getDb($dbPath), $id, $whitelist);
+    return $r['success'] ? ['success' => true, 'id' => $id, 'sender' => $r['sender'], 'whitelisted' => $r['whitelisted']] : $r;
+}
+
+/**
+ * One message .SPAM -> INBOX: spam marks removed (agentCleanSpamTags(): subject
+ * tag, X-Spam-Flag), the file's mtime (= the date the client shows as
+ * received) kept, marked checked, sender optionally whitelisted.
+ */
+function spamReleaseOne($maildirPath, $db, $id, $whitelist)
+{
     if (!validQuarantineId($id)) {
         return ['success' => false, 'error' => 'Invalid id'];
     }
@@ -3583,15 +3613,40 @@ function spamRelease($maildirPath, $dbPath, array $options)
     if (!is_dir($targetDir)) {
         @mkdir($targetDir, 0755, true);
     }
-    if (!@rename($found['path'], $targetDir . '/' . $found['file'])) {
+    $target = $targetDir . '/' . $found['file'];
+    $mtime = @filemtime($found['path']);
+    $raw = @filesize($found['path']) <= 50 * 1048576 ? @file_get_contents($found['path']) : false;
+    $clean = is_string($raw) ? agentCleanSpamTags($raw) : null;
+    $moved = false;
+    if ($clean !== null) {
+        // Rewritten copy: written to tmp/, dated like the original, then renamed in (atomic for the client).
+        $tmpDir = $maildirPath . '/tmp';
+        if (!is_dir($tmpDir)) {
+            @mkdir($tmpDir, 0755, true);
+        }
+        $tmp = $tmpDir . '/' . $found['file'] . '.release';
+        if (@file_put_contents($tmp, $clean) === strlen($clean)) {
+            if ($mtime) {
+                @touch($tmp, $mtime);
+            }
+            if (@rename($tmp, $target)) {
+                @unlink($found['path']);
+                $moved = true;
+            }
+        }
+        @unlink($tmp);
+    }
+    if (!$moved && !@rename($found['path'], $target)) {
         return ['success' => false, 'error' => 'Could not move message back to INBOX'];
     }
+    if ($mtime) {
+        @touch($target, $mtime);
+    }
 
-    $db = getDb($dbPath);
     markChecked($db, $id);
 
     $whitelisted = false;
-    if (!empty($options['whitelist']) && $from['email'] !== '') {
+    if ($whitelist && $from['email'] !== '') {
         $stmt = $db->prepare('SELECT 1 FROM email_whitelist WHERE whitelistemail = :w');
         $stmt->bindValue(':w', $from['email']);
         if (!$stmt->execute()->fetchArray()) {
@@ -3604,7 +3659,40 @@ function spamRelease($maildirPath, $dbPath, array $options)
         $whitelisted = true;
     }
 
-    return ['success' => true, 'id' => $id, 'sender' => $from['email'], 'whitelisted' => $whitelisted];
+    return ['success' => true, 'sender' => $from['email'], 'whitelisted' => $whitelisted];
+}
+
+/** Same as SpamTagCleaner::cleanSubject() in the panel. */
+function agentCleanSubject($subject)
+{
+    $re = '/^\s*(?:(?:\[|\{|\()\s*\**\s*(?:possible|suspected|potential|probable|likely|potencjalny|podejrzany|prawdopodobnie)?\s*(?:spam|junk)\s*\??\s*\**\s*(?:\]|\}|\))|\*+\s*(?:spam|junk)\s*\*+|(?:spam|junk)\s*:)\s*/i';
+    $out = $subject;
+    for ($i = 0; $i < 5; $i++) {
+        $next = preg_replace($re, '', $out, 1);
+        if ($next === null || $next === $out) {
+            break;
+        }
+        $out = $next;
+    }
+    return trim($out) === '' ? $subject : $out;
+}
+
+/** Same as SpamTagCleaner::clean(): the message without spam marks, null = nothing to change. */
+function agentCleanSpamTags($raw)
+{
+    if (!preg_match('/\r?\n\r?\n/', $raw, $m, PREG_OFFSET_CAPTURE)) {
+        return null;
+    }
+    $split = $m[0][1];
+    $headers = substr($raw, 0, $split);
+    $rest = substr($raw, $split);
+    $new = preg_replace_callback('/^(Subject:[ \t]*)([^\r\n]*)/mi', function ($s) { return $s[1] . agentCleanSubject($s[2]); }, $headers, 1);
+    $new = preg_replace('/^(X-Spam-Flag:[ \t]*)yes\b/mi', '$1NO', (string)$new);
+    $new = preg_replace('/^(X-Spam-Status:[ \t]*)yes\b/mi', '$1No', (string)$new);
+    if ($new === null || $new === $headers) {
+        return null;
+    }
+    return $new . $rest;
 }
 
 

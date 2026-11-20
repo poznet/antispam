@@ -108,38 +108,59 @@ class MySpamControllerTest extends TestCase
         return ['id' => $id, 'from' => 'a@b.pl', 'from_name' => '', 'subject' => 's', 'date' => null, 'score' => 12, 'reasons' => $reasons, 'uidvalidity' => 42];
     }
 
-    public function testListingCoversOwnMailboxesOnly()
+    public function testListingShowsOneOwnMailboxAtATime()
     {
         $controller = $this->controller($this->jan());
-        $this->spam->expects($this->exactly(2))->method('listItems')
-            ->with($this->callback(fn($key) => in_array($key, ['imap-5', 'ssh-7'], true)))
-            ->willReturnCallback(fn($key) => $key === 'ssh-7' ? throw new \RuntimeException('/home/u: agent error') : ['items' => [self::item('3', [['rule' => 'blacklist:b.pl', 'score' => 12]])], 'total' => 1]);
-
+        $this->spam->expects($this->once())->method('listItems')->with('imap-5')
+            ->willReturn(['items' => [self::item('3', [['rule' => 'blacklist:b.pl', 'score' => 12]])], 'total' => 1]);
         $vars = $controller->spamAction();
-        $this->assertSame(['imap-5', 'ssh-7'], array_column($vars['mailboxes'], 'key'));
+        $this->assertSame(['imap-5'], array_column($vars['mailboxes'], 'key'));
+        $this->assertSame(['imap-5', 'ssh-7'], array_column($vars['all_mailboxes'], 'key'));
         $this->assertFalse($vars['mailboxes'][0]['items'][0]['high_risk']);
-        $this->assertNotNull($vars['mailboxes'][1]['error']);
-        $this->assertStringNotContainsString('/home/u', $vars['mailboxes'][1]['error']);
+    }
+
+    public function testAgentErrorIsHiddenFromTheUser()
+    {
+        $controller = $this->controller($this->jan());
+        $this->spam->method('listItems')->willThrowException(new \RuntimeException('/home/u: agent error'));
+        $vars = $controller->spamAction(new Request(['mailbox' => 'ssh-7']));
+        $this->assertSame('ssh-7', $vars['selected']);
+        $this->assertNotNull($vars['mailboxes'][0]['error']);
+        $this->assertStringNotContainsString('/home/u', $vars['mailboxes'][0]['error']);
     }
 
     public function testAdminPicksOneMailboxAndUserCannotPickAForeignOne()
     {
-        $admin = new InMemoryUser('admin', 'x', ['ROLE_ADMIN']);
-        $controller = $this->controller($admin);
+        $controller = $this->controller(new InMemoryUser('admin', 'x', ['ROLE_ADMIN']));
         $this->spam->expects($this->once())->method('listItems')->with('imap-6')->willReturn(['items' => [], 'total' => 0]);
         $vars = $controller->spamAction(new Request(['mailbox' => 'imap-6']));
         $this->assertSame(['imap-6'], array_column($vars['mailboxes'], 'key'));
-        $this->assertSame('imap-6', $vars['selected']);
         $this->assertTrue($vars['admin']);
         $this->assertSame(['imap-5', 'imap-6', 'ssh-7', 'imap'], array_column($vars['all_mailboxes'], 'key'));
 
-        // ROLE_USER asking for someone else's mailbox: the key is ignored, only own mailboxes load.
+        // ROLE_USER asking for someone else's mailbox: falls back to the first own one.
         $controller = $this->controller($this->jan());
-        $this->spam->expects($this->exactly(2))->method('listItems')
-            ->with($this->callback(fn($key) => in_array($key, ['imap-5', 'ssh-7'], true)))->willReturn(['items' => [], 'total' => 0]);
+        $this->spam->expects($this->once())->method('listItems')->with('imap-5')->willReturn(['items' => [], 'total' => 0]);
         $vars = $controller->spamAction(new Request(['mailbox' => 'imap-6']));
-        $this->assertSame('all', $vars['selected']);
-        $this->assertSame(['imap-5', 'ssh-7'], array_column($vars['all_mailboxes'], 'key'));
+        $this->assertSame('imap-5', $vars['selected']);
+    }
+
+    public function testDomainReleaseOfAForeignMailboxIsDenied()
+    {
+        $controller = $this->controller($this->jan());
+        $this->spam->expects($this->never())->method('releaseDomain');
+        $this->expectException(AccessDeniedException::class);
+        $controller->spamDomainAction(Request::create('/my/spam/domain', 'POST', ['_token' => 't', 'mailbox' => 'imap-6', 'domain' => '*.firma.pl']));
+    }
+
+    public function testDomainReleaseOfAnOwnMailbox()
+    {
+        $controller = $this->controller($this->jan());
+        $this->spam->expects($this->once())->method('releaseDomain')->with('ssh-7', '*.firma.pl', true)
+            ->willReturn(['success' => true, 'message' => 'ok', 'released' => 3, 'skipped' => 1, 'failed' => 0, 'whitelisted' => true]);
+        $this->sync->expects($this->once())->method('deferForOwner')->with('jan@ssh.pl');
+        $controller->spamDomainAction(Request::create('/my/spam/domain', 'POST', ['_token' => 't', 'mailbox' => 'ssh-7', 'domain' => '*.firma.pl', 'whitelist' => '1']));
+        $this->assertSame('spam.domain_whitelist', $this->audit->entries[0]['action'] ?? null);
     }
 
     public static function foreignKeys(): iterable

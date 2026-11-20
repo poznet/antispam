@@ -10,6 +10,7 @@ use AntispamBundle\Entity\User;
 use AntispamBundle\Security\MailboxAccess;
 use AntispamBundle\Services\AccountStatsPage;
 use AntispamBundle\Services\DeferredAgentSync;
+use AntispamBundle\Services\DomainHelper;
 use AntispamBundle\Services\Jobs\JobQueue;
 use AntispamBundle\Services\MailClientPluginBuilder;
 use AntispamBundle\Services\PluginService;
@@ -298,15 +299,10 @@ class MyController extends AbstractController
         return true;
     }
 
-    /** Up to this many mailboxes the SPAM page loads all of them at once; above it one at a time. */
-    public const SPAM_ALL_AT_ONCE = 5;
-
     /**
-     * Newest messages of the SPAM folder of each own mailbox (IMAP or SSH
-     * agent). Administrators see every mailbox (also linked from the admin
-     * menu as "Spam w skrzynkach"). ?mailbox=<key> shows one mailbox,
-     * ?mailbox=all every one; default: all up to SPAM_ALL_AT_ONCE mailboxes,
-     * otherwise the first one (every folder is a separate IMAP / SSH call).
+     * The SPAM folder of one own mailbox at a time (IMAP or SSH agent), the
+     * mailbox list on the side; ?mailbox=<key>, default the first one.
+     * Administrators see every mailbox (admin menu "Spam w skrzynkach").
      */
     #[Route('/spam', name: 'antispam_my_spam', methods: ['GET'])]
     #[Template('@Antispam/My/spam.html.twig')]
@@ -315,12 +311,12 @@ class MyController extends AbstractController
         $all = $this->access->filterMailboxes($this->getUser(), $this->quarantine->getMailboxes());
         $selected = (string)($request?->query->get('mailbox') ?? '');
         $keys = array_column($all, 'key');
-        if ($selected !== 'all' && !in_array($selected, $keys, true)) {
-            $selected = count($all) <= self::SPAM_ALL_AT_ONCE ? 'all' : (string)($keys[0] ?? 'all');
+        if (!in_array($selected, $keys, true)) {
+            $selected = (string)($keys[0] ?? '');
         }
         $mailboxes = [];
         foreach ($all as $mailbox) {
-            if ($selected !== 'all' && $mailbox['key'] !== $selected) {
+            if ($mailbox['key'] !== $selected) {
                 continue;
             }
             $items = [];
@@ -332,6 +328,9 @@ class MyController extends AbstractController
                 foreach ($list['items'] as $item) {
                     $item['labels'] = QuarantineDigestService::reasonLabels($item['reasons']);
                     $item['high_risk'] = QuarantineDigestService::isHighRisk($item['reasons']);
+                    $at = strrpos((string)$item['from'], '@');
+                    // "Przywróć z domeny" hint: the registrable domain (mail.firma.pl -> firma.pl).
+                    $item['sender_domain'] = $at === false ? '' : DomainHelper::registrable(substr((string)$item['from'], $at + 1));
                     $items[] = $item;
                 }
             } catch (\Throwable $e) {
@@ -391,8 +390,42 @@ class MyController extends AbstractController
         }
 
         $this->addFlash($result['success'] ? 'success' : 'danger', $result['message']);
-        $view = (string)$request->request->get('view');
-        return $this->redirectToRoute('antispam_my_spam', $view === 'all' || $view === $key ? ['mailbox' => $view] : []);
+        return $this->redirectToRoute('antispam_my_spam', ['mailbox' => $key]);
+    }
+
+    /**
+     * "Przywróć z domeny": every message of one own mailbox's SPAM folder
+     * from a domain ("firma.pl" or "*.firma.pl" with subdomains), optionally
+     * also whitelisting the domain for that mailbox (SpamFolderService::releaseDomain).
+     */
+    #[Route('/spam/domain', name: 'antispam_my_spam_domain', methods: ['POST'])]
+    public function spamDomainAction(Request $request)
+    {
+        if (!$this->isCsrfTokenValid('my_spam_action', (string)$request->request->get('_token'))) {
+            $this->addFlash('danger', 'Nieprawidłowy token formularza, spróbuj ponownie');
+            return $this->redirectToRoute('antispam_my_spam');
+        }
+        $key = (string)$request->request->get('mailbox');
+        if (!$this->access->canAccessMailboxKey($this->getUser(), $key)) {
+            throw $this->createAccessDeniedException();
+        }
+        $pattern = (string)$request->request->get('domain');
+        $whitelist = $request->request->getBoolean('whitelist');
+        try {
+            $result = $this->spam->releaseDomain($key, $pattern, $whitelist);
+        } catch (\Throwable $e) {
+            $result = ['success' => false, 'message' => 'Operacja nie powiodła się. Spróbuj ponownie lub skontaktuj się z administratorem.', 'released' => 0, 'skipped' => 0, 'failed' => 0, 'whitelisted' => false];
+        }
+        $mailbox = $this->quarantine->getMailbox($key);
+        $this->audit($result['whitelisted'] ? 'spam.domain_whitelist' : 'spam.domain_release', targetType: 'domain',
+            targetId: SpamFolderService::domainPattern($pattern) ?? mb_substr($pattern, 0, 100), mailbox: $mailbox['account_email'] ?? null,
+            details: ['source' => 'my', 'mailbox_id' => $key, 'ok' => (bool)$result['success'], 'released' => $result['released'],
+                'skipped' => $result['skipped'], 'failed' => $result['failed']]);
+        if ($result['whitelisted'] && $mailbox && str_starts_with($key, 'ssh-')) {
+            $this->agentSync->deferForOwner((string)$mailbox['account_email']);
+        }
+        $this->addFlash($result['success'] && !$result['failed'] ? 'success' : ($result['success'] ? 'warning' : 'danger'), $result['message']);
+        return $this->redirectToRoute('antispam_my_spam', ['mailbox' => $key]);
     }
 
     /** Fail closed, like the quarantine: unlisted / unknown-score / risky messages get no whitelist. */

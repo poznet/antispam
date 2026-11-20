@@ -149,12 +149,32 @@ log (IMAP: newest `spam` decision of the same mailbox, sender and subject; agent
 
 Administrators open the same page from the admin menu (*Spam w skrzynkach*) and see
 every mailbox (IMAP accounts, SSH accounts with a deployed agent, the legacy IMAP
-mailbox). Above the list there is one tab per mailbox plus *Wszystkie*
-(`?mailbox=<key>` / `?mailbox=all`); by default all mailboxes are loaded when there are
-at most `MyController::SPAM_ALL_AT_ONCE` (5), otherwise only the first one, because every
-folder is a separate IMAP / SSH call. A user's own `?mailbox=` key is checked against
-their mailboxes - a foreign key falls back to the default. After *Przywróć* the page
-returns to the same tab.
+mailbox). The page shows **one mailbox at a time** (`?mailbox=<key>`, default the first
+one) with the mailbox list on the side, so nothing has to be scrolled through and only
+one IMAP / SSH call is made. A user's `?mailbox=` key is checked against their own
+mailboxes - a foreign key falls back to the first own one. After an action the page
+returns to the same mailbox.
+
+**Released messages come back clean** (`SpamTagCleaner`, agent `agentCleanSpamTags()`):
+a leading subject tag the server / SpamAssassin added (`[SPAM]`, `***SPAM***`, `{Spam?}`,
+`[Possible Spam]`, `SPAM:`…) is removed and `X-Spam-Flag: YES` / `X-Spam-Status: Yes`
+become `NO` / `No` (headers only, the body is never touched). The original date is kept:
+IMAP re-adds a changed message with `APPEND` using its `Date:` as INTERNALDATE (and the
+`\Seen` flag), an unchanged one is moved (MOVE keeps INTERNALDATE); the client junk
+keywords `$Junk` / `Junk` are cleared. When `APPEND` fails (quota, size) the message is
+moved as it is. The agent (3.11) rewrites the file through `tmp/` and keeps its mtime.
+
+**Przywróć z domeny** (`POST /my/spam/domain`, `mailbox`, `domain`, `whitelist`):
+every message of that mailbox's SPAM folder (up to 500 newest) from `firma.pl` (that
+domain only) or `*.firma.pl` (with subdomains) goes back to INBOX. High-risk messages
+(phishing, virus, unknown score) are skipped and counted - release them one by one.
+*i dodaj domenę do zaufanych* also adds the domain whitelist rules of the mailbox
+owner (`firma.pl` exact, plus `*.firma.pl` wildcard for a wildcard pattern); free-mail
+domains (gmail.com, wp.pl…, `DomainHelper::isFreemail`) are never whitelisted. SSH
+mailboxes use one agent call per 100 messages (`spam-release --ids=a/b/c`, agent 3.11;
+an older agent falls back to one call per message). Each sender row has a *domena
+firma.pl* link that fills the form with `*.firma.pl`. Audited as `spam.domain_release` /
+`spam.domain_whitelist`.
 
 - **Przywróć do skrzynki** - moves the message back to INBOX and marks it checked
   (IMAP: `MessageService::setAsChecked` for that mailbox; agent: `checked` table), so the

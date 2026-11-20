@@ -21,8 +21,12 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 ### Added
 
 - **Spam w skrzynkach** (admin menu): the SPAM folder of every mailbox on
-  `/my/spam` with one tab per mailbox plus *Wszystkie* (`?mailbox=`); release /
-  release + whitelist like the users; above 5 mailboxes one is loaded at a time.
+  `/my/spam`, one mailbox at a time with the mailbox list on the side
+  (`?mailbox=`); the same for users with several mailboxes.
+- **Przywróć z domeny** on the SPAM page: every message from `firma.pl` or
+  `*.firma.pl` (with subdomains) back to INBOX, high-risk ones skipped,
+  optionally the domain whitelisted for the mailbox (never free-mail domains).
+  Agent 3.11 `spam-release --ids=`.
 - **Plugin downloads for users**: *Moja poczta → Wtyczki pocztowe*
   (`/my/plugins`) - Thunderbird `.xpi`, Outlook manifest (https only), the
   server address to copy and which own mailboxes have a plugin password or
@@ -365,9 +369,12 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 
 ### Fixed
 
+- Released from SPAM = back **without the "[SPAM]" subject tag** and
+  `X-Spam-Flag: YES`, with the **original date** (IMAP APPEND with the message
+  date / MOVE, agent keeps the file mtime); client junk keywords cleared.
 - `url_text_mismatch` no longer fires when the link text and the target differ
   only by a leading `www.` (`www.gov.pl` -> `gov.pl`: gov.pl is a public suffix,
-  so the registrable domains differed). Server and agent 3.10.
+  so the registrable domains differed). Server and agent (3.10+).
 
 ## [2.0.0] - 2026-10-28 (current)
 

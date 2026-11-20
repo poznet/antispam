@@ -341,6 +341,7 @@ as the quarantine commands.
 ```bash
 php antispam-agent.php spam-list [--limit=100]
 php antispam-agent.php spam-release --id=<id> [--whitelist]
+php antispam-agent.php spam-release --ids=<id1>/<id2>/... [--whitelist]   # 3.11+
 ```
 
 `spam-list` lists `.SPAM/{new,cur}` newest first (file mtime). The folder can be large,
@@ -356,6 +357,15 @@ alone, and with `--whitelist` adds the sender to the local `email_whitelist` (th
 adds the rule to its database too and syncs the rules afterwards). Answers
 `{"success": true, "id": "...", "sender": "a@b.pl", "whitelisted": false}`; an id that is
 not in `.SPAM` gives `{"success": false, "error": "Message not found in the SPAM folder ..."}`.
+
+Since 3.11 a released message comes back without spam marks (`agentCleanSpamTags()`,
+same as the panel's `SpamTagCleaner`): a leading subject tag (`[SPAM]`, `***SPAM***`,
+`{Spam?}`…) is removed and `X-Spam-Flag: YES` / `X-Spam-Status: Yes` become `NO` / `No`;
+the rewritten file goes through `tmp/` and keeps the original mtime (the received
+date clients show). `--ids=` releases up to 500 messages in one call (ids separated by
+`/`, which never occurs in a Maildir name) and answers
+`{"success": true, "released": [{"id", "sender"}], "failed": [{"id", "error"}]}` -
+used by *Przywróć z domeny* in the panel.
 
 Agents older than 3.1 answer with the usage text; the panel then reports the agent as
 outdated for that mailbox (redeploy: Konta → Wdróż). Nothing else changed in 3.1 - the

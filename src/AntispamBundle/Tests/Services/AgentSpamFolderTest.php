@@ -155,4 +155,33 @@ class AgentSpamFolderTest extends TestCase
         $this->put('.SPAM/new/9.M9.host', "From: a@b.pl\n\nx\n", time());
         $this->assertFalse(\quarantineRelease($this->maildir(), $this->db(), ['id' => '9.M9.host'])['success']);
     }
+
+    public function testSpamReleaseRemovesTheSpamTagAndKeepsTheDate()
+    {
+        $when = strtotime('2026-03-04 10:20:00');
+        $this->put('.SPAM/cur/11.M11.host:2,S', "From: a@firma.pl\nSubject: [SPAM] ***SPAM*** Faktura 3/2026\nX-Spam-Flag: YES\nX-Spam-Status: Yes, score=7\n\n[SPAM] w treści zostaje\n", $when);
+        $res = \spamRelease($this->maildir(), $this->db(), ['id' => '11.M11.host']);
+        $this->assertTrue($res['success'], json_encode($res));
+        $path = $this->maildir() . '/cur/11.M11.host:2,S';
+        $raw = file_get_contents($path);
+        $this->assertStringContainsString("Subject: Faktura 3/2026\n", $raw);
+        $this->assertStringContainsString("X-Spam-Flag: NO\n", $raw);
+        $this->assertStringContainsString("X-Spam-Status: No, score=7\n", $raw);
+        $this->assertStringContainsString("[SPAM] w treści zostaje", $raw, 'body untouched');
+        clearstatcache();
+        $this->assertSame($when, filemtime($path), 'received date (mtime) kept');
+        $this->assertFileDoesNotExist($this->maildir() . '/.SPAM/cur/11.M11.host:2,S');
+        $this->assertSame([], glob($this->maildir() . '/tmp/*'), 'no leftover temp file');
+    }
+
+    public function testSpamReleaseOfManyIds()
+    {
+        $this->put('.SPAM/new/21.M21.host', "From: a@firma.pl\nSubject: a\n\nx\n", time());
+        $this->put('.SPAM/new/22.M22.host', "From: b@mail.firma.pl\nSubject: b\n\nx\n", time());
+        $res = \spamRelease($this->maildir(), $this->db(), ['ids' => '21.M21.host/22.M22.host/99.M99.host/../x']);
+        $this->assertTrue($res['success']);
+        $this->assertSame(['21.M21.host', '22.M22.host'], array_column($res['released'], 'id'));
+        $this->assertSame(['99.M99.host', '..', 'x'], array_column($res['failed'], 'id'));
+        $this->assertFileExists($this->maildir() . '/new/22.M22.host');
+    }
 }

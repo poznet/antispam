@@ -148,6 +148,78 @@ class SpamFolderServiceTest extends TestCase
         $this->assertSame('promo@sklep.pl', $res['sender']);
     }
 
+    public function testImapReleaseWithASpamTagReAddsTheCleanMessageWithItsDate()
+    {
+        $service = $this->service();
+        $this->uidValidity(42);
+        $msg = $this->message(3, 'a@firma.pl', '[SPAM] Faktura');
+        $msg->method('getRawMessage')->willReturn("From: a@firma.pl\r\nSubject: [SPAM] Faktura\r\n\r\nx");
+        $msg->method('isSeen')->willReturn(true);
+        $this->spamFolder->method('getMessage')->willReturn($msg);
+        $this->inboxFolder->expects($this->once())->method('addMessage')
+            ->with("From: a@firma.pl\r\nSubject: Faktura\r\n\r\nx", '\\Seen', $this->callback(fn ($d) => $d instanceof \DateTimeInterface && $d->format('Y-m-d') === '2026-10-03'));
+        $msg->expects($this->once())->method('delete');
+        $msg->expects($this->never())->method('move');
+        $msg->expects($this->once())->method('clearFlag')->with('$Junk Junk');
+        $this->connection->expects($this->once())->method('expunge');
+
+        $this->assertTrue($service->release('imap-5', '3', false, 42)['success']);
+    }
+
+    public function testImapReleaseFallsBackToMoveWhenAppendFails()
+    {
+        $service = $this->service();
+        $this->uidValidity(42);
+        $msg = $this->message(3, 'a@firma.pl', '[SPAM] Faktura');
+        $msg->method('getRawMessage')->willReturn("Subject: [SPAM] Faktura\r\n\r\nx");
+        $this->spamFolder->method('getMessage')->willReturn($msg);
+        $this->inboxFolder->method('addMessage')->willThrowException(new \RuntimeException('quota'));
+        $msg->expects($this->never())->method('delete');
+        $msg->expects($this->once())->method('move')->with($this->inboxFolder);
+
+        $this->assertTrue($service->release('imap-5', '3', false, 42)['success']);
+    }
+
+    public function testDomainReleaseOverSshSkipsHighRiskAndWhitelistsTheDomain()
+    {
+        $service = $this->service();
+        $this->ssh->method('spamList')->willReturn(['success' => true, 'total' => 4, 'items' => [
+            ['id' => '1.M1.h', 'from' => 'a@firma.pl', 'score' => 9, 'reasons' => [['rule' => 'bayes:0.99', 'score' => 9]]],
+            ['id' => '2.M2.h', 'from' => 'b@mail.firma.pl', 'score' => 9, 'reasons' => [['rule' => 'bayes:0.99', 'score' => 9]]],
+            ['id' => '3.M3.h', 'from' => 'c@firma.pl', 'score' => null, 'reasons' => []],
+            ['id' => '4.M4.h', 'from' => 'd@inna.pl', 'score' => 9, 'reasons' => [['rule' => 'bayes:0.99', 'score' => 9]]],
+        ]]);
+        $this->ssh->expects($this->once())->method('spamReleaseMany')->with($this->anything(), ['1.M1.h', '2.M2.h'])
+            ->willReturn(['success' => true, 'released' => [['id' => '1.M1.h'], ['id' => '2.M2.h']], 'failed' => []]);
+        $added = [];
+        $this->quarantine->method('whitelistDomain')->willReturnCallback(function ($owner, $host, $type) use (&$added) {
+            $added[] = [$owner, $host, $type];
+            return true;
+        });
+
+        $r = $service->releaseDomain('ssh-7', '*.firma.pl', true);
+        $this->assertSame([2, 1, 0], [$r['released'], $r['skipped'], $r['failed']]);
+        $this->assertTrue($r['whitelisted']);
+        $this->assertSame([['jan@ssh.pl', 'firma.pl', 'exact'], ['jan@ssh.pl', '*.firma.pl', 'wildcard']], $added);
+    }
+
+    public function testDomainReleaseNeverWhitelistsFreemailAndFallsBackForOldAgents()
+    {
+        $service = $this->service();
+        $this->ssh->method('spamList')->willReturn(['success' => true, 'total' => 1, 'items' => [
+            ['id' => '1.M1.h', 'from' => 'kto@gmail.com', 'score' => 9, 'reasons' => [['rule' => 'bayes:0.99', 'score' => 9]]],
+        ]]);
+        $this->ssh->method('spamReleaseMany')->willReturn(['success' => false, 'error' => 'Invalid id']);
+        $this->ssh->expects($this->once())->method('spamRelease')->with($this->anything(), '1.M1.h', false)->willReturn(['success' => true, 'sender' => 'kto@gmail.com']);
+        $this->quarantine->expects($this->never())->method('whitelistDomain');
+
+        $r = $service->releaseDomain('ssh-7', 'gmail.com', true);
+        $this->assertSame(1, $r['released']);
+        $this->assertFalse($r['whitelisted']);
+        $this->assertStringContainsString('darmowa poczta', $r['message']);
+        $this->assertFalse($service->releaseDomain('ssh-7', '*.pl')['success'], 'too broad');
+    }
+
     public function testImapReleaseRefusesAStaleUidValidityAndBadIds()
     {
         $service = $this->service();

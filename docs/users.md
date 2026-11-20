@@ -166,8 +166,13 @@ moved as it is. The agent (3.11) rewrites the file through `tmp/` and keeps its 
 
 **Przywróć z domeny** (`POST /my/spam/domain`, `mailbox`, `domain`, `whitelist`):
 every message of that mailbox's SPAM folder (up to 500 newest) from `firma.pl` (that
-domain only) or `*.firma.pl` (with subdomains) goes back to INBOX. High-risk messages
-(phishing, virus, unknown score) are skipped and counted - release them one by one.
+domain only) or `*.firma.pl` (with subdomains) goes back to INBOX. Messages with a real high-risk reason
+(phishing / impersonation, virus, bad attachment or link - `isPurgeableHighRisk`) are
+skipped and counted - release them one by one. A message without a score log row
+(`score_unknown`: moved by the mail server's own filter, or the log was purged) IS
+released, the domain was picked explicitly. A run that moved nothing while messages
+matched is reported as a warning / error, not a success; per-message IMAP errors are
+logged (`Spam release failed`).
 *i dodaj domenę do zaufanych* also adds the domain whitelist rules of the mailbox
 owner (`firma.pl` exact, plus `*.firma.pl` wildcard for a wildcard pattern); free-mail
 domains (gmail.com, wp.pl…, `DomainHelper::isFreemail`) are never whitelisted. SSH

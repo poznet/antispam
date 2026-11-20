@@ -34,6 +34,7 @@ class SpamFolderService
         private InboxService $inbox,
         private MessageService $messages,
         private ?Bayes\BayesService $bayes = null,
+        private ?\Psr\Log\LoggerInterface $logger = null,
     ) {
     }
 
@@ -105,7 +106,8 @@ class SpamFolderService
                 $this->messages->setAsChecked($msg, $mailbox['account_email'] ?: null);
                 $this->moveToInbox($connection, $msg);
             } catch (\Throwable $e) {
-                return ['success' => false, 'message' => self::NOT_FOUND, 'sender' => ''];
+                $this->logger?->warning('Spam release failed', ['mailbox' => $key, 'id' => $id, 'error' => $e->getMessage()]);
+                return ['success' => false, 'message' => self::NOT_FOUND, 'sender' => '', 'error' => $e->getMessage()];
             }
         } else {
             $res = $this->ssh->spamRelease($this->sshAccount($key), $id, $whitelist);
@@ -243,7 +245,11 @@ class SpamFolderService
             if (!self::senderInDomain((string)$item['from'], $pattern)) {
                 continue;
             }
-            if (QuarantineDigestService::isHighRisk($item['reasons'])) {
+            // The domain was picked explicitly: only a real high-risk reason (phishing,
+            // virus) is skipped. A message without a score log row (moved by the mail
+            // server's own filter, purged log) is released - skipping those made the
+            // button a no-op for whole mailboxes.
+            if (QuarantineDigestService::isPurgeableHighRisk($item['reasons'])) {
                 $out['skipped']++;
                 continue;
             }
@@ -254,6 +260,9 @@ class SpamFolderService
             foreach ($ids as $row) {
                 $r = $this->release($key, $row['id'], false, $row['uidvalidity']);
                 $r['success'] ? $out['released']++ : $out['failed']++;
+                if (!$r['success']) {
+                    $this->logger?->warning('Spam domain release failed', ['mailbox' => $key, 'id' => $row['id'], 'error' => $r['error'] ?? $r['message']]);
+                }
             }
         } elseif ($ids) {
             $account = $this->sshAccount($key);
@@ -280,10 +289,11 @@ class SpamFolderService
             $out['whitelisted'] = true;
         }
 
-        $out['success'] = true;
+        // Nothing moved although messages matched = not a success (no green flash).
+        $out['success'] = $out['released'] > 0 || (!$out['failed'] && !$out['skipped']);
         $msg = sprintf('Przywrócono z domeny %s: %d.', $pattern, $out['released']);
         if ($out['skipped']) {
-            $msg .= sprintf(' Pominięto %d o wysokim ryzyku (phishing, wirus lub brak oceny) - przywróć je pojedynczo, jeśli na pewno są potrzebne.', $out['skipped']);
+            $msg .= sprintf(' Pominięto %d o wysokim ryzyku (phishing lub wirus) - przywróć je pojedynczo, jeśli na pewno są potrzebne.', $out['skipped']);
         }
         if ($out['failed']) {
             $msg .= sprintf(' Nie udało się: %d.', $out['failed']);

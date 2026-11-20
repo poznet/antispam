@@ -188,9 +188,11 @@ class SpamFolderServiceTest extends TestCase
             ['id' => '2.M2.h', 'from' => 'b@mail.firma.pl', 'score' => 9, 'reasons' => [['rule' => 'bayes:0.99', 'score' => 9]]],
             ['id' => '3.M3.h', 'from' => 'c@firma.pl', 'score' => null, 'reasons' => []],
             ['id' => '4.M4.h', 'from' => 'd@inna.pl', 'score' => 9, 'reasons' => [['rule' => 'bayes:0.99', 'score' => 9]]],
+            ['id' => '5.M5.h', 'from' => 'e@firma.pl', 'score' => 20, 'reasons' => [['rule' => 'clamav:Eicar', 'score' => 20]]],
         ]]);
-        $this->ssh->expects($this->once())->method('spamReleaseMany')->with($this->anything(), ['1.M1.h', '2.M2.h'])
-            ->willReturn(['success' => true, 'released' => [['id' => '1.M1.h'], ['id' => '2.M2.h']], 'failed' => []]);
+        // No score (moved by the server's own filter) is released; only phishing / virus is skipped.
+        $this->ssh->expects($this->once())->method('spamReleaseMany')->with($this->anything(), ['1.M1.h', '2.M2.h', '3.M3.h'])
+            ->willReturn(['success' => true, 'released' => [['id' => '1.M1.h'], ['id' => '2.M2.h'], ['id' => '3.M3.h']], 'failed' => []]);
         $added = [];
         $this->quarantine->method('whitelistDomain')->willReturnCallback(function ($owner, $host, $type) use (&$added) {
             $added[] = [$owner, $host, $type];
@@ -198,7 +200,7 @@ class SpamFolderServiceTest extends TestCase
         });
 
         $r = $service->releaseDomain('ssh-7', '*.firma.pl', true);
-        $this->assertSame([2, 1, 0], [$r['released'], $r['skipped'], $r['failed']]);
+        $this->assertSame([3, 1, 0], [$r['released'], $r['skipped'], $r['failed']]);
         $this->assertTrue($r['whitelisted']);
         $this->assertSame([['jan@ssh.pl', 'firma.pl', 'exact'], ['jan@ssh.pl', '*.firma.pl', 'wildcard']], $added);
     }
@@ -218,6 +220,19 @@ class SpamFolderServiceTest extends TestCase
         $this->assertFalse($r['whitelisted']);
         $this->assertStringContainsString('darmowa poczta', $r['message']);
         $this->assertFalse($service->releaseDomain('ssh-7', '*.pl')['success'], 'too broad');
+    }
+
+    public function testDomainReleaseThatMovedNothingIsNotASuccess()
+    {
+        $service = $this->service();
+        $this->ssh->method('spamList')->willReturn(['success' => true, 'total' => 1, 'items' => [
+            ['id' => '1.M1.h', 'from' => 'csp@ab.pl', 'score' => 9, 'reasons' => [['rule' => 'bayes:0.99', 'score' => 9]]],
+        ]]);
+        $this->ssh->method('spamReleaseMany')->willReturn(['success' => true, 'released' => [], 'failed' => [['id' => '1.M1.h', 'error' => 'rename failed']]]);
+
+        $r = $service->releaseDomain('ssh-7', 'ab.pl');
+        $this->assertFalse($r['success'], 'no green flash when nothing was moved');
+        $this->assertSame([0, 1], [$r['released'], $r['failed']]);
     }
 
     public function testImapReleaseRefusesAStaleUidValidityAndBadIds()

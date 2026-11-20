@@ -20,6 +20,10 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 
 ### Added
 
+- **Plugin downloads for users**: *Moja poczta → Wtyczki pocztowe*
+  (`/my/plugins`) - Thunderbird `.xpi`, Outlook manifest (https only), the
+  server address to copy and which own mailboxes have a plugin password or
+  accept the IMAP password.
 - **"Sprawdź tę wiadomość"** in the plugins (Thunderbird 1.7.0 context menu,
   Outlook add-in 1.3.0.0 button): `POST /api/plugin/scan` runs the antivirus
   first - ClamAV on the whole message and every attachment, VirusTotal on the

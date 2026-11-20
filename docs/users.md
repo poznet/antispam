@@ -85,9 +85,15 @@ See [api.md](api.md): `/my/*`, `/start` (ROLE_USER) and `/users/*` (ROLE_ADMIN).
 
 After login (`default_target_path: antispam_start`) administrators land on `/panel`,
 users on `/my/quarantine` (after the 2FA code, when 2FA is on). The sidebar shows only
-the user menu (Kwarantanna, Spam, Dziennik ocen, Moje reguły, Zmiana hasła,
-Weryfikacja dwuetapowa) to `ROLE_USER`; "Spam" is the SPAM folder (`/my/spam`), the
-score log stays under "Dziennik ocen".
+the user menu (Kwarantanna, Spam, Dziennik ocen, Statystyki, Moje reguły, Wtyczki
+pocztowe, Zmiana hasła, Weryfikacja dwuetapowa) to `ROLE_USER`; "Spam" is the SPAM
+folder (`/my/spam`), the score log stays under "Dziennik ocen".
+
+"Wtyczki pocztowe" (`/my/plugins`) gives the user the Thunderbird `.xpi`
+(`/plugin/download`) and the Outlook manifest (only when the server address is
+https), the server address to paste into a generic build, and per own mailbox
+whether a plugin password is set or the IMAP password also works (no secrets
+shown). With the plugins switched off it says so instead.
 
 ## Own sender rules (`/my/rules`)
 

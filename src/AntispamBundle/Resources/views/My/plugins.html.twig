@@ -1,0 +1,97 @@
+{% extends '@Antispam/main.html.twig' %}
+{% block title %}Wtyczki pocztowe{% endblock %}
+{% block page_title %}Wtyczki pocztowe{% endblock %}
+
+{% block body %}
+    {% if not enabled %}
+        <div class="alert alert-info">Wtyczki pocztowe są wyłączone przez administratora.</div>
+    {% else %}
+    <p class="text-muted">Wtyczka dodaje w programie pocztowym przyciski „Zgłoś spam”, „To nie spam” i „Sprawdź tę wiadomość”
+        (antywirus ClamAV i VirusTotal, potem reguły), a w Thunderbirdzie też sprawdza nową pocztę przy odbiorze.</p>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="panel panel-default">
+                <div class="panel-heading"><span class="glyphicon glyphicon-download-alt"></span> Thunderbird</div>
+                <div class="panel-body">
+                    <p><a href="{{ path('antispam_plugin_download', {v: version}) }}" class="btn btn-success">
+                        <span class="glyphicon glyphicon-download-alt"></span> Pobierz wtyczkę ({{ version }})
+                    </a></p>
+                    <ol class="small">
+                        <li>Thunderbird: <em>Dodatki i motywy → ⚙ → Zainstaluj dodatek z pliku…</em> i wybierz pobrany plik <code>.xpi</code>.</li>
+                        <li>Jeśli wtyczka zapyta o adres serwera - wklej adres podany niżej i kliknij <em>Zapisz ustawienia</em>.</li>
+                        <li>Zaloguj się w ustawieniach wtyczki adresem swojej skrzynki (patrz „Logowanie”).</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="panel panel-default">
+                <div class="panel-heading"><span class="glyphicon glyphicon-download-alt"></span> Outlook</div>
+                <div class="panel-body">
+                    {% if outlook_ok %}
+                        <p><a href="{{ path('antispam_plugin_outlook_manifest') }}" class="btn btn-success">
+                            <span class="glyphicon glyphicon-download-alt"></span> Pobierz antispam-outlook.xml
+                        </a></p>
+                        <ol class="small">
+                            <li>Outlook (nowy, klasyczny, w przeglądarce, na Macu): <em>Pobierz dodatki → Moje dodatki → Dodaj dodatek niestandardowy → Dodaj z pliku…</em></li>
+                            <li>Wybierz pobrany plik <code>antispam-outlook.xml</code>; dodatek pojawi się na pasku wiadomości.</li>
+                        </ol>
+                        <p class="text-muted small">Jeśli dodawanie własnych dodatków jest zablokowane w Twojej firmie, poproś administratora o wdrożenie centralne.</p>
+                    {% else %}
+                        <p class="text-muted">Dodatek Outlook wymaga adresu https - poproś administratora o jego udostępnienie.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-link"></span> Adres serwera</div>
+        <div class="panel-body">
+            <div class="input-group" style="max-width:560px">
+                <input type="text" class="form-control" id="pp-plugin-server" value="{{ server }}" readonly aria-label="Adres serwera antyspamu">
+                <span class="input-group-btn"><button type="button" class="btn btn-default" id="pp-plugin-copy"><span class="glyphicon glyphicon-copy"></span> Kopiuj</button></span>
+            </div>
+            <p class="help-block">Potrzebny tylko wtedy, gdy wtyczka poprosi o niego przy pierwszym uruchomieniu.</p>
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-heading"><span class="glyphicon glyphicon-user"></span> Logowanie</div>
+        <div class="panel-body">
+            {% if mailboxes %}
+                <table class="table table-condensed" style="margin-bottom:8px">
+                    <thead><tr><th>Skrzynka</th><th>Hasło do wtyczki</th></tr></thead>
+                    <tbody>
+                    {% for m in mailboxes %}
+                        <tr>
+                            <td><code>{{ m.email }}</code></td>
+                            <td>{% if m.plugin_password %}<span class="label label-success">hasło wtyczki ustawione</span>{% endif %}
+                                {% if m.imap_password %}<span class="label label-default">działa też hasło do poczty</span>{% endif %}
+                                {% if not m.plugin_password and not m.imap_password %}<span class="text-muted">poproś administratora o hasło wtyczki</span>{% endif %}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                <p class="text-muted small">W ustawieniach wtyczki podaj adres skrzynki i hasło wtyczki od administratora (lub hasło do poczty, jeśli jest oznaczone powyżej).
+                    Hasło do panelu nie działa we wtyczce.</p>
+            {% else %}
+                <p class="text-muted">Nie masz jeszcze przypisanych skrzynek - wtyczka zadziała po przypisaniu skrzynki przez administratora.</p>
+            {% endif %}
+        </div>
+    </div>
+    <script>
+        (function () {
+            var input = document.getElementById('pp-plugin-server'), btn = document.getElementById('pp-plugin-copy');
+            input.addEventListener('focus', function () { input.select(); });
+            btn.addEventListener('click', function () {
+                input.select();
+                var done = function () { btn.innerHTML = '<span class="glyphicon glyphicon-ok"></span> Skopiowano'; };
+                if (navigator.clipboard) { navigator.clipboard.writeText(input.value).then(done, function () { document.execCommand('copy'); done(); }); }
+                else { document.execCommand('copy'); done(); }
+            });
+        })();
+    </script>
+    {% endif %}
+{% endblock %}

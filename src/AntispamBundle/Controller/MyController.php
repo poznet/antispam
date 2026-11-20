@@ -11,6 +11,8 @@ use AntispamBundle\Security\MailboxAccess;
 use AntispamBundle\Services\AccountStatsPage;
 use AntispamBundle\Services\DeferredAgentSync;
 use AntispamBundle\Services\Jobs\JobQueue;
+use AntispamBundle\Services\MailClientPluginBuilder;
+use AntispamBundle\Services\PluginService;
 use AntispamBundle\Services\QuarantineDigestService;
 use AntispamBundle\Services\DeferredRetroactivePass;
 use AntispamBundle\Services\QuarantinePurge;
@@ -51,6 +53,7 @@ class MyController extends AbstractController
         private ?JobQueue $jobs = null,
         private ?DeferredRetroactivePass $retroactive = null,
         private ?AccountStatsPage $statsPage = null,
+        private ?PluginService $plugin = null,
     ) {
     }
 
@@ -74,6 +77,35 @@ class MyController extends AbstractController
         $vars = $this->statsPage->build($account, $request->query->getInt('days', 30), $request->query->getBoolean('agent'), false);
         $vars['own_accounts'] = $this->em->getRepository(Account::class)->findBy(['id' => $ids], ['email' => 'ASC']);
         return $this->render('@Antispam/Account/stats.html.twig', $vars);
+    }
+
+    /**
+     * Mail client plugins for the user (docs/thunderbird.md, docs/outlook.md):
+     * the Thunderbird .xpi and the Outlook manifest (both public downloads),
+     * the server address to paste into a generic build and how to log in with
+     * the own mailboxes - which of them have a plugin password, which accept
+     * the IMAP password. No secrets are shown.
+     */
+    #[Route('/plugins', name: 'antispam_my_plugins', methods: ['GET'])]
+    public function pluginsAction(Request $request)
+    {
+        $server = rtrim(($this->plugin?->getPublicUrl() ?: '') ?: $request->getSchemeAndHttpHost() . $request->getBasePath(), '/');
+        $ids = $this->access->accountIds($this->getUser());
+        $mailboxes = [];
+        foreach ($ids ? $this->em->getRepository(Account::class)->findBy(['id' => $ids], ['email' => 'ASC']) : [] as $a) {
+            $mailboxes[] = [
+                'email' => (string)$a->getEmail(),
+                'plugin_password' => (bool)$a->getPluginPasswordHash(),
+                'imap_password' => $a->isImap() && !$a->isOAuth() && (string)$a->getImapPassword() !== '',
+            ];
+        }
+        return $this->render('@Antispam/My/plugins.html.twig', [
+            'enabled' => $this->plugin?->isEnabled() ?? false,
+            'server' => $server,
+            'version' => PluginApiController::PLUGIN_VERSION,
+            'outlook_ok' => MailClientPluginBuilder::isOutlookCompatible($server),
+            'mailboxes' => $mailboxes,
+        ]);
     }
 
     #[Route('/quarantine', name: 'antispam_my_quarantine', methods: ['GET'])]

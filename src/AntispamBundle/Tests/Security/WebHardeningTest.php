@@ -65,7 +65,6 @@ class WebHardeningTest extends WebTestCase
             ['/config/spam/clamav-test/'],
             ['/config/spam/virustotal-test/'],
             ['/config/spam/bayes-reset/'],
-            ['/spambox/restore/SPAM/1'],
         ];
     }
 
@@ -112,7 +111,6 @@ class WebHardeningTest extends WebTestCase
             'dnsbl preset' => ['/dnsbl/add-preset/0', '/dnsbl/'],
             'dnsbl toggle' => ['/dnsbl/toggle/1', '/dnsbl/'],
             'dnsbl delete' => ['/dnsbl/del/1', '/dnsbl/'],
-            'spam restore' => ['/spambox/restore/SPAM/1', '/spambox/index'],
         ];
     }
 
@@ -172,14 +170,6 @@ class WebHardeningTest extends WebTestCase
                     public $enabled = true;
                 }],
                 'presets' => [['name' => 'Spamhaus ZEN', 'zone' => 'zen.spamhaus.org', 'score' => 8], ['name' => 'SpamCop', 'zone' => 'bl.spamcop.net', 'score' => 5]],
-            ]],
-            ['@Antispam/Spambox/index.html.twig', 2, [
-                'messages' => [
-                    ['id' => 1, 'from' => 'a@spam.test', 'subject' => 'One', 'date' => new \DateTime(), 'html' => '<img src="https://track.test/p.gif">', 'text' => null],
-                    ['id' => 2, 'from' => 'b@spam.test', 'subject' => 'Two', 'date' => new \DateTime(), 'html' => null, 'text' => 'plain'],
-                ],
-                'selected' => ['id' => 2, 'from' => 'b@spam.test', 'subject' => 'Two'],
-                'preview' => SpamboxController::previewDocument(null, 'plain <b>'),
             ]],
         ];
     }

@@ -142,6 +142,23 @@ class AgentSpamFolderTest extends TestCase
         $this->assertSame(1, (int)$db->querySingle("SELECT COUNT(*) FROM checked WHERE message_id = '7.M7.host'"));
     }
 
+    public function testSpamShowReturnsTheSourceWithoutTouchingTheFile()
+    {
+        $when = time() - 7200;
+        $this->put('.SPAM/cur/31.M31.host:2,S', "From: a@ab.pl\nSubject: Oferta\n\nTreść\n", $when);
+        $res = \spamShow($this->maildir(), ['id' => '31.M31.host']);
+        $this->assertTrue($res['success']);
+        $this->assertStringContainsString('Subject: Oferta', base64_decode($res['raw']));
+        $this->assertFalse($res['truncated']);
+        clearstatcache();
+        $this->assertSame($when, filemtime($this->maildir() . '/.SPAM/cur/31.M31.host:2,S'), 'read only');
+        $this->assertFileExists($this->maildir() . '/.SPAM/cur/31.M31.host:2,S');
+
+        $this->put('new/32.M32.host', "From: a@b.pl\n\nx\n", time());
+        $this->assertFalse(\spamShow($this->maildir(), ['id' => '32.M32.host'])['success'], 'INBOX message is not in SPAM');
+        $this->assertFalse(\spamShow($this->maildir(), ['id' => '../new/32.M32.host'])['success']);
+    }
+
     public function testSpamReleaseRefusesBadAndUnknownIds()
     {
         $this->put('new/8.M8.host', "From: a@b.pl\n\nx\n", time());

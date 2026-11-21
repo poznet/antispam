@@ -7,10 +7,7 @@ use AntispamBundle\Controller\SpamboxController;
 use AntispamBundle\Entity\BackgroundJob;
 use AntispamBundle\Entity\User;
 use AntispamBundle\Security\MailboxAccess;
-use AntispamBundle\Services\ConnectionService;
 use AntispamBundle\Services\DeferredAgentSync;
-use AntispamBundle\Services\InboxService;
-use AntispamBundle\Services\MessageService;
 use AntispamBundle\Services\QuarantinePurge;
 use AntispamBundle\Services\QuarantineService;
 use AntispamBundle\Services\SpamFolderService;
@@ -104,8 +101,7 @@ class QuarantinePurgeControllerTest extends TestCase
 
     private function spambox(): SpamboxController
     {
-        return $this->wire(new SpamboxController($this->db->em, $this->createMock(InboxService::class), $this->createMock(ConnectionService::class),
-            $this->quarantine, $this->createMock(MessageService::class), null, $this->purger()));
+        return $this->wire(new SpamboxController($this->db->em, $this->quarantine, $this->purger()));
     }
 
     private static function user(string $name, string $role = User::ROLE_USER): User

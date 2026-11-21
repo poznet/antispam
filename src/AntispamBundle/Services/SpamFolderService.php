@@ -137,6 +137,80 @@ class SpamFolderService
         ];
     }
 
+    /** Bytes of a message parsed for the preview (bigger = shown truncated). */
+    public const PREVIEW_MAX_BYTES = 2097152;
+
+    /**
+     * One SPAM message for the preview on /my/spam (read only: the IMAP read
+     * uses the raw source fetched with BODY.PEEK / FT_PEEK, so \Seen is not set; the
+     * agent only reads the file).
+     *
+     * @return array{success: bool, message?: string, subject?: string, from?: string, date?: ?\DateTimeInterface,
+     *               html?: string, text?: string, attachments?: list<string>, truncated?: bool}
+     */
+    public function preview(string $key, string $id, ?int $uidValidity = null): array
+    {
+        if (!$this->quarantine->getMailbox($key)) {
+            return ['success' => false, 'message' => 'Ta skrzynka nie jest już obsługiwana.'];
+        }
+        $truncated = false;
+        try {
+            if (self::isImapKey($key)) {
+                if (!preg_match('/^\d{1,10}$/', $id)) {
+                    return ['success' => false, 'message' => self::NOT_FOUND];
+                }
+                $connection = $this->imapConnection($key);
+                $name = $this->inbox->getSpamFolderName($connection);
+                if (!$connection->hasMailbox($name)) {
+                    return ['success' => false, 'message' => self::NOT_FOUND];
+                }
+                $folder = $connection->getMailbox($name);
+                if ($uidValidity !== null && self::folderUidValidity($folder) !== $uidValidity) {
+                    return ['success' => false, 'message' => self::NOT_FOUND];
+                }
+                $raw = (string)$folder->getMessage((int)$id)->getRawMessage();
+            } else {
+                $res = $this->ssh->spamShow($this->sshAccount($key), $id);
+                if (empty($res['success'])) {
+                    $error = (string)($res['error'] ?? '');
+                    return ['success' => false, 'message' => stripos($error, 'not found') !== false ? self::NOT_FOUND
+                        : (stripos($error, 'nie obsługuje') !== false
+                            ? 'Podgląd wymaga agenta 3.12 na serwerze tej skrzynki - wdróż go ponownie (Konta → Wdróż).'
+                            : 'Nie udało się odczytać wiadomości.')];
+                }
+                $raw = (string)base64_decode((string)($res['raw'] ?? ''), true);
+                $truncated = !empty($res['truncated']);
+            }
+        } catch (\Throwable $e) {
+            $this->logger?->warning('Spam preview failed', ['mailbox' => $key, 'id' => $id, 'error' => $e->getMessage()]);
+            return ['success' => false, 'message' => self::NOT_FOUND];
+        }
+        if (strlen($raw) > self::PREVIEW_MAX_BYTES) {
+            $raw = substr($raw, 0, self::PREVIEW_MAX_BYTES);
+            $truncated = true;
+        }
+
+        $parser = new RawMessageParser($raw);
+        $parts = $parser->getParts();
+        $dateHeader = (string)$parser->getHeader('Date');
+        $date = null;
+        if ($dateHeader !== '' && ($ts = strtotime($dateHeader)) !== false) {
+            $date = (new \DateTimeImmutable())->setTimestamp($ts);
+        }
+        $name = $parser->getFromName();
+        $address = $parser->getFromAddress();
+        return [
+            'success' => true,
+            'subject' => (string)$parser->getSubject(),
+            'from' => trim(($name !== '' ? $name . ' ' : '') . ($address !== '' ? '<' . $address . '>' : '')),
+            'date' => $date,
+            'html' => $parts['html'],
+            'text' => $parts['text'],
+            'attachments' => array_values(array_map(fn ($a) => ($a['filename'] !== '' ? $a['filename'] : $a['type']), $parts['attachments'])),
+            'truncated' => $truncated,
+        ];
+    }
+
     /**
      * SPAM -> INBOX without the spam marks (SpamTagCleaner: "[SPAM]" subject
      * tag, X-Spam-Flag) and with the original date: a message with marks is

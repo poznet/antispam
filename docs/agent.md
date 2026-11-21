@@ -342,6 +342,7 @@ as the quarantine commands.
 php antispam-agent.php spam-list [--limit=100]
 php antispam-agent.php spam-release --id=<id> [--whitelist]
 php antispam-agent.php spam-release --ids=<id1>/<id2>/... [--whitelist]   # 3.11+
+php antispam-agent.php spam-show --id=<id>     # 3.12+: source for the panel preview (base64, first 2 MB, read only)
 ```
 
 `spam-list` lists `.SPAM/{new,cur}` newest first (file mtime). The folder can be large,

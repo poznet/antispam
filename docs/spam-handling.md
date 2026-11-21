@@ -163,9 +163,9 @@ existed have both empty; old plugin entries are still recognised by their
 agent's SQLite DB, so they never appear in this table - only in the mailbox
 panels above it.
 
-Spam in the legacy mailbox's `SPAM` folder can be restored to INBOX on
-**Skrzynki → Folder spamu**. For IMAP/SSH accounts use the mail client
-(the folder is a normal IMAP folder).
+Spam of every mailbox (legacy IMAP, IMAP accounts, SSH accounts with an agent)
+can be previewed and restored to INBOX on **Skrzynki → Spam w skrzynkach**
+(`/my/spam`, docs/users.md).
 
 ## Retroactive blacklist
 

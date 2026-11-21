@@ -65,7 +65,7 @@ Only explicit user verdicts are learned - never the filter's own decisions
 | Plugin "spam" / "nie spam" (`/api/plugin/report`) | spam / ham | only reports with a logged-in mailbox; anonymous spam reports are not learned (poisoning) |
 | Plugin phishing report (`/api/plugin/phishing`) | spam | |
 | Quarantine *Przywróć* / *Zawsze akceptuj* (panel, `/my/quarantine`, digest `/q/` link) | ham | IMAP mailboxes: the message is read before it is moved |
-| `/my/spam` *Przywróć* (IMAP) and panel *Folder spamu → Przywróć* (legacy mailbox) | ham | |
+| `/my/spam` *Przywróć* (IMAP) | ham | |
 | `antispam:bayes:train` | spam / ham | bootstrap from IMAP folders |
 
 Not learned: quarantine *Usuń* (deleting is not a reliable "this is spam" - users

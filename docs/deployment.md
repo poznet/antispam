@@ -397,7 +397,7 @@ template that needs it) and external script files. Once the remaining inline
 code is moved out, drop `'unsafe-inline'` from `script-src` in
 `SecurityHeadersListener::POLICY_DEFAULT` (consider shipping it as
 `Content-Security-Policy-Report-Only` for a while first).
-The spam folder preview (`/spambox/index`) renders the message in a
+The spam folder preview (`/my/spam?msg=…`) renders the message in a
 `sandbox=""` iframe whose document carries its own
 `default-src 'none'; img-src data:` policy, so tracking pixels and remote CSS
 of spam are never fetched.

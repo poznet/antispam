@@ -33,7 +33,34 @@
         </div>
         {% endif %}
         <div class="{{ all_mailboxes|length > 1 ? 'col-md-9' : 'col-md-12' }}">
+    {% set preview = preview|default(null) %}
     {% for mailbox in mailboxes %}
+    {% if preview %}
+    <div class="panel panel-default pp-spam-preview" id="podglad">
+        <div class="panel-heading" style="word-break:break-word;">
+            <a href="{{ path('antispam_my_spam', {mailbox: mailbox.key}) }}" class="close" aria-label="Zamknij podgląd" title="Zamknij podgląd">&times;</a>
+            {% if preview.success %}
+                <strong>{{ preview.subject ?: '(bez tematu)' }}</strong><br>
+                <small class="text-muted">{{ preview.from }}{% if preview.date %} · {{ preview.date|date('Y-m-d H:i') }}{% endif %}</small>
+                {% if preview.attachments|length > 0 %}<br><small><span class="glyphicon glyphicon-paperclip" aria-hidden="true"></span> {{ preview.attachments|join(', ') }}</small>{% endif %}
+            {% else %}
+                <strong>Podgląd</strong>
+            {% endif %}
+        </div>
+        <div class="panel-body">
+            {% if preview.success %}
+                {% if preview.truncated %}<p class="text-muted small">Wiadomość jest duża - pokazano jej początek.</p>{% endif %}
+                {# Untrusted HTML from the message: fully sandboxed iframe (no scripts, forms,
+                   navigation) with its own CSP - remote images / CSS of the spam are not loaded,
+                   so the sender does not learn the message was opened. #}
+                <iframe sandbox="" referrerpolicy="no-referrer" title="Treść wiadomości" srcdoc="{{ preview.document|e('html_attr') }}" style="width:100%; min-height:420px; border:0; background:#fff;"></iframe>
+                <p class="help-block small" style="margin-bottom:0;">Obrazki z internetu i skrypty są zablokowane - nadawca nie dowie się, że wiadomość została otwarta.</p>
+            {% else %}
+                <div class="alert alert-warning" style="margin:0;">{{ preview.message }}</div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
     <div class="panel panel-default">
         <div class="panel-heading">
             <span class="glyphicon glyphicon-inbox"></span> {{ mailbox.label }}
@@ -65,7 +92,8 @@
             <tbody>
             {% for item in mailbox.items %}
                 {% set sender_domain = item.sender_domain|default('') %}
-                <tr>
+                {% set previewed = preview and preview.id == item.id %}
+                <tr{% if previewed %} class="info"{% endif %}>
                     <td class="pp-cell-nowrap">{{ item.date ? item.date|date('Y-m-d H:i') : '—' }}</td>
                     <td class="pp-cell-wrap">{% if item.from_name %}{{ item.from_name }}<br>{% endif %}<small>{{ item.from }}</small>
                         {% if sender_domain %}<br><button type="button" class="btn btn-link btn-xs pp-pick-domain" style="padding:0" data-domain="*.{{ sender_domain }}" data-target="pp-domain-{{ loop.parent.loop.index }}" title="Wstaw *.{{ sender_domain }} do „Przywróć z domeny”">domena {{ sender_domain }}</button>{% endif %}</td>
@@ -77,6 +105,9 @@
                     </td>
                     <td class="pp-spam-actions">
                         <form method="post" action="{{ path('antispam_my_spam_action') }}">
+                            <a href="{{ path('antispam_my_spam', {mailbox: mailbox.key, msg: item.id} + (item.uidvalidity is not null ? {uidvalidity: item.uidvalidity} : {})) }}#podglad" class="btn btn-xs btn-default" title="Pokaż treść wiadomości (bezpiecznie, bez obrazków z internetu)"{% if previewed %} aria-current="true"{% endif %}>
+                                <span class="glyphicon glyphicon-eye-open" aria-hidden="true"></span> Podgląd
+                            </a>
                             <input type="hidden" name="_token" value="{{ token }}">
                             <input type="hidden" name="mailbox" value="{{ mailbox.key }}">
                             <input type="hidden" name="id" value="{{ item.id }}">

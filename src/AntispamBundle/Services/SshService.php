@@ -46,6 +46,7 @@ class SshService
         'quarantine-purge' => 600,
         'spam-list' => 180,
         'spam-release' => 180,
+        'spam-show' => 60,
     ];
 
     /** Directory under which every account's SSH private key must live. */
@@ -589,6 +590,12 @@ class SshService
             $args .= ' --whitelist';
         }
         return $this->runAgent($account, 'spam-release', $args);
+    }
+
+    /** Source of one .SPAM message for the preview (agent 3.12+): ['success', 'raw' (base64), 'size', 'truncated']. */
+    public function spamShow(Account $account, string $id)
+    {
+        return $this->runAgent($account, 'spam-show', $this->maildirArg($account) . ' --id=' . escapeshellarg($id));
     }
 
     /**

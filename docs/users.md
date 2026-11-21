@@ -198,7 +198,7 @@ firma.pl* link that fills the form with `*.firma.pl`. Audited as `spam.domain_re
 - Audited as `spam.release` / `spam.whitelist` (`details`: `source: my`, `mailbox_id`, `ok`).
 - SSH accounts need agent **3.1** (redeploy: Konta → Wdróż); with an older agent the page
   shows an error for that mailbox only.
-- The admin page **Skrzynki → Folder spamu** (legacy mailbox) is unchanged.
+- **Podgląd** shows the message body (read only, sandboxed iframe without remote images or scripts, attachments listed by name); SSH mailboxes need agent 3.12 (`spam-show`). The old admin page *Skrzynki → Folder spamu* (legacy mailbox only) was removed; `/spambox/index` redirects here.
 
 ## Two-factor authentication (2FA)
 

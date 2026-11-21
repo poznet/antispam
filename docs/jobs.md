@@ -38,7 +38,7 @@ Still synchronous, on purpose: **Test** of an account (short timeouts: IMAP
 open 10 s / read 20 s, SSH 15 s connect + 20 s per command), the IMAP/TLS check
 of the account form, releasing / deleting **one** quarantined or spam message,
 forwarding **one** phishing report, the ClamAV and alert tests. Listing pages
-(Folder spamu, Kwarantanna, `/my/quarantine`) read the mailboxes with their
+(Spam w skrzynkach, Kwarantanna, `/my/quarantine`) read the mailboxes with their
 own limits and timeouts.
 
 ## Dedupe

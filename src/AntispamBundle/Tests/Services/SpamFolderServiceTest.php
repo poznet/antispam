@@ -235,6 +235,38 @@ class SpamFolderServiceTest extends TestCase
         $this->assertSame([0, 1], [$r['released'], $r['failed']]);
     }
 
+    public function testImapPreviewParsesTheSourceAndRefusesAStaleUidValidity()
+    {
+        $service = $this->service();
+        $this->uidValidity(42);
+        $msg = $this->createMock(MessageInterface::class);
+        $msg->method('getRawMessage')->willReturn("From: CSP <csp@ab.pl>\r\nSubject: [SPAM] Oferta\r\nDate: Mon, 2 Nov 2026 10:00:00 +0000\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>Witam</p>");
+        $this->spamFolder->method('getMessage')->with(3)->willReturn($msg);
+        $msg->expects($this->never())->method('move');
+
+        $p = $service->preview('imap-5', '3', 42);
+        $this->assertTrue($p['success']);
+        $this->assertSame('[SPAM] Oferta', $p['subject']);
+        $this->assertSame('CSP <csp@ab.pl>', $p['from']);
+        $this->assertStringContainsString('<p>Witam</p>', $p['html']);
+        $this->assertSame('2026-11-02', $p['date']->format('Y-m-d'));
+        $this->assertFalse($service->preview('imap-5', '3', 41)['success'], 'stale UIDVALIDITY');
+        $this->assertFalse($service->preview('imap-5', 'x')['success']);
+        $this->assertFalse($service->preview('imap-99', '3')['success']);
+    }
+
+    public function testSshPreviewUsesTheAgentAndExplainsAnOldAgent()
+    {
+        $service = $this->service();
+        $this->ssh->method('spamShow')->willReturnOnConsecutiveCalls(
+            ['success' => true, 'raw' => base64_encode("From: a@ab.pl\nSubject: Hej\n\ntekst"), 'truncated' => true],
+            ['success' => false, 'error' => 'Agent na serwerze nie obsługuje polecenia "spam-show" (starsza wersja)'],
+        );
+        $p = $service->preview('ssh-7', '1.M1.h');
+        $this->assertSame(['Hej', "tekst", true], [$p['subject'], trim($p['text']), $p['truncated']]);
+        $this->assertStringContainsString('3.12', $service->preview('ssh-7', '1.M1.h')['message']);
+    }
+
     public function testImapReleaseRefusesAStaleUidValidityAndBadIds()
     {
         $service = $this->service();

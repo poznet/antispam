@@ -18,8 +18,17 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 
 ## [Unreleased]
 
+### Removed
+
+- Admin page **Folder spamu** (`/spambox/index`, legacy single mailbox only) and
+  its `/spambox/restore` action: replaced by *Spam w skrzynkach* (every mailbox,
+  preview, release without the SPAM tag); the old URL redirects there.
+
 ### Added
 
+- **Podgląd** on the SPAM page (*Spam w skrzynkach* / *Mój spam*): the body of
+  a SPAM message, read only, in a sandboxed iframe without remote images or
+  scripts, attachments listed by name. Agent 3.12 `spam-show` for SSH mailboxes.
 - **Spam w skrzynkach** (admin menu): the SPAM folder of every mailbox on
   `/my/spam`, one mailbox at a time with the mailbox list on the side
   (`?mailbox=`); the same for users with several mailboxes.

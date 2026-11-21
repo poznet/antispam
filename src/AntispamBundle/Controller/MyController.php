@@ -340,7 +340,20 @@ class MyController extends AbstractController
             $mailboxes[] = $mailbox + ['items' => $items, 'total' => $total, 'error' => $error];
         }
 
+        // ?msg=<id>[&uidvalidity=N]: preview of one message of the selected mailbox.
+        $preview = null;
+        $msgId = (string)($request?->query->get('msg') ?? '');
+        if ($selected !== '' && $msgId !== '') {
+            $uidValidity = $request->query->get('uidvalidity');
+            $preview = $this->spam->preview($selected, $msgId, is_numeric($uidValidity) ? (int)$uidValidity : null);
+            $preview['id'] = $msgId;
+            if ($preview['success']) {
+                $preview['document'] = SpamboxController::previewDocument($preview['html'], $preview['text']);
+            }
+        }
+
         return [
+            'preview' => $preview,
             'mailboxes' => $mailboxes, 'limit' => SpamFolderService::DEFAULT_LIMIT,
             'all_mailboxes' => array_map(fn ($m) => ['key' => $m['key'], 'label' => $m['label']], $all),
             'selected' => $selected, 'admin' => $this->access->isAdmin($this->getUser()),

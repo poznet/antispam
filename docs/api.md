@@ -29,7 +29,7 @@ a foreign mailbox key gives 403, see [users.md](users.md).
 | POST | `/my/quarantine/purge` | Bulk permanent delete: `mailbox` (must be assigned, else 403), `mode` (`high_risk` / `all`), optional `shown` (count named in the confirmation, display only); CSRF token `my_quarantine_purge`. Queues a `quarantine.purge` job → `/my/jobs/{id}` ([spam-handling.md](spam-handling.md#bulk-deletion)) |
 | GET | `/my/jobs/{id}` | Page of an own quarantine purge job (status, counts); 404 for any other job |
 | GET | `/my/jobs/{id}/status` | Its JSON status (same fields as `/jobs/{id}/status`), `Cache-Control: no-store` |
-| GET | `/my/spam` | Newest 100 messages of the SPAM folder of each own mailbox (IMAP account folder / agent `spam-list`) |
+| GET | `/my/spam` | Newest 100 messages of the SPAM folder of one own mailbox (`?mailbox=<key>`, default the first; IMAP account folder / agent `spam-list`). `?msg=<id>[&uidvalidity=N]` adds the preview of that message: read only (IMAP raw source / agent 3.12 `spam-show`, first 2 MB), body in a `sandbox=""` iframe with its own CSP (`SpamboxController::PREVIEW_CSP`, no remote images / CSS) |
 | POST | `/my/spam/action` | `mailbox` (`imap-<id>` / `ssh-<id>`, must be assigned), `id`, `action` (`release` / `whitelist` = release + exact e-mail whitelist rule), optional `uidvalidity` (IMAP); CSRF token `my_spam_action`. `whitelist` is refused for high-risk / unscored / unlisted messages |
 | GET | `/my/scorelog` | Own score log (same template and filters as `/spambox/scorelog`; `account` is limited to the user's mailboxes) |
 | GET | `/my/rules` | Own sender rules (4 lists) of the user's mailboxes |
@@ -81,8 +81,7 @@ a foreign mailbox key gives 403, see [users.md](users.md).
 
 | Method | URL | Description |
 |--------|-----|-------------|
-| GET | `/spambox/index` | First 20 spam messages; `?msg=<number>` picks the previewed one. The body is shown in a sandboxed iframe with its own CSP (no remote images / CSS) |
-| POST | `/spambox/restore/{folder}/{id}` | Move a message from `SPAM` / `QUARANTINE` back to INBOX (CSRF token `spambox_restore`) |
+| GET | `/spambox/index` | Old single-mailbox "Folder spamu" page: 301 redirect to `/my/spam` |
 | GET | `/spambox/quarantine` | Quarantine of every mailbox (legacy IMAP `QUARANTINE`, each IMAP account, each SSH account with a deployed agent) and the last 30 days of `quarantine` decisions from the score log (what the dashboard tile counts) |
 | POST | `/spambox/quarantine/action` | `mailbox` (`imap` / `imap-<id>` / `ssh-<id>`), `id`, `action` (`release` / `whitelist` / `delete`); CSRF token `quarantine_action` |
 | POST | `/spambox/quarantine/purge` | Bulk permanent delete of one mailbox's quarantine: `mailbox` (`imap` / `imap-<id>` / `ssh-<id>`), `mode` (`high_risk` / `all`), optional `shown`; CSRF token `quarantine_purge`. Queues a `quarantine.purge` job → `/jobs/{id}` |

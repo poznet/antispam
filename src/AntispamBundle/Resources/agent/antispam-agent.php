@@ -44,7 +44,7 @@
  * PHP warnings never reach STDOUT; they are collected into "warnings".
  */
 
-const AGENT_VERSION = '3.11';
+const AGENT_VERSION = '3.12';
 // Complex rules (complex*() functions below)
 const COMPLEX_MAX_BODY = 262144;
 const COMPLEX_BACKTRACK_LIMIT = 100000;
@@ -189,6 +189,9 @@ try {
         case 'spam-release':
             agentPrint(spamRelease($maildirPath, $dbPath, $options));
             break;
+        case 'spam-show':
+            agentPrint(spamShow($maildirPath, $options));
+            break;
         case 'stats':
             agentPrint(agentStats($dbPath, $options));
             break;
@@ -214,6 +217,7 @@ try {
             echo "  php antispam-agent.php quarantine-to-spam --id=ID [--maildir=path] [--account=ID] [--db=path]\n";
             echo "  php antispam-agent.php spam-list [--maildir=path] [--account=ID] [--db=path] [--limit=N]\n";
             echo "  php antispam-agent.php spam-release --id=ID|--ids=ID1/ID2 [--whitelist] [--maildir=path] [--account=ID] [--db=path]\n";
+            echo "  php antispam-agent.php spam-show --id=ID [--maildir=path]\n";
             echo "  php antispam-agent.php stats [--days=30] [--account=ID] [--db=path]\n";
             break;
     }
@@ -3565,6 +3569,30 @@ function spamList($maildirPath, $dbPath, array $options)
     return $out;
 }
 
+
+/**
+ * Source of one .SPAM message for the panel preview (3.12): base64 of the
+ * first 2 MB. Read only - the file, its flags and mtime
+ * are not touched.
+ */
+function spamShow($maildirPath, array $options)
+{
+    $id = $options['id'] ?? '';
+    if (!validQuarantineId($id)) {
+        return ['success' => false, 'error' => 'Invalid id'];
+    }
+    $found = findQuarantineFile($maildirPath, $id, '.SPAM');
+    if (!$found) {
+        return ['success' => false, 'error' => 'Message not found in the SPAM folder (already released or deleted?)'];
+    }
+    $max = 2097152; // same as SpamFolderService::PREVIEW_MAX_BYTES
+    $size = (int)@filesize($found['path']);
+    $raw = @file_get_contents($found['path'], false, null, 0, $max);
+    if (!is_string($raw)) {
+        return ['success' => false, 'error' => 'Could not read the message'];
+    }
+    return ['success' => true, 'id' => $id, 'size' => $size, 'truncated' => $size > strlen($raw), 'raw' => base64_encode($raw)];
+}
 
 /** Move a message from .SPAM back to INBOX and mark it checked (it is not filtered again). */
 function spamRelease($maildirPath, $dbPath, array $options)

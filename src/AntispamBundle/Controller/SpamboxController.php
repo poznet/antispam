@@ -5,10 +5,7 @@ namespace AntispamBundle\Controller;
 use AntispamBundle\Entity\BackgroundJob;
 use AntispamBundle\Entity\PluginReport;
 use AntispamBundle\Entity\SpamScoreLog;
-use AntispamBundle\Services\ConnectionService;
-use AntispamBundle\Services\InboxService;
 use AntispamBundle\Services\QuarantineDigestService;
-use AntispamBundle\Services\MessageService;
 use AntispamBundle\Services\DeferredRetroactivePass;
 use AntispamBundle\Services\QuarantinePurge;
 use AntispamBundle\Services\QuarantineService;
@@ -36,18 +33,14 @@ class SpamboxController extends AbstractController
 
     public function __construct(
         private EntityManagerInterface $em,
-        private InboxService $inbox,
-        private ConnectionService $connection,
         private QuarantineService $quarantine,
-        private MessageService $messages,
-        private ?\AntispamBundle\Services\Bayes\BayesService $bayes = null,
         private ?QuarantinePurge $purger = null,
         private ?DeferredRetroactivePass $retroactive = null,
     ) {
     }
 
     /**
-     * Policy of the spam preview document (Spambox/index.html.twig iframe).
+     * Policy of the spam preview document (My/spam.html.twig iframe).
      * The srcdoc iframe also inherits the panel's CSP; this meta tag keeps
      * remote images / CSS / fonts of the spam from loading (tracking pixels
      * would reveal the admin's IP and that the message was opened) even if
@@ -55,24 +48,11 @@ class SpamboxController extends AbstractController
      */
     public const PREVIEW_CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:";
 
+    /** The old single-mailbox "Folder spamu" page: replaced by "Spam w skrzynkach" (/my/spam, every mailbox + preview). */
     #[Route('/index', name: 'antispam_spambox_index', methods: ['GET'])]
-    #[Template('@Antispam/Spambox/index.html.twig')]
-    public function indexAction(Request $request)
+    public function indexAction()
     {
-        $messages = $this->loadFolder($this->legacyFolderName(true));
-        // ?msg=<number> picks the previewed message; default: the first one.
-        $selected = $messages[0] ?? null;
-        foreach ($messages as $msg) {
-            if ((string)$msg['id'] === (string)$request->query->get('msg')) {
-                $selected = $msg;
-            }
-        }
-
-        return [
-            'messages' => $messages,
-            'selected' => $selected,
-            'preview' => $selected ? self::previewDocument($selected['html'], $selected['text']) : null,
-        ];
+        return $this->redirectToRoute('antispam_my_spam', [], 301);
     }
 
     /**
@@ -284,44 +264,6 @@ class SpamboxController extends AbstractController
         return is_numeric($shown) ? max(0, (int)$shown) : null;
     }
 
-    /** Move a message from SPAM or QUARANTINE back to INBOX. */
-    #[Route('/restore/{folder}/{id}', name: 'antispam_spambox_restore', methods: ['POST'], requirements: ['id' => '\d+'])]
-    public function restoreAction($folder, $id, Request $request)
-    {
-        if (!$this->isCsrfTokenValid('spambox_restore', (string)$request->request->get('_token'))) {
-            $this->addFlash('danger', 'Nieprawidłowy token formularza, spróbuj ponownie');
-            return $this->redirectToRoute('antispam_spambox_index');
-        }
-        $allowed = [
-            $this->legacyFolderName(true),
-            $this->legacyFolderName(false),
-        ];
-        if (!in_array($folder, $allowed, true)) {
-            $this->addFlash('danger', 'Nieprawidłowy folder');
-            return $this->redirectToRoute('antispam_spambox_index');
-        }
-
-        try {
-            $messages = $this->inbox->getInbox($folder);
-            $msg = $this->inbox->getMessage((int)$id);
-            // Restored = "not spam" for the Bayes classifier (read before the move).
-            $this->bayes?->learnImap($msg, 'ham', null, 'restore');
-            // Restored mail must not be filtered again on the next scan.
-            $this->messages->setAsChecked($msg);
-            $inboxMailbox = $this->connection->getConnection()->getMailbox('INBOX');
-            $msg->move($inboxMailbox);
-            $this->inbox->expunge();
-            $this->addFlash('success', 'Wiadomość przywrócona do INBOX');
-            $this->audit('spambox.restore', targetType: 'message', targetId: $id, mailbox: $this->auditLogger()?->mailboxForKey('imap'), details: ['folder' => $folder]);
-        } catch (\Throwable $e) {
-            $this->addFlash('danger', 'Przywracanie nie powiodło się: ' . $e->getMessage());
-        }
-
-        return $this->redirectToRoute($folder === 'QUARANTINE'
-            ? 'antispam_spambox_quarantine'
-            : 'antispam_spambox_index');
-    }
-
     /** Recent score log with reasons - "why did X get flagged". */
     #[Route('/scorelog', name: 'antispam_spambox_scorelog')]
     #[Template('@Antispam/Spambox/scorelog.html.twig')]
@@ -396,47 +338,6 @@ class SpamboxController extends AbstractController
             'verdict' => $verdict,
             'who' => $who,
         ];
-    }
-
-    /** SPAM / QUARANTINE folder name of the legacy mailbox (its own "Spam" when it has one). */
-    private function legacyFolderName(bool $spam): string
-    {
-        try {
-            $connection = $this->inbox->legacyConnection();
-            return $spam ? $this->inbox->getSpamFolderName($connection) : $this->inbox->getQuarantineFolderName($connection);
-        } catch (\Throwable $e) {
-            return $spam ? $this->inbox->getSpamFolderName() : $this->inbox->getQuarantineFolderName();
-        }
-    }
-
-    private function loadFolder($folderName)
-    {
-        $messages = [];
-        try {
-            $list = $this->inbox->getInbox($folderName);
-        } catch (\Throwable $e) {
-            return $messages;
-        }
-
-        $count = 0;
-        foreach ($list as $m) {
-            if ($count++ >= 20) break;
-            try {
-                $msg = $this->inbox->getMessage($m->getNumber());
-                $from = $msg->getFrom();
-                $messages[] = [
-                    'subject' => (string)$msg->getSubject(),
-                    'from' => $from ? $from->getFullAddress() : '',
-                    'html' => $msg->getBodyHtml(),
-                    'text' => $msg->getBodyText(),
-                    'date' => $msg->getDate(),
-                    'id' => $msg->getNumber(),
-                ];
-            } catch (\Throwable $e) {
-                continue;
-            }
-        }
-        return $messages;
     }
 
     /**

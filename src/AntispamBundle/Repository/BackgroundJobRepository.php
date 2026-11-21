@@ -23,14 +23,4 @@ class BackgroundJobRepository extends EntityRepository
         }
         return $qb->getQuery()->getResult();
     }
-
-    public function countActive(): int
-    {
-        return (int)$this->createQueryBuilder('j')
-            ->select('COUNT(j.id)')
-            ->where('j.status IN (:active)')
-            ->setParameter('active', BackgroundJob::ACTIVE_STATUSES)
-            ->getQuery()
-            ->getSingleScalarResult();
-    }
 }

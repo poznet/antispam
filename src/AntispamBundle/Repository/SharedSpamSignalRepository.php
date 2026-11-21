@@ -7,11 +7,6 @@ use Doctrine\ORM\EntityRepository;
 
 class SharedSpamSignalRepository extends EntityRepository
 {
-    public function findOneByTypeHash($type, $hash)
-    {
-        return $this->findOneBy(['type' => $type, 'hash' => $hash]);
-    }
-
     /**
      * Batch lookup for a list of {type, hash} pairs. Returns matching entities
      * indexed by "type:hash" so callers can avoid a query per pair.

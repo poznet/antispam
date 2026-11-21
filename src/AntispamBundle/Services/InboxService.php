@@ -7,7 +7,6 @@ use Ddeboer\Imap\ConnectionInterface;
 class InboxService
 {
     private $connection;
-    private $mailbox;
     private $spamboxname = 'SPAM';
     private $quarantineboxname = 'QUARANTINE';
     /** @var \WeakMap<ConnectionInterface, array<string, string>>|null folder names found per connection */
@@ -19,28 +18,6 @@ class InboxService
     public function __construct(ConnectionService $connection)
     {
         $this->connection = $connection;
-    }
-
-    public function getInbox($name = 'INBOX', $condition = null)
-    {
-        $connection = $this->connection->getConnection();
-        $this->mailbox = $connection->getMailbox($name);
-        $messages = $this->mailbox->getMessages($condition);
-        return $messages;
-    }
-
-    public function getMessage($id)
-    {
-        return $this->mailbox->getMessage($id);
-    }
-
-    /**
-     * Permanently removes messages flagged as deleted - IMAP "move" leaves
-     * the original in the source folder until the mailbox is expunged.
-     */
-    public function expunge()
-    {
-        $this->connection->getConnection()->expunge();
     }
 
     /**
@@ -76,12 +53,6 @@ class InboxService
     public function getQuarantineFolderName(?ConnectionInterface $connection = null)
     {
         return $connection ? $this->resolve(self::KIND_QUARANTINE, $connection) : $this->quarantineboxname;
-    }
-
-    /** The legacy (single, .env configured) mailbox. */
-    public function legacyConnection(): ConnectionInterface
-    {
-        return $this->connection->getConnection();
     }
 
     /**

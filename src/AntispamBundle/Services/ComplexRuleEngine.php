@@ -123,11 +123,6 @@ final class ComplexRuleEngine
         return (self::FIELD_META[$field]['type'] ?? 'text') === 'number';
     }
 
-    public static function isNetworkField(string $field): bool
-    {
-        return !empty(self::FIELD_META[$field]['network']);
-    }
-
     /**
      * Validate and canonicalize a condition tree (array or JSON string).
      * Unknown keys are dropped, values trimmed. Returns null with $errors set
@@ -338,16 +333,6 @@ final class ComplexRuleEngine
             return array_values(array_unique($out));
         }
         return [(string)($tree['field'] ?? '')];
-    }
-
-    public static function needsBody(array $tree): bool
-    {
-        foreach (self::fieldsUsed($tree) as $f) {
-            if (!empty(self::FIELD_META[$f]['body'])) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /** Human-readable form: (Temat zawiera „faktura” I Treść nie zawiera „przelew”). */

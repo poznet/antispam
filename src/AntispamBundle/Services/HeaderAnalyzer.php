@@ -47,11 +47,6 @@ class HeaderAnalyzer
     {
     }
 
-    public function setConfig(array $config)
-    {
-        $this->config = array_merge($this->config, $config);
-    }
-
     /**
      * Analyse an IMAP message. Uses the raw header block: imap_headerinfo()
      * (getHeaders()) has no Authentication-Results, Received-SPF or Received.

@@ -10,3 +10,6 @@
 /build/
 src/AntispamBundle/Resources/applemail/build/
 src/AntispamBundle/Resources/applemail/*.xcodeproj/
+
+# Claude Code local state (settings.local, agent worktrees)
+/.claude/

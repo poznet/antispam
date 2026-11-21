@@ -236,11 +236,6 @@ final class ImapClient
         $this->selected = $mailbox;
     }
 
-    public function getSelected(): ?string
-    {
-        return $this->selected;
-    }
-
     /**
      * UID SEARCH in the selected mailbox. Criteria must be plain ASCII
      * (ddeboer search conditions: ALL, SINCE "d-M-Y", FROM "x", UID n:*).

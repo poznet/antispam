@@ -9,22 +9,20 @@ Symfony-based application for cleaning spam from email accounts via IMAP or SSH+
 - **Symfony 7.4 LTS**, Doctrine ORM 3
 - **MySQL 5.7+** or MariaDB 10.4+
 - PHP extensions: `imap`, `pdo_mysql`, `iconv`, `ctype`, `curl`, `intl`, `zip`
-- IMAP enabled email account
+- Mailboxes: IMAP (password or OAuth2 for Microsoft 365 / Gmail) or SSH access to a Maildir hosting account
 
 ## Features
 
-- **Email filtering** via IMAP protocol
-- **Whitelist/Blacklist management** for domains and email addresses
-- **Automatic spam detection** using configurable rules
-- **Event-driven architecture** for flexible message processing
-- **CLI commands** for batch processing
-- **Web interface** for managing filters
-- **Statistics tracking** with counter for each rule
+- **Many mailboxes**: IMAP accounts (password or OAuth2) and SSH+Maildir accounts with a standalone agent ([docs/accounts.md](docs/accounts.md), [docs/agent.md](docs/agent.md))
+- **Scoring**: whitelists / blacklists (exact, wildcard, regex), DNSBL, header and SPF/DKIM/DMARC checks, optional Bayes classifier, ClamAV / VirusTotal, complex AND / OR / NOT rules ([docs/scoring.md](docs/scoring.md))
+- **SPAM folder and quarantine** per mailbox in the panel: preview, release (without the SPAM tag, original date), release a whole domain, retroactive blacklist, full rescan ([docs/spam-handling.md](docs/spam-handling.md))
+- **Users and roles**: admins and mailbox owners (`/my`), 2FA (TOTP) and YubiKey ([docs/users.md](docs/users.md))
+- **Background jobs, health checks, audit log, backups** ([docs/jobs.md](docs/jobs.md), [docs/health.md](docs/health.md), [docs/audit.md](docs/audit.md), [docs/backup.md](docs/backup.md))
 - **Impersonation / BEC protection**: VIP display-name spoofing, lookalike and homoglyph domains, own-domain spoofing
 - **Link protection**: text/target mismatch, IP and shortened links, punycode, URI block lists, Google Safe Browsing
 - **Attachment policy**: blocked file types (also inside ZIP), double extensions, disguised executables, macros, encrypted archives
 - **Quarantine digest**: periodic e-mail to mailbox owners with signed one-click deliver / always-accept / delete links
-- **Thunderbird plugin** — report spam from the mail client (no login needed) and, when logged in, have new mail checked by antispam on arrival ([docs/thunderbird.md](docs/thunderbird.md))
+- **Mail client plugins**: Thunderbird and Outlook — report spam / phishing, check a message, on-arrival checks ([docs/thunderbird.md](docs/thunderbird.md), [docs/outlook.md](docs/outlook.md))
 
 ## Installation
 
@@ -60,14 +58,19 @@ deploying the app on Coolify or plain docker-compose.
 
 ## Usage
 
-### Check configuration
+Mailboxes are added in the panel (*Konta*). Scans, syncs and the other periodic
+tasks run from the Docker `scheduler` service (`docker/scheduler.sh`); without
+Docker, run them from cron - full list in [docs/commands.md](docs/commands.md).
+
+### Check the install
 ```bash
-php bin/console antispam:check
+php bin/console antispam:doctor
 ```
 
-### Run spam filtering
+### Run spam filtering (every mailbox)
 ```bash
-php bin/console antispam:go
+php bin/console antispam:agent:scan-all
+php bin/console antispam:jobs:work      # background jobs started from the panel
 ```
 
 ### Web interface
@@ -81,11 +84,11 @@ vendor/bin/phpunit
 
 ## Upgrade
 
-Upgrading an existing Symfony 4.4 installation: see [UPGRADE.md](UPGRADE.md).
+Upgrading an old Symfony 4.4 installation: see [UPGRADE.md](UPGRADE.md). Releases and changes: [CHANGELOG.md](CHANGELOG.md).
 
 ## Status
 
-**Pre-alpha stage** - Active development
+In production use, actively developed; the version is `AntispamBundle\AppVersion::VERSION` ([CHANGELOG.md](CHANGELOG.md)).
 
 ## License
 

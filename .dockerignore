@@ -22,3 +22,6 @@ public/bundles
 *.swo
 .DS_Store
 Thumbs.db
+
+# Claude Code local state / agent worktrees
+.claude

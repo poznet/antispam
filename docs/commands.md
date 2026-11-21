@@ -1,9 +1,12 @@
 # CLI Commands
 
-## Existing Commands
+## Legacy mailbox commands
+
+The single mailbox from *Konfiguracja (stara)* only; for everything else use
+`antispam:agent:scan-all` and `antispam:doctor` below.
 
 ### antispam:check
-Validates email account configuration.
+Validates the legacy mailbox configuration.
 ```bash
 php bin/console antispam:check
 ```

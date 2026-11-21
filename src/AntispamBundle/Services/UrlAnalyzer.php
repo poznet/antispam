@@ -243,16 +243,6 @@ class UrlAnalyzer
         return $this->dnsCache[$key];
     }
 
-    public static function resolveA($fqdn)
-    {
-        if (function_exists('dns_get_record')) {
-            $records = @dns_get_record($fqdn, DNS_A);
-            return is_array($records) ? array_filter(array_column($records, 'ip')) : [];
-        }
-        $ip = @gethostbyname($fqdn);
-        return ($ip && $ip !== $fqdn) ? [$ip] : [];
-    }
-
     /**
      * Google Safe Browsing v4 Lookup API.
      *

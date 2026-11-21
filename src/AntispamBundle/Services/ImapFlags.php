@@ -39,11 +39,6 @@ final class ImapFlags
         ];
     }
 
-    public static function defaultPort($encryption)
-    {
-        return $encryption === self::ENCRYPTION_SSL ? 993 : 143;
-    }
-
     /**
      * @param array $options encryption, validate_cert, secure, norsh, debug
      */

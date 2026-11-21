@@ -67,11 +67,6 @@ class YubicoOtpClient
         return self::isOtp($otp) ? substr($otp, 0, -32) : '';
     }
 
-    public static function isValidPublicId(string $id): bool
-    {
-        return preg_match('/^[' . self::MODHEX . ']{2,16}$/', $id) === 1;
-    }
-
     /**
      * Validate an OTP. Returns STATUS_OK or the failure status; never throws.
      *

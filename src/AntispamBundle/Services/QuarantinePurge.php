@@ -26,11 +26,6 @@ class QuarantinePurge
     const SOURCE_PANEL = 'panel';
     const SOURCE_MY = 'my';
 
-    const MODE_LABELS = [
-        QuarantineService::PURGE_HIGH_RISK => 'wiadomości wysokiego ryzyka',
-        QuarantineService::PURGE_ALL => 'wszystkie wiadomości',
-        QuarantineService::PURGE_MIN_SCORE => 'wiadomości z wynikiem od N pkt',
-    ];
     /** Highest threshold accepted from the form ("od N pkt"). */
     const MAX_MIN_SCORE = 1000;
 

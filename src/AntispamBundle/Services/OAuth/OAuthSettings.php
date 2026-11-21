@@ -24,9 +24,6 @@ class OAuthSettings
     public const KEY_GOOGLE_CLIENT_ID = 'oauth.google.client_id';
     public const KEY_GOOGLE_CLIENT_SECRET = 'oauth.google.client_secret';
 
-    /** Secrets of these settings (BackupSecrets, settings form). */
-    public const SECRET_KEYS = [self::KEY_MS_CLIENT_SECRET, self::KEY_GOOGLE_CLIENT_SECRET];
-
     /** `common` = work/school and personal Microsoft accounts. */
     public const DEFAULT_MS_TENANT = 'common';
 

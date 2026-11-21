@@ -254,12 +254,6 @@ class AccountStatsService
         return $cat !== '' ? $cat : 'inne';
     }
 
-    /** Human label of a rule category (score log reason prefix). */
-    public static function categoryLabel(string $cat): string
-    {
-        return self::CATEGORY_LABELS[$cat] ?? $cat;
-    }
-
     public const CATEGORY_LABELS = [
         'blacklist' => 'czarna lista (domena)',
         'email_blacklist' => 'czarna lista (adres)',

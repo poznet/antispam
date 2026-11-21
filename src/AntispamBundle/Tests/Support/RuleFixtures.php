@@ -8,15 +8,13 @@ use AntispamBundle\Entity\DnsblProvider;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Entity\EmailWhitelist;
 use AntispamBundle\Entity\Whitelist;
-use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\RuleOwnership;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\TestCase;
 
 /**
  * In-memory "database" for rule-ownership tests: one InMemoryRepository per
- * entity, an EntityManager mock wired to them (persist() adds), and a
- * ConfigService mock for the legacy mailbox setting.
+ * entity and an EntityManager mock wired to them (persist() adds).
  */
 class RuleFixtures
 {
@@ -25,9 +23,8 @@ class RuleFixtures
     public array $persisted = [];
     public int $flushes = 0;
     public EntityManagerInterface $em;
-    public ConfigService $config;
 
-    public function __construct(TestCase $test, ?string $legacyEmail, array $accountEmails = [])
+    public function __construct(TestCase $test, array $accountEmails = [])
     {
         foreach ([Account::class, DnsblProvider::class, Blacklist::class, Whitelist::class, EmailBlacklist::class, EmailWhitelist::class, \AntispamBundle\Entity\ComplexRule::class] as $class) {
             $this->repos[$class] = new InMemoryRepository();
@@ -47,15 +44,11 @@ class RuleFixtures
             $this->flushes++;
         });
         $this->em = $em;
-
-        $config = (new \ReflectionMethod($test, 'createMock'))->invoke($test, ConfigService::class);
-        $config->method('get')->willReturnCallback(fn($name) => $name === 'email' ? $legacyEmail : null);
-        $this->config = $config;
     }
 
     public function ownership(): RuleOwnership
     {
-        return new RuleOwnership($this->em, $this->config);
+        return new RuleOwnership($this->em);
     }
 
     public function add(object $rule): object

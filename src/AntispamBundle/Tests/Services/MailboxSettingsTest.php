@@ -11,7 +11,6 @@ use AntispamBundle\Services\AgentRulesExporter;
 use AntispamBundle\Services\AttachmentPolicyAnalyzer;
 use AntispamBundle\Services\CertHoleService;
 use AntispamBundle\Services\ConfigService;
-use AntispamBundle\Services\ConnectionService;
 use AntispamBundle\Services\CryptoService;
 use AntispamBundle\Services\DigestTokenService;
 use AntispamBundle\Services\DnsblService;
@@ -107,19 +106,15 @@ class MailboxSettingsTest extends TestCase
         $this->assertSame(['spam_threshold' => 20], $s->overrides);
     }
 
-    public function testSshAccountNeverDeletesSpamAndLegacyMailboxIsGlobal()
+    public function testSshAccountNeverDeletesSpamAndNoAccountMeansGlobal()
     {
-        $this->config->set('delete', true);
-        $this->config->set('email', 'biuro@firma.pl');
-        $this->config->set('digest.imap_recipient', 'it@firma.pl');
-
         $ssh = $this->account('ssh@firma.pl', Account::CONNECTION_SSH)->setDeleteSpam(true);
         $this->assertFalse($this->resolver->forAccount($ssh)->deleteSpam);
 
-        $legacy = $this->resolver->forAccount(null);
-        $this->assertTrue($legacy->deleteSpam);
-        $this->assertSame('it@firma.pl', $legacy->digestRecipient);
-        $this->assertSame([], $legacy->overrides);
+        $global = $this->resolver->forAccount(null);
+        $this->assertFalse($global->deleteSpam);
+        $this->assertNull($global->digestRecipient);
+        $this->assertSame([], $global->overrides);
         $this->assertSame(ScoringService::DEFAULT_SPAM_THRESHOLD, $this->resolver->forEmail('nobody@firma.pl')->spamThreshold);
         $ssh->setSpamThreshold(7);
         $this->em->flush();
@@ -200,7 +195,7 @@ class MailboxSettingsTest extends TestCase
         $seen = [];
 
         $scan = $this->getMockBuilder(ImapScanService::class)
-            ->setConstructorArgs([new EventDispatcher(), $this->createMock(ConnectionService::class), $this->config,
+            ->setConstructorArgs([new EventDispatcher(), $this->config,
                 $this->createMock(CryptoService::class), $this->createMock(MessageService::class), null,
                 sys_get_temp_dir() . '/antispam-locks-' . bin2hex(random_bytes(4)), $this->resolver])
             ->onlyMethods(['connect', 'scan'])
@@ -302,11 +297,10 @@ class MailboxSettingsTest extends TestCase
             $connected[] = $a->getEmail();
             return $connection;
         });
-        $imap->method('isLegacyConfigured')->willReturn(false);
         $inbox = $this->createMock(InboxService::class);
         $inbox->method('getSpamFolder')->willReturn($this->createMock(MailboxInterface::class));
 
-        $service = new RetroactiveSpamService($this->em, $this->scoring, $imap, $this->createMock(ConnectionService::class), $this->config,
+        $service = new RetroactiveSpamService($this->em, $this->scoring, $imap,
             $inbox, $this->createMock(SshService::class), $this->createMock(AgentRulesExporter::class));
         $result = $service->applyRule($rule);
 
@@ -331,7 +325,7 @@ class MailboxSettingsTest extends TestCase
         $exporter->expects($this->once())->method('export')->with('ssh@firma.pl', $ssh)->willReturn([]);
         $imap = $this->createMock(ImapScanService::class);
 
-        $service = new RetroactiveSpamService($this->em, $this->scoring, $imap, $this->createMock(ConnectionService::class), $this->config,
+        $service = new RetroactiveSpamService($this->em, $this->scoring, $imap,
             $this->createMock(InboxService::class), $agent, $exporter);
         $this->assertSame(2, $service->applyRule($rule)['moved']);
     }
@@ -341,7 +335,7 @@ class MailboxSettingsTest extends TestCase
     private function quarantine(): QuarantineService
     {
         $q = $this->getMockBuilder(QuarantineService::class)
-            ->setConstructorArgs([$this->em, $this->config, $this->createMock(SshService::class), $this->createMock(ConnectionService::class),
+            ->setConstructorArgs([$this->em, $this->createMock(SshService::class),
                 $this->createMock(InboxService::class), $this->createMock(MessageService::class), $this->createMock(ImapScanService::class), $this->resolver])
             ->onlyMethods(['listItems'])
             ->getMock();

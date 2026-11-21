@@ -143,7 +143,6 @@ class AccountScanJobTest extends TestCase
         $this->queueScan(); // jan: queued from the panel
 
         $imap = $this->createMock(ImapScanService::class);
-        $imap->method('isLegacyConfigured')->willReturn(false);
         $imap->expects($this->exactly(2))->method('scanAccount')
             ->with($this->isInstanceOf(Account::class), null, $this->isType('float'))
             ->willReturnCallback(function (Account $a) {
@@ -152,7 +151,7 @@ class AccountScanJobTest extends TestCase
                 }
                 return self::pass(3, 0, true, 3);
             });
-        $command = new AgentScanAllCommand($this->db->em, new AccountScanner($this->db->em, $this->createMock(SshService::class), $imap), $imap, $this->db->queue);
+        $command = new AgentScanAllCommand($this->db->em, new AccountScanner($this->db->em, $this->createMock(SshService::class), $imap), $this->db->queue);
         $tester = new CommandTester($command);
 
         $this->assertSame(0, $tester->execute([]), 'a busy mailbox is not an error');
@@ -165,9 +164,8 @@ class AccountScanJobTest extends TestCase
     public function testScheduledScanLeavesTheRestOfAHugeInboxForTheNextRun()
     {
         $imap = $this->createMock(ImapScanService::class);
-        $imap->method('isLegacyConfigured')->willReturn(false);
         $imap->method('scanAccount')->willReturn(self::pass(800, 1700));
-        $tester = new CommandTester(new AgentScanAllCommand($this->db->em, new AccountScanner($this->db->em, $this->createMock(SshService::class), $imap), $imap, $this->db->queue));
+        $tester = new CommandTester(new AgentScanAllCommand($this->db->em, new AccountScanner($this->db->em, $this->createMock(SshService::class), $imap), $this->db->queue));
 
         $this->assertSame(0, $tester->execute(['--max-seconds' => '60']));
         $this->assertStringContainsString('1700 left for the next run (initial scan)', $tester->getDisplay());

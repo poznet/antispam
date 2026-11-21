@@ -1,5 +1,5 @@
 /*
- * IMAP forms (accounts, legacy global config): clickable SSL/TLS options, live c-client flag preview and the
+ * IMAP account forms (add / edit): clickable SSL/TLS options, live c-client flag preview and the
  * connection / certificate check (AccountController::imapCheckAction).
  * Mirrors AntispamBundle\Services\ImapFlags::build().
  */

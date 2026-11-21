@@ -20,8 +20,8 @@ use Doctrine\ORM\EntityManagerInterface;
  * its id, counter and score are unchanged.
  *
  * Side effects of makeGlobal() (not of reassign()): a moved blacklist rule
- * gets the retroactive pass, which for a global rule covers every account and
- * the legacy mailbox (RetroactiveSpamService::applyRule), and every deployed
+ * gets the retroactive pass, which for a global rule covers every account
+ * (RetroactiveSpamService::applyRule), and every deployed
  * SSH agent gets an `account.sync` job - its rule export now includes the new
  * global rules (or drops the merged mailbox copy).
  */

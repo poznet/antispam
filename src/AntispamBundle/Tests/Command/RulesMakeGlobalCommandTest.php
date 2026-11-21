@@ -17,7 +17,7 @@ class RulesMakeGlobalCommandTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->db = new RuleFixtures($this, 'biuro@firma.pl', ['jan@firma.pl']);
+        $this->db = new RuleFixtures($this, ['jan@firma.pl']);
         $this->db->em->method('remove')->willReturnCallback(function ($e) { $this->removed[] = $e; });
     }
 
@@ -28,15 +28,15 @@ class RulesMakeGlobalCommandTest extends TestCase
         return $tester->getDisplay();
     }
 
-    public function testLegacyRulesBecomeGlobalOthersUntouched()
+    public function testOwnerRulesBecomeGlobalOthersUntouched()
     {
-        $legacy = $this->db->add((new Blacklist())->setEmail('biuro@firma.pl')->setHost('spam.example')->setCounter(3));
+        $owned = $this->db->add((new Blacklist())->setEmail('biuro@firma.pl')->setHost('spam.example')->setCounter(3));
         $wl = $this->db->add((new EmailWhitelist())->setEmail('biuro@firma.pl')->setWhitelistemail('szef@firma.pl'));
         $other = $this->db->add((new Blacklist())->setEmail('jan@firma.pl')->setHost('other.example'));
 
-        $out = $this->run_([]);
+        $out = $this->run_(['--owner' => 'biuro@firma.pl']);
 
-        $this->assertSame(RuleOwnership::ALL, $legacy->getEmail());
+        $this->assertSame(RuleOwnership::ALL, $owned->getEmail());
         $this->assertSame(RuleOwnership::ALL, $wl->getEmail());
         $this->assertSame('jan@firma.pl', $other->getEmail());
         $this->assertStringContainsString('2 rule(s) of biuro@firma.pl made global', $out);
@@ -46,21 +46,21 @@ class RulesMakeGlobalCommandTest extends TestCase
     public function testDuplicateOfGlobalRuleIsMergedNotDuplicated()
     {
         $global = $this->db->add((new Blacklist())->setEmail(RuleOwnership::ALL)->setHost('spam.example')->setCounter(2));
-        $legacy = $this->db->add((new Blacklist())->setEmail('biuro@firma.pl')->setHost('spam.example')->setCounter(5));
+        $owned = $this->db->add((new Blacklist())->setEmail('biuro@firma.pl')->setHost('spam.example')->setCounter(5));
 
-        $this->run_([]);
+        $this->run_(['--owner' => 'biuro@firma.pl']);
 
-        $this->assertSame([$legacy], $this->removed);
+        $this->assertSame([$owned], $this->removed);
         $this->assertSame(7, $global->getCounter());
     }
 
     public function testDryRunChangesNothing()
     {
-        $legacy = $this->db->add((new Blacklist())->setEmail('biuro@firma.pl')->setHost('spam.example'));
+        $owned = $this->db->add((new Blacklist())->setEmail('biuro@firma.pl')->setHost('spam.example'));
 
-        $out = $this->run_(['--dry-run' => true]);
+        $out = $this->run_(['--owner' => 'biuro@firma.pl', '--dry-run' => true]);
 
-        $this->assertSame('biuro@firma.pl', $legacy->getEmail());
+        $this->assertSame('biuro@firma.pl', $owned->getEmail());
         $this->assertSame(0, $this->db->flushes);
         $this->assertStringContainsString('[dry run] 1 rule(s)', $out);
     }
@@ -70,5 +70,14 @@ class RulesMakeGlobalCommandTest extends TestCase
         $rule = $this->db->add((new Blacklist())->setEmail('jan@firma.pl')->setHost('x.example'));
         $this->run_(['--owner' => 'jan@firma.pl']);
         $this->assertSame(RuleOwnership::ALL, $rule->getEmail());
+    }
+
+    public function testOwnerIsRequired()
+    {
+        $rule = $this->db->add((new Blacklist())->setEmail('jan@firma.pl')->setHost('x.example'));
+        $this->assertStringContainsString('--owner=address', $this->run_([]));
+        $this->assertStringContainsString('--owner=address', $this->run_(['--owner' => '*']));
+        $this->assertSame('jan@firma.pl', $rule->getEmail());
+        $this->assertSame(0, $this->db->flushes);
     }
 }

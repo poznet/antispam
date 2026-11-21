@@ -22,7 +22,7 @@ class MessageEvent extends Event
     private $checkedbefore = false;
     /** @var array<int, array> scoring reasons collected by the pipeline listeners */
     private $reasons = [];
-    /** IMAP connection the message came from; null = the legacy mailbox from the "E-mail" settings */
+    /** IMAP connection the message came from (null in plugin checks / unit tests) */
     private $connection;
     /** Delete spam instead of moving it to SPAM; null = global "delete" setting */
     private $deleteSpam;

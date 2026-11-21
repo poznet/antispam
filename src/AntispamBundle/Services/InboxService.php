@@ -6,7 +6,6 @@ use Ddeboer\Imap\ConnectionInterface;
 
 class InboxService
 {
-    private $connection;
     private $spamboxname = 'SPAM';
     private $quarantineboxname = 'QUARANTINE';
     /** @var \WeakMap<ConnectionInterface, array<string, string>>|null folder names found per connection */
@@ -15,19 +14,12 @@ class InboxService
     public const KIND_SPAM = 'spam';
     public const KIND_QUARANTINE = 'quarantine';
 
-    public function __construct(ConnectionService $connection)
-    {
-        $this->connection = $connection;
-    }
-
     /**
      * The SPAM folder of a mailbox (created when it has none).
-     *
-     * @param ConnectionInterface|null $connection mailbox to look in; null = the legacy mailbox
      */
-    public function getSpamFolder(?ConnectionInterface $connection = null)
+    public function getSpamFolder(ConnectionInterface $connection)
     {
-        return $this->getOrCreateFolder(self::KIND_SPAM, $connection ?? $this->connection->getConnection());
+        return $this->getOrCreateFolder(self::KIND_SPAM, $connection);
     }
 
     /**
@@ -45,9 +37,9 @@ class InboxService
      * Returns (creating if needed) the quarantine folder used for messages
      * whose score is suspicious but below the spam threshold.
      */
-    public function getQuarantineFolder(?ConnectionInterface $connection = null)
+    public function getQuarantineFolder(ConnectionInterface $connection)
     {
-        return $this->getOrCreateFolder(self::KIND_QUARANTINE, $connection ?? $this->connection->getConnection());
+        return $this->getOrCreateFolder(self::KIND_QUARANTINE, $connection);
     }
 
     public function getQuarantineFolderName(?ConnectionInterface $connection = null)

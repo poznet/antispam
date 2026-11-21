@@ -265,14 +265,10 @@ class AuditLogger
         return ['anonymous', AuditLog::ACTOR_ANONYMOUS, null];
     }
 
-    /** Mailbox address of a quarantine key (imap / imap-<id> / ssh-<id>), null when unknown. */
+    /** Mailbox address of a quarantine key (imap-<id> / ssh-<id>), null when unknown. */
     public function mailboxForKey(string $key): ?string
     {
         try {
-            if ($key === 'imap') {
-                $email = $this->db->fetchOne('SELECT value FROM config WHERE name = ?', ['email']);
-                return $email !== false ? (string)$email : null;
-            }
             if (preg_match('/^(imap|ssh)-(\d+)$/', $key, $m)) {
                 $account = $this->em->getRepository(Account::class)->find((int)$m[2]);
                 return $account ? (string)$account->getEmail() : null;

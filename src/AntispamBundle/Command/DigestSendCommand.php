@@ -33,7 +33,7 @@ class DigestSendCommand extends Command
 
     protected function configure(): void
     {
-        $this->addOption('mailbox', 'm', InputOption::VALUE_REQUIRED, 'Only this mailbox key ("imap" or "ssh-<accountId>")')
+        $this->addOption('mailbox', 'm', InputOption::VALUE_REQUIRED, 'Only this mailbox key ("imap-<accountId>" or "ssh-<accountId>")')
              ->addOption('since', null, InputOption::VALUE_REQUIRED, 'Include messages since this date/time (e.g. "-3 days"); default: since the previous digest')
              ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Build digests and report counts without sending')
              ->addOption('force', 'f', InputOption::VALUE_NONE, 'Send even when the digest is disabled in settings (a mailbox switched off on its own is still skipped)')

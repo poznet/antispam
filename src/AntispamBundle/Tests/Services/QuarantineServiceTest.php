@@ -2,9 +2,8 @@
 
 namespace AntispamBundle\Tests\Services;
 
+use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\SpamScoreLog;
-use AntispamBundle\Services\ConfigService;
-use AntispamBundle\Services\ConnectionService;
 use AntispamBundle\Services\ImapScanService;
 use AntispamBundle\Services\InboxService;
 use AntispamBundle\Services\MessageService;
@@ -28,16 +27,14 @@ use PHPUnit\Framework\TestCase;
 class QuarantineServiceTest extends TestCase
 {
     private EntityManager $em;
-    private ConfigService $config;
-    private ConnectionService $connection;
+    private ImapScanService $imapScan;
 
     protected function setUp(): void
     {
         $config = ORMSetup::createAttributeMetadataConfiguration([dirname(__DIR__, 2) . '/Entity'], true);
         $this->em = new EntityManager(DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]), $config);
         (new SchemaTool($this->em))->createSchema($this->em->getMetadataFactory()->getAllMetadata());
-        $this->config = new ConfigService($this->em);
-        $this->connection = $this->createMock(ConnectionService::class);
+        $this->imapScan = $this->createMock(ImapScanService::class);
     }
 
     private function service(): QuarantineService
@@ -46,12 +43,10 @@ class QuarantineServiceTest extends TestCase
         $inbox->method('getQuarantineFolderName')->willReturn('QUARANTINE');
         return new QuarantineService(
             $this->em,
-            $this->config,
             $this->createMock(SshService::class),
-            $this->connection,
             $inbox,
             $this->createMock(MessageService::class),
-            $this->createMock(ImapScanService::class),
+            $this->imapScan,
         );
     }
 
@@ -128,36 +123,38 @@ class QuarantineServiceTest extends TestCase
         $this->assertTrue(QuarantineDigestService::isHighRisk($items[0]['reasons']));
     }
 
-    private function legacyImapFolder(int $uidValidity): MailboxInterface
+    /** @return array{0: MailboxInterface, 1: string} quarantine folder and the "imap-<id>" key */
+    private function imapAccountFolder(int $uidValidity): array
     {
-        $this->config->set('imap', 'imap.firma.pl');
-        $this->config->set('login', 'jan');
-        $this->config->set('email', 'jan@firma.pl');
+        $account = (new Account())->setName('Jan')->setEmail('jan@firma.pl')->setConnectionType(Account::CONNECTION_IMAP)
+            ->setImapHost('imap.firma.pl')->setImapLogin('jan');
+        $this->em->persist($account);
+        $this->em->flush();
 
         $folder = $this->createMock(MailboxInterface::class);
         $folder->method('getStatus')->willReturn((object)['uidvalidity' => $uidValidity]);
         $conn = $this->createMock(ConnectionInterface::class);
         $conn->method('getMailbox')->willReturn($folder);
-        $this->connection->method('getConnection')->willReturn($conn);
-        return $folder;
+        $this->imapScan->method('connect')->willReturn($conn);
+        return [$folder, 'imap-' . $account->getId()];
     }
 
     public function testDigestActionRefusedAfterUidValidityChange()
     {
-        $folder = $this->legacyImapFolder(222);
+        [$folder, $key] = $this->imapAccountFolder(222);
         $folder->expects($this->never())->method('getMessage');
 
         $service = $this->service();
-        $this->assertFalse($service->release('imap', '42', true, 111)['success']);
-        $this->assertSame(QuarantineService::NOT_FOUND, $service->delete('imap', '42', 111)['message']);
+        $this->assertFalse($service->release($key, '42', true, 111)['success']);
+        $this->assertSame(QuarantineService::NOT_FOUND, $service->delete($key, '42', 111)['message']);
     }
 
     public function testDigestActionProceedsWhenUidValidityMatches()
     {
-        $folder = $this->legacyImapFolder(222);
+        [$folder, $key] = $this->imapAccountFolder(222);
         // Reaching getMessage() means the check passed (the mock message is then not found).
         $folder->expects($this->once())->method('getMessage')->with(42)->willThrowException(new \RuntimeException('gone'));
 
-        $this->service()->delete('imap', '42', 222);
+        $this->service()->delete($key, '42', 222);
     }
 }

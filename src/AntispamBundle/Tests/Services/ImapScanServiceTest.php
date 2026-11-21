@@ -7,7 +7,6 @@ use AntispamBundle\Event\MessageEvent;
 use AntispamBundle\EventListener\Message\CheckIfIsAlreadyChecked;
 use AntispamBundle\EventListener\Message\SetAsChecked;
 use AntispamBundle\Services\ConfigService;
-use AntispamBundle\Services\ConnectionService;
 use AntispamBundle\Services\CryptoService;
 use AntispamBundle\Services\ImapScanService;
 use AntispamBundle\Services\Jobs\JobCancellation;
@@ -86,7 +85,6 @@ class ImapScanServiceTest extends TestCase
 
         return new ImapScanService(
             $dispatcher,
-            $this->createMock(ConnectionService::class),
             $config ?? $this->createMock(ConfigService::class),
             $this->createMock(CryptoService::class),
             $ms,
@@ -279,7 +277,7 @@ class ImapScanServiceTest extends TestCase
         $account->markScanned(['total' => 0]);
 
         $scan = $this->getMockBuilder(ImapScanService::class)
-            ->setConstructorArgs([$this->dispatcherWithCounter(), $this->createMock(ConnectionService::class), $this->createMock(ConfigService::class),
+            ->setConstructorArgs([$this->dispatcherWithCounter(), $this->createMock(ConfigService::class),
                 $this->createMock(CryptoService::class), $this->messages(), null, $this->tmp . '/locks'])
             ->onlyMethods(['connect'])
             ->getMock();
@@ -298,7 +296,7 @@ class ImapScanServiceTest extends TestCase
         $account->setLastScanAt(new \DateTime('2026-10-20 10:00'));
 
         $scan = $this->getMockBuilder(ImapScanService::class)
-            ->setConstructorArgs([$this->dispatcherWithCounter(), $this->createMock(ConnectionService::class), $this->createMock(ConfigService::class),
+            ->setConstructorArgs([$this->dispatcherWithCounter(), $this->createMock(ConfigService::class),
                 $this->createMock(CryptoService::class), $this->messages(), null, $this->tmp . '/locks'])
             ->onlyMethods(['connect'])
             ->getMock();
@@ -318,7 +316,7 @@ class ImapScanServiceTest extends TestCase
         $this->assertTrue(flock($held, LOCK_EX | LOCK_NB));
 
         $scan = $this->getMockBuilder(ImapScanService::class)
-            ->setConstructorArgs([$this->dispatcherWithCounter(), $this->createMock(ConnectionService::class), $this->createMock(ConfigService::class),
+            ->setConstructorArgs([$this->dispatcherWithCounter(), $this->createMock(ConfigService::class),
                 $this->createMock(CryptoService::class), $this->messages(), null, $this->tmp . '/locks'])
             ->onlyMethods(['connect'])
             ->getMock();
@@ -439,7 +437,7 @@ class ImapScanServiceTest extends TestCase
         $this->fill(1, 4);
         $account = (new Account())->setEmail('box@firma.pl');
         $scan = $this->getMockBuilder(ImapScanService::class)
-            ->setConstructorArgs([$this->dispatcherWithCounter(), $this->createMock(ConnectionService::class), $this->createMock(ConfigService::class),
+            ->setConstructorArgs([$this->dispatcherWithCounter(), $this->createMock(ConfigService::class),
                 $this->createMock(CryptoService::class), $this->messages(), null, $this->tmp . '/locks'])
             ->onlyMethods(['connect'])
             ->getMock();
@@ -640,7 +638,7 @@ class ImapScanServiceTest extends TestCase
             public function isRequested(): bool { return ++$this->asked >= 3; }
         };
         $base = $this->service($this->messages());
-        $scan = new ImapScanService((fn () => $this->dispatcher)->call($base), $this->createMock(ConnectionService::class), $this->createMock(ConfigService::class),
+        $scan = new ImapScanService((fn () => $this->dispatcher)->call($base), $this->createMock(ConfigService::class),
             $this->createMock(CryptoService::class), $this->messages(), null, $this->tmp . '/locks', cancellation: $cancel);
 
         $stats = $scan->rescan($this->connection(), 'box@firma.pl', null, null, microtime(true) + 600);

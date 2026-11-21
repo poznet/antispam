@@ -40,11 +40,6 @@
                 </div>
             </div>
             <div class="row" style="margin-top:10px;">
-                <div class="col-sm-6">
-                    <label>Odbiorca dla starej skrzynki IMAP</label>
-                    <input type="email" name="config[imap_recipient]" class="form-control" value="{{ config.imap_recipient }}" placeholder="domyślnie skonfigurowany e-mail IMAP">
-                    <small class="text-muted">Konta SSH zawsze dostają raport na adres konta.</small>
-                </div>
                 <div class="col-sm-3">
                     <label>Ważność linków (dni)</label>
                     <input type="number" name="config[token_ttl_days]" class="form-control" value="{{ config.token_ttl_days }}" min="1" max="30">

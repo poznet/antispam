@@ -6,8 +6,6 @@ use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\Blacklist;
 use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Services\AgentRulesExporter;
-use AntispamBundle\Services\ConfigService;
-use AntispamBundle\Services\ConnectionService;
 use AntispamBundle\Services\ImapScanService;
 use AntispamBundle\Services\InboxService;
 use AntispamBundle\Services\PatternMatcher;
@@ -79,8 +77,7 @@ class RetroactiveSpamServiceTest extends TestCase
         $inbox = $this->createMock(InboxService::class);
         $inbox->method('getSpamFolder')->willReturn($this->createMock(MailboxInterface::class));
 
-        $service = new RetroactiveSpamService($em, $scoring, $imap, $this->createMock(ConnectionService::class),
-            $this->createMock(ConfigService::class), $inbox, $this->createMock(SshService::class), $this->createMock(AgentRulesExporter::class));
+        $service = new RetroactiveSpamService($em, $scoring, $imap, $inbox, $this->createMock(SshService::class), $this->createMock(AgentRulesExporter::class));
         return $service->applyRule($rule);
     }
 

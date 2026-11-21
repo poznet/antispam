@@ -9,8 +9,7 @@ use Symfony\Component\Security\Core\User\UserInterface;
  * Ownership rules: which mailboxes (and so which score-log rows) a panel user
  * may see and act on. Administrators (ROLE_ADMIN, including the legacy
  * environment admin) are unrestricted; a ROLE_USER only gets the Accounts
- * assigned to it. The legacy config-based "imap" mailbox has no Account, so it
- * is admin-only.
+ * assigned to it.
  *
  * Every user-area controller action must go through this class - never trust
  * a mailbox key or e-mail address taken from the request.

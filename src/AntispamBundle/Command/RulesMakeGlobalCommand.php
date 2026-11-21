@@ -15,17 +15,17 @@ use Symfony\Component\Console\Output\OutputInterface;
 /**
  * Turns the white/black list rules of one mailbox into global rules ("Wszystkie
  * skrzynki", owner '*'). Meant for installs upgraded from the single-mailbox
- * days, where every panel rule was owned by the legacy mailbox from the
+ * days, where every panel rule was owned by the old single mailbox of the
  * settings and so never reached the IMAP/SSH accounts.
  *
- *     php bin/console antispam:rules:make-global --dry-run
- *     php bin/console antispam:rules:make-global [--owner=jan@firma.pl]
+ *     php bin/console antispam:rules:make-global --owner=jan@firma.pl --dry-run
+ *     php bin/console antispam:rules:make-global --owner=jan@firma.pl
  *
  * A rule that already exists globally (same value and pattern type) is
  * removed instead of moved; its hit counter is added to the global one
  * (RuleGlobalizer::reassign, shared with the panel action).
  */
-#[AsCommand(name: 'antispam:rules:make-global', description: 'Make the list rules of a mailbox (default: the legacy one) apply to all mailboxes')]
+#[AsCommand(name: 'antispam:rules:make-global', description: 'Make the list rules of a mailbox apply to all mailboxes')]
 class RulesMakeGlobalCommand extends Command
 {
     public function __construct(
@@ -43,15 +43,15 @@ class RulesMakeGlobalCommand extends Command
     protected function configure(): void
     {
         $this
-            ->addOption('owner', null, InputOption::VALUE_REQUIRED, 'Mailbox whose rules become global (default: the mailbox from the "E-mail" settings)')
+            ->addOption('owner', null, InputOption::VALUE_REQUIRED, 'Mailbox whose rules become global')
             ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Only show what would change');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $owner = $input->getOption('owner') ?? $this->ownership->legacyEmail();
+        $owner = $input->getOption('owner');
         if ($owner === null || trim($owner) === '' || RuleOwnership::isGlobal($owner)) {
-            $output->writeln('<error>No mailbox given and no legacy mailbox in the settings - use --owner=address.</error>');
+            $output->writeln('<error>Give the mailbox: --owner=address.</error>');
             return Command::FAILURE;
         }
         $dryRun = (bool)$input->getOption('dry-run');

@@ -10,8 +10,7 @@ use Doctrine\ORM\EntityManagerInterface;
  *
  * Every rule entity (Whitelist, EmailWhitelist, Blacklist, EmailBlacklist)
  * stores its owner in the NOT NULL `email` column:
- *  - a mailbox address (an Account e-mail or the legacy mailbox from
- *    Ustawienia -> E-mail): the rule applies to that mailbox only,
+ *  - a mailbox address (an Account e-mail): the rule applies to that mailbox only,
  *  - RuleOwnership::ALL ('*'): a global rule, applied to every mailbox.
  *
  * '*' is never a valid mailbox address, keeps the column NOT NULL and works
@@ -25,7 +24,6 @@ class RuleOwnership
 
     public function __construct(
         private EntityManagerInterface $em,
-        private ConfigService $config,
     ) {
     }
 
@@ -41,13 +39,6 @@ class RuleOwnership
         return (string)$owner === self::ALL;
     }
 
-    /** Address of the legacy mailbox from the settings, or null when none is set. */
-    public function legacyEmail(): ?string
-    {
-        $email = trim((string)$this->config->get('email'));
-        return $email === '' ? null : $email;
-    }
-
     /**
      * Owners selectable in the panel forms: [owner value => label], global first.
      *
@@ -56,10 +47,6 @@ class RuleOwnership
     public function choices(): array
     {
         $choices = [self::ALL => self::ALL_LABEL];
-        $legacy = $this->legacyEmail();
-        if ($legacy !== null) {
-            $choices[$legacy] = $legacy . ' (skrzynka z ustawień)';
-        }
         $accounts = $this->em->getRepository(Account::class)->findBy([], ['email' => 'ASC']);
         foreach ($accounts as $account) {
             $email = trim((string)$account->getEmail());
@@ -72,10 +59,10 @@ class RuleOwnership
         return $choices;
     }
 
-    /** Preselected owner: the legacy mailbox (what panel rules used to get), otherwise global. */
+    /** Preselected owner: global (every mailbox). */
     public function defaultOwner(): string
     {
-        return $this->legacyEmail() ?? self::ALL;
+        return self::ALL;
     }
 
     /**

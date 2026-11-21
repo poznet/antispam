@@ -14,51 +14,42 @@ class RuleOwnershipTest extends TestCase
     {
         $this->assertSame(['jan@firma.pl', '*'], RuleOwnership::scope('jan@firma.pl'));
         $this->assertSame(['jan@firma.pl', '*'], RuleOwnership::scope(' jan@firma.pl '));
-        // No mailbox address (legacy mailbox without an e-mail set): global rules only.
+        // No mailbox address: global rules only.
         $this->assertSame(['*'], RuleOwnership::scope(null));
         $this->assertSame(['*'], RuleOwnership::scope(''));
         $this->assertSame(['*'], RuleOwnership::scope('*'));
     }
 
-    public function testChoicesListGlobalLegacyAndAccounts()
+    public function testChoicesListGlobalAndAccounts()
     {
-        $db = new RuleFixtures($this, 'biuro@firma.pl', ['jan@firma.pl', 'BIURO@firma.pl', 'anna@firma.pl']);
+        $db = new RuleFixtures($this, ['jan@firma.pl', 'BIURO@firma.pl', 'anna@firma.pl']);
         $choices = $db->ownership()->choices();
 
-        $this->assertSame(['*', 'biuro@firma.pl', 'jan@firma.pl', 'anna@firma.pl'], array_keys($choices));
+        $this->assertSame(['*', 'jan@firma.pl', 'BIURO@firma.pl', 'anna@firma.pl'], array_keys($choices));
         $this->assertSame('Wszystkie skrzynki', $choices['*']);
-        $this->assertStringContainsString('z ustawień', $choices['biuro@firma.pl']);
     }
 
-    public function testDefaultOwnerIsLegacyMailboxThenGlobal()
+    public function testDefaultOwnerIsGlobal()
     {
-        $this->assertSame('biuro@firma.pl', (new RuleFixtures($this, 'biuro@firma.pl'))->ownership()->defaultOwner());
-        $this->assertSame('*', (new RuleFixtures($this, null))->ownership()->defaultOwner());
-        $this->assertSame('*', (new RuleFixtures($this, '  '))->ownership()->defaultOwner());
+        $this->assertSame('*', (new RuleFixtures($this, ['jan@firma.pl']))->ownership()->defaultOwner());
+        $this->assertSame('*', (new RuleFixtures($this))->ownership()->defaultOwner());
     }
 
     public function testResolveAcceptsOnlyKnownOwners()
     {
-        $ownership = (new RuleFixtures($this, 'biuro@firma.pl', ['jan@firma.pl']))->ownership();
+        $ownership = (new RuleFixtures($this, ['jan@firma.pl']))->ownership();
 
         $this->assertSame('jan@firma.pl', $ownership->resolve('jan@firma.pl'));
         $this->assertSame('jan@firma.pl', $ownership->resolve('JAN@firma.pl'), 'canonical spelling of the account');
         $this->assertSame('*', $ownership->resolve('*'));
-        $this->assertSame('biuro@firma.pl', $ownership->resolve(''), 'missing field = legacy default');
-        $this->assertSame('biuro@firma.pl', $ownership->resolve(null));
-        $this->assertNull($ownership->resolve('obcy@example.com'));
-    }
-
-    public function testResolveWithoutLegacyMailboxNeverGivesNull()
-    {
-        $ownership = (new RuleFixtures($this, null))->ownership();
+        $this->assertSame('*', $ownership->resolve(''), 'missing field = global default');
         $this->assertSame('*', $ownership->resolve(null));
-        $this->assertSame('*', $ownership->resolve('*'));
+        $this->assertNull($ownership->resolve('obcy@example.com'));
     }
 
     public function testDuplicateIsPerOwnerAndGlobalCoversEveryMailbox()
     {
-        $db = new RuleFixtures($this, null, ['jan@firma.pl', 'anna@firma.pl']);
+        $db = new RuleFixtures($this, ['jan@firma.pl', 'anna@firma.pl']);
         $db->add((new Blacklist())->setEmail('jan@firma.pl')->setHost('spam.example'));
         $db->add((new Blacklist())->setEmail('*')->setHost('global.example'));
         $ownership = $db->ownership();
@@ -72,7 +63,7 @@ class RuleOwnershipTest extends TestCase
 
     public function testLabelsMarkOwnersThatNoLongerExist()
     {
-        $db = new RuleFixtures($this, null, ['jan@firma.pl']);
+        $db = new RuleFixtures($this, ['jan@firma.pl']);
         $rules = [
             (new EmailWhitelist())->setEmail('jan@firma.pl')->setWhitelistemail('a@b.pl'),
             (new EmailWhitelist())->setEmail('stare@firma.pl')->setWhitelistemail('c@d.pl'),

@@ -1,23 +1,5 @@
 # CLI Commands
 
-## Legacy mailbox commands
-
-The single mailbox from *Konfiguracja (stara)* only; for everything else use
-`antispam:agent:scan-all` and `antispam:doctor` below.
-
-### antispam:check
-Validates the legacy mailbox configuration.
-```bash
-php bin/console antispam:check
-```
-
-### antispam:go
-Runs spam filtering on INBOX of the legacy mailbox from Ustawienia → Konfiguracja (stara)
-(also included in `antispam:agent:scan-all`).
-```bash
-php bin/console antispam:go
-```
-
 ## Agent Commands
 
 ### antispam:agent:deploy
@@ -43,8 +25,8 @@ php bin/console antispam:agent:scan {accountId}
 ```
 
 ### antispam:agent:scan-all
-Scans every mailbox: SSH accounts with a deployed agent, IMAP accounts and the
-legacy mailbox (if configured). Prints per-mailbox counters (new, spam,
+Scans every mailbox: SSH accounts with a deployed agent, and IMAP accounts.
+Prints per-mailbox counters (new, spam,
 quarantine, whitelisted) and per-message errors. Exits non-zero when any
 mailbox failed. Suitable for cron.
 
@@ -92,7 +74,9 @@ Options: `--once`, `--time-limit=N` (stop starting jobs after N s), `--memory-li
 Turns the white/black list rules of one mailbox into global rules
 ("Wszystkie skrzynki", owner `*`, see [scoring.md](scoring.md#rule-ownership)).
 For installs from the single-mailbox days, where every panel rule belonged to
-the legacy mailbox from the "E-mail" settings and never reached IMAP/SSH accounts.
+the old single mailbox and never reached IMAP/SSH accounts. `--owner=` is required
+(the old mailbox is a regular account now, see
+[accounts.md](accounts.md#migrating-the-old-single-mailbox)).
 A rule that already exists globally is removed and its hit counter added to
 the global one (also when two copies of a value are in the batch). Same logic
 as the panel action **Zmień na: Wszystkie skrzynki** (`RuleGlobalizer`,
@@ -100,7 +84,6 @@ as the panel action **Zmień na: Wszystkie skrzynki** (`RuleGlobalizer`,
 entries or jobs: SSH agents need a sync afterwards.
 ```bash
 php bin/console antispam:rules:make-global --dry-run          # preview
-php bin/console antispam:rules:make-global                    # legacy mailbox
 php bin/console antispam:rules:make-global --owner=jan@firma.pl
 php bin/console antispam:agent:sync                           # push to SSH agents
 ```
@@ -141,11 +124,9 @@ php bin/console antispam:purge --dry-run     # only count
 Bootstraps the local Bayes classifier from IMAP folders: the newest `--limit`
 (default 500, max 5000) messages of `--folder` (default `SPAM`) are learned as
 spam, those of `--ham-folder` as ham. Read-only (flags unchanged, nothing
-moved); works while the classifier is switched off. IMAP accounts and the
-legacy mailbox only. See [bayes.md](bayes.md#bootstrap).
+moved); works while the classifier is switched off. IMAP accounts only. See [bayes.md](bayes.md#bootstrap).
 ```bash
 php bin/console antispam:bayes:train --account=jan@firma.pl --folder=SPAM --ham-folder=INBOX --limit=500
-php bin/console antispam:bayes:train --legacy --folder=SPAM --ham-folder=INBOX
 ```
 
 ## Quarantine Digest Commands

@@ -23,6 +23,33 @@ Mail client plugins and the SSH+Maildir agent have their own version numbers
 - Admin page **Folder spamu** (`/spambox/index`, legacy single mailbox only) and
   its `/spambox/restore` action: replaced by *Spam w skrzynkach* (every mailbox,
   preview, release without the SPAM tag); the old URL redirects there.
+- The legacy single mailbox of *Ustawienia → Konfiguracja (stara)* (page
+  `/config/email/`, config keys `email` / `login` / `password` / `imap` /
+  `imap_port` / `imap_flags`, cursor `imap.legacy_cursor`) and everything that
+  existed only for it: commands `antispam:go` and `antispam:check` (use
+  `antispam:agent:scan-all` and `antispam:doctor`), `antispam:bayes:train --legacy`
+  (use `--account=`), `ConnectionService`, `CheckEvent` / `CheckEmailData`, the
+  `imap` mailbox key (quarantine, digest, `/spambox/quarantine` actions, audit,
+  connection check), the digest setting *Odbiorca dla starej skrzynki IMAP*
+  (`digest.imap_recipient`), `RuleOwnership::legacyEmail()` (rule forms preselect
+  *Wszystkie skrzynki*) and the doctor checks of the config password / e-mail.
+- The global *Usuwaj spam na stałe* checkbox (config `delete`) on *Ustawienia →
+  Filtr spamu*: it only affected the old mailbox. Deleting instead of moving spam
+  is now only the per-account *Usuwaj spam* (`delete_spam`); where unknown, spam is
+  moved. The page shows a note pointing to *Konta → Edytuj*.
+
+### Changed
+
+- **Old single mailbox migrated to *Konta*** on upgrade: `antispam:db:upgrade`
+  (every Docker boot) runs `LegacyMailboxImporter`, which turns the mailbox from
+  *Konfiguracja (stara)* into a regular IMAP account (address, encrypted password,
+  login / host / port / TLS flags, the old global *Usuwaj spam na stałe* value as the
+  account's `delete_spam`, the digest recipient as the account's *Odbiorca raportu*,
+  scan cursor and last scan time - no full rescan) and clears the old config keys.
+  An account with the same e-mail already existing only gets the config cleared.
+  Rules, score log and stats stay with the mailbox (keyed by e-mail); old checked
+  markers keep working.
+- `antispam:rules:make-global` now requires `--owner=`.
 
 ### Added
 

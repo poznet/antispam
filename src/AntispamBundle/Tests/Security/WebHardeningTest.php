@@ -132,13 +132,6 @@ class WebHardeningTest extends WebTestCase
         }
     }
 
-    public function testLegacyEmailSettingsRequireToken()
-    {
-        $client = $this->adminClient();
-        $client->request('POST', '/config/email/', ['config' => ['password' => 'x']]);
-        $this->assertSame(403, $client->getResponse()->getStatusCode());
-    }
-
     // ---- every POST form of the touched templates carries a token ----------
 
     public static function templates(): array
@@ -157,8 +150,7 @@ class WebHardeningTest extends WebTestCase
             // Settings + Thunderbird upload + removal of the uploaded package.
             ['@Antispam/Configuration/pluginConfig.html.twig', 3, ['config' => [], 'base_url' => 'https://antispam.test', 'outlook_ok' => true, 'thunderbird_auto_update' => true,
                 'thunderbird_uploaded' => ['version' => '1.2.0', 'signed' => false, 'current' => true, 'uploaded_at' => '2026-10-28T12:00:00+01:00']]],
-            ['@Antispam/Configuration/digestConfig.html.twig', 1, ['config' => [], 'errors' => [], 'mailboxes' => [['key' => 'imap', 'label' => 'IMAP', 'recipient' => 'a@b.pl', 'last_sent' => null]]]],
-            ['@Antispam/Configuration/emailConfig.html.twig', 1, ['config' => ['password_set' => true, 'imap_flags' => '/imap/ssl'], 'imap_tls' => ['encryption' => 'ssl', 'validate_cert' => true]]],
+            ['@Antispam/Configuration/digestConfig.html.twig', 1, ['config' => [], 'errors' => [], 'mailboxes' => [['key' => 'imap-1', 'label' => 'IMAP', 'recipient' => 'a@b.pl', 'last_sent' => null]]]],
             ['@Antispam/Dnsbl/index.html.twig', 4, [
                 'providers' => [new class {
                     public $id = 7;
@@ -226,11 +218,6 @@ class WebHardeningTest extends WebTestCase
         $this->assertStringNotContainsString('server-key-secret', $html);
         $this->assertStringNotContainsString('value="short"', $html);
 
-        $html = $this->render('@Antispam/Configuration/emailConfig.html.twig', ['config' => ['password_set' => true, 'imap_flags' => '/imap/ssl'], 'imap_tls' => ['encryption' => 'ssl', 'validate_cert' => true]]);
-        $this->assertMatchesRegularExpression('~name="config\[password\]" value=""~', $html);
-        $this->assertStringContainsString('zostaw puste, aby nie zmieniać', $html);
-        // The connection check of the legacy page may use the stored password (stored host only).
-        $this->assertStringContainsString('data-account-id="legacy"', $html);
     }
 
     public function testSecretHint()

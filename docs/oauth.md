@@ -100,11 +100,9 @@ over plain text. With an empty host the provider's server is used
 
 ### Not supported for OAuth accounts
 
-- The legacy single mailbox of *Konfiguracja (stara) → E-mail* (password only).
 - *Sprawdź połączenie i certyfikat* on the account form (`/account/imap-check`)
   tests a c-client password login; for OAuth accounts use **Test** in the account
   list (real XOAUTH2 login, folder count).
-- *Przywróć* of the legacy SPAM / QUARANTINE folder on `/spambox` (`spambox.restore`) - it only ever worked on the legacy mailbox.
 - Plugin login with the mail password: OAuth accounts have no IMAP password on
   this server - set a **plugin password** on the account (see below).
 - Google service accounts with domain-wide delegation; Microsoft device-code flow;

@@ -49,7 +49,7 @@ class MyRulesControllerTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->db = new RuleFixtures($this, null);
+        $this->db = new RuleFixtures($this);
         $this->db->repos[Account::class]->add(MailboxAccessTest::account(5, 'jan@firma.pl'));
         $this->db->repos[Account::class]->add(MailboxAccessTest::account(6, 'ola@firma.pl'));
         $this->db->repos[Account::class]->add(MailboxAccessTest::account(7, 'jan@ssh.pl', Account::CONNECTION_SSH));
@@ -227,7 +227,7 @@ class MyRulesControllerTest extends TestCase
         return [
             'other mailbox' => [EmailWhitelist::class, 'email_whitelist', 'ola@firma.pl'],
             'global rule' => [Blacklist::class, 'blacklist', '*'],
-            'legacy mailbox' => [Whitelist::class, 'whitelist', 'stara@firma.pl'],
+            'unknown mailbox' => [Whitelist::class, 'whitelist', 'stara@firma.pl'],
         ];
     }
 

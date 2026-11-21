@@ -7,8 +7,8 @@ final class BackupSecrets
 {
     /**
      * `config` keys holding a secret: exported only with --include-secrets and
-     * then encrypted with the instance key. The legacy mailbox password is
-     * stored encrypted, the API keys in plain text (as the settings forms do).
+     * then encrypted with the instance key. The old single-mailbox password (until
+     * LegacyMailboxImporter moves it to an account) is stored encrypted, the API keys in plain text (as the settings forms do).
      */
     public const CONFIG_KEYS = [
         'password',

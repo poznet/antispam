@@ -6,7 +6,6 @@ use AntispamBundle\Entity\Account;
 use AntispamBundle\Services\AuditLogger;
 use AntispamBundle\Services\Bayes\BayesService;
 use AntispamBundle\Services\Bayes\BayesTokenizer;
-use AntispamBundle\Services\ConnectionService;
 use AntispamBundle\Services\ImapScanService;
 use AntispamBundle\Services\InboxService;
 use Ddeboer\Imap\ConnectionInterface;
@@ -36,7 +35,6 @@ class BayesTrainCommand extends Command
         private BayesService $bayes,
         private EntityManagerInterface $em,
         private ImapScanService $imapScan,
-        private ConnectionService $legacy,
         private ?AuditLogger $audit = null,
     ) {
         parent::__construct();
@@ -44,8 +42,7 @@ class BayesTrainCommand extends Command
 
     protected function configure(): void
     {
-        $this->addOption('account', null, InputOption::VALUE_REQUIRED, 'IMAP account (id or e-mail); omit with --legacy')
-            ->addOption('legacy', null, InputOption::VALUE_NONE, 'Use the mailbox from the "E-mail" settings')
+        $this->addOption('account', null, InputOption::VALUE_REQUIRED, 'IMAP account (id or e-mail)')
             ->addOption('folder', null, InputOption::VALUE_REQUIRED, 'Folder learned as spam (empty = none)', 'SPAM')
             ->addOption('ham-folder', null, InputOption::VALUE_REQUIRED, 'Folder learned as ham (empty = none)', '')
             ->addOption('limit', null, InputOption::VALUE_REQUIRED, 'Newest messages per folder (max ' . self::MAX_LIMIT . ')', '500');
@@ -122,12 +119,9 @@ class BayesTrainCommand extends Command
     /** @return array{0: ConnectionInterface, 1: ?string} connection, mailbox e-mail */
     private function open(InputInterface $input): array
     {
-        if ($input->getOption('legacy')) {
-            return [$this->legacy->getConnection(), null];
-        }
         $ref = trim((string)$input->getOption('account'));
         if ($ref === '') {
-            throw new \InvalidArgumentException('Give --account=<id|e-mail> or --legacy');
+            throw new \InvalidArgumentException('Give --account=<id|e-mail>');
         }
         $repo = $this->em->getRepository(Account::class);
         $account = ctype_digit($ref) ? $repo->find((int)$ref) : $repo->findOneBy(['email' => $ref], ['id' => 'ASC']);

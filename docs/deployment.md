@@ -105,7 +105,7 @@ on **Przegląd → Logi crona** (see [spam-handling.md](spam-handling.md)).
 
 | Variable | Command | Default |
 | --- | --- | --- |
-| `SCAN_INTERVAL` | `antispam:agent:scan-all` (SSH agents, IMAP accounts, legacy mailbox) every N minutes (`0` = off) | `5` |
+| `SCAN_INTERVAL` | `antispam:agent:scan-all` (SSH agents, IMAP accounts) every N minutes (`0` = off) | `5` |
 | `FEED_SYNC_INTERVAL` | `antispam:feed:sync` every N minutes (`0` = off) | `15` |
 | `CERT_SYNC_INTERVAL` | `antispam:cert:sync` (CERT Polska domain list) every N hours at minute :17 (`0` = off) | `6` |
 | `PHISHING_FORWARD_INTERVAL` | `antispam:phishing:forward` (automatic phishing forward to CERT Polska / SOC, see [phishing.md](phishing.md)) every N minutes (`0` = off) | `10` |
@@ -144,7 +144,7 @@ updates signatures on its own). To use it, in the panel open
 The first start downloads the signature database (a few minutes, the
 healthcheck allows 5); until then the test fails. clamd needs about
 1.5-2 GB of RAM. Port 3310 is only reachable inside the stack, so it serves
-the server-side scans (IMAP accounts, legacy mailbox, mail client plugins).
+the server-side scans (IMAP accounts, mail client plugins).
 SSH agents get the same DSN with their settings but cannot reach it from
 another server - the connection fails and the attachment is treated as clean (no virus scan, no penalty).
 For agents, run clamd on the mail server and use a separate install there.
@@ -304,8 +304,7 @@ Before exposing the instance publicly, make sure:
       webhook in *Przegląd → Stan systemu* and click **Wyślij testowy alert**.
       See [health.md](health.md).
 
-IMAP passwords in the `account` table and the password of the legacy
-single-account settings (*Konfiguracja → E-mail*) are encrypted with a key
+IMAP passwords in the `account` table are encrypted with a key
 derived from `APP_SECRET` (values saved before this change stay readable as
 plain text until they are saved again - open the page, type the password once
 and save). Changing `APP_SECRET` makes them unreadable: enter them again.

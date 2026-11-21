@@ -433,10 +433,6 @@ class DoctorService
     {
         $plain = [];
         $broken = [];
-        $legacy = (string)$this->config->get('password');
-        if ($legacy !== '') {
-            $this->classifySecret($legacy, 'legacy mailbox (Konfiguracja (stara))', $plain, $broken);
-        }
         foreach ($this->em->getRepository(Account::class)->findAll() as $a) {
             if ((string)$a->getImapPassword() !== '') {
                 $this->classifySecret((string)$a->getImapPassword(), $a->getEmail(), $plain, $broken);
@@ -448,7 +444,7 @@ class DoctorService
         }
         if ($plain) {
             return DoctorCheck::warn('stored_passwords', 'IMAP password(s) still stored in plain text: ' . self::listSome($plain) . '.',
-                'Open the account (or Konfiguracja (stara)), type the password once and save - it is then stored encrypted.');
+                'Open the account, type the password once and save - it is then stored encrypted.');
         }
 
         return DoctorCheck::ok('stored_passwords', 'All stored IMAP passwords are encrypted.');
@@ -470,10 +466,6 @@ class DoctorService
     private function checkOrphanRules(): DoctorCheck
     {
         $known = [RuleOwnership::ALL => true];
-        $legacy = strtolower(trim((string)$this->config->get('email')));
-        if ($legacy !== '') {
-            $known[$legacy] = true;
-        }
         foreach ($this->em->getRepository(Account::class)->findAll() as $a) {
             $known[strtolower(trim((string)$a->getEmail()))] = true;
         }

@@ -5,7 +5,6 @@ namespace AntispamBundle\Command;
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\BackgroundJob;
 use AntispamBundle\Services\AccountScanner;
-use AntispamBundle\Services\ImapScanService;
 use AntispamBundle\Services\Jobs\JobQueue;
 use AntispamBundle\Services\ScanLockedException;
 use Doctrine\ORM\EntityManagerInterface;
@@ -17,8 +16,8 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 /**
- * Scans every mailbox: SSH accounts through their agent, IMAP accounts and
- * the legacy mailbox from the "E-mail" settings through the IMAP pipeline.
+ * Scans every mailbox: SSH accounts through their agent, IMAP accounts
+ * through the IMAP pipeline.
  *
  * A mailbox that is being scanned right now (a background scan job started
  * from the panel, or the agent's own lock) is skipped, not counted as an
@@ -33,7 +32,6 @@ class AgentScanAllCommand extends Command
     public function __construct(
         private EntityManagerInterface $em,
         private AccountScanner $scanner,
-        private ImapScanService $imapScan,
         private ?JobQueue $jobs = null,
         #[Autowire('%env(default::SCAN_MAX_SECONDS)%')] private ?string $envMaxSeconds = null,
     ) {
@@ -56,14 +54,12 @@ class AgentScanAllCommand extends Command
         $maxSeconds = (int)$maxSeconds;
 
         $accounts = $this->em->getRepository(Account::class)->findAll();
-        $legacy = $this->imapScan->isLegacyConfigured();
-
-        if (empty($accounts) && !$legacy) {
+        if (empty($accounts)) {
             $output->writeln('<comment>No accounts configured</comment>');
             return 0;
         }
 
-        $output->writeln('Scanning ' . (count($accounts) + ($legacy ? 1 : 0)) . ' mailbox(es)...');
+        $output->writeln('Scanning ' . count($accounts) . ' mailbox(es)...');
         $errors = 0;
 
         foreach ($accounts as $account) {
@@ -81,18 +77,6 @@ class AgentScanAllCommand extends Command
                 $result = $this->scanner->scan($account, null, $maxSeconds > 0 ? microtime(true) + $maxSeconds : null);
                 $this->scanner->finish($account, $result);
                 $this->writeResult($output, $result);
-            } catch (ScanLockedException $e) {
-                $output->writeln('<comment>skipped (' . $e->getMessage() . ')</comment>');
-            } catch (\Throwable $e) {
-                $output->writeln('<error>FAILED: ' . $e->getMessage() . '</error>');
-                $errors++;
-            }
-        }
-
-        if ($legacy) {
-            $output->write('IMAP (ustawienia E-mail): ');
-            try {
-                $this->writeResult($output, $this->imapScan->scanLegacy());
             } catch (ScanLockedException $e) {
                 $output->writeln('<comment>skipped (' . $e->getMessage() . ')</comment>');
             } catch (\Throwable $e) {

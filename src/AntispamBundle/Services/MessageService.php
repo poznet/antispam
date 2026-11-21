@@ -39,7 +39,6 @@ class MessageService
     public function __construct(
         #[Autowire('%kernel.project_dir%/var/data/checked')] string $dir,
         private ?EntityManagerInterface $em = null,
-        private ?ConfigService $config = null,
     ) {
         $this->dir = rtrim($dir, '/');
         $this->fs = new Filesystem();
@@ -103,9 +102,6 @@ class MessageService
             $this->em->createQuery('UPDATE ' . Account::class . ' a SET a.imapUidValidity = 0, a.imapLastUid = 0 WHERE a.connectionType = :imap')
                 ->setParameter('imap', Account::CONNECTION_IMAP)
                 ->execute();
-        }
-        if ($this->config) {
-            $this->config->set(ImapScanService::LEGACY_CURSOR_KEY, ImapScanService::encodeCursor(ImapScanService::fullRescanCursor()));
         }
     }
 

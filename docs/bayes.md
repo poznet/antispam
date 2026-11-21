@@ -84,8 +84,7 @@ learned without the unlearn step.
 `bayes.per_mailbox` (*Ucz się także osobno dla każdej skrzynki*): every verdict
 is learned into the global table **and** the mailbox's own table (by account
 id). A mailbox whose own table reached the minimum training is scored with it,
-the others with the global one. The legacy mailbox (Ustawienia → E-mail) only
-has the global table.
+the others with the global one.
 
 ## Privacy
 
@@ -101,8 +100,6 @@ installation (the shared spam feed is separate, see [feed.md](feed.md)).
 ```bash
 # learn the newest 500 messages of SPAM as spam and of INBOX as ham
 php bin/console antispam:bayes:train --account=jan@firma.pl --folder=SPAM --ham-folder=INBOX --limit=500
-# legacy mailbox from Ustawienia → E-mail
-php bin/console antispam:bayes:train --legacy --folder=SPAM --ham-folder=INBOX
 # only one side
 php bin/console antispam:bayes:train --account=3 --folder=Junk
 ```

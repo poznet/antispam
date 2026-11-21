@@ -9,7 +9,6 @@ use AntispamBundle\EventListener\Message\CheckHeaders;
 use AntispamBundle\EventListener\Message\CheckIfIsAlreadyChecked;
 use AntispamBundle\EventListener\Message\CheckUrls;
 use AntispamBundle\EventListener\Message\MoveToSpam;
-use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\DnsblService;
 use AntispamBundle\Services\HeaderAnalyzer;
 use AntispamBundle\Services\InboxService;
@@ -17,6 +16,7 @@ use AntispamBundle\Services\MessageService;
 use AntispamBundle\Services\ScoringService;
 use AntispamBundle\Services\UrlAnalyzer;
 use AntispamBundle\Tests\Support\JobsDatabase;
+use Ddeboer\Imap\ConnectionInterface;
 use Ddeboer\Imap\MailboxInterface;
 use Ddeboer\Imap\MessageInterface;
 use PHPUnit\Framework\TestCase;
@@ -29,7 +29,7 @@ class RescanPipelineTest extends TestCase
 {
     private function rescanEvent(MessageInterface $msg, ?bool $deleteSpam = false): MessageEvent
     {
-        $event = new MessageEvent($msg, 'box@firma.pl', null, $deleteSpam);
+        $event = new MessageEvent($msg, 'box@firma.pl', $this->createMock(ConnectionInterface::class), $deleteSpam);
         $event->setRescan(true);
         return $event;
     }
@@ -60,20 +60,35 @@ class RescanPipelineTest extends TestCase
         $this->assertTrue($normal->isCheckedbefore());
     }
 
-    public function testSpamIsMovedEvenWhenTheGlobalDeleteSettingIsOn()
+    /** ImapScanService::rescan passes deleteSpam = false, also for an account with "delete spam" on. */
+    public function testRescanSpamIsMovedNotDeleted()
     {
-        $config = $this->createMock(ConfigService::class);
-        $config->method('get')->willReturn(true); // `delete` = on
-        $inbox = $this->createMock(InboxService::class);
-        $inbox->method('getSpamFolder')->willReturn($this->createMock(MailboxInterface::class));
-        $msg = $this->createMock(MessageInterface::class);
-        $msg->expects($this->never())->method('delete');
-        $msg->expects($this->once())->method('move');
+        foreach ([false, null] as $deleteSpam) {
+            $inbox = $this->createMock(InboxService::class);
+            $inbox->method('getSpamFolder')->willReturn($this->createMock(MailboxInterface::class));
+            $msg = $this->createMock(MessageInterface::class);
+            $msg->expects($this->never())->method('delete');
+            $msg->expects($this->once())->method('move');
 
-        $event = $this->rescanEvent($msg); // ImapScanService::rescan passes deleteSpam = false
+            $event = $this->rescanEvent($msg, $deleteSpam);
+            $event->setSpam(true);
+            (new MoveToSpam($inbox, $this->createMock(ScoringService::class)))->move($event);
+            $this->assertTrue($event->isDelete(), 'left INBOX');
+        }
+    }
+
+    public function testSpamIsDeletedOnlyWhenTheAccountSaysSo()
+    {
+        $inbox = $this->createMock(InboxService::class);
+        $inbox->expects($this->never())->method('getSpamFolder');
+        $msg = $this->createMock(MessageInterface::class);
+        $msg->expects($this->once())->method('delete');
+        $msg->expects($this->never())->method('move');
+
+        $event = new MessageEvent($msg, 'box@firma.pl', $this->createMock(ConnectionInterface::class), true);
         $event->setSpam(true);
-        (new MoveToSpam($config, $inbox, $this->createMock(ScoringService::class)))->move($event);
-        $this->assertTrue($event->isDelete(), 'left INBOX');
+        (new MoveToSpam($inbox, $this->createMock(ScoringService::class)))->move($event);
+        $this->assertTrue($event->isDelete());
     }
 
     public function testDecisionsAreLoggedAsRescanAndKeptOutOfTheStats()

@@ -4,7 +4,6 @@ namespace AntispamBundle\EventListener\Message;
 
 use AntispamBundle\Entity\SpamScoreLog;
 use AntispamBundle\Event\MessageEvent;
-use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\InboxService;
 use AntispamBundle\Services\ScoringService;
 
@@ -15,13 +14,11 @@ use AntispamBundle\Services\ScoringService;
  */
 class MoveToSpam
 {
-    private $config;
     private $inbox;
     private $scoring;
 
-    public function __construct(ConfigService $config, InboxService $inbox, ScoringService $scoring)
+    public function __construct(InboxService $inbox, ScoringService $scoring)
     {
-        $this->config = $config;
         $this->inbox = $inbox;
         $this->scoring = $scoring;
     }
@@ -32,7 +29,7 @@ class MoveToSpam
             return;
         }
 
-        $delete = $event->getDeleteSpam() ?? (bool)$this->config->get('delete');
+        $delete = (bool)$event->getDeleteSpam(); // the account's own setting; unknown = move, never delete
         try {
             if ($delete) {
                 $event->getMessage()->delete();

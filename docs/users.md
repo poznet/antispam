@@ -53,8 +53,7 @@ every request:
 
 - **Quarantine listing** - `QuarantineService::getMailboxes()` is filtered to the keys
   of the user's accounts. A key must equal exactly `imap-<id>` / `ssh-<id>` of an
-  assigned account (connection type included). The legacy config-based mailbox
-  (`imap`) is admin-only.
+  assigned account (connection type included).
 - **Release / whitelist / delete** - the `mailbox` key from the POST body is checked
   before anything else; a foreign or malformed key gives HTTP 403. The message `id`
   is only resolved inside that mailbox's quarantine, so it cannot reach another
@@ -63,7 +62,7 @@ every request:
   `score_unknown`, see [quarantine-digest.md](quarantine-digest.md)), the same rule
   the buttons follow.
 - **Bulk delete** (`/my/quarantine/purge`, `mailbox` + `mode` `high_risk` / `all`):
-  the key is checked the same way (403 for a foreign / legacy key, nothing queued),
+  the key is checked the same way (403 for a foreign key, nothing queued),
   then a `quarantine.purge` job is queued with the user as requester; the job checks
   ownership again when it runs. The job page `/my/jobs/{id}` (and its status JSON)
   answers 404 for any job that is not a purge of an own mailbox queued by this user
@@ -110,7 +109,7 @@ They are the ordinary rule rows (same tables and consumers: scan, agent, plugins
 owned by the mailbox address - see [scoring.md](scoring.md#rule-ownership).
 
 - **Owner** = one of the e-mails of the user's assigned accounts, never `*` (global
-  rules stay admin-only) and never the legacy mailbox. An administrator opening the
+  rules stay admin-only) An administrator opening the
   page may pick any account e-mail (still not `*`).
 - **Pattern types**: exact and wildcard only (`Services\UserRulePolicy`); regex is
   refused server-side. A wildcard must end in a literal domain (whitelist: a real
@@ -148,8 +147,7 @@ log (IMAP: newest `spam` decision of the same mailbox, sender and subject; agent
 `score_log.file` link).
 
 Administrators open the same page from the admin menu (*Spam w skrzynkach*) and see
-every mailbox (IMAP accounts, SSH accounts with a deployed agent, the legacy IMAP
-mailbox). The page shows **one mailbox at a time** (`?mailbox=<key>`, default the first
+every mailbox (IMAP accounts, SSH accounts with a deployed agent). The page shows **one mailbox at a time** (`?mailbox=<key>`, default the first
 one) with the mailbox list on the side, so nothing has to be scrolled through and only
 one IMAP / SSH call is made. A user's `?mailbox=` key is checked against their own
 mailboxes - a foreign key falls back to the first own one. After an action the page
@@ -198,7 +196,7 @@ firma.pl* link that fills the form with `*.firma.pl`. Audited as `spam.domain_re
 - Audited as `spam.release` / `spam.whitelist` (`details`: `source: my`, `mailbox_id`, `ok`).
 - SSH accounts need agent **3.1** (redeploy: Konta → Wdróż); with an older agent the page
   shows an error for that mailbox only.
-- **Podgląd** shows the message body (read only, sandboxed iframe without remote images or scripts, attachments listed by name); SSH mailboxes need agent 3.12 (`spam-show`). The old admin page *Skrzynki → Folder spamu* (legacy mailbox only) was removed; `/spambox/index` redirects here.
+- **Podgląd** shows the message body (read only, sandboxed iframe without remote images or scripts, attachments listed by name); SSH mailboxes need agent 3.12 (`spam-show`). The old admin page *Skrzynki → Folder spamu* was removed; `/spambox/index` redirects here.
 
 ## Two-factor authentication (2FA)
 

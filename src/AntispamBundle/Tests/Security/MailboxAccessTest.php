@@ -38,7 +38,7 @@ class MailboxAccessTest extends TestCase
         $this->assertFalse($access->canAccessMailboxKey($user, 'ssh-50'));
     }
 
-    public function testLegacyImapMailboxAndMalformedKeysAreAdminOnly()
+    public function testMalformedKeysAreRefusedForUsers()
     {
         $access = new MailboxAccess();
         $user = self::user(User::ROLE_USER, [self::account(5, 'jan@firma.pl')]);
@@ -46,7 +46,7 @@ class MailboxAccessTest extends TestCase
         foreach (['imap', '', 'imap-', 'imap-5x', "imap-5\n", 'imap-05a', '../imap-5', 'IMAP-5', 'imap-5 ', 'foo-5'] as $key) {
             $this->assertFalse($access->canAccessMailboxKey($user, $key), var_export($key, true));
         }
-        $this->assertTrue($access->canAccessMailboxKey(self::user(User::ROLE_ADMIN, []), 'imap'));
+        $this->assertTrue($access->canAccessMailboxKey(self::user(User::ROLE_ADMIN, []), 'imap-99'), 'admin: any mailbox');
     }
 
     public function testUserWithoutAccountsSeesNothing()

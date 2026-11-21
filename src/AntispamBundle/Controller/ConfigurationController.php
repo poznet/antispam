@@ -12,8 +12,6 @@ use AntispamBundle\Services\AuditLogger;
 use AntispamBundle\Services\Bayes\BayesService;
 use AntispamBundle\Services\ClamavService;
 use AntispamBundle\Services\ConfigService;
-use AntispamBundle\Services\CryptoService;
-use AntispamBundle\Services\ImapFlags;
 use AntispamBundle\Services\ImpersonationAnalyzer;
 use AntispamBundle\Services\MailClientPluginBuilder;
 use AntispamBundle\Services\MessageService;
@@ -40,12 +38,6 @@ class ConfigurationController extends AbstractController
     use AuditTrait;
     use JobQueueTrait;
 
-    /**
-     * Secrets are kept in the VARCHAR(255) `config.value` column; an encrypted
-     * value of this length (enc:v1: + base64(nonce + MAC + text)) still fits.
-     */
-    private const MAX_SECRET_LENGTH = 128;
-
     public function __construct(
         private EntityManagerInterface $em,
         private ConfigService $config,
@@ -56,54 +48,10 @@ class ConfigurationController extends AbstractController
         private MessageService $messages,
         private ClamavService $clamav,
         private VirusTotalService $virusTotal,
-        private CryptoService $crypto,
         private ThunderbirdPluginBuilder $thunderbird,
         private ?BayesService $bayes = null,
         private ?\AntispamBundle\Services\Jobs\JobQueue $jobs = null,
     ) {
-    }
-
-    #[Route('/email/', name: 'antispam_account_config')]
-    #[Template('@Antispam/Configuration/emailConfig.html.twig')]
-    public function emailConfigAction(Request $request)
-    {
-        if ($request->isMethod('POST')) {
-            if (!$this->isCsrfTokenValid('email_config', (string)$request->request->get('_token'))) {
-                throw $this->createAccessDeniedException('Nieprawidłowy token CSRF');
-            }
-            $post = $request->request->all('config');
-            $password = (string)($post['password'] ?? '');
-            if (strlen($password) > self::MAX_SECRET_LENGTH) {
-                $this->addFlash('danger', sprintf('Hasło jest za długie (maks. %d znaków).', self::MAX_SECRET_LENGTH));
-                return $this->redirectToRoute('antispam_account_config');
-            }
-            foreach (['email', 'login', 'imap', 'imap_port'] as $key) {
-                $this->config->set($key, $post[$key] ?? '');
-            }
-            // Stored encrypted (CryptoService, key derived from APP_SECRET); an
-            // empty field keeps the current password. Values saved before this
-            // change are plain text and stay readable (decrypt() passes them through).
-            if ($password !== '') {
-                $this->config->set('password', $this->crypto->encrypt($password));
-            }
-            $this->config->set('imap_flags', ImapFlags::fromFormData($post));
-            // `delete` belongs to the spam settings page: this form has no such
-            // checkbox, so saving it used to switch "delete spam" off.
-            $this->audit('settings.save', targetType: 'settings', targetId: 'email', label: 'Konfiguracja (stara)', details: AuditLogger::formFields($post, ['password']));
-            $this->addFlash('success', 'Ustawienia konta zapisane');
-            return $this->redirectToRoute('antispam_account_config');
-        }
-        $config = [
-            'email' => $this->config->get('email'),
-            // Never rendered back into the form, only whether one is stored.
-            'password_set' => (string)$this->config->get('password') !== '',
-            'login' => $this->config->get('login'),
-            'imap' => $this->config->get('imap'),
-            'imap_port' => $this->config->get('imap_port') ?: '993',
-            'imap_flags' => $this->config->get('imap_flags') ?: '/imap/ssl',
-            'delete' => $this->config->get('delete'),
-        ];
-        return ['config' => $config, 'imap_tls' => ImapFlags::parse($config['imap_flags'])];
     }
 
     #[Route('/spam/', name: 'antispam_spam_config')]
@@ -117,7 +65,6 @@ class ConfigurationController extends AbstractController
                 return $this->redirectToRoute('antispam_spam_config');
             }
             $post = $request->request->all('config');
-            $c->set('delete', array_key_exists('delete', $post));
             $c->set('scoring.enabled', array_key_exists('scoring_enabled', $post));
             $c->set('scoring.dnsbl_enabled', array_key_exists('dnsbl_enabled', $post));
             $c->set('scoring.header_check_enabled', array_key_exists('header_check_enabled', $post));
@@ -184,7 +131,6 @@ class ConfigurationController extends AbstractController
         }
 
         $config = [
-            'delete' => $c->get('delete'),
             'scoring_enabled' => $c->get('scoring.enabled'),
             'dnsbl_enabled' => $c->get('scoring.dnsbl_enabled'),
             'header_check_enabled' => $c->get('scoring.header_check_enabled'),
@@ -258,7 +204,6 @@ class ConfigurationController extends AbstractController
             $c->set('digest.base_url', rtrim(trim($post['base_url'] ?? ''), '/'));
             $c->set('digest.from_email', trim($post['from_email'] ?? ''));
             $c->set('digest.from_name', trim($post['from_name'] ?? ''));
-            $c->set('digest.imap_recipient', trim($post['imap_recipient'] ?? ''));
             $c->set('digest.token_ttl_days', max(1, min(30, (int)($post['token_ttl_days'] ?? QuarantineDigestService::DEFAULT_TTL_DAYS))));
             $c->set('digest.max_items', max(1, min(500, (int)($post['max_items'] ?? QuarantineDigestService::DEFAULT_MAX_ITEMS))));
 
@@ -300,7 +245,6 @@ class ConfigurationController extends AbstractController
                 'base_url' => $this->digest->getBaseUrl(),
                 'from_email' => $this->digest->getFromEmail(),
                 'from_name' => $c->get('digest.from_name') ?: '',
-                'imap_recipient' => $c->get('digest.imap_recipient') ?: '',
                 'token_ttl_days' => $this->digest->getTtlDays(),
                 'max_items' => $this->digest->getMaxItems(),
             ],
@@ -310,7 +254,7 @@ class ConfigurationController extends AbstractController
     }
 
     /** Render the digest a mailbox would receive (last 7 days), without sending. */
-    #[Route('/digest/preview/{key}', name: 'antispam_digest_preview', requirements: ['key' => 'imap(-\d+)?|ssh-\d+'])]
+    #[Route('/digest/preview/{key}', name: 'antispam_digest_preview', requirements: ['key' => 'imap-\d+|ssh-\d+'])]
     public function digestPreviewAction($key)
     {
         $mailbox = $this->quarantine->getMailbox($key);

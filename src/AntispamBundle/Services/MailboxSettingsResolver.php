@@ -12,8 +12,7 @@ use Doctrine\ORM\EntityManagerInterface;
  * and what it inherits otherwise. Every consumer asks it: the IMAP pipeline
  * and the plugin check (via within(), which scopes ScoringService), the
  * retroactive blacklist pass, the SSH agent (scan flags and synced settings)
- * and the quarantine digest. The legacy mailbox from the "E-mail" settings
- * has no overrides - global() is its settings.
+ * and the quarantine digest.
  */
 class MailboxSettingsResolver
 {
@@ -39,24 +38,21 @@ class MailboxSettingsResolver
     ) {
     }
 
-    /** Global settings - also the settings of the legacy mailbox. */
+    /** Global settings (what an account without overrides gets). */
     public function global(): MailboxSettings
     {
-        $email = trim((string)$this->config->get('email'));
-        $recipient = trim((string)$this->config->get('digest.imap_recipient')) ?: $email;
-
         return new MailboxSettings(
             $this->scoring->getGlobalSpamThreshold(),
             $this->scoring->getGlobalQuarantineThreshold(),
             $this->scoring->isGlobalScoringEnabled(),
-            self::truthy($this->config->get('delete')),
+            false, // deleting spam is per account only (Account::deleteSpam)
             $this->isGlobalDigestEnabled(),
-            $recipient !== '' ? $recipient : null,
+            null,
             null,
         );
     }
 
-    /** Effective settings of an account (null = global / legacy mailbox). */
+    /** Effective settings of an account (null = the global settings). */
     public function forAccount(?Account $account): MailboxSettings
     {
         if ($account === null) {
@@ -81,7 +77,7 @@ class MailboxSettingsResolver
 
     /**
      * Settings of the account with this e-mail (first by id), or the global
-     * ones when no account has it (e.g. the legacy mailbox).
+     * ones when no account has it (e.g. a plugin check of an unknown mailbox).
      */
     public function forEmail(?string $email): MailboxSettings
     {

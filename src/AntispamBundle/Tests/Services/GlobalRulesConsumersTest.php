@@ -13,7 +13,6 @@ use AntispamBundle\EventListener\Message\CheckEmailBlacklist;
 use AntispamBundle\EventListener\Message\CheckEmailWhitelist;
 use AntispamBundle\EventListener\Message\CheckWhitelist;
 use AntispamBundle\Services\AgentRulesExporter;
-use AntispamBundle\Services\ConnectionService;
 use AntispamBundle\Services\ImapScanService;
 use AntispamBundle\Services\InboxService;
 use AntispamBundle\Services\MessageService;
@@ -34,7 +33,7 @@ class GlobalRulesConsumersTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->db = new RuleFixtures($this, 'biuro@firma.pl', ['jan@firma.pl', 'anna@firma.pl']);
+        $this->db = new RuleFixtures($this, ['jan@firma.pl', 'anna@firma.pl']);
         $this->db->add((new Blacklist())->setEmail('*')->setHost('global-spam.example')->setScore(12));
         $this->db->add((new Blacklist())->setEmail('anna@firma.pl')->setHost('anna-only.example')->setScore(12));
         $this->db->add((new EmailBlacklist())->setEmail('*')->setBlacklistemail('bad@global.example')->setScore(9));
@@ -113,10 +112,8 @@ class GlobalRulesConsumersTest extends TestCase
         $scoring = $this->createMock(ScoringService::class);
         $scoring->method('isScoringEnabled')->willReturn(false);
         $imapScan = $this->createMock(ImapScanService::class);
-        $imapScan->method('isLegacyConfigured')->willReturn(false);
         $service = new RetroactiveSpamService(
             $this->db->em, $scoring, $imapScan,
-            $this->createMock(ConnectionService::class), $this->db->config,
             $this->createMock(InboxService::class), $this->createMock(SshService::class),
             $this->createMock(AgentRulesExporter::class),
         );

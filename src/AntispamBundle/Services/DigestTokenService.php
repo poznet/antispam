@@ -47,7 +47,7 @@ class DigestTokenService
     }
 
     /**
-     * @param string $mailbox mailbox key ("imap", "imap-<accountId>" or "ssh-<accountId>")
+     * @param string $mailbox mailbox key ("imap-<accountId>" or "ssh-<accountId>")
      * @param string $id      message id inside that mailbox's quarantine
      * @param array  $meta    display-only data (sender, subject) shown on the confirmation page,
      *                        plus 'account': the mailbox address the link was issued for, and
@@ -121,10 +121,10 @@ class DigestTokenService
         ];
     }
 
-    /** "imap" (legacy mailbox) or "imap-<accountId>". */
+    /** "imap-<accountId>". */
     public static function isImapMailboxKey($key)
     {
-        return $key === 'imap' || preg_match('/^imap-\d+\z/', (string)$key) === 1;
+        return preg_match('/^imap-\d+\z/', (string)$key) === 1;
     }
 
     private function sign($data)

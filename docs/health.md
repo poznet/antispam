@@ -50,9 +50,6 @@ background job `health.full`; the job page links to the report,
 `/system/status?job={id}`), `/health?token=…&full=1`
 or `antispam:health:check --full`.
 
-The legacy mailbox from *Konfiguracja → E-mail* has no per-account scan time
-and is not checked (the `scan-all` job fails when it cannot be scanned).
-
 ## Endpoints
 
 | Path | Access | Answer |

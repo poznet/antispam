@@ -56,7 +56,6 @@
     {label: 'Logowanie OAuth',      icon: 'lock',         path: 'antispam_oauth_config',         match: ['antispam_oauth_config']},
     {label: 'Użytkownicy',         icon: 'user',         path: 'antispam_user_index',           match: ['antispam_user_index', 'antispam_user_add', 'antispam_user_edit']},
     {label: 'Kopia zapasowa',       icon: 'floppy-disk',  path: 'antispam_backup_index',         match: ['antispam_backup_index', 'antispam_backup_import', 'antispam_backup_apply']},
-    {label: 'Konfiguracja (stara)', icon: 'cog',          path: 'antispam_account_config',       match: ['antispam_account_config']}
 ] %}
 {# ROLE_USER sees only their own mailbox views (access is enforced server-side too). #}
 {% if not is_granted('ROLE_ADMIN') %}

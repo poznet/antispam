@@ -2,7 +2,6 @@
 
 namespace AntispamBundle\Tests\Services;
 
-use AntispamBundle\Services\ConnectionService;
 use AntispamBundle\Services\InboxService;
 use Ddeboer\Imap\ConnectionInterface;
 use Ddeboer\Imap\Exception\CreateMailboxException;
@@ -51,7 +50,7 @@ class InboxServiceFolderTest extends TestCase
     {
         $names = ['INBOX', 'Spam', 'Kosz'];
         $c = $this->connection($names, ['SPAM']);
-        $inbox = new InboxService($this->createMock(ConnectionService::class));
+        $inbox = new InboxService();
         $this->assertSame('Spam', $inbox->getSpamFolderName($c));
         $this->assertSame('Spam', $inbox->getSpamFolder($c)->getName());
         $this->assertSame(['INBOX', 'Spam', 'Kosz'], $names);
@@ -62,7 +61,7 @@ class InboxServiceFolderTest extends TestCase
     {
         $names = ['INBOX'];
         $c = $this->connection($names, ['QUARANTINE']);
-        $inbox = new InboxService($this->createMock(ConnectionService::class));
+        $inbox = new InboxService();
         $this->assertSame('INBOX.QUARANTINE', $inbox->getQuarantineFolder($c)->getName());
         $this->assertSame('INBOX.QUARANTINE', $inbox->getQuarantineFolderName($c));
         $this->assertSame('SPAM', $inbox->getSpamFolder($c)->getName());
@@ -72,7 +71,7 @@ class InboxServiceFolderTest extends TestCase
     {
         $names = ['INBOX'];
         $c = $this->connection($names, ['SPAM', 'INBOX.SPAM']);
-        $inbox = new InboxService($this->createMock(ConnectionService::class));
+        $inbox = new InboxService();
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessageMatches('/nie pozwala utworzyć folderu „SPAM”/');
         $inbox->getSpamFolder($c);

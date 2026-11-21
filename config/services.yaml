@@ -24,16 +24,7 @@ services:
     AntispamBundle\AppVersion:
         arguments: ['%kernel.project_dir%']
 
-    # Config check (`antispam:check`)
-    AntispamBundle\EventListener\CheckConfig\CheckEmailData:
-        tags:
-            - { name: kernel.event_listener, event: antispam.check.config, method: checkEmail }
-            - { name: kernel.event_listener, event: antispam.check.config, method: checkLogin }
-            - { name: kernel.event_listener, event: antispam.check.config, method: checkPass }
-            - { name: kernel.event_listener, event: antispam.check.config, method: checkImap }
-            - { name: kernel.event_listener, event: antispam.check.config, method: tryToConnect, priority: -10 }
-
-    # Message pipeline (`antispam:go`, IMAP account scan).
+    # Message pipeline (IMAP account scan).
     # Priorities: higher = runs first. Whitelist short-circuits; scoring steps
     # accumulate; final decision runs at the tail.
     AntispamBundle\EventListener\Message\CheckIfIsAlreadyChecked:

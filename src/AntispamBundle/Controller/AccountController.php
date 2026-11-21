@@ -222,16 +222,12 @@ class AccountController extends AbstractController
     }
 
     /**
-     * Host and decrypted password stored for an account id, or for `legacy`
-     * (the single mailbox of Konfiguracja → E-mail).
+     * Host and decrypted password stored for an account id.
      *
      * @return array{0: string, 1: string}
      */
     private function storedImapCredentials(string $id): array
     {
-        if ($id === 'legacy') {
-            return [(string)$this->config->get('imap'), (string)$this->crypto->decrypt((string)$this->config->get('password'))];
-        }
         $account = ctype_digit($id) ? $this->em->getRepository(Account::class)->find((int)$id) : null;
         if (!$account) {
             return ['', ''];

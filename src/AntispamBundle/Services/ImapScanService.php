@@ -22,8 +22,7 @@ use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 /**
  * Runs the INBOX of an IMAP mailbox through the `antispam.check.message`
  * pipeline: spam goes to SPAM (or is deleted), suspicious mail to QUARANTINE.
- * Used for both IMAP accounts (Konta) and the legacy mailbox from the
- * "E-mail" settings, by the panel and by `antispam:agent:scan-all`.
+ * Used for the IMAP accounts (Konta), by the panel and by `antispam:agent:scan-all`.
  *
  * INBOX is read incrementally: every mailbox keeps a cursor (UIDVALIDITY +
  * highest UID already processed) and a scan only fetches UIDs above it. How a
@@ -50,8 +49,6 @@ class ImapScanService
     const IMAP_OPEN_TIMEOUT = 20;
     const IMAP_READ_TIMEOUT = 60;
 
-    /** Config key of the legacy mailbox cursor ("uidvalidity:last_uid:unix time"). */
-    const LEGACY_CURSOR_KEY = 'imap.legacy_cursor';
     /** Look-back for a cursor-less pass when the time of the last scan is unknown. */
     const FALLBACK_WINDOW_DAYS = 3;
 
@@ -64,7 +61,6 @@ class ImapScanService
 
     public function __construct(
         private EventDispatcherInterface $dispatcher,
-        private ConnectionService $legacyConnection,
         private ConfigService $config,
         private CryptoService $crypto,
         private MessageService $messages,
@@ -167,11 +163,6 @@ class ImapScanService
         return [$host, $port, $encryption, (bool)$options['validate_cert']];
     }
 
-    public function isLegacyConfigured(): bool
-    {
-        return $this->config->get('imap') && $this->config->get('login');
-    }
-
     /**
      * @param int|null   $maxMessages at most this many messages in this call (null = all)
      * @param float|null $deadline    microtime(true) after which no further message is started
@@ -213,27 +204,8 @@ class ImapScanService
         return 'account-' . strtolower((string)$account->getEmail()) . '-' . $account->getId();
     }
 
-    /** The mailbox from the "E-mail" settings page (`antispam:go`). */
-    public function scanLegacy(): array
-    {
-        $lock = $this->lock('legacy');
-        try {
-            $stored = self::decodeCursor($this->config->get(self::LEGACY_CURSOR_KEY));
-            $scannedBefore = $stored !== null || $this->messages->hasAnyMarkers();
-            $since = null;
-            if ($scannedBefore) {
-                $since = $this->windowStart(isset($stored['scanned_at']) ? (new \DateTimeImmutable())->setTimestamp($stored['scanned_at']) : null);
-            }
-            $stats = $this->scan($this->legacyConnection->getConnection(), (string)$this->config->get('email'), null, false, $stored, $since, $cursor);
-            $this->config->set(self::LEGACY_CURSOR_KEY, self::encodeCursor($cursor));
-            return $stats;
-        } finally {
-            $this->unlock($lock);
-        }
-    }
-
     /**
-     * @param bool|null $deleteSpam null = global "delete" setting
+     * @param bool|null $deleteSpam true = delete spam, false / null = move it to SPAM
      * @param bool $initialScan first scan of a newly connected mailbox (kept out of stats)
      * @param array|null $cursor ['uidvalidity' => int, 'last_uid' => int] from the previous scan
      * @param \DateTimeInterface|null $since used when the cursor cannot be: only mail
@@ -547,7 +519,7 @@ class ImapScanService
         }
     }
 
-    /** "uidvalidity:last_uid:unix time" - the legacy mailbox cursor as stored in the config table. */
+    /** "uidvalidity:last_uid:unix time" (the old config-table cursor format; LegacyMailboxImporter). */
     public static function encodeCursor(?array $cursor)
     {
         if ($cursor === null) {

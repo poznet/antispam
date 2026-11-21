@@ -25,7 +25,7 @@ empty = inherit). The effective value (account override -> global) applies to
 everything that reads a threshold for that mailbox: the IMAP pipeline
 (`classify()`/`decide()`), the header cap below, the CERT default score, the
 plugin `/check` and the SSH agent (scan flags
-and synced settings). The legacy mailbox always uses the global values. See
+and synced settings). See
 [accounts.md](accounts.md#per-mailbox-settings-ustawienia-skrzynki).
 
 ## Scoring signals
@@ -191,8 +191,8 @@ Every white/blacklist rule (`antispam_whitelist`, `antispam_email_whitelist`,
 
 | `email` value | Applies to |
 |---------------|------------|
-| a mailbox address (an account's e-mail, or the legacy mailbox from Ustawienia → E-mail) | that mailbox only |
-| `*` (`RuleOwnership::ALL`, shown as **Wszystkie skrzynki**) | every mailbox: all IMAP and SSH accounts and the legacy mailbox |
+| a mailbox address (an account's e-mail) | that mailbox only |
+| `*` (`RuleOwnership::ALL`, shown as **Wszystkie skrzynki**) | every mailbox: all IMAP and SSH accounts |
 
 `*` was chosen over `NULL` because it keeps the column NOT NULL (no schema
 change), is never a valid address, and works in a plain `IN (...)` lookup.
@@ -206,17 +206,14 @@ the scan listeners (`CheckWhitelist`, `CheckEmailWhitelist`, `CheckBlacklist`,
 `CheckEmailBlacklist`), the plugin's `RawMessageScanner`, the agent rules
 export (`AgentRulesExporter` - the agent gets its account's rules plus the
 global ones) and the retroactive pass (`RetroactiveSpamService`: a global
-blacklist rule is applied to every account and the legacy mailbox, and the
+blacklist rule is applied to every account, and the
 whitelists checked there include the global ones).
 
 Panel forms (**Whitelista / Blacklista domen / e-mail**, **Import / eksport**)
-have a mailbox selector with **Wszystkie skrzynki**, the legacy mailbox (when
-its e-mail is set) and every account e-mail; the legacy mailbox is
-preselected when configured (what panel rules always got), otherwise
-**Wszystkie skrzynki** - so an install without a legacy mailbox can still add
-rules. The submitted owner must be one of those choices. The lists show the
+have a mailbox selector with **Wszystkie skrzynki** (preselected) and every
+account e-mail. The submitted owner must be one of those choices. The lists show the
 owner of every rule and can be filtered by owner (`?owner=`); owners that no
-longer exist (deleted account, changed legacy address) are shown as
+longer exist (deleted account, changed address) are shown as
 *nieaktywna* - such rules apply nowhere, delete and re-add them.
 
 ### Making a rule global
@@ -249,8 +246,8 @@ The logic is `Services\RuleGlobalizer` (shared with `antispam:rules:make-global`
 Side effects (`makeGlobal()`): one audit entry `rule.make_global` per changed
 rule ([audit.md](audit.md)); every **moved** blacklist rule queues its
 retroactive pass (`rule.retroactive`, [spam-handling.md](spam-handling.md#retroactive-blacklist)) -
-for a global rule `RetroactiveSpamService::applyRule()` goes over every account
-and the legacy mailbox; a merged one does not (the global rule already applied
+for a global rule `RetroactiveSpamService::applyRule()` goes over every account;
+a merged one does not (the global rule already applied
 everywhere); every deployed SSH agent gets an `account.sync` job
 (`DeferredAgentSync::deferAll()`), since every agent exports the global rules.
 The console command only reassigns (no per-rule audit, no jobs) and tells you to

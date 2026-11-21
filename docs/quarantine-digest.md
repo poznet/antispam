@@ -30,7 +30,6 @@ recipient clicks link ─► GET  /q/{token}   confirmation page (nothing happen
 
 | Key | Source | Recipient |
 |-----|--------|-----------|
-| `imap` | Legacy IMAP account (Ustawienia → Konfiguracja (stara)), folder `QUARANTINE` | *Recipient for the legacy IMAP mailbox*, or the configured IMAP e-mail |
 | `imap-<id>` | Every IMAP account (Konta), folder `QUARANTINE` | *Odbiorca raportu* of the account, else the account e-mail |
 | `ssh-<id>` | Every SSH account with a deployed agent, `~/Maildir/.QUARANTINE` | *Odbiorca raportu* of the account, else the account e-mail |
 
@@ -103,7 +102,6 @@ quarantine entries therefore never get the whitelist button.
 | Enable quarantine digest | `digest.enabled` | off |
 | Public base URL (links point to `<base>/q/…`) | `digest.base_url` | *(required)* |
 | Sender address / name | `digest.from_email`, `digest.from_name` | *(required)* / "Pancernapanda antispam" |
-| Recipient for the legacy IMAP mailbox | `digest.imap_recipient` | IMAP e-mail |
 | Link validity (days, 1–30) | `digest.token_ttl_days` | 7 |
 | Max messages per digest (1–500) | `digest.max_items` | 50 |
 
@@ -117,7 +115,7 @@ that transport, or the digest itself may be filtered.
 
 ## Per-mailbox settings
 
-Each account (not the legacy mailbox) can override three digest settings on
+Each account can override three digest settings on
 **Konta → Edytuj → Ustawienia skrzynki**; empty = inherit:
 
 | Setting | Column | Inherit = | Effect |

@@ -8,8 +8,8 @@ use AntispamBundle\Entity\SpamScoreLog;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
- * SPAM folder of the mailboxes known to QuarantineService (same keys: "imap"
- * legacy, "imap-<id>", "ssh-<id>") for the user area /my/spam: list the
+ * SPAM folder of the mailboxes known to QuarantineService (same keys:
+ * "imap-<id>", "ssh-<id>") for the user area /my/spam: list the
  * newest messages and release one back to INBOX, optionally whitelisting the
  * sender ("Przywróć i zawsze akceptuj").
  *
@@ -30,7 +30,6 @@ class SpamFolderService
         private QuarantineService $quarantine,
         private SshService $ssh,
         private ImapScanService $imapScan,
-        private ConnectionService $legacyConnection,
         private InboxService $inbox,
         private MessageService $messages,
         private ?Bayes\BayesService $bayes = null,
@@ -444,14 +443,11 @@ class SpamFolderService
 
     private static function isImapKey(string $key): bool
     {
-        return $key === QuarantineService::IMAP_KEY || preg_match('/^imap-\d+\z/', $key) === 1;
+        return preg_match('/^imap-\d+\z/', $key) === 1;
     }
 
     private function imapConnection(string $key)
     {
-        if ($key === QuarantineService::IMAP_KEY) {
-            return $this->legacyConnection->getConnection();
-        }
         if (!isset($this->connections[$key])) {
             $account = $this->em->getRepository(Account::class)->find((int)substr($key, 5));
             if (!$account || !$account->isImap()) {

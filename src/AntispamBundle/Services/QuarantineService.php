@@ -14,17 +14,14 @@ use Doctrine\ORM\EntityManagerInterface;
 /**
  * One API over both quarantine back-ends:
  *
- *   - "imap"        the legacy single IMAP mailbox (QUARANTINE folder)
  *   - "imap-<id>"   an IMAP account (its QUARANTINE folder)
  *   - "ssh-<id>"    an SSH+Maildir account, handled through the agent
  *
  * Used by the quarantine digest and its one-click release / whitelist /
- * delete links. IMAP services are pulled lazily from a service locator
- * because ConnectionService logs in to IMAP as soon as it is built.
+ * delete links.
  */
 class QuarantineService
 {
-    const IMAP_KEY = 'imap';
     const NOT_FOUND = 'Nie znaleziono wiadomości w kwarantannie (została już przywrócona lub usunięta?).';
 
     /**
@@ -49,9 +46,7 @@ class QuarantineService
     const PURGE_EXPUNGE_EVERY = 100;
 
     private $em;
-    private $config;
     private $ssh;
-    private $connection;
     private $inbox;
     private $messages;
     private $imapScan;
@@ -60,9 +55,7 @@ class QuarantineService
 
     public function __construct(
         EntityManagerInterface $em,
-        ConfigService $config,
         SshService $ssh,
-        ConnectionService $connection,
         InboxService $inbox,
         MessageService $messages,
         ImapScanService $imapScan,
@@ -71,9 +64,7 @@ class QuarantineService
     ) {
         $this->imapScan = $imapScan;
         $this->em = $em;
-        $this->config = $config;
         $this->ssh = $ssh;
-        $this->connection = $connection;
         $this->inbox = $inbox;
         $this->messages = $messages;
     }
@@ -90,11 +81,6 @@ class QuarantineService
     public function getMailboxes()
     {
         $out = [];
-        if ($this->config->get('imap') && $this->config->get('login')) {
-            $email = (string)$this->config->get('email');
-            $recipient = trim((string)$this->config->get('digest.imap_recipient')) ?: $email;
-            $out[] = array_replace(['key' => self::IMAP_KEY, 'label' => 'IMAP: ' . ($email ?: $this->config->get('login')), 'account_email' => $email, 'recipient' => $recipient], $this->digestSettings(null));
-        }
         foreach ($this->em->getRepository(Account::class)->findBy(['connectionType' => Account::CONNECTION_IMAP]) as $account) {
             $out[] = array_replace([
                 'key' => 'imap-' . $account->getId(),
@@ -537,15 +523,12 @@ class QuarantineService
 
     private static function isImapKey($key)
     {
-        return $key === self::IMAP_KEY || preg_match('/^imap-\d+\z/', (string)$key);
+        return preg_match('/^imap-\d+\z/', (string)$key) === 1;
     }
 
-    /** Connection of the legacy mailbox or of an IMAP account ("imap-<id>"). */
+    /** Connection of an IMAP account ("imap-<id>"). */
     private function imapConnection($key)
     {
-        if ($key === self::IMAP_KEY) {
-            return $this->connection->getConnection();
-        }
         if (!isset($this->accountConnections[$key])) {
             $account = $this->em->getRepository(Account::class)->find((int)substr((string)$key, 5));
             if (!$account || !$account->isImap()) {

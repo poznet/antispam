@@ -51,7 +51,7 @@ class QuarantinePurgeControllerTest extends TestCase
         $mailboxes = [
             ['key' => 'imap-5', 'label' => 'Jan (jan@firma.pl)', 'account_email' => 'jan@firma.pl'],
             ['key' => 'ssh-6', 'label' => 'Ola (ola@firma.pl)', 'account_email' => 'ola@firma.pl'],
-            ['key' => 'imap', 'label' => 'IMAP: biuro@firma.pl', 'account_email' => 'biuro@firma.pl'],
+            ['key' => 'imap-8', 'label' => 'Biuro (biuro@firma.pl)', 'account_email' => 'biuro@firma.pl'],
         ];
         $this->quarantine->method('getMailboxes')->willReturn($mailboxes);
         $this->quarantine->method('getMailbox')->willReturnCallback(function ($key) use ($mailboxes) {
@@ -196,9 +196,9 @@ class QuarantinePurgeControllerTest extends TestCase
     public function testAdminQueuesAPurgeOfAnyMailbox()
     {
         $controller = $this->spambox();
-        $response = $controller->quarantinePurgeAction(self::post(['mailbox' => 'imap', 'mode' => 'all', 'shown' => '12']));
+        $response = $controller->quarantinePurgeAction(self::post(['mailbox' => 'imap-8', 'mode' => 'all', 'shown' => '12']));
         $this->assertSame('/antispam_job_show/1', $response->getTargetUrl());
-        $this->assertSame('quarantine.purge:imap:all', $this->db->row(1)['active_key']);
+        $this->assertSame('quarantine.purge:imap-8:all', $this->db->row(1)['active_key']);
 
         $response = $controller->quarantinePurgeAction(self::post(['mailbox' => 'imap-77', 'mode' => 'all']));
         $this->assertSame('/antispam_spambox_quarantine', $response->getTargetUrl(), 'unknown mailbox');
@@ -212,7 +212,7 @@ class QuarantinePurgeControllerTest extends TestCase
 
         $this->assertSame('/antispam_job_index/quarantine.purge', $response->getTargetUrl());
         $keys = $this->db->em->getConnection()->fetchFirstColumn('SELECT active_key FROM ' . BackgroundJob::TABLE . ' ORDER BY id');
-        $this->assertSame(['quarantine.purge:imap-5:high_risk', 'quarantine.purge:ssh-6:high_risk', 'quarantine.purge:imap:high_risk'], $keys);
+        $this->assertSame(['quarantine.purge:imap-5:high_risk', 'quarantine.purge:ssh-6:high_risk', 'quarantine.purge:imap-8:high_risk'], $keys);
         $this->assertStringContainsString('dodano do kolejki 3 zadania', $this->session->getFlashBag()->get('success')[0]);
 
         $controller->quarantinePurgeAllAction(self::post([]));

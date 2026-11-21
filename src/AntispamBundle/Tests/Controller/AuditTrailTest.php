@@ -138,7 +138,7 @@ class AuditTrailTest extends TestCase
 
     public function testRuleAddAndDelete()
     {
-        $db = new RuleFixtures($this, 'biuro@firma.pl');
+        $db = new RuleFixtures($this);
         $controller = $this->wire(new WhitelistController($db->em, $db->ownership()));
 
         $controller->addAction($this->post(['host' => 'partner.pl', 'owner' => '*']));
@@ -153,7 +153,7 @@ class AuditTrailTest extends TestCase
 
     public function testRejectedRuleIsNotAudited()
     {
-        $db = new RuleFixtures($this, 'biuro@firma.pl');
+        $db = new RuleFixtures($this);
         $controller = $this->wire(new WhitelistController($db->em, $db->ownership()));
         $controller->addAction($this->post(['host' => 'x.pl', 'owner' => 'nobody@nowhere.pl']));
         $this->assertSame([], $this->audit->entries);
@@ -161,7 +161,7 @@ class AuditTrailTest extends TestCase
 
     public function testBulkImport()
     {
-        $db = new RuleFixtures($this, 'biuro@firma.pl');
+        $db = new RuleFixtures($this);
         $controller = $this->wire(new BulkImportController($db->em, $db->ownership()));
         $controller->importAction($this->post(['owner' => '*', 'entries' => "a.pl\nb.pl\na.pl"]), 'blacklist');
 
@@ -409,13 +409,13 @@ class AuditTrailTest extends TestCase
 
     public function testRulesMakeGlobalCommand()
     {
-        $db = new RuleFixtures($this, 'biuro@firma.pl');
+        $db = new RuleFixtures($this);
         $db->add((new Whitelist())->setEmail('biuro@firma.pl')->setHost('a.pl')->setPatternType('exact'));
         $tester = new CommandTester(new RulesMakeGlobalCommand($db->em, $db->ownership(), $this->audit));
 
-        $tester->execute(['--dry-run' => true]);
+        $tester->execute(['--owner' => 'biuro@firma.pl', '--dry-run' => true]);
         $this->assertSame([], $this->audit->entries, 'a dry run changes nothing');
-        $tester->execute([]);
+        $tester->execute(['--owner' => 'biuro@firma.pl']);
         $this->assertSame(['rules.make_global', 'biuro@firma.pl', 1], [$this->audit->last()['action'], $this->audit->last()['mailbox'], $this->audit->last()['details']['moved']]);
     }
 

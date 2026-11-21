@@ -14,7 +14,6 @@ use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Entity\EmailWhitelist;
 use AntispamBundle\Entity\User;
 use AntispamBundle\Entity\Whitelist;
-use AntispamBundle\Services\ConfigService;
 use AntispamBundle\Services\DeferredAgentSync;
 use AntispamBundle\Services\DeferredRetroactivePass;
 use AntispamBundle\Services\RuleGlobalizer;
@@ -93,9 +92,7 @@ class RuleMakeGlobalTest extends KernelTestCase
 
     private function controller(string $class): AbstractController
     {
-        $config = $this->createMock(ConfigService::class);
-        $config->method('get')->willReturn(null);
-        $ownership = new RuleOwnership($this->db->em, $config);
+        $ownership = new RuleOwnership($this->db->em);
         $controller = match ($class) {
             DomainBlacklistController::class, EmailBlacklistController::class => new $class($this->db->em, $ownership, new DeferredRetroactivePass($this->db->queue), $this->globalizer()),
             default => new $class($this->db->em, $ownership, $this->globalizer()),

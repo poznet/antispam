@@ -302,7 +302,7 @@ class BayesService
         return $scopes;
     }
 
-    /** Account id of a mailbox address (first by id, like MailboxSettingsResolver), 0 = none / legacy mailbox. */
+    /** Account id of a mailbox address (first by id, like MailboxSettingsResolver), 0 = none. */
     public function scopeOf(?string $mailbox): int
     {
         $mailbox = strtolower(trim((string)$mailbox));

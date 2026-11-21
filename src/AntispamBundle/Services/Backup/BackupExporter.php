@@ -20,7 +20,7 @@ use Doctrine\ORM\EntityManagerInterface;
  * DNSBL providers, accounts and users. Phishing reports, quarantine, score log,
  * cron log and other runtime data are never included.
  *
- * Secrets (IMAP / legacy mailbox passwords, API keys, feed keys, password
+ * Secrets (IMAP passwords, API keys, feed keys, password
  * hashes, plugin password hashes, SSH key paths) are only exported with
  * $includeSecrets, and then every one of them is encrypted with the instance
  * key (CryptoService, derived from APP_SECRET) - an import elsewhere needs the

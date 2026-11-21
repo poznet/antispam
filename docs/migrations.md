@@ -22,6 +22,10 @@ DDL implicitly, so a transaction would protect nothing.
 
 ## antispam:db:upgrade
 
+After the schema step it also runs `Services\LegacyMailboxImporter` (moves the removed
+*Konfiguracja (stara)* single mailbox into *Konta*, idempotent; see
+[accounts.md](accounts.md#migrating-the-old-single-mailbox)).
+
 ```bash
 php bin/console antispam:db:upgrade --dry-run   # state + plan, changes nothing
 php bin/console antispam:db:upgrade

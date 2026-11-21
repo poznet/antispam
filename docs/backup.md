@@ -69,7 +69,7 @@ two tables when moving servers ([bayes.md](bayes.md#storage-and-housekeeping)).
 
 Without `--include-secrets` (and in the panel's default download) these stay on the server:
 
-- legacy mailbox password (`config.password`), VirusTotal / Safe Browsing API keys
+- old single-mailbox password (`config.password`, only present until the upgrade migrates it), VirusTotal / Safe Browsing API keys
   (`scoring.vt_api_key`, `url.gsb_api_key`), shared feed keys (`feed.server_key`,
   `feed.remote_key`) - `BackupSecrets::CONFIG_KEYS`;
 - OAuth client secrets (`oauth.microsoft.client_secret`, `oauth.google.client_secret`,
@@ -183,7 +183,7 @@ docker compose exec -u www-data app php bin/console antispam:doctor
 | `cron` | | nothing in the cron log, or the last job is older than 60 min |
 | `accounts_scanned` | | accounts that never had a successful scan |
 | `ssh_agents` | | deployed agents whose last reported `agent_version` is older than the bundled one |
-| `stored_passwords` | encrypted IMAP passwords that do not decrypt (APP_SECRET changed) | legacy plaintext IMAP passwords (legacy mailbox or accounts) |
+| `stored_passwords` | encrypted IMAP passwords that do not decrypt (APP_SECRET changed) | legacy plaintext IMAP passwords (accounts) |
 | `oauth` | OAuth accounts whose provider app is not configured or whose client secret does not decrypt; accounts not connected or with a failing token renewal ([oauth.md](oauth.md)) | app-only account with a multi-tenant alias (`common`) as tenant |
 | `orphan_rules` | | list rules owned by a mailbox that no longer exists (they never match) |
 | `feed` | hub URL without hub key | enabled with nothing configured, hub not https, short local key |

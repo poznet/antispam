@@ -11,7 +11,6 @@ use AntispamBundle\Entity\User;
 use AntispamBundle\Security\MailboxAccess;
 use AntispamBundle\Services\AuditLogger;
 use AntispamBundle\Services\ConfigService;
-use AntispamBundle\Services\ConnectionService;
 use AntispamBundle\Services\ImapScanService;
 use AntispamBundle\Services\InboxService;
 use AntispamBundle\Services\Jobs\Handler\QuarantinePurgeHandler;
@@ -82,8 +81,7 @@ class QuarantinePurgeTest extends TestCase
         $inbox->method('getSpamFolderName')->willReturn('SPAM');
         $imapScan = $this->createMock(ImapScanService::class);
         $imapScan->method('connect')->willReturn($this->conn);
-        return new QuarantineService($this->db->em, new ConfigService($this->db->em), $this->sshService,
-            $this->createMock(ConnectionService::class), $inbox, $this->createMock(MessageService::class), $imapScan);
+        return new QuarantineService($this->db->em, $this->sshService, $inbox, $this->createMock(MessageService::class), $imapScan);
     }
 
     /** @param MessageInterface[] $messages */
@@ -201,8 +199,7 @@ class QuarantinePurgeTest extends TestCase
         $inbox->method('getSpamFolder')->willReturn($spam);
         $imapScan = $this->createMock(ImapScanService::class);
         $imapScan->method('connect')->willReturn($this->conn);
-        $service = new QuarantineService($this->db->em, new ConfigService($this->db->em), $this->sshService,
-            $this->createMock(ConnectionService::class), $inbox, $this->createMock(MessageService::class), $imapScan);
+        $service = new QuarantineService($this->db->em, $this->sshService, $inbox, $this->createMock(MessageService::class), $imapScan);
 
         $r = $service->blacklist($this->key($this->imap), '7');
         $this->assertTrue($r['success']);

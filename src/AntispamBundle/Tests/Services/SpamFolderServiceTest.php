@@ -5,7 +5,6 @@ namespace AntispamBundle\Tests\Services;
 use AntispamBundle\Entity\Account;
 use AntispamBundle\Entity\SpamScoreLog;
 use AntispamBundle\Repository\SpamScoreLogRepository;
-use AntispamBundle\Services\ConnectionService;
 use AntispamBundle\Services\ImapScanService;
 use AntispamBundle\Services\InboxService;
 use AntispamBundle\Services\MessageService;
@@ -79,7 +78,7 @@ class SpamFolderServiceTest extends TestCase
         $inbox = $this->createMock(InboxService::class);
         $inbox->method('getSpamFolderName')->willReturn('SPAM');
 
-        return new SpamFolderService($em, $this->quarantine, $this->ssh, $imapScan, $this->createMock(ConnectionService::class), $inbox, $this->messages);
+        return new SpamFolderService($em, $this->quarantine, $this->ssh, $imapScan, $inbox, $this->messages);
     }
 
     private function message(int $uid, string $from, string $subject): MessageInterface

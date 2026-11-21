@@ -21,13 +21,16 @@ deleted only when deletion is switched on:
 | Mailbox | Setting |
 |---------|---------|
 | IMAP account (Konta) | *Usuwaj spam (zamiast przenosić do folderu SPAM)* on the account form (`delete_spam`) |
-| Legacy mailbox (Ustawienia → Konfiguracja (stara)) | *Usuwaj spam na stałe* in Ustawienia → Filtr spamu (config `delete`) |
 | SSH+Maildir account | always moved to `~/Maildir/.SPAM` (the agent never deletes spam) |
 
 The thresholds deciding ham / quarantine / spam can differ per mailbox
 (**Ustawienia skrzynki** on the account form, empty = global value); the
-delete switch above has always been per account and does not inherit the
-global `delete` setting, which belongs to the legacy mailbox only.
+delete switch above is per account only. The former global *Usuwaj spam na stałe*
+(config `delete`, *Ustawienia → Filtr spamu*) was removed - it only ever affected the old
+single mailbox; the page now shows a note pointing to *Konta → Edytuj*. Where the
+setting is unknown, spam is moved, never deleted. The upgrade copied the old value into
+the migrated account's `delete_spam`
+(see [accounts.md](accounts.md#migrating-the-old-single-mailbox)).
 
 The `SPAM` and `QUARANTINE` folders are created on first use. IMAP: when the
 mailbox has no `SPAM` but its own spam folder (`Spam`, `INBOX.Spam`,
@@ -45,8 +48,7 @@ end of the scan. If the move fails (quota, permissions...) the score log gets
 
 `MoveToSpam` and `ApplyScoreDecision` act on the IMAP connection the message
 came from (`MessageEvent::getConnection()`), so every IMAP account uses its own
-folders. `ImapScanService` runs the pipeline for both IMAP accounts and the
-legacy mailbox.
+folders. `ImapScanService` runs the pipeline for IMAP accounts.
 
 ## Quarantine
 
@@ -66,7 +68,7 @@ Every quarantined message can be released:
   links, same three actions).
 
 A released message is marked as checked, so the next scan does not quarantine
-it again. The page covers the legacy mailbox (`imap`), every IMAP account
+it again. The page covers every IMAP account
 (`imap-<id>`) and every SSH account with a deployed agent (`ssh-<id>`).
 
 ### Blacklisting a sender from the quarantine
@@ -135,7 +137,7 @@ one job per mailbox, then the job list filtered to `quarantine.purge`.
   `--min-score=N`) ([agent.md](agent.md#quarantine-management)),
   which only unlinks files in `.QUARANTINE/new|cur`; an older agent fails the
   job with "wdróż go ponownie".
-- **Permissions:** admin - any mailbox (including the legacy `imap`); ROLE_USER -
+- **Permissions:** admin - any mailbox; ROLE_USER -
   only an assigned mailbox (`MailboxAccess`, foreign key = 403), checked again
   when the job runs (access removed meanwhile = the job fails, nothing deleted).
   CSRF tokens `quarantine_purge` / `my_quarantine_purge`. Audit:
@@ -163,7 +165,7 @@ existed have both empty; old plugin entries are still recognised by their
 agent's SQLite DB, so they never appear in this table - only in the mailbox
 panels above it.
 
-Spam of every mailbox (legacy IMAP, IMAP accounts, SSH accounts with an agent)
+Spam of every mailbox (IMAP accounts, SSH accounts with an agent)
 can be previewed and restored to INBOX on **Skrzynki → Spam w skrzynkach**
 (`/my/spam`, docs/users.md).
 
@@ -181,7 +183,7 @@ rule is added:
 `RetroactiveSpamService::applyRule()` moves matching INBOX messages from the
 last 30 days (every rule type) to `SPAM` in every mailbox owned by the rule's account e-mail (a
 global rule - owner **Wszystkie skrzynki**, `*` - goes through every account
-and the legacy mailbox, one after another; see
+one after another; see
 [scoring.md](scoring.md#rule-ownership)). The pass is a **background job**
 (`rule.retroactive`, queued by `DeferredRetroactivePass`, one pending pass per
 rule, see [jobs.md](jobs.md)): the rule form answers at once with "Poczta, która
@@ -340,7 +342,7 @@ setting. For one mailbox prefer the full rescan.
 ## Periodic jobs and the cron log
 
 `antispam:agent:scan-all` scans **every** mailbox: SSH accounts through the
-agent, IMAP accounts and the legacy mailbox through the IMAP pipeline. SSH
+agent, IMAP accounts through the IMAP pipeline. SSH
 accounts without a deployed agent are skipped, and so are mailboxes busy with a
 panel scan job (shared per-mailbox lock, [jobs.md](jobs.md#concurrency-with-the-scheduled-scan)).
 An IMAP mailbox gets at most `SCAN_MAX_SECONDS` (600) per run; a huge first scan

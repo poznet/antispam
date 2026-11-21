@@ -11,7 +11,7 @@ use Symfony\Component\Routing\Route;
 use Symfony\Component\Routing\RouteCollection;
 
 /**
- * Every mailbox key QuarantineService can produce (imap, imap-<id>, ssh-<id>)
+ * Every mailbox key QuarantineService can produce (imap-<id>, ssh-<id>)
  * must be accepted by the routes that take it - otherwise the page listing
  * mailboxes fails with a 500 while generating the link.
  */
@@ -27,7 +27,7 @@ class QuarantineRoutesTest extends TestCase
         $routes->add('preview', new Route($attr->getPath(), [], $attr->getRequirements()));
         $generator = new UrlGenerator($routes, new RequestContext());
 
-        foreach (['imap', 'imap-12', 'ssh-3'] as $key) {
+        foreach (['imap-12', 'ssh-3'] as $key) {
             $this->assertSame('/digest/preview/' . $key, $generator->generate('preview', ['key' => $key]));
         }
     }

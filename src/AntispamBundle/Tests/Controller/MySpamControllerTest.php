@@ -48,7 +48,7 @@ class MySpamControllerTest extends TestCase
         ['key' => 'imap-5', 'label' => 'Jan', 'account_email' => 'jan@firma.pl', 'recipient' => 'jan@firma.pl'],
         ['key' => 'imap-6', 'label' => 'Ola', 'account_email' => 'ola@firma.pl', 'recipient' => 'ola@firma.pl'],
         ['key' => 'ssh-7', 'label' => 'Jan SSH', 'account_email' => 'jan@ssh.pl', 'recipient' => 'jan@ssh.pl'],
-        ['key' => 'imap', 'label' => 'Legacy', 'account_email' => 'stara@firma.pl', 'recipient' => 'stara@firma.pl'],
+        ['key' => 'imap-8', 'label' => 'Biuro', 'account_email' => 'biuro@firma.pl', 'recipient' => 'biuro@firma.pl'],
     ];
 
     private function controller(object $user): MyController
@@ -136,7 +136,7 @@ class MySpamControllerTest extends TestCase
         $vars = $controller->spamAction(new Request(['mailbox' => 'imap-6']));
         $this->assertSame(['imap-6'], array_column($vars['mailboxes'], 'key'));
         $this->assertTrue($vars['admin']);
-        $this->assertSame(['imap-5', 'imap-6', 'ssh-7', 'imap'], array_column($vars['all_mailboxes'], 'key'));
+        $this->assertSame(['imap-5', 'imap-6', 'ssh-7', 'imap-8'], array_column($vars['all_mailboxes'], 'key'));
 
         // ROLE_USER asking for someone else's mailbox: falls back to the first own one.
         $controller = $this->controller($this->jan());
@@ -248,7 +248,7 @@ class MySpamControllerTest extends TestCase
     public function testAdminMayActOnAnyMailbox()
     {
         $controller = $this->controller(new InMemoryUser('admin', 'h', ['ROLE_ADMIN']));
-        $this->spam->expects($this->once())->method('release')->with('imap', '3')->willReturn(['success' => true, 'message' => 'ok', 'sender' => '']);
-        $controller->spamItemAction($this->post(['mailbox' => 'imap', 'id' => '3', 'action' => 'release']));
+        $this->spam->expects($this->once())->method('release')->with('imap-8', '3')->willReturn(['success' => true, 'message' => 'ok', 'sender' => '']);
+        $controller->spamItemAction($this->post(['mailbox' => 'imap-8', 'id' => '3', 'action' => 'release']));
     }
 }

@@ -24,7 +24,7 @@ a foreign mailbox key gives 403, see [users.md](users.md).
 
 | Method | URL | Description |
 |--------|-----|-------------|
-| GET | `/my/quarantine` | Quarantine of the user's mailboxes (IMAP / SSH accounts only; not the legacy mailbox) |
+| GET | `/my/quarantine` | Quarantine of the user's mailboxes (IMAP / SSH accounts) |
 | POST | `/my/quarantine/action` | `mailbox` (`imap-<id>` / `ssh-<id>`, must be assigned), `id`, `action` (`release` / `whitelist` / `delete`); CSRF token `my_quarantine_action`. `whitelist` is refused for high-risk messages |
 | POST | `/my/quarantine/purge` | Bulk permanent delete: `mailbox` (must be assigned, else 403), `mode` (`high_risk` / `all`), optional `shown` (count named in the confirmation, display only); CSRF token `my_quarantine_purge`. Queues a `quarantine.purge` job → `/my/jobs/{id}` ([spam-handling.md](spam-handling.md#bulk-deletion)) |
 | GET | `/my/jobs/{id}` | Page of an own quarantine purge job (status, counts); 404 for any other job |
@@ -63,7 +63,7 @@ a foreign mailbox key gives 403, see [users.md](users.md).
 | GET | `/account/index` | List all accounts |
 | GET/POST | `/account/add` | Add new account form (POST needs CSRF token `account_form`; e-mail, host names, ports and SSH user are validated) |
 | GET/POST | `/account/edit/{id}` | Edit account (POST needs CSRF token `account_form`, same validation) |
-| POST | `/account/imap-check` | IMAP connection / TLS certificate check from the account form, JSON; `mode=detect` suggests SSL/TLS or STARTTLS (CSRF token `imap_check`). With an empty password and `account[id]` (an account id, or `legacy` for *Konfiguracja → E-mail*) the stored password is used, but only against the stored host - another host is refused |
+| POST | `/account/imap-check` | IMAP connection / TLS certificate check from the account form, JSON; `mode=detect` suggests SSL/TLS or STARTTLS (CSRF token `imap_check`). With an empty password and `account[id]` (the account id) the stored password is used, but only against the stored host - another host is refused |
 | POST | `/account/del/{id}` | Delete account (CSRF token `account_action_{id}`) |
 | POST | `/account/test/{id}` | Test connection (IMAP or SSH), synchronous with short timeouts (IMAP 10 s open / 20 s read, SSH 15 s + 20 s per command) (CSRF token `account_action_{id}`) |
 | POST | `/account/deploy/{id}` | Queue an agent deploy + rules push (SSH only) → `/jobs/{id}` (CSRF token `account_action_{id}`) |
@@ -82,9 +82,9 @@ a foreign mailbox key gives 403, see [users.md](users.md).
 | Method | URL | Description |
 |--------|-----|-------------|
 | GET | `/spambox/index` | Old single-mailbox "Folder spamu" page: 301 redirect to `/my/spam` |
-| GET | `/spambox/quarantine` | Quarantine of every mailbox (legacy IMAP `QUARANTINE`, each IMAP account, each SSH account with a deployed agent) and the last 30 days of `quarantine` decisions from the score log (what the dashboard tile counts) |
-| POST | `/spambox/quarantine/action` | `mailbox` (`imap` / `imap-<id>` / `ssh-<id>`), `id`, `action` (`release` / `whitelist` / `delete`); CSRF token `quarantine_action` |
-| POST | `/spambox/quarantine/purge` | Bulk permanent delete of one mailbox's quarantine: `mailbox` (`imap` / `imap-<id>` / `ssh-<id>`), `mode` (`high_risk` / `all`), optional `shown`; CSRF token `quarantine_purge`. Queues a `quarantine.purge` job → `/jobs/{id}` |
+| GET | `/spambox/quarantine` | Quarantine of every mailbox (each IMAP account, each SSH account with a deployed agent) and the last 30 days of `quarantine` decisions from the score log (what the dashboard tile counts) |
+| POST | `/spambox/quarantine/action` | `mailbox` (`imap-<id>` / `ssh-<id>`), `id`, `action` (`release` / `whitelist` / `delete`); CSRF token `quarantine_action` |
+| POST | `/spambox/quarantine/purge` | Bulk permanent delete of one mailbox's quarantine: `mailbox` (`imap-<id>` / `ssh-<id>`), `mode` (`high_risk` / `all`), optional `shown`; CSRF token `quarantine_purge`. Queues a `quarantine.purge` job → `/jobs/{id}` |
 | POST | `/spambox/quarantine/purge-all` | High-risk purge of every mailbox (one job each) → `/jobs/?type=quarantine.purge`; CSRF token `quarantine_purge` |
 | GET | `/spambox/scorelog` | Score log ("Dziennik ocen"), 50 per page. Query filters: `decision` (`ham`/`quarantine`/`spam`/`whitelisted`), `account`, `q` (sender/subject substring), `from`/`to` (`Y-m-d`), `min_score`, `page`. The decision tiles link to the matching `decision` filter |
 | GET | `/spambox/plugin-reports` | Mail plugin reports - Thunderbird and Outlook (anonymous + logged in), filters `?verdict=spam\|ham`, `?who=anonymous\|account` |
@@ -144,7 +144,6 @@ Heavy panel operations run in the background worker (`antispam:jobs:work`), see 
 
 | Method | URL | Description |
 |--------|-----|-------------|
-| GET/POST | `/config/email/` | Legacy email account settings, same SSL/TLS options as the account form (POST needs CSRF token `email_config`) |
 | GET/POST | `/config/spam/` | Spam processing settings (POST needs CSRF token `spam_config`) |
 | GET/POST | `/config/feed/` | Shared spam feed settings (POST needs CSRF token `feed_config`) |
 | GET/POST | `/config/digest/` | Quarantine digest settings, mailbox list, "send now" (POST needs CSRF token `digest_config`) |
@@ -155,12 +154,10 @@ Heavy panel operations run in the background worker (`antispam:jobs:work`), see 
 | POST | `/config/uncheck-all/` | Reset all checked messages (markers) and the IMAP cursors - the next scan reads every INBOX in full (CSRF token `spam_maintenance`) |
 | POST | `/config/reset/countes/` | Reset all rule counters (CSRF token `spam_maintenance`) |
 
-Stored secrets (legacy IMAP password, VirusTotal / Safe Browsing API keys, feed
+Stored secrets (VirusTotal / Safe Browsing API keys, feed
 keys) are never rendered back into the forms: the field stays empty with
 "(ustawione - zostaw puste, aby nie zmieniać)", an empty field keeps the stored
 value and the *Usuń zapisany klucz* checkbox (`<field>_clear`) removes a key.
-The legacy IMAP password is stored encrypted (`CryptoService`, like account
-passwords).
 
 ## DNSBL providers (`/dnsbl`)
 
@@ -178,7 +175,7 @@ passwords).
 Every state-changing panel action is POST only (`methods: ['POST']`, a GET gets
 `405`) and checks a CSRF token (`_token` field, ids listed above). A missing or
 wrong token is answered with a redirect back and the flash "Nieprawidłowy token
-formularza" (`/config/email/` and the account actions answer `403`). Security
+formularza" (the account actions answer `403`). Security
 headers per route: [deployment.md](deployment.md#security-headers).
 
 ## Shared Spam Feed API (`/api/feed`)

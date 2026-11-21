@@ -6,7 +6,6 @@ use AntispamBundle\Event\MessageEvent;
 use AntispamBundle\Imap\ImapClient;
 use AntispamBundle\Imap\SocketConnection;
 use AntispamBundle\Services\ConfigService;
-use AntispamBundle\Services\ConnectionService;
 use AntispamBundle\Services\CryptoService;
 use AntispamBundle\Services\ImapScanService;
 use AntispamBundle\Services\MessageService;
@@ -143,7 +142,7 @@ class SocketAdapterIntegrationTest extends TestCase
                 $e->setDelete(true);
             }
         });
-        $scan = new ImapScanService($dispatcher, $this->createMock(ConnectionService::class), $this->createMock(ConfigService::class),
+        $scan = new ImapScanService($dispatcher, $this->createMock(ConfigService::class),
             $this->createMock(CryptoService::class), $ms, null, $this->tmp . '/locks');
 
         $stats = $scan->scan($this->connection, $this->user, false, false, null, null, $cursor);

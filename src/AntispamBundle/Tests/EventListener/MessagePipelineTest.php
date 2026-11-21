@@ -19,6 +19,7 @@ use AntispamBundle\Services\MessageService;
 use AntispamBundle\Services\RawMessageParser;
 use AntispamBundle\Services\ScoringService;
 use AntispamBundle\Services\VirusTotalService;
+use Ddeboer\Imap\ConnectionInterface;
 use Ddeboer\Imap\MailboxInterface;
 use Ddeboer\Imap\Message\EmailAddress;
 use Ddeboer\Imap\MessageInterface;
@@ -134,7 +135,7 @@ class MessagePipelineTest extends KernelTestCase
 
         $msg = $this->message('a', 'b.pl');
         $msg->method('move')->willThrowException(new \RuntimeException('NO [OVERQUOTA]'));
-        $event = new MessageEvent($msg, 'box@firma.pl');
+        $event = new MessageEvent($msg, 'box@firma.pl', $this->createMock(ConnectionInterface::class));
 
         $this->expectExceptionMessage('OVERQUOTA');
         (new ApplyScoreDecision($scoring, $inbox))->decide($event);

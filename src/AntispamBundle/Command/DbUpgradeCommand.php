@@ -4,6 +4,7 @@ namespace AntispamBundle\Command;
 
 use AntispamBundle\Services\Database\DatabaseState;
 use AntispamBundle\Services\Database\DatabaseUpgrader;
+use AntispamBundle\Services\LegacyMailboxImporter;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -28,7 +29,7 @@ class DbUpgradeCommand extends Command
 {
     public const EXIT_WARNINGS = 2;
 
-    public function __construct(private DatabaseUpgrader $upgrader)
+    public function __construct(private DatabaseUpgrader $upgrader, private ?LegacyMailboxImporter $legacyMailbox = null)
     {
         parent::__construct();
     }
@@ -128,6 +129,26 @@ class DbUpgradeCommand extends Command
                 $warnings++;
                 $output->writeln(sprintf('<comment>%sWARNING: the entities still differ from the database (%d statement(s), e.g. %s). An entity change has no migration - generate one (docs/migrations.md).</comment>',
                     $prefix, count($drift), mb_substr(self::oneLine($drift[0]), 0, 160)));
+            }
+        }
+
+        // The old single mailbox of "Konfiguracja (stara)" becomes a regular account (once).
+        if (!$dryRun && $this->legacyMailbox) {
+            try {
+                if (($done = $this->legacyMailbox->import()) !== null) {
+                    $output->writeln($prefix . $done);
+                }
+            } catch (\Throwable $e) {
+                $warnings++;
+                $output->writeln(sprintf('<comment>%sWARNING: the old mailbox of the settings could not be moved to Konta: %s</comment>', $prefix, $e->getMessage()));
+            }
+        } elseif ($dryRun && $this->legacyMailbox && $state->state !== DatabaseState::FRESH) {
+            try {
+                if ($this->legacyMailbox->pending()) {
+                    $output->writeln($prefix . 'The old mailbox of the settings would be moved to Konta.');
+                }
+            } catch (\Throwable) {
+                // config table not there yet
             }
         }
 

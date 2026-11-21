@@ -7,7 +7,6 @@ use AntispamBundle\EventListener\Message\CheckBayes;
 use AntispamBundle\Services\AttachmentPolicyAnalyzer;
 use AntispamBundle\Services\Bayes\BayesService;
 use AntispamBundle\Services\CertHoleService;
-use AntispamBundle\Services\ConnectionService;
 use AntispamBundle\Services\DnsblService;
 use AntispamBundle\Services\HeaderAnalyzer;
 use AntispamBundle\Services\ImapScanService;
@@ -69,28 +68,31 @@ class BayesTrainingHooksTest extends BayesTestCase
         return $msg;
     }
 
-    private function legacyConnection(MessageInterface $msg): ConnectionService
+    /**
+     * IMAP account whose folders hold the given message.
+     *
+     * @return array{0: ImapScanService, 1: string} scan service mock (connects to it) and the "imap-<id>" key
+     */
+    private function imapAccount(MessageInterface $msg): array
     {
-        $this->config->set('imap', 'imap.firma.pl');
-        $this->config->set('login', 'jan');
-        $this->config->set('email', 'jan@firma.pl');
+        $account = $this->account('jan@firma.pl');
         $folder = $this->createMock(MailboxInterface::class);
         $folder->method('getMessage')->willReturn($msg);
         $conn = $this->createMock(ConnectionInterface::class);
         $conn->method('getMailbox')->willReturn($folder);
         $conn->method('hasMailbox')->willReturn(true);
-        $service = $this->createMock(ConnectionService::class);
-        $service->method('getConnection')->willReturn($conn);
-        return $service;
+        $imapScan = $this->createMock(ImapScanService::class);
+        $imapScan->method('connect')->willReturn($conn);
+        return [$imapScan, 'imap-' . $account->getId()];
     }
 
-    private function quarantine(ConnectionService $connection, BayesService $bayes): QuarantineService
+    private function quarantine(ImapScanService $imapScan, BayesService $bayes): QuarantineService
     {
         $inbox = $this->createMock(InboxService::class);
         $inbox->method('getQuarantineFolderName')->willReturn('QUARANTINE');
         $inbox->method('getSpamFolderName')->willReturn('SPAM');
-        return new QuarantineService($this->em, $this->config, $this->createMock(SshService::class), $connection, $inbox,
-            $this->createMock(MessageService::class), $this->createMock(ImapScanService::class), null, $bayes);
+        return new QuarantineService($this->em, $this->createMock(SshService::class), $inbox,
+            $this->createMock(MessageService::class), $imapScan, null, $bayes);
     }
 
     public function testQuarantineReleaseTrainsHamBeforeTheMove()
@@ -98,7 +100,8 @@ class BayesTrainingHooksTest extends BayesTestCase
         $bayes = $this->bayes();
         $msg = $this->imapMessage(self::hamCorpus(1)[0]);
         $msg->expects($this->once())->method('move');
-        $this->assertTrue($this->quarantine($this->legacyConnection($msg), $bayes)->release('imap', '7')['success']);
+        [$imapScan, $key] = $this->imapAccount($msg);
+        $this->assertTrue($this->quarantine($imapScan, $bayes)->release($key, '7')['success']);
         $this->assertSame([0, 1], [$bayes->stats()['spam'], $bayes->stats()['ham']]);
     }
 
@@ -106,12 +109,12 @@ class BayesTrainingHooksTest extends BayesTestCase
     {
         $bayes = $this->bayes();
         $msg = $this->imapMessage(self::hamCorpus(1)[0]);
-        $connection = $this->legacyConnection($msg);
+        [$imapScan, $key] = $this->imapAccount($msg);
         $inbox = $this->createMock(InboxService::class);
         $inbox->method('getSpamFolderName')->willReturn('SPAM');
-        $service = new SpamFolderService($this->em, $this->quarantine($connection, $bayes), $this->createMock(SshService::class),
-            $this->createMock(ImapScanService::class), $connection, $inbox, $this->createMock(MessageService::class), $bayes);
-        $this->assertTrue($service->release('imap', '7')['success']);
+        $service = new SpamFolderService($this->em, $this->quarantine($imapScan, $bayes), $this->createMock(SshService::class),
+            $imapScan, $inbox, $this->createMock(MessageService::class), $bayes);
+        $this->assertTrue($service->release($key, '7')['success']);
         $this->assertSame(1, $bayes->stats()['ham']);
     }
 

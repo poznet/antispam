@@ -23,7 +23,7 @@ Symfony 7.4 LTS application for email spam filtering via IMAP or SSH+Maildir age
 See `docs/` directory for detailed documentation:
 - `docs/architecture.md` - system architecture and event pipeline
 - `docs/agent.md` - Maildir agent: installation, commands, SQLite schema
-- `docs/accounts.md` - account management: IMAP/SSH config, SSH keys, deploy
+- `docs/accounts.md` - account management: IMAP/SSH config, SSH keys, deploy; automatic migration of the old single mailbox ("Konfiguracja (stara)") into Konta on upgrade
 - `docs/commands.md` - CLI commands reference
 - `docs/api.md` - web controller endpoints
 - `docs/deployment.md` - Docker / Coolify deployment guide; "Releasing": version in `AntispamBundle\AppVersion::VERSION` (+ `CHANGELOG.md`, plugin/agent bump rules, build arg `GIT_COMMIT` -> `REVISION`)

@@ -241,20 +241,23 @@ class DoctorServiceTest extends TestCase
 
     public function testRulesOfDeletedMailbox()
     {
-        $this->config->set('email', 'biuro@firma.pl');
         $this->em->persist((new Account())->setName('a')->setEmail('jan@firma.pl'));
         $this->em->persist((new Blacklist())->setEmail('*')->setHost('a.example'));
         $this->em->persist((new Blacklist())->setEmail('Jan@Firma.pl')->setHost('b.example'));
-        $this->em->persist((new Blacklist())->setEmail('biuro@firma.pl')->setHost('c.example'));
         $this->em->flush();
         $this->assertSame(DoctorCheck::OK, $this->checks()['orphan_rules']->status);
 
         $this->em->persist((new Blacklist())->setEmail('gone@firma.pl')->setHost('d.example'));
         $this->em->persist((new EmailWhitelist())->setEmail('gone@firma.pl')->setWhitelistemail('x@y.pl'));
         $this->em->flush();
+        // The old settings mailbox no longer owns rules (it is moved to Konta at upgrade).
+        $this->config->set('email', 'biuro@firma.pl');
+        $this->em->persist((new Blacklist())->setEmail('biuro@firma.pl')->setHost('c.example'));
+        $this->em->flush();
         $check = $this->checks()['orphan_rules'];
         $this->assertSame(DoctorCheck::WARN, $check->status);
         $this->assertStringContainsString('gone@firma.pl: 2', $check->message);
+        $this->assertStringContainsString('biuro@firma.pl: 1', $check->message);
     }
 
     public function testFeedKeys()

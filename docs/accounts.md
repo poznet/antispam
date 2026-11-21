@@ -3,6 +3,30 @@
 ## Overview
 
 Each email account can be configured with one of two connection modes: IMAP or SSH+Maildir.
+Accounts (*Konta*) are the only kind of mailbox: there is no separate "global" mailbox in the settings.
+
+### Migrating the old single mailbox
+
+Earlier versions had one IMAP mailbox in *Ustawienia → Konfiguracja (stara)*
+(config keys `email`, `login`, `password`, `imap`, `imap_port`, `imap_flags`,
+cursor `imap.legacy_cursor`, digest recipient `digest.imap_recipient`). The page
+was removed. On upgrade `antispam:db:upgrade` (every Docker boot) runs
+`Services\LegacyMailboxImporter`, which is idempotent:
+
+- creates a regular IMAP account (*Konta*) with the same address, encrypted
+  password, login, host / port / TLS flags, the old global *Usuwaj spam na stałe* value
+  (config `delete`, then removed from *Filtr spamu*) as the account's `delete_spam`, the old digest recipient as the account's
+  *Odbiorca raportu* override, and the scan cursor + last scan time (no full
+  rescan of INBOX);
+- then clears those config keys;
+- if an account with the same e-mail already exists, only the config keys are cleared;
+- rules, score log and stats are keyed by the e-mail, so they stay with the mailbox;
+  old checked-message markers keep working (global markers, `MessageService::isChecked()`).
+
+Removed with it: `antispam:go` / `antispam:check` (use `antispam:agent:scan-all`
+and `antispam:doctor`), `antispam:bayes:train --legacy` (use `--account=`), the
+`imap` quarantine / mailbox key and the digest setting *Odbiorca dla starej
+skrzynki IMAP*.
 
 ## IMAP Mode
 
@@ -33,7 +57,7 @@ token problems show as a red badge in the account list, in Stan systemu and in
 
 ### SSL/TLS options in the form
 
-The account add/edit form and the legacy global config (`/config/email/`) build the flags from clickable
+The account add/edit form builds the flags from clickable
 options (`AntispamBundle\Services\ImapFlags`, shared template `Account/_imap_security.html.twig`):
 
 | Encryption | Flag | Default port |
@@ -115,8 +139,7 @@ mailbox and only add points in another), `SshService::runScan` (flags),
 change, the next scan passes the thresholds as flags anyway),
 `QuarantineService::getMailboxes` / `QuarantineDigestService`.
 
-Not per mailbox (on purpose): the **legacy mailbox** from *Ustawienia →
-E-mail* always uses the global settings (it has no account row); digest
+Not per mailbox (on purpose): digest
 **language** (the digest is Polish only); **quarantine retention** (nothing
 expires quarantined mail, see [spam-handling.md](spam-handling.md#quarantine)).
 Other scoring knobs (DNSBL, ClamAV, links...) stay global.

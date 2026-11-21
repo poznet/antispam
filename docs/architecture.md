@@ -20,23 +20,22 @@ Antispam is a Symfony 7.4 web application for filtering spam from email accounts
 - Connects to mail server via IMAP protocol (port 993 / SSL by default, configurable)
 - Uses `ddeboer/imap` library
 - Fetches messages, checks headers, moves spam to SPAM folder
-- `ImapScanService` runs the pipeline for IMAP accounts and the legacy mailbox
-  (Ustawienia → Konfiguracja (stara)); `MessageEvent` carries the message's own connection
+- `ImapScanService` runs the pipeline for IMAP accounts; `MessageEvent` carries the message's own connection
 - All processing happens on the Symfony server
 
 #### Incremental INBOX scan
 
 Each IMAP mailbox keeps a **UID cursor**: INBOX `UIDVALIDITY` + the highest
 UID already run through the pipeline (`antispam_account.imap_uid_validity` /
-`imap_last_uid`; the legacy mailbox uses the config key `imap.legacy_cursor`,
-`"uidvalidity:last_uid:unix time"`). A scan picks its messages like this:
+`imap_last_uid`; the old single mailbox cursor `imap.legacy_cursor` was copied there by
+`LegacyMailboxImporter`). A scan picks its messages like this:
 
 | Situation | Messages scanned |
 |-----------|------------------|
 | cursor valid (normal case) | only UIDs above the cursor (`UID FETCH n:*`) |
-| first scan of a new mailbox (`lastScanAt` null; legacy: no cursor and no markers) | the whole INBOX (initial clean-up, kept out of stats) |
+| first scan of a new mailbox (`lastScanAt` null) | the whole INBOX (initial clean-up, kept out of stats) |
 | cursor `0/0` - set by *Zresetuj flagi sprawdzenia* (`/config/uncheck-all/`) | the whole INBOX once |
-| no cursor but scanned before (upgrade from a version without cursors), or `UIDVALIDITY` changed, or the IMAP host/port/login was edited | only mail received since the last scan minus one day (`SEARCH SINCE`; legacy mailbox: 4 days) - **older mail is never touched** |
+| no cursor but scanned before (upgrade from a version without cursors), or `UIDVALIDITY` changed, or the IMAP host/port/login was edited | only mail received since the last scan minus one day (`SEARCH SINCE`) - **older mail is never touched** |
 | server reports no `UIDVALIDITY` | "since the last scan" every time, no cursor |
 
 The cursor advances to the highest UID processed; when a message throws

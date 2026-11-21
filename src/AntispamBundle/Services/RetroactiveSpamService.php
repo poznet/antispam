@@ -37,8 +37,6 @@ class RetroactiveSpamService
         private EntityManagerInterface $em,
         private ScoringService $scoring,
         private ImapScanService $imapScan,
-        private ConnectionService $legacyConnection,
-        private ConfigService $config,
         private InboxService $inbox,
         private SshService $ssh,
         private AgentRulesExporter $rulesExporter,
@@ -74,14 +72,6 @@ class RetroactiveSpamService
                 }
             } catch (\Throwable $e) {
                 $result['errors'][] = $account->getEmail() . ': ' . $e->getMessage();
-            }
-        }
-
-        if ($this->imapScan->isLegacyConfigured() && (RuleOwnership::isGlobal($owner) || strcasecmp((string)$this->config->get('email'), $owner) === 0)) {
-            try {
-                $result['moved'] += $this->applyImap($this->legacyConnection->getConnection(), (string)$this->config->get('email'), $rule, $result['errors']);
-            } catch (\Throwable $e) {
-                $result['errors'][] = 'IMAP: ' . $e->getMessage();
             }
         }
 

@@ -6,7 +6,7 @@ namespace AntispamBundle\Services;
  * Effective (account override -> global) settings of one mailbox, built by
  * MailboxSettingsResolver. Immutable; `overrides` lists the fields the
  * account sets itself (field => value), empty for a mailbox that inherits
- * everything (and always for the legacy mailbox from the "E-mail" settings).
+ * everything.
  */
 final class MailboxSettings
 {

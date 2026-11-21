@@ -32,14 +32,14 @@ class DigestTokenServiceTest extends TestCase
         $s = new DigestTokenService('secret');
         $d = $s->verify($s->create('imap-5', '7', 'delete', 3600, ['uidvalidity' => '1700000123']));
         $this->assertSame(1700000123, $d['uidvalidity']);
-        $this->assertSame(0, $s->verify($s->create('imap', '7', 'delete', 3600, ['uidvalidity' => 0]))['uidvalidity']);
+        $this->assertSame(0, $s->verify($s->create('imap-5', '7', 'delete', 3600, ['uidvalidity' => 0]))['uidvalidity']);
     }
 
     /** Tokens minted before UIDVALIDITY binding: the UID may name another message now - reject. */
     public function testImapTokenWithoutUidValidityIsRejected()
     {
         $s = new DigestTokenService('secret');
-        $this->assertNull($s->verify($s->create('imap', '42', 'release', 3600)));
+        $this->assertNull($s->verify($s->create('imap-5', '42', 'release', 3600)));
         $this->assertNull($s->verify($s->create('imap-5', '42', 'whitelist', 3600, ['account' => 'jan@firma.pl'])));
         // Maildir file names are never reused: SSH tokens don't need it.
         $ssh = $s->verify($s->create('ssh-3', '1700000001.M1P2.host', 'release', 3600));
@@ -58,13 +58,13 @@ class DigestTokenServiceTest extends TestCase
     public function testRejectsTamperedForeignAndExpired()
     {
         $s = new DigestTokenService('secret');
-        $t = $s->create('imap', '42', 'release', 3600);
+        $t = $s->create('imap-5', '42', 'release', 3600);
         list($body, $sig) = explode('.', $t);
 
-        $forged = rtrim(strtr(base64_encode(json_encode(['m' => 'imap', 'i' => '43', 'a' => 'delete', 'e' => time() + 3600])), '+/', '-_'), '=');
+        $forged = rtrim(strtr(base64_encode(json_encode(['m' => 'imap-5', 'i' => '43', 'a' => 'delete', 'e' => time() + 3600])), '+/', '-_'), '=');
         $this->assertNull($s->verify($forged . '.' . $sig));
         $this->assertNull((new DigestTokenService('other'))->verify($t));
-        $this->assertNull($s->verify($s->create('imap', '42', 'release', -10)));
+        $this->assertNull($s->verify($s->create('imap-5', '42', 'release', -10)));
         $this->assertNull($s->verify('garbage'));
         $this->assertNull($s->verify($body . '.'));
     }

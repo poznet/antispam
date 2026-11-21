@@ -4,9 +4,9 @@
 
 {% block body %}
     {% if admin|default(false) %}
-    <p class="text-muted">Folder SPAM każdej skrzynki (konta IMAP i SSH z wdrożonym agentem, najnowsze {{ limit }} na skrzynkę). Przywrócona wiadomość wraca bez dopisku SPAM w temacie, z oryginalną datą, i nie zostanie ponownie odfiltrowana; „Przywróć i zawsze akceptuj” dodaje nadawcę do zaufanych właściciela skrzynki.</p>
+    <p class="text-muted">Folder SPAM każdej skrzynki (konta IMAP i SSH z wdrożonym agentem, najnowsze {{ limit }} na skrzynkę). Przywrócona wiadomość wraca bez dopisku SPAM w temacie, z oryginalną datą, i nie zostanie ponownie odfiltrowana; „Zawsze akceptuj” przywraca wiadomość i dodaje nadawcę do zaufanych właściciela skrzynki.</p>
     {% else %}
-    <p class="text-muted">Wiadomości, które filtr przeniósł do folderu SPAM Twojej skrzynki (najnowsze {{ limit }}). Jeśli któraś jest potrzebna, przywróć ją do skrzynki odbiorczej - wróci bez dopisku SPAM w temacie, z oryginalną datą, i nie zostanie ponownie odfiltrowana. „Przywróć i zawsze akceptuj” dodaje też nadawcę do Twoich <a href="{{ path('antispam_my_rules') }}">zaufanych nadawców</a>.</p>
+    <p class="text-muted">Wiadomości, które filtr przeniósł do folderu SPAM Twojej skrzynki (najnowsze {{ limit }}). Jeśli któraś jest potrzebna, przywróć ją do skrzynki odbiorczej - wróci bez dopisku SPAM w temacie, z oryginalną datą, i nie zostanie ponownie odfiltrowana. „Zawsze akceptuj” przywraca wiadomość i dodaje też nadawcę do Twoich <a href="{{ path('antispam_my_rules') }}">zaufanych nadawców</a>.</p>
     {% endif %}
 
     {% set all_mailboxes = all_mailboxes|default([]) %}
@@ -61,7 +61,7 @@
         {% elseif mailbox.items|length > 0 %}
         <div class="table-responsive">
         <table class="table table-striped" style="margin-bottom:0;">
-            <thead><tr><th>Data</th><th>Nadawca</th><th>Temat</th><th>Punkty</th><th>Powód</th><th></th></tr></thead>
+            <thead><tr><th>Data</th><th>Nadawca</th><th>Temat</th><th>Punkty</th><th>Powód</th><th style="width:1%"></th></tr></thead>
             <tbody>
             {% for item in mailbox.items %}
                 {% set sender_domain = item.sender_domain|default('') %}
@@ -75,18 +75,18 @@
                         {% if item.high_risk %}<span class="label label-danger">wysokie ryzyko</span><br>{% endif %}
                         {% for label in item.labels %}<small>{{ label }}</small><br>{% endfor %}
                     </td>
-                    <td class="text-right pp-cell-nowrap">
-                        <form method="post" action="{{ path('antispam_my_spam_action') }}" style="display:inline;">
+                    <td class="pp-spam-actions">
+                        <form method="post" action="{{ path('antispam_my_spam_action') }}">
                             <input type="hidden" name="_token" value="{{ token }}">
                             <input type="hidden" name="mailbox" value="{{ mailbox.key }}">
                             <input type="hidden" name="id" value="{{ item.id }}">
                             {% if item.uidvalidity is not null %}<input type="hidden" name="uidvalidity" value="{{ item.uidvalidity }}">{% endif %}
                             <button type="submit" name="action" value="release" class="btn btn-xs btn-success" title="Przywróć do skrzynki odbiorczej"{% if item.high_risk %} data-confirm="Ta wiadomość ma wysokie ryzyko (phishing / złośliwy załącznik) albo nie ma zapisanej oceny. Na pewno przywrócić ją do skrzynki?"{% endif %}>
-                                <span class="glyphicon glyphicon-ok" aria-hidden="true"></span> Przywróć do skrzynki
+                                <span class="glyphicon glyphicon-ok" aria-hidden="true"></span> Przywróć
                             </button>
                             {% if not item.high_risk and item.from %}
                             <button type="submit" name="action" value="whitelist" class="btn btn-xs btn-info" title="Przywróć i zawsze przepuszczaj pocztę od tego nadawcy">
-                                <span class="glyphicon glyphicon-star" aria-hidden="true"></span> Przywróć i zawsze akceptuj
+                                <span class="glyphicon glyphicon-star" aria-hidden="true"></span> Zawsze akceptuj
                             </button>
                             {% endif %}
                         </form>
@@ -106,6 +106,16 @@
     {% endif %}
 
     <p class="text-muted">Dlaczego wiadomość uznano za spam - zobacz <a href="{{ admin|default(false) ? path('antispam_spambox_scorelog') : path('antispam_my_scorelog', {decision: 'spam'}) }}">dziennik ocen</a>.</p>
+{% endblock %}
+
+{% block stylesheets %}
+    {{ parent() }}
+    <style>
+        /* Buttons stacked in a narrow column, so the table never runs off the panel. */
+        .pp-spam-actions { min-width: 140px; }
+        .pp-spam-actions form { display: flex; flex-direction: column; gap: 4px; margin: 0; }
+        .pp-spam-actions .btn { white-space: nowrap; text-align: left; }
+    </style>
 {% endblock %}
 
 {% block javascripts %}

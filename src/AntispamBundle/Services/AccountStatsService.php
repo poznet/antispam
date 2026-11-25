@@ -138,6 +138,38 @@ class AccountStatsService
     }
 
     /**
+     * Counters of one day over all accounts (dashboard "Dzisiaj"): new mail
+     * (scan + initial) in 'new', rescan + retroactive passes in 'rescan',
+     * 'accounts' = how many accounts were scanned that day.
+     *
+     * @return array{new: array<string,int>, rescan: array<string,int>, accounts: int, last_update: ?string}
+     */
+    public function dayTotals(\DateTimeInterface $day): array
+    {
+        $zero = array_fill_keys(AccountDailyStat::COUNTERS, 0);
+        $out = ['new' => $zero, 'rescan' => $zero, 'accounts' => 0, 'last_update' => null];
+        $cols = implode(', ', array_map(fn ($c) => 'SUM(' . $c . ') AS ' . $c, AccountDailyStat::COUNTERS));
+        $d = $day->format('Y-m-d');
+        try {
+            $rows = $this->db()->fetchAllAssociative('SELECT kind, ' . $cols . ', MAX(updated_at) AS last_update FROM ' . self::TABLE . ' WHERE day = ? GROUP BY kind', [$d]);
+            $out['accounts'] = (int)$this->db()->fetchOne('SELECT COUNT(DISTINCT account_id) FROM ' . self::TABLE . ' WHERE day = ?', [$d]);
+        } catch (\Throwable $e) {
+            $this->logger?->warning('antispam: day stats not read', ['day' => $d, 'error' => $e->getMessage()]);
+            return $out;
+        }
+        foreach ($rows as $row) {
+            $bucket = in_array($row['kind'], [AccountDailyStat::KIND_SCAN, AccountDailyStat::KIND_INITIAL], true) ? 'new' : 'rescan';
+            foreach (AccountDailyStat::COUNTERS as $k) {
+                $out[$bucket][$k] += (int)$row[$k];
+            }
+            if ($row['last_update'] && ($out['last_update'] === null || $row['last_update'] > $out['last_update'])) {
+                $out['last_update'] = (string)$row['last_update'];
+            }
+        }
+        return $out;
+    }
+
+    /**
      * One entry per day of the period (oldest first), the given kinds summed
      * (default: new mail only - a rescan of thousands of old messages would
      * flatten the chart).

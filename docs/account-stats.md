@@ -32,6 +32,15 @@ The page shows the period totals (tiles with the share of the checked mail),
 a daily chart of new mail (kinds `scan` + `initial`, last 30 / 90 days - a rescan would flatten it), the totals per kind, blacklist hits,
 skipped, failed moves, errors and the plugin reports (`antispam_plugin_report`).
 
+## Dashboard "Dzisiaj"
+
+The admin dashboard (`/panel`) shows today's counters summed over all accounts
+(`AccountStatsService::dayTotals()`): messages checked (new mail = `scan` +
+`initial`), scan passes, accounts scanned, spam / blacklisted / not moved,
+quarantined, whitelisted, scan errors, rescan volume, plus plugin checks of the
+day from the score log (`source = plugin`); each tile shows yesterday's value
+for comparison.
+
 ## Per-message detail
 
 - **IMAP**: the score log of the mailbox (`antispam_spam_score_log`, only when

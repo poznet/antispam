@@ -9,6 +9,7 @@ use AntispamBundle\Entity\EmailBlacklist;
 use AntispamBundle\Entity\EmailWhitelist;
 use AntispamBundle\Entity\SpamScoreLog;
 use AntispamBundle\Entity\Whitelist;
+use AntispamBundle\Services\AccountStatsService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Attribute\Template;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -18,6 +19,7 @@ class DefaultController extends AbstractController
 {
     public function __construct(
         private EntityManagerInterface $em,
+        private AccountStatsService $accountStats,
     ) {
     }
 
@@ -54,7 +56,17 @@ class DefaultController extends AbstractController
             'SELECT b FROM AntispamBundle\Entity\EmailBlacklist b WHERE b.counter > 0 ORDER BY b.counter DESC'
         )->setMaxResults(5)->getResult();
 
+        // "Dzisiaj": scan counters of every account (IMAP + SSH) + plugin checks from the score log.
+        $today = $this->accountStats->dayTotals(new \DateTimeImmutable('today'));
+        $yesterday = $this->accountStats->dayTotals(new \DateTimeImmutable('yesterday'));
+        $pluginToday = (int)$this->em->createQuery(
+            'SELECT COUNT(l.id) FROM AntispamBundle\Entity\SpamScoreLog l WHERE l.source = :src AND l.scoredAt >= :since'
+        )->setParameter('src', SpamScoreLog::SOURCE_PLUGIN)->setParameter('since', new \DateTime('today'))->getSingleScalarResult();
+
         return [
+            'today' => $today,
+            'yesterday' => $yesterday,
+            'pluginToday' => $pluginToday,
             'accounts' => count($accounts),
             'whitelistCount' => $whitelistCount,
             'blacklistCount' => $blacklistCount,

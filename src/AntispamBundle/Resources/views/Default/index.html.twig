@@ -27,6 +27,33 @@
         </div>
     </section>
 
+    {% set tn = today.new %}
+    {% set yn = yesterday.new %}
+    <h3 class="pp-section-title">Dzisiaj <small class="text-muted">{{ 'now'|date('d.m.Y') }}{% if today.last_update %} · ostatnia aktualizacja {{ today.last_update|date('H:i') }}{% endif %}</small></h3>
+    <div class="pp-grid pp-grid-4">
+        <a class="pp-kpi" href="{{ path('antispam_account_index') }}" data-kpi="accent">
+            <div class="pp-kpi-head"><span class="pp-kpi-label">Sprawdzono dziś</span><span class="pp-kpi-icon"><span class="glyphicon glyphicon-search"></span></span></div>
+            <div class="pp-kpi-value">{{ tn.checked }}</div>
+            <div class="pp-kpi-foot">{{ tn.passes }} skanów · {{ today.accounts }} kont{% if pluginToday > 0 %} · {{ pluginToday }} z wtyczek{% endif %} · wczoraj {{ yn.checked }}</div>
+        </a>
+        <a class="pp-kpi" href="{{ path('antispam_my_spam') }}" data-kpi="danger">
+            <div class="pp-kpi-head"><span class="pp-kpi-label">Spam dziś</span><span class="pp-kpi-icon"><span class="glyphicon glyphicon-fire"></span></span></div>
+            <div class="pp-kpi-value">{{ tn.moved_to_spam }}</div>
+            <div class="pp-kpi-foot">{{ tn.blacklisted }} z blacklisty{% if tn.move_failed > 0 %} · <span class="text-danger">{{ tn.move_failed }} nieprzeniesionych</span>{% endif %} · wczoraj {{ yn.moved_to_spam }}</div>
+        </a>
+        <a class="pp-kpi" href="{{ path('antispam_spambox_quarantine') }}" data-kpi="warning">
+            <div class="pp-kpi-head"><span class="pp-kpi-label">Kwarantanna dziś</span><span class="pp-kpi-icon"><span class="glyphicon glyphicon-warning-sign"></span></span></div>
+            <div class="pp-kpi-value">{{ tn.quarantined }}</div>
+            <div class="pp-kpi-foot">wczoraj {{ yn.quarantined }}</div>
+        </a>
+        <div class="pp-kpi" data-kpi="{{ tn.errors > 0 ? 'danger' : 'success' }}">
+            <div class="pp-kpi-head"><span class="pp-kpi-label">Whitelista dziś</span><span class="pp-kpi-icon"><span class="glyphicon glyphicon-star"></span></span></div>
+            <div class="pp-kpi-value">{{ tn.whitelisted }}</div>
+            <div class="pp-kpi-foot">{% if tn.errors > 0 %}<span class="text-danger">{{ tn.errors }} błędów skanu</span> · {% endif %}{% if today.rescan.checked > 0 %}ponowne skany: {{ today.rescan.checked }} · {% endif %}wczoraj {{ yn.whitelisted }}</div>
+        </div>
+    </div>
+
+    <h3 class="pp-section-title">Ogółem</h3>
     <div class="pp-grid pp-grid-4">
         <a class="pp-kpi" href="{{ path('antispam_account_index') }}" data-kpi="accent">
             <div class="pp-kpi-head"><span class="pp-kpi-label">Konta pocztowe</span><span class="pp-kpi-icon"><span class="glyphicon glyphicon-cloud"></span></span></div>
